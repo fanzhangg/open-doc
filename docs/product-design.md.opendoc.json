@@ -1,0 +1,132 @@
+{
+  "opendoc": 1,
+  "doc": "product-design.md",
+  "docHash": "sha256:2c5c452e0c0b9b4a6e2b640489bcc5c3e82e3507298f7273c10d24273ea6a19a",
+  "participants": [
+    {
+      "name": "claude",
+      "kind": "agent"
+    },
+    {
+      "name": "fanzhangg",
+      "kind": "human"
+    }
+  ],
+  "threads": [
+    {
+      "id": "t_denfv1h068",
+      "anchor": null,
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-14T22:16:49.339Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_133lecxz9c",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "bout my open-doc product",
+          "mentions": [],
+          "createdAt": "2026-10-14T22:16:29.856Z"
+        },
+        {
+          "id": "m_uf0yy1tavp",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Your comment looks cut off (it reads 'bout my open-doc product'), and I see you've resolved it. Did you want me to start drafting this doc about the open-doc product? If so, tell me which sections you want (e.g. problem, users, core concepts, editor/CLI/agent workflow, non-goals) or any key points, and I'll draft it.",
+          "mentions": [],
+          "createdAt": "2026-10-14T22:16:43.112Z"
+        }
+      ]
+    },
+    {
+      "id": "t_vg8b79p264",
+      "anchor": null,
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "claude",
+      "resolvedAt": "2026-10-14T22:21:03.872Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_43lom2rsze",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude write a product design document for my product open-doc",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-14T22:17:07.551Z"
+        },
+        {
+          "id": "m_gbhqbuh8bx",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Drafted the product design doc from the README and SPEC: summary, problem, goals, non-goals, users, core concepts, experience (editor, CLI, server-started agent), components, key design decisions, and open questions. The Problem, Non-goals and Users sections are my framing, not taken from existing docs, so please check them. The open questions at the end (target user, success metrics, roadmap, other agents) need your input. Leaving this open for you to review.",
+          "mentions": [],
+          "createdAt": "2026-10-14T22:17:52.388Z"
+        },
+        {
+          "id": "m_ate3n1vadd",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Can you link the relevant doc?",
+          "mentions": [],
+          "createdAt": "2026-10-14T22:20:49.990Z"
+        },
+        {
+          "id": "m_fo0tg0xwlu",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Added a 'Related docs' list under the Summary linking the README, format spec, JSON Schema, agent skill, and the example doc with its sidecar (relative links from docs/).",
+          "mentions": [],
+          "createdAt": "2026-10-14T22:21:03.668Z"
+        }
+      ]
+    },
+    {
+      "id": "t_86x7ma8s8s",
+      "anchor": null,
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_3wnh62fd3q",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Can you translate this to Chinese?",
+          "mentions": [],
+          "createdAt": "2026-10-14T23:13:55.986Z"
+        },
+        {
+          "id": "m_cb2bmn6q7p",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Translated the whole doc to Chinese. I kept code, commands, file names and links unchanged, and left the UI strings that appear in English in the app (\"claude is working on it\", \"Resolved by claude\") in English. Key terms keep the English in parentheses the first time (e.g. 评论串 (Thread), 锚点 (Anchor)). Leaving this open so you can check the terminology.",
+          "mentions": [],
+          "createdAt": "2026-10-14T23:15:05.822Z"
+        }
+      ]
+    }
+  ]
+}

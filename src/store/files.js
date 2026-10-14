@@ -101,8 +101,14 @@ export async function moveDoc(fromPath, toPath) {
   }
 }
 
-async function acquireLock(docPath) {
-  const path = lockPath(docPath);
+const acquireLock = (docPath) => lockFile(lockPath(docPath), sidecarPath(docPath));
+
+/**
+ * Take the exclusive lock file `path` (SPEC.md §6) guarding `target`; a lock
+ * older than LOCK_STALE_MS is taken over.
+ * @returns {Promise<() => Promise<void>>} release
+ */
+export async function lockFile(path, target) {
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   for (;;) {
     try {
@@ -117,7 +123,7 @@ async function acquireLock(docPath) {
     } catch {
       // The holder released it between our attempts.
     }
-    if (Date.now() > deadline) throw new StoreError('lock_timeout', `could not lock ${sidecarPath(docPath)}`);
+    if (Date.now() > deadline) throw new StoreError('lock_timeout', `could not lock ${target}`);
     await sleep(5 + Math.random() * 20);
   }
 }

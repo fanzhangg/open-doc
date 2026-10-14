@@ -1,6 +1,10 @@
+import { mkdtempSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// Keep tests away from the real user's settings file.
+process.env.OPENDOC_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'opendoc-config-'));
 
 export const SAMPLE = `# Q4 Launch Plan
 

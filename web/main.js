@@ -9,6 +9,7 @@ import { createDocEditor } from './editor.js';
 import { avatar, createCommentMargin } from './threads.js';
 import { createAgentPresence } from './agent.js';
 import { createChrome } from './ui.js';
+import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
 import { merge3 } from './merge.js';
 import { project } from '../src/core/project.js';
@@ -18,7 +19,6 @@ import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const SAVE_DELAY_MS = 800;
-const NAME_KEY = 'opendoc.name';
 
 const status = document.querySelector('.od-status');
 const banner = document.querySelector('.od-banner');
@@ -28,6 +28,8 @@ let editor;
 let chrome;
 let margin;
 let presence;
+let settings;
+let defaultName;
 let me;
 let sidecar;
 let baseHash;
@@ -48,7 +50,14 @@ async function start() {
     return;
   }
   baseHash = initial.docHash;
-  me = loadName(initial.defaultName);
+  defaultName = initial.defaultName;
+  settings = createSettings(initial.settings, {
+    save: api.saveSettings,
+    onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
+  });
+  if (!initial.settingsSaved) adoptLegacySettings();
+  me = settings.get().name ?? defaultName;
+  settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
   document.title = `${initial.doc} — opendoc`;
   document.querySelector('.od-doc-name').textContent = initial.doc;
   paintNameChip();
@@ -71,7 +80,7 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
-  chrome = createChrome({ editor, onComment: () => editor.requestComment(), getName: () => me, setName });
+  chrome = createChrome({ editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName });
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
     onCreate: createThread,
@@ -117,6 +126,7 @@ async function start() {
     const next = JSON.parse(event.data);
     presence.render(next);
   });
+  events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('hello', () => (dirty ? setStatus('Saving…', 'saving') : setStatus('Saved')));
 }
@@ -326,33 +336,30 @@ function select(id) {
 
 // ---- identity ----
 
-function loadName(fallback) {
-  try {
-    const saved = localStorage.getItem(NAME_KEY);
-    if (saved && NAME_PATTERN.test(saved)) return saved;
-  } catch {
-    // storage unavailable
-  }
-  return fallback;
+// Before settings had a file, this browser kept them for one port only;
+// carry them over the first time, then forget them.
+function adoptLegacySettings() {
+  const patch = legacySettings();
+  if (Object.keys(patch).length > 0) settings.set(patch);
+  forgetLegacySettings();
 }
 
 function paintNameChip() {
   document.querySelector('.od-me').replaceChildren(avatar(me, 'human'));
 }
 
-/** Rename the human in comments; false when the name is not allowed. */
+/** Rename the human in comments, in every doc; false when the name is not allowed. */
 function setName(next) {
   if (!NAME_PATTERN.test(next)) return false;
-  if (next === me) return true;
+  if (next !== me) settings.set({ name: next });
+  return true;
+}
+
+function renameMe(next) {
+  if (next === me) return;
   me = next;
   paintNameChip();
-  try {
-    localStorage.setItem(NAME_KEY, me);
-  } catch {
-    // storage unavailable
-  }
-  margin.update(sidecar, me);
-  return true;
+  margin?.update(sidecar, me);
 }
 
 // Saving is automatic and local, so the header says nothing while it works;

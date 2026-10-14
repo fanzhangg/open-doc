@@ -55,6 +55,12 @@ merge with your unsaved typing; only a change to the same paragraph you are
 editing asks you to choose. Saves keep the original bytes of every block you did
 not touch, so `git diff` shows only real edits.
 
+Settings (your name, theme, font, width, outline, word count, focus mode) are
+saved for every doc in `settings.json` in your config folder
+(`%APPDATA%\OpenDoc` on Windows, `~/Library/Application Support/OpenDoc` on
+macOS, `~/.config/opendoc` on Linux; `OPENDOC_CONFIG_DIR` overrides it). A
+change applies at once in every open editor.
+
 - [Format spec](spec/SPEC.md) and [JSON Schema](spec/opendoc.schema.json)
 - [Example doc](spec/examples/plan.md) and [its sidecar](spec/examples/plan.md.opendoc.json)
 

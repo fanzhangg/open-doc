@@ -23,4 +23,9 @@ export const api = {
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
   agentAction: async (action) => (await request('POST', '/api/agent', { action })).data.status,
   agentDetails: async () => (await request('GET', '/api/agent')).data,
+  async saveSettings(patch) {
+    const { status, data } = await request('PUT', '/api/settings', patch);
+    if (status !== 200) throw Object.assign(new Error(data.error ?? 'settings are busy'), { code: data.code, status });
+    return data.settings;
+  },
 };

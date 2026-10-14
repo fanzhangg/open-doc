@@ -1,6 +1,6 @@
-// Local editor server for one doc: static editor assets, a four-endpoint JSON
-// API, and a Server-Sent Events stream of change hashes. Single user, bound to
-// 127.0.0.1, every API call carries a per-run token.
+// Local editor server for one doc: static editor assets, a small JSON API,
+// and a Server-Sent Events stream of changes (doc, sidecar, agent, settings).
+// Single user, bound to 127.0.0.1, every API call carries a per-run token.
 
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -11,7 +11,9 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp } from '../core/index.js';
 import { NAME_PATTERN } from '../core/mentions.js';
+import { SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
+import { configDir, readSettings, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Dispatcher } from './agents/dispatcher.js';
@@ -39,15 +41,18 @@ class HttpError extends Error {
 /**
  * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
  * a headless agent run whenever a comment mentions that agent.
+ * `settingsDir` is the folder of the user's settings file (default: the
+ * per-user config folder).
  * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, close: () => Promise<void> }>}
  */
-export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent } = {}) {
+export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent, settingsDir = configDir() } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
   let dispatcher = null;
   let actualPort = port;
   let lastDocHash = null;
   let lastSidecarHash = null;
+  let lastSettings = null;
 
   const server = createServer((req, res) => {
     handle(req, res).catch((error) => {
@@ -85,6 +90,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       } catch {
         throw new HttpError(500, 'no_assets', 'Editor assets are missing; run "npm run build".');
       }
+      if (file === 'index.html') body = withSettings(body.toString('utf8'), (await readSettings(settingsDir)).settings);
       res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', ...SECURITY_HEADERS });
       res.end(body);
       return;
@@ -106,6 +112,10 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
         return sendJson(res, 200, await applyBrowserOp(await readJson(req)));
       case 'GET /api/events':
         return openEvents(req, res);
+      case 'GET /api/settings':
+        return sendJson(res, 200, await readSettings(settingsDir));
+      case 'PUT /api/settings':
+        return sendJson(res, 200, { settings: await updateSettings(await readJson(req), settingsDir) });
       case 'GET /api/agent':
         if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
         return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
@@ -135,11 +145,14 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
 
   async function state() {
     const { doc, sidecar } = await load(docPath);
+    const { settings, saved } = await readSettings(settingsDir);
     return {
       doc: basename(docPath),
       markdown: doc.markdown,
       docHash: doc.hash,
       sidecar,
+      settings,
+      settingsSaved: saved,
       defaultName: defaultName(),
       agent: dispatcher?.status() ?? null,
     };
@@ -197,9 +210,25 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       if (!(error instanceof StoreError)) console.error(error);
     }
   }
+  // Settings are shared with every other window and `serve` run: pass on
+  // changes from any of them.
+  async function onSettingsChanged() {
+    try {
+      const { settings } = await readSettings(settingsDir);
+      const json = JSON.stringify(settings);
+      if (json === lastSettings) return;
+      lastSettings = json;
+      broadcast('settings', settings);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
   lastDocHash = (await readDoc(docPath)).hash;
   lastSidecarHash = await fileHash(sidecarPath(docPath));
+  lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   const stopWatching = watchDoc(docPath, onFilesChanged);
+  const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   const heartbeat = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');
   }, HEARTBEAT_MS);
@@ -223,6 +252,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
     async close() {
       clearInterval(heartbeat);
       stopWatching();
+      stopWatchingSettings();
       await dispatcher?.stop();
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
@@ -326,9 +356,20 @@ function sendJson(res, status, body) {
 }
 
 function statusFor(error) {
-  if (error instanceof OpError) return 400;
+  if (error instanceof OpError || error instanceof SettingsError) return 400;
   if (error instanceof StoreError) return error.code === 'lock_timeout' ? 409 : 404;
   return 500;
+}
+
+// Put the display settings on <html> as the page would, so its first paint
+// already uses them (the CSP allows no inline script to do it earlier).
+// Values are validated settings, from a fixed set of words.
+function withSettings(html, settings) {
+  const attrs = [`data-font="${settings.font}"`, `data-width="${settings.width}"`];
+  if (settings.theme !== 'system') attrs.push(`data-theme="${settings.theme}"`);
+  if (settings.focus) attrs.push('data-focus');
+  if (!settings.outline) attrs.push('data-no-outline');
+  return html.replace(/<html\b/i, `<html ${attrs.join(' ')}`);
 }
 
 async function fileHash(path) {

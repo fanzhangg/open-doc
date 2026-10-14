@@ -216,3 +216,85 @@ test('events: hello, then sidecar and doc changes made by the CLI or on disk', {
     req.destroy();
   });
 });
+
+async function withSettingsServer(fn) {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  await writeFile(join(assetsDir, 'index.html'), '<!doctype html>\n<html lang="en"><title>opendoc</title></html>');
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const server = await startServer(docPath, { assetsDir, settingsDir });
+  try {
+    await fn({ server, settingsDir });
+  } finally {
+    await server.close();
+  }
+}
+
+test('settings: defaults until saved, then shared through the user file', async () => {
+  await withSettingsServer(async ({ server, settingsDir }) => {
+    const first = await call(server, 'GET', '/api/state');
+    assert.equal(first.body.settings.font, 'sans');
+    assert.equal(first.body.settings.name, null);
+    assert.equal(first.body.settingsSaved, false);
+
+    const saved = await call(server, 'PUT', '/api/settings', { body: { font: 'serif', name: 'fzhan' } });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.body.settings.font, 'serif');
+    assert.equal(saved.body.settings.name, 'fzhan');
+
+    const again = await call(server, 'GET', '/api/settings');
+    assert.equal(again.body.saved, true);
+    assert.equal(again.body.settings.font, 'serif');
+    const onDisk = JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8'));
+    assert.equal(onDisk.font, 'serif');
+  });
+});
+
+test('settings: bad patches are refused and cross-origin writes blocked', async () => {
+  await withSettingsServer(async ({ server }) => {
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { font: 'comic' } })).status, 400);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { colour: 'red' } })).status, 400);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { font: 'serif' }, headers: { origin: 'https://evil.example' } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { font: 'serif' }, token: false })).status, 403);
+    assert.equal((await call(server, 'GET', '/api/settings')).body.saved, false);
+  });
+});
+
+test('settings: the page arrives with the display settings on <html>', async () => {
+  await withSettingsServer(async ({ server }) => {
+    const page = () => new Promise((resolve) => request({ port: server.port, path: `/?t=${server.token}`, headers: { host: `127.0.0.1:${server.port}` } }, (res) => {
+      let html = '';
+      res.on('data', (chunk) => { html += chunk; });
+      res.on('end', () => resolve(html));
+    }).end());
+    assert.match(await page(), /<html data-font="sans" data-width="normal" lang="en">/);
+    await call(server, 'PUT', '/api/settings', { body: { font: 'mono', theme: 'dark', width: 'wide', focus: true, outline: false } });
+    assert.match(await page(), /<html data-font="mono" data-width="wide" data-theme="dark" data-focus data-no-outline lang="en">/);
+  });
+});
+
+test('settings: a change saved by another window arrives as an event', { timeout: 15_000 }, async () => {
+  await withSettingsServer(async ({ server, settingsDir }) => {
+    const other = await startServer(await tempDoc(SAMPLE), { assetsDir: await mkdtemp(join(tmpdir(), 'opendoc-assets-')), settingsDir });
+    const received = [];
+    const req = request({ port: server.port, path: `/api/events?t=${server.token}`, headers: { host: `127.0.0.1:${server.port}` } }, (res) => {
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        for (const block of chunk.split('\n\n')) {
+          if (/^event: settings$/m.test(block)) received.push(JSON.parse(block.match(/^data: (.+)$/m)[1]));
+        }
+      });
+    });
+    req.end();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      assert.equal((await call(other, 'PUT', '/api/settings', { body: { theme: 'light' } })).status, 200);
+      const deadline = Date.now() + 5000;
+      while (received.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(received.at(-1)?.theme, 'light');
+    } finally {
+      req.destroy();
+      await other.close();
+    }
+  });
+});

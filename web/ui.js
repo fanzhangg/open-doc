@@ -5,8 +5,6 @@
 
 import { hydrateIcons, icon } from './icons.js';
 
-const DISPLAY_KEY = 'opendoc.display';
-const DEFAULTS = { font: 'sans', theme: 'system', width: 'normal', outline: true, wordCount: false, focus: false };
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
   { command: 'paragraph', icon: 'text', label: 'Text', words: 'text paragraph normal p' },
@@ -38,15 +36,15 @@ export function keyLabel(keys) {
 }
 
 /**
- * @param {{ editor: object, onComment: () => void,
+ * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean }} options
  */
-export function createChrome({ editor, onComment, getName, setName }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
 
-  const settings = setupSettings({ getName, setName });
+  const settings = setupSettings({ store, getName, setName });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -149,22 +147,19 @@ export function createChrome({ editor, onComment, getName, setName }) {
 
 // ---- settings: a dialog with General, Appearance, Editor and Shortcuts ----
 
-function setupSettings({ getName, setName }) {
+// Settings are saved for every doc and window (see settings.js); a change
+// made in another window shows up here too.
+function setupSettings({ store, getName, setName }) {
   const dialog = document.querySelector('.od-settings');
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
   const nameInput = dialog.querySelector('#od-name-input');
   const nameError = dialog.querySelector('.od-input-error');
-  let settings = { ...DEFAULTS };
-  try {
-    settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(DISPLAY_KEY) ?? '{}') };
-  } catch {
-    // storage unavailable or corrupt: defaults
-  }
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
 
   function apply() {
+    const settings = store.get();
     const root = document.documentElement;
     if (settings.theme === 'system') delete root.dataset.theme;
     else root.dataset.theme = settings.theme;
@@ -180,18 +175,11 @@ function setupSettings({ getName, setName }) {
     mark('[data-theme-choice]', 'themeChoice', settings.theme);
     mark('[data-width]', 'width', settings.width);
     for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
+    if (document.activeElement !== nameInput) nameInput.value = getName();
     window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
   }
-
-  function set(patch) {
-    settings = { ...settings, ...patch };
-    try {
-      localStorage.setItem(DISPLAY_KEY, JSON.stringify(settings));
-    } catch {
-      // storage unavailable: applies to this visit only
-    }
-    apply();
-  }
+  store.subscribe(apply);
+  const set = (patch) => store.set(patch);
 
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
@@ -246,7 +234,7 @@ function setupSettings({ getName, setName }) {
 
   apply();
   return {
-    get: () => settings,
+    get: () => store.get(),
     set,
     /** Open on `section`, or close when it is already showing that section. */
     toggle(section) {
