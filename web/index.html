@@ -9,45 +9,60 @@
 </head>
 <body>
   <header class="od-header">
-    <span class="od-doc-name"></span>
-    <span class="od-status" role="status" aria-live="polite"></span>
+    <div class="od-title">
+      <span class="od-doc-name"></span>
+      <span class="od-status" role="status" aria-live="polite"></span>
+    </div>
     <span class="od-spacer"></span>
-    <span class="od-me-label">You</span>
-    <button class="od-me" type="button" title="Change your name"></button>
+    <div class="od-people">
+      <span class="od-agent" hidden>
+        <span class="od-agent-line" role="status" aria-live="polite" hidden></span>
+        <button class="od-agent-face" type="button" aria-label="Agent status"></button>
+      </span>
+      <button class="od-me" type="button" title="You · click to change your name"></button>
+    </div>
   </header>
 
+  <div class="od-panel" hidden>
+    <div class="od-panel-title"></div>
+    <div class="od-panel-text"></div>
+    <button class="od-panel-action od-secondary" type="button"></button>
+    <pre class="od-panel-log"></pre>
+  </div>
+
+  <div class="od-toolbar" role="toolbar" aria-label="Formatting">
+    <button type="button" data-command="paragraph" title="Body text">Text</button>
+    <button type="button" data-command="h1" title="Heading 1">H1</button>
+    <button type="button" data-command="h2" title="Heading 2">H2</button>
+    <button type="button" data-command="h3" title="Heading 3">H3</button>
+    <span class="od-sep"></span>
+    <button type="button" data-command="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+    <button type="button" data-command="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+    <button type="button" data-command="link" title="Link">Link</button>
+    <span class="od-sep"></span>
+    <button type="button" data-command="bullets" title="Bulleted list">• List</button>
+    <button type="button" data-command="numbers" title="Numbered list">1. List</button>
+    <span class="od-spacer"></span>
+    <button type="button" class="od-tool-comment" data-action="comment" title="Add comment (Ctrl+Alt+M)">+ Comment</button>
+    <button type="button" class="od-show-resolved" aria-pressed="false" title="Show resolved comments">Resolved</button>
+  </div>
+
   <div class="od-banner" hidden>
-    <span>This doc changed on disk while you were editing.</span>
-    <button type="button" data-action="reload">Load the version on disk</button>
+    <span class="od-banner-text"></span>
+    <button type="button" data-action="reload">Use their version</button>
     <button type="button" data-action="keep">Keep mine</button>
   </div>
 
-  <main class="od-layout">
-    <section class="od-doc" aria-label="Document">
-      <div class="od-toolbar" role="toolbar" aria-label="Formatting">
-        <button type="button" data-command="paragraph" title="Body text">Text</button>
-        <button type="button" data-command="h1" title="Heading 1">H1</button>
-        <button type="button" data-command="h2" title="Heading 2">H2</button>
-        <button type="button" data-command="h3" title="Heading 3">H3</button>
-        <span class="od-sep"></span>
-        <button type="button" data-command="bold" title="Bold"><b>B</b></button>
-        <button type="button" data-command="italic" title="Italic"><i>I</i></button>
-        <button type="button" data-command="link" title="Link">Link</button>
-        <span class="od-sep"></span>
-        <button type="button" data-command="bullets" title="Bulleted list">• List</button>
-        <button type="button" data-command="numbers" title="Numbered list">1. List</button>
-      </div>
-      <div class="od-editor"></div>
-      <button class="od-comment-button" type="button" hidden>Comment</button>
-    </section>
-
-    <aside class="od-pane" aria-label="Comments">
-      <div class="od-pane-head">
-        <button class="od-new-doc-comment" type="button">Comment on document</button>
-        <label class="od-toggle"><input class="od-show-resolved" type="checkbox"> Resolved <span class="od-resolved-count"></span></label>
-      </div>
-      <div class="od-threads"></div>
-    </aside>
+  <main class="od-canvas">
+    <div class="od-stage">
+      <article class="od-page" aria-label="Document">
+        <div class="od-editor"></div>
+      </article>
+      <aside class="od-margin" aria-label="Comments"></aside>
+      <button class="od-add-comment" type="button" title="Add comment (Ctrl+Alt+M)" aria-label="Add comment" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4z"/></svg>
+      </button>
+    </div>
   </main>
 </body>
 </html>

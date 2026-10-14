@@ -14,6 +14,7 @@ import { NAME_PATTERN } from '../core/mentions.js';
 import { StoreError, hashBytes, load, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
+import { Dispatcher } from './agents/dispatcher.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -35,11 +36,14 @@ class HttpError extends Error {
 }
 
 /**
- * @returns {Promise<{ url: string, port: number, token: string, close: () => Promise<void> }>}
+ * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
+ * a headless agent run whenever a comment mentions that agent.
+ * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, close: () => Promise<void> }>}
  */
-export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS } = {}) {
+export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
+  let dispatcher = null;
   let actualPort = port;
   let lastDocHash = null;
   let lastSidecarHash = null;
@@ -88,6 +92,11 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
         return sendJson(res, 200, await applyBrowserOp(await readJson(req)));
       case 'GET /api/events':
         return openEvents(req, res);
+      case 'GET /api/agent':
+        if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
+        return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
+      case 'POST /api/agent':
+        return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
       default:
         throw new HttpError(404, 'not_found', 'not found');
     }
@@ -112,7 +121,24 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
 
   async function state() {
     const { doc, sidecar } = await load(docPath);
-    return { doc: basename(docPath), markdown: doc.markdown, docHash: doc.hash, sidecar, defaultName: defaultName() };
+    return {
+      doc: basename(docPath),
+      markdown: doc.markdown,
+      docHash: doc.hash,
+      sidecar,
+      defaultName: defaultName(),
+      agent: dispatcher?.status() ?? null,
+    };
+  }
+
+  async function agentAction(body) {
+    if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
+    const action = body?.action;
+    if (action === 'pause') dispatcher.pause();
+    else if (action === 'resume') dispatcher.resume();
+    else if (action === 'retry') await dispatcher.retry();
+    else throw new HttpError(400, 'bad_input', 'action must be pause, resume or retry');
+    return dispatcher.status();
   }
 
   async function applyBrowserOp(body) {
@@ -151,6 +177,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       if (sidecarHash !== lastSidecarHash) {
         lastSidecarHash = sidecarHash;
         broadcast('sidecar', { hash: sidecarHash });
+        dispatcher?.notify();
       }
     } catch (error) {
       if (!(error instanceof StoreError)) console.error(error);
@@ -169,13 +196,20 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   });
   actualPort = server.address().port;
 
+  if (agent) {
+    dispatcher = new Dispatcher({ docPath, ...agent, onStatus: (status) => broadcast('agent', status) });
+    await dispatcher.start();
+  }
+
   return {
     url: `http://127.0.0.1:${actualPort}/?t=${token}`,
     port: actualPort,
     token,
+    dispatcher,
     async close() {
       clearInterval(heartbeat);
       stopWatching();
+      await dispatcher?.stop();
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
     },

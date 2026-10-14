@@ -7,6 +7,33 @@ survive edits by either side.
 Status: early, but complete end to end: the format spec, the core library,
 the CLI, the local editor and the agent skill.
 
+## Agent that answers on its own
+
+```bash
+opendoc serve plan.md --agent claude
+```
+
+The editor works like a shared doc with Claude as a co-author. Leave a comment
+and the server starts a headless Claude Code run for it: Claude's avatar shows
+it working, the card shows "claude is working on it", and its edits appear in
+the page highlighted with its name, merged with anything you are typing
+elsewhere in the doc. Claude replies in the thread and resolves it when the edit
+is done; the card stays as "Resolved by claude" until you dismiss it.
+
+Every comment that mentions `@claude` or no one goes to Claude; a comment that
+mentions only someone else does not. `--mentions-only` limits runs to comments
+that mention `@claude`. Each run uses `claude -p` in the doc's folder with only
+`Read`, `Edit` on this doc, and `opendoc` allowed. Runs are batched, one at a
+time, and resume the same Claude session while the server runs. A failed run
+shows a note next to Claude's avatar (click it for the log) and is not retried
+until you reply or click Try again.
+
+Limits (flags on `serve`): `--max-turns 30`, `--run-timeout 10` (minutes),
+`--runs-per-hour 20`, optional `--max-budget-usd`. `--model` picks the model;
+`--agent-bin` points at `claude` if it is not found; `--agent-isolated` adds
+`--bare` (needs `ANTHROPIC_API_KEY`). Other agents: `--agent <name> --agent-cmd
+"<command with {promptFile} {threadsFile} {doc}>"`.
+
 ## Agent skill
 
 [`skills/opendoc/SKILL.md`](skills/opendoc/SKILL.md) teaches an agent the
@@ -21,10 +48,12 @@ resolve completed edits), wait again. For Claude Code, copy the
 opendoc serve plan.md        # opens a two-pane editor on 127.0.0.1
 ```
 
-Edit the doc visually; select text and click **Comment**, or use **Comment on
-document**. Type `@` to mention a participant. Changes the agent makes to the
-files show up live. Saves keep the original bytes of every block you did not
-touch, so `git diff` shows only real edits.
+Edit the doc visually. Select text and click the comment button at the page
+edge (or press Ctrl+Alt+M); comments sit in the margin beside their text. Type
+`@` to mention a participant. Changes made to the file on disk show up live and
+merge with your unsaved typing; only a change to the same paragraph you are
+editing asks you to choose. Saves keep the original bytes of every block you did
+not touch, so `git diff` shows only real edits.
 
 - [Format spec](spec/SPEC.md) and [JSON Schema](spec/opendoc.schema.json)
 - [Example doc](spec/examples/plan.md) and [its sidecar](spec/examples/plan.md.opendoc.json)

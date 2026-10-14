@@ -5,6 +5,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '../src/server/server.js';
+import { customAdapter } from '../src/server/agents/adapters.js';
 import { main } from '../src/cli/main.js';
 import { sidecarPath } from '../src/store/files.js';
 import { SAMPLE, tempDoc } from './helpers.js';
@@ -127,6 +128,34 @@ test('browser operations: always human, validated, persisted', async () => {
     ];
     for (const op of bad) assert.equal((await call(server, 'POST', '/api/ops', { body: { op } })).status, 400, op.type);
   });
+});
+
+test('agent endpoints: status in state, pause/resume, details; 404 without an agent', async () => {
+  await withServer(async ({ server }) => {
+    assert.equal((await call(server, 'GET', '/api/state')).body.agent, null);
+    assert.equal((await call(server, 'GET', '/api/agent')).status, 404);
+  });
+
+  const docPath = await tempDoc();
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const adapter = customAdapter(`"${process.execPath}" -e "process.exit(0)"`);
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  try {
+    const state = await call(server, 'GET', '/api/state');
+    assert.equal(state.body.agent.name, 'claude');
+    assert.equal(state.body.agent.state, 'ready');
+    const paused = await call(server, 'POST', '/api/agent', { body: { action: 'pause' } });
+    assert.equal(paused.body.status.state, 'paused');
+    const resumed = await call(server, 'POST', '/api/agent', { body: { action: 'resume' } });
+    assert.equal(resumed.body.status.state, 'ready');
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'explode' } })).status, 400);
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'pause' }, token: false })).status, 403);
+    const details = await call(server, 'GET', '/api/agent');
+    assert.equal(details.status, 200);
+    assert.equal(typeof details.body.log, 'string');
+  } finally {
+    await server.close();
+  }
 });
 
 test('events: hello, then sidecar and doc changes made by the CLI or on disk', { timeout: 15_000 }, async () => {

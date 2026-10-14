@@ -71,6 +71,15 @@ Repeat until the human says they are done.
 6. Go back to step 1 right away. Re-arm `wait` after every round so the human
    never waits on you.
 
+## When `opendoc serve` started you
+
+The human may run `opendoc serve X.md --agent claude`. Then the server waits
+for comments itself and starts you once per batch, with the waiting threads
+already claimed and passed to you as JSON. In that case skip step 1 and step 6
+of the loop: handle exactly the threads you were given (steps 2 to 5), then
+stop. Do not run `opendoc wait` or `opendoc serve`. Your tools are limited to
+reading files, editing this one doc, and running `opendoc`.
+
 ## Which threads are yours
 
 `wait` and `inbox` already apply these rules, so normally just handle what they

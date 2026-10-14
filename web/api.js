@@ -21,4 +21,6 @@ export const api = {
   saveDoc: (markdown, baseHash) => request('PUT', '/api/doc', { markdown, baseHash }),
   op: async (op) => (await request('POST', '/api/ops', { op })).data,
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
+  agentAction: async (action) => (await request('POST', '/api/agent', { action })).data.status,
+  agentDetails: async () => (await request('GET', '/api/agent')).data,
 };
