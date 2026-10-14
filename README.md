@@ -64,6 +64,29 @@ change applies at once in every open editor.
 - [Format spec](spec/SPEC.md) and [JSON Schema](spec/opendoc.schema.json)
 - [Example doc](spec/examples/plan.md) and [its sidecar](spec/examples/plan.md.opendoc.json)
 
+## Desktop app (preview)
+
+The same editor in its own window, without a terminal or a browser tab. It runs
+from a checkout for now; installers come later
+([design and plan](docs/desktop-app.md)).
+
+```bash
+npm install
+npm run desktop                      # start window: New doc, Open, recent docs
+npm run desktop -- path/to/plan.md   # open a doc (asks before creating a missing one)
+```
+
+Each doc opens in its own window; opening a doc that is already open focuses
+its window. File > Open (Ctrl/Cmd+O) takes `.md` and `.markdown` files, or a
+doc's `.md.opendoc.json` sidecar. File > New Doc (Ctrl/Cmd+N) picks a folder
+and a name and never replaces an existing file; File > New Doc in This Folder
+(Ctrl/Cmd+Alt+N) creates `Untitled.md` (or `Untitled 2.md`, ...) next to the
+open doc. File > Rename, or clicking the doc name, renames the doc and its
+sidecar together, like `opendoc mv`, and the window stays open. Closing a
+window waits for the last save. Settings are the same `settings.json` as
+above, so they apply to every window and to `opendoc serve`. Recent docs and
+the last window size are kept in `state.json` in the same folder.
+
 ## CLI
 
 ```bash

@@ -58,7 +58,7 @@
       <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
       <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
       <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
-      <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link"></button>
+      <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
     </div>
     <span class="od-sep"></span>
     <div class="od-tool-group">
@@ -99,11 +99,18 @@
         <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
         <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
         <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
-        <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link"></button>
+        <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
       </div>
       <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
     </div>
   </main>
+
+  <div class="od-link" role="dialog" aria-label="Link" hidden>
+    <span class="od-link-icon" data-icon="link"></span>
+    <input class="od-link-input" type="text" inputmode="url" autocomplete="off" spellcheck="false" aria-label="Link URL" placeholder="Paste or type a link">
+    <button type="button" class="od-primary" data-action="apply">Apply</button>
+    <button type="button" class="od-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link" hidden></button>
+  </div>
 
   <div class="od-tip" role="tooltip" hidden></div>
 

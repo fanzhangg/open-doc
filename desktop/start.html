@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'">
+  <title>OpenDoc</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff; --soft: #f6f6f4; --hover: #eeeeec; --border: #e4e4e0;
+      --text: #1f1f1d; --text-soft: #5f5f5a; --text-faint: #8d8d87; --accent: #2f6fde; --accent-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1b; --soft: #252524; --hover: #2f2f2d; --border: #353533;
+        --text: #ededea; --text-soft: #b4b4ae; --text-faint: #85857f; --accent: #5b8ff0; --accent-text: #0e1420;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; padding: 36px 32px 24px; gap: 28px;
+      user-select: none;
+    }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .lead { margin: 0; color: var(--text-soft); }
+    .actions { display: flex; gap: 10px; }
+    button {
+      font: inherit; border-radius: 8px; padding: 8px 16px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--soft); color: var(--text);
+    }
+    button:hover { background: var(--hover); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 550; }
+    button.primary:hover { filter: brightness(1.06); }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin: 0 0 6px; }
+    .recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    ul { list-style: none; margin: 0 -10px; padding: 0; overflow-y: auto; }
+    li button {
+      width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px;
+      display: flex; flex-direction: column; gap: 1px; border-radius: 8px;
+    }
+    li button:hover { background: var(--hover); }
+    .name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder { font-size: 12.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+    .empty { color: var(--text-faint); margin: 4px 0; }
+    .keys { color: var(--text-faint); font-size: 12px; }
+  </style>
+  <script src="start.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>OpenDoc</h1>
+    <p class="lead">Write markdown with an AI co-author, in comments next to the text.</p>
+  </header>
+  <div class="actions">
+    <button class="primary" type="button" data-action="new">New doc</button>
+    <button type="button" data-action="open">Open…</button>
+  </div>
+  <section class="recent" aria-labelledby="recent-title">
+    <h2 id="recent-title">Recent</h2>
+    <ul></ul>
+    <p class="empty" hidden>Docs you open show up here.</p>
+  </section>
+  <p class="keys"></p>
+</body>
+</html>

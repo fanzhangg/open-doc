@@ -58,8 +58,8 @@ async function start() {
   if (!initial.settingsSaved) adoptLegacySettings();
   me = settings.get().name ?? defaultName;
   settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
-  document.title = `${initial.doc} — opendoc`;
-  document.querySelector('.od-doc-name').textContent = initial.doc;
+  showDocName(initial.doc);
+  offerRename();
   paintNameChip();
 
   editor = await createDocEditor({
@@ -127,6 +127,7 @@ async function start() {
     presence.render(next);
   });
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
+  events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('hello', () => (dirty ? setStatus('Saving…', 'saving') : setStatus('Saved')));
 }
@@ -181,6 +182,20 @@ async function flushSave() {
     else await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
+
+// Leaving with an edit not saved yet: hold the page and save it. A browser
+// asks before leaving; the desktop app retries closing until the save is in.
+window.addEventListener('beforeunload', (event) => {
+  if (editor && !dirty && editor.getMarkdown() !== synced) {
+    // Typing the editor has not reported yet (it does so on a debounce).
+    dirty = true;
+    version++;
+  }
+  if (!dirty && !saving) return;
+  event.preventDefault();
+  event.returnValue = true;
+  flushSave().catch(() => {});
+});
 
 // ---- changes from disk ----
 
@@ -342,6 +357,29 @@ function adoptLegacySettings() {
   const patch = legacySettings();
   if (Object.keys(patch).length > 0) settings.set(patch);
   forgetLegacySettings();
+}
+
+function showDocName(name) {
+  document.title = `${name} — opendoc`;
+  document.querySelector('.od-doc-name').textContent = name;
+}
+
+// In the desktop app, clicking the doc name renames the doc (File > Rename).
+function offerRename() {
+  const desktop = window.opendocDesktop;
+  if (!desktop) return;
+  const name = document.querySelector('.od-doc-name');
+  Object.assign(name, { tabIndex: 0, title: 'Rename' });
+  name.setAttribute('role', 'button');
+  name.classList.add('od-renamable');
+  const rename = () => desktop.rename().catch(() => {});
+  name.addEventListener('click', rename);
+  name.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      rename();
+    }
+  });
 }
 
 function paintNameChip() {

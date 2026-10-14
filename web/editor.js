@@ -7,7 +7,7 @@
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
   commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
-  wrapInBulletListCommand, wrapInOrderedListCommand, toggleLinkCommand, updateLinkCommand, turnIntoTextCommand,
+  wrapInBulletListCommand, wrapInOrderedListCommand, turnIntoTextCommand,
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
 } from '@milkdown/kit/preset/commonmark';
 import { gfm, toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
@@ -26,6 +26,7 @@ import { docRange, projectDoc, textRange } from './pm-text.js';
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
+const linkKey = new PluginKey('opendoc-link');
 
 // Decorations replaced wholesale through a meta, mapped through other edits.
 const decorationPlugin = (key) => $prose(() => new Plugin({
@@ -35,6 +36,29 @@ const decorationPlugin = (key) => $prose(() => new Plugin({
     apply: (tr, set) => tr.getMeta(key) ?? set.map(tr.mapping, tr.doc),
   },
   props: { decorations: (state) => key.getState(state) },
+}));
+
+// The range a link is being written for while the link popover has focus:
+// { from, to }, set and cleared through a meta, mapped through other edits,
+// and shown as a selection would be.
+const linkPlugin = $prose(() => new Plugin({
+  key: linkKey,
+  state: {
+    init: () => null,
+    apply(tr, range) {
+      if (tr.getMeta(linkKey) !== undefined) return tr.getMeta(linkKey);
+      if (!range) return null;
+      const from = tr.mapping.map(range.from, 1);
+      return { from, to: Math.max(from, tr.mapping.map(range.to, -1)) };
+    },
+  },
+  props: {
+    decorations(state) {
+      const range = linkKey.getState(state);
+      if (!range || range.from === range.to) return null;
+      return DecorationSet.create(state.doc, [Decoration.inline(range.from, range.to, { class: 'od-link-target' })]);
+    },
+  },
 }));
 
 // Reports every view update and lets the page take keys first (for the "/"
@@ -88,7 +112,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         .updated(() => onDocUpdated());
     })
     .use(commonmark).use(gfm).use(history).use(clipboard).use(listener)
-    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(uiPlugin(hooks))
+    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
@@ -187,14 +211,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     codeBlock: () => editor.action(callCommand(createCodeBlockCommand.key)),
     divider: () => editor.action(callCommand(insertHrCommand.key)),
     table: () => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })),
-    link: () => {
-      const current = markActive(view().state, 'link');
-      const href = window.prompt(current ? 'Link URL (empty to remove)' : 'Link URL', current?.attrs.href ?? 'https://');
-      if (href === null) return;
-      if (current && !href.trim()) return editor.action(callCommand(toggleLinkCommand.key));
-      if (current) return editor.action(callCommand(updateLinkCommand.key, { href: href.trim() }));
-      if (href.trim()) editor.action(callCommand(toggleLinkCommand.key, { href: href.trim() }));
-    },
   };
 
   /** Run a named formatting command against the current selection. */
@@ -217,6 +233,59 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const block = blockType(state);
     active.add(block);
     return { active, block };
+  }
+
+  // ---- links, written in the link popover ----
+
+  /**
+   * Hold the link at the selection for the popover: the selection widened to
+   * whole links at its ends, or the link around the caret. Returns its href,
+   * or null for a new link.
+   */
+  function beginLink() {
+    const v = view();
+    const target = linkTarget(v.state);
+    v.dispatch(v.state.tr.setMeta(linkKey, { from: target.from, to: target.to }).setMeta('addToHistory', false));
+    return target.href;
+  }
+
+  /**
+   * Finish the held link: `href` sets it, '' removes it, null cancels. A new
+   * link at a bare caret inserts the URL as its text.
+   */
+  function endLink(href) {
+    const v = view();
+    const range = linkKey.getState(v.state);
+    if (!range) return;
+    const { state } = v;
+    const type = state.schema.marks.link;
+    const { from, to } = range;
+    const tr = state.tr.setMeta(linkKey, null);
+    const $from = state.doc.resolve(from);
+    if (href === null || (href && from === to && !$from.parent.type.allowsMarkType(type))) {
+      tr.setMeta('addToHistory', false); // cancelled, or a caret in a code block
+    } else if (!href) {
+      tr.removeMark(from, to, type);
+    } else if (from === to) {
+      const marks = type.create({ href }).addToSet(state.storedMarks ?? $from.marks());
+      tr.insert(from, state.schema.text(href, marks));
+      tr.setSelection(TextSelection.create(tr.doc, from + href.length));
+    } else {
+      tr.removeMark(from, to, type).addMark(from, to, type.create({ href }));
+      tr.setSelection(TextSelection.create(tr.doc, to));
+    }
+    v.dispatch(tr.scrollIntoView());
+    v.focus();
+  }
+
+  /** Viewport rectangle of the held link, or null when none is held. */
+  function linkRect() {
+    const v = view();
+    const range = linkKey.getState(v.state);
+    if (!range) return null;
+    const start = v.coordsAtPos(range.from);
+    const end = v.coordsAtPos(range.to);
+    return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right) };
   }
 
   // ---- "/" menu: the query typed after a slash at the caret ----
@@ -357,6 +426,9 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     scrollToHeading,
     counts,
     selectionRect,
+    beginLink,
+    endLink,
+    linkRect,
     coordsAt: (pos) => view().coordsAtPos(pos),
     /** Called after every editor update: typing, selection, focus. */
     onUi(listener) {
@@ -406,6 +478,47 @@ function markActive(state, name) {
     found ??= type.isInSet(node.marks) ?? null;
   });
   return found;
+}
+
+// What the link popover edits: { from, to, href }. A selection grows to take
+// in whole links at its ends; a caret takes the link around it, if any.
+function linkTarget(state) {
+  const type = state.schema.marks.link;
+  const { from, to, empty } = state.selection;
+  const head = linkAround(state.doc, from, type, empty ? 'both' : 'after');
+  const tail = empty ? head : linkAround(state.doc, to, type, 'before');
+  let mark = head?.mark ?? tail?.mark ?? null;
+  if (!empty) {
+    state.doc.nodesBetween(from, to, (node) => {
+      mark ??= type.isInSet(node.marks) ?? null;
+    });
+  }
+  return { from: Math.min(from, head?.from ?? from), to: Math.max(to, tail?.to ?? to), href: mark?.attrs.href ?? null };
+}
+
+// The run of text carrying one link that touches `pos` on `side`
+// ('before', 'after' or 'both'): { from, to, mark }, or null.
+function linkAround(doc, pos, type, side) {
+  const $pos = doc.resolve(pos);
+  const after = side !== 'before' && type.isInSet($pos.nodeAfter?.marks ?? []);
+  const before = side !== 'after' && type.isInSet($pos.nodeBefore?.marks ?? []);
+  const mark = after || before;
+  if (!mark) return null;
+  const { parent } = $pos;
+  let at = $pos.start();
+  let run = null;
+  for (let i = 0; i < parent.childCount; i++) {
+    const child = parent.child(i);
+    if (mark.isInSet(child.marks)) {
+      run = run ? { ...run, to: at + child.nodeSize } : { from: at, to: at + child.nodeSize, mark };
+    } else if (run && run.to >= pos) {
+      break;
+    } else {
+      run = null;
+    }
+    at += child.nodeSize;
+  }
+  return run && run.from <= pos && pos <= run.to ? run : null;
 }
 
 // 'paragraph', 'h1'…'h6', 'code_block' or another node name, for the block at the caret.

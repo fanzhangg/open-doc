@@ -260,9 +260,10 @@ size and position. Not synced between machines and safe to delete.
 | --- | --- |
 | `desktop/main.js` | New: app lifecycle, single instance, menus, open/new dialogs |
 | `desktop/files.js` | New: create a doc (exclusive create, next free name), rename doc and sidecar |
+| `desktop/state.js` | New: `state.json` (recent docs, last folder, window bounds) |
 | `desktop/windows.js` | New: one window per doc, start window, bounds |
 | `desktop/preload.cjs` | New: `window.opendocDesktop` |
-| `desktop/start.html` | New: start window (New, Open, recent) |
+| `desktop/start.html`, `desktop/start.js` | New: start window (New, Open, recent) |
 | `desktop/bin/` | New: `opendoc` and `opendoc.cmd` shims |
 | `electron-builder.yml` | New: installers and file associations |
 | `src/core/settings.js` | New: defaults and validation, shared by the server and the page |
@@ -292,6 +293,27 @@ Each phase is usable on its own and lands as its own PR.
    one window and one server per doc, the start window, recent docs, window
    bounds, close behavior. Creating docs: New Doc (pick folder and name),
    New Doc in This Folder, a shell path to a missing file, and Rename.
+   *Done:* `npm run desktop [-- doc.md]`. Notes from building it:
+   - The server's `moveTo()` renames the open doc: saves and comment writes
+     run one at a time, so a rename waits for a save in flight, and the page
+     gets a `renamed` event with the new name.
+   - Rename and New Doc use the OS save dialog. On Windows and macOS that
+     dialog itself asks "replace?" for an existing name; the app then still
+     refuses to overwrite and offers to open the existing doc instead.
+   - Closing: the page holds `beforeunload` while an edit is unsaved
+     (including typing the editor has not reported yet) and saves it; the app
+     retries the close until the page lets go, and after 5 seconds asks
+     whether to close anyway. `opendoc serve` gets the browser's "Leave
+     site?" prompt from the same handler.
+   - The File menu is the only custom menu. Edit is the standard one on macOS
+     only (needed for Cmd+C/V there); on Windows and Linux the page handles
+     its own shortcuts, so a menu accelerator cannot take Ctrl+Z from the
+     editor's history.
+   - Preload actions also require user activation (a click or key press), and
+     each action is limited to the window it belongs to: the recent list only
+     to the start window, rename only to doc windows.
+   - Electron fires `ready` only after the ESM entry module has loaded, so
+     `desktop/main.js` must not `await app.whenReady()` at the top level.
 3. **OS integration.** Single-instance forwarding, `open-file`, drag and
    drop, native menus wired to the page's commands (focus mode, settings,
    shortcuts), Reveal in Explorer/Finder, OS recent documents, moved/deleted

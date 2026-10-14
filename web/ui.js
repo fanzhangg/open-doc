@@ -1,7 +1,7 @@
 // The chrome around the editor: the toolbar (reflecting the formatting at the
-// caret), a formatting bubble over selections, the "/" block menu, a floating
-// outline, the word count, tooltips that show shortcuts, and the Settings
-// dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
+// caret), a formatting bubble over selections, the link popover, the "/" block
+// menu, a floating outline, the word count, tooltips that show shortcuts, and
+// the Settings dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
 
 import { hydrateIcons, icon } from './icons.js';
 
@@ -21,7 +21,7 @@ const SLASH_ITEMS = [
 ];
 const SHORTCUTS = [
   ['Comments', [['Add comment', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
-  ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E']]],
+  ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E'], ['Link', 'Mod+K']]],
   ['Blocks', [['Insert block', '/'], ['Normal text', 'Mod+Alt+0'], ['Heading 1–3', 'Mod+Alt+1…3'], ['Bulleted list', 'Mod+Alt+8'], ['Numbered list', 'Mod+Alt+7'], ['Quote', 'Mod+Shift+B'], ['Code block', 'Mod+Alt+C']]],
   ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];
@@ -48,6 +48,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
+  const link = setupLink(editor);
   const outline = setupOutline(editor);
   const blockPicker = setupBlockPicker(editor);
   const count = document.querySelector('.od-count');
@@ -59,6 +60,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       if (!target || target.closest('.od-block-picker')) return;
       event.preventDefault();
       if (target.dataset.action === 'comment') onComment();
+      else if (target.dataset.command === 'link') link.toggle(target);
       else if (target.dataset.command) editor.run(target.dataset.command);
     });
   }
@@ -134,6 +136,9 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     } else if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault();
       settings.set({ focus: !settings.get().focus });
+    } else if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k' && event.target.closest?.('.od-editor')) {
+      event.preventDefault();
+      link.toggle();
     }
   });
 
@@ -141,6 +146,95 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   return {
     hideBubble() {
       bubble.hidden = true;
+    },
+  };
+}
+
+// ---- link popover: the URL for the selection or the link at the caret ----
+
+// Enter applies, an empty URL removes the link, Escape or clicking away
+// cancels. It sits under the text it links, or under the button that opened
+// it when that text is out of view.
+function setupLink(editor) {
+  const popover = document.querySelector('.od-link');
+  const input = popover.querySelector('.od-link-input');
+  const unlink = popover.querySelector('[data-action="unlink"]');
+  const canvas = document.querySelector('.od-canvas');
+  let button = null; // the toolbar or bubble button it opened from
+
+  function open(from) {
+    button = from ?? null;
+    const href = editor.beginLink();
+    input.value = href ?? '';
+    unlink.hidden = href === null;
+    popover.hidden = false;
+    place();
+    input.focus();
+    input.select();
+  }
+
+  // `href`: the URL to set, '' to remove the link, null to cancel.
+  function close(href) {
+    if (popover.hidden) return;
+    popover.hidden = true;
+    button = null;
+    editor.endLink(href);
+  }
+
+  function place() {
+    const rect = editor.linkRect();
+    const view = canvas.getBoundingClientRect();
+    const visible = rect && rect.bottom > view.top && rect.top < view.bottom;
+    const shown = button?.isConnected && button.getClientRects().length > 0;
+    const anchor = visible || !shown ? rect : button.getBoundingClientRect();
+    if (!anchor) return;
+    const { offsetWidth: width, offsetHeight: height } = popover;
+    const left = visible ? rect.left - 10 : (anchor.left + anchor.right) / 2 - width / 2;
+    const below = anchor.bottom + 8 + height < window.innerHeight - 8;
+    popover.style.left = `${Math.min(Math.max(left, 8), window.innerWidth - width - 8)}px`;
+    popover.style.top = `${below ? anchor.bottom + 8 : anchor.top - height - 8}px`;
+  }
+
+  popover.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      close(null);
+    } else if (event.key === 'Enter' && event.target === input) {
+      event.preventDefault();
+      close(input.value.trim());
+    } else if (event.key === 'Tab') {
+      // Focus stays in the popover: the URL, Apply, Remove.
+      const stops = [...popover.querySelectorAll('input, button:not([hidden])')];
+      const next = stops.indexOf(document.activeElement) + (event.shiftKey ? -1 : 1);
+      if (next < 0 || next >= stops.length) {
+        event.preventDefault();
+        stops.at(next < 0 ? -1 : 0).focus();
+      }
+    }
+  });
+  popover.addEventListener('click', (event) => {
+    const action = event.target.closest('button')?.dataset.action;
+    if (action === 'apply') close(input.value.trim());
+    else if (action === 'unlink') close('');
+  });
+  // Clicking anywhere else cancels; the link buttons toggle it themselves.
+  document.addEventListener('mousedown', (event) => {
+    if (popover.hidden || popover.contains(event.target) || event.target.closest?.('[data-command="link"]')) return;
+    close(null);
+  }, true);
+  canvas.addEventListener('scroll', () => {
+    if (!popover.hidden) place();
+  }, { passive: true });
+  window.addEventListener('resize', () => {
+    if (!popover.hidden) place();
+  });
+
+  return {
+    /** Open for the selection (`from`: the button that asked), or cancel when open. */
+    toggle(from) {
+      if (popover.hidden) open(from);
+      else close(null);
     },
   };
 }

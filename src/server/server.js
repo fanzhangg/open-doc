@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { OpError, applyOp } from '../core/index.js';
 import { NAME_PATTERN } from '../core/mentions.js';
 import { SettingsError } from '../core/settings.js';
-import { StoreError, hashBytes, load, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
+import { StoreError, hashBytes, load, moveDoc, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
@@ -43,7 +43,9 @@ class HttpError extends Error {
  * a headless agent run whenever a comment mentions that agent.
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder).
- * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, close: () => Promise<void> }>}
+ * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
+ * to moveDoc and may return the final path); the page is told its new name.
+ * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent, settingsDir = configDir() } = {}) {
   await readDoc(docPath); // fail early on a missing doc
@@ -53,6 +55,14 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   let lastDocHash = null;
   let lastSidecarHash = null;
   let lastSettings = null;
+  // Writes to the doc and its sidecar run one at a time, so a rename never
+  // lands in the middle of a save.
+  let writes = Promise.resolve();
+  const serial = (fn) => {
+    const run = writes.then(fn);
+    writes = run.catch(() => {});
+    return run;
+  };
 
   const server = createServer((req, res) => {
     handle(req, res).catch((error) => {
@@ -106,10 +116,14 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
     switch (route) {
       case 'GET /api/state':
         return sendJson(res, 200, await state());
-      case 'PUT /api/doc':
-        return sendJson(...(await saveDoc(await readJson(req))));
-      case 'POST /api/ops':
-        return sendJson(res, 200, await applyBrowserOp(await readJson(req)));
+      case 'PUT /api/doc': {
+        const body = await readJson(req);
+        return sendJson(...(await serial(() => saveDoc(body))));
+      }
+      case 'POST /api/ops': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await serial(() => applyBrowserOp(body)));
+      }
       case 'GET /api/events':
         return openEvents(req, res);
       case 'GET /api/settings':
@@ -224,10 +238,28 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
     }
   }
 
+  async function startDispatcher() {
+    dispatcher = new Dispatcher({ docPath, ...agent, onStatus: (status) => broadcast('agent', status) });
+    await dispatcher.start();
+  }
+
+  async function moveTo(newPath, move = moveDoc) {
+    return serial(async () => {
+      const target = (await move(docPath, newPath)) ?? newPath;
+      stopWatching();
+      await dispatcher?.stop();
+      docPath = target;
+      stopWatching = watchDoc(docPath, onFilesChanged);
+      if (agent) await startDispatcher();
+      broadcast('renamed', { doc: basename(docPath) });
+      return docPath;
+    });
+  }
+
   lastDocHash = (await readDoc(docPath)).hash;
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
-  const stopWatching = watchDoc(docPath, onFilesChanged);
+  let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   const heartbeat = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');
@@ -239,16 +271,17 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   });
   actualPort = server.address().port;
 
-  if (agent) {
-    dispatcher = new Dispatcher({ docPath, ...agent, onStatus: (status) => broadcast('agent', status) });
-    await dispatcher.start();
-  }
+  if (agent) await startDispatcher();
 
   return {
     url: `http://127.0.0.1:${actualPort}/?t=${token}`,
     port: actualPort,
     token,
-    dispatcher,
+    get dispatcher() {
+      return dispatcher;
+    },
+    docPath: () => docPath,
+    moveTo,
     async close() {
       clearInterval(heartbeat);
       stopWatching();

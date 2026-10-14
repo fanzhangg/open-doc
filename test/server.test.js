@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
 import { main } from '../src/cli/main.js';
@@ -214,6 +214,35 @@ test('events: hello, then sidecar and doc changes made by the CLI or on disk', {
     await writeFile(docPath, SAMPLE.replace('Q4 Launch Plan', 'Q4 Plan'));
     await waitFor('doc');
     req.destroy();
+  });
+});
+
+test('a doc renamed while open keeps serving from its new path', async () => {
+  await withServer(async ({ server, docPath }) => {
+    const { body: before } = await call(server, 'GET', '/api/state');
+    const op = {
+      type: 'addThread', id: 't_rename1', anchor: null,
+      message: { id: 'm_rename1', author: human, body: 'keep me', createdAt: 'ignored' },
+    };
+    assert.equal((await call(server, 'POST', '/api/ops', { body: { op } })).status, 200);
+
+    const newPath = join(dirname(docPath), 'launch.md');
+    // A save sent while the rename runs waits for it, then lands in the new file.
+    const [moved, saved] = await Promise.all([
+      server.moveTo(newPath),
+      call(server, 'PUT', '/api/doc', { body: { markdown: SAMPLE.replace('Q4', 'Q1'), baseHash: before.docHash } }),
+    ]);
+    assert.equal(moved, newPath);
+    assert.equal(server.docPath(), newPath);
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await readdir(dirname(docPath))).sort(), ['launch.md', 'launch.md.opendoc.json']);
+    assert.match(await readFile(newPath, 'utf8'), /Q1 Launch Plan/);
+
+    const { body: after } = await call(server, 'GET', '/api/state');
+    assert.equal(after.doc, 'launch.md');
+    assert.equal(after.sidecar.doc, 'launch.md');
+    assert.equal(after.sidecar.threads[0].messages[0].body, 'keep me');
+    await assert.rejects(server.moveTo(newPath), /already exists/);
   });
 });
 
