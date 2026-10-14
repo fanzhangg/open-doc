@@ -12,9 +12,12 @@
   "files": [
     "bin/",
     "src/",
-    "spec/"
+    "spec/",
+    "dist/"
   ],
   "scripts": {
+    "build": "node scripts/build.js",
+    "prepack": "npm run build",
     "test": "node --test \"test/*.test.js\""
   },
   "engines": {
@@ -28,6 +31,8 @@
     "micromark-extension-gfm": "3.0.0"
   },
   "devDependencies": {
-    "ajv": "8.17.1"
+    "@milkdown/kit": "7.22.2",
+    "ajv": "8.17.1",
+    "esbuild": "0.28.2"
   }
 }

@@ -4,8 +4,19 @@ Co-author plain markdown with AI agents. Comments live in a sidecar file next
 to the doc (`plan.md` → `plan.md.opendoc.json`), anchored to the text so they
 survive edits by either side.
 
-Status: early. This repo holds the format spec, the core library and the
-CLI; the local editor and the agent skill come next.
+Status: early. This repo holds the format spec, the core library, the CLI
+and the local editor; the agent skill comes next.
+
+## Editor
+
+```bash
+opendoc serve plan.md        # opens a two-pane editor on 127.0.0.1
+```
+
+Edit the doc visually; select text and click **Comment**, or use **Comment on
+document**. Type `@` to mention a participant. Changes the agent makes to the
+files show up live. Saves keep the original bytes of every block you did not
+touch, so `git diff` shows only real edits.
 
 - [Format spec](spec/SPEC.md) and [JSON Schema](spec/opendoc.schema.json)
 - [Example doc](spec/examples/plan.md) and [its sidecar](spec/examples/plan.md.opendoc.json)
@@ -48,6 +59,7 @@ Re-anchoring tries an exact match, then the unchanged text around the quote
 
 ```bash
 npm install
+npm run build    # bundles the editor into dist/web
 npm test
 ```
 

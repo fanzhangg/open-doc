@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>opendoc</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <header class="od-header">
+    <span class="od-doc-name"></span>
+    <span class="od-status" role="status" aria-live="polite"></span>
+    <span class="od-spacer"></span>
+    <span class="od-me-label">You</span>
+    <button class="od-me" type="button" title="Change your name"></button>
+  </header>
+
+  <div class="od-banner" hidden>
+    <span>This doc changed on disk while you were editing.</span>
+    <button type="button" data-action="reload">Load the version on disk</button>
+    <button type="button" data-action="keep">Keep mine</button>
+  </div>
+
+  <main class="od-layout">
+    <section class="od-doc" aria-label="Document">
+      <div class="od-toolbar" role="toolbar" aria-label="Formatting">
+        <button type="button" data-command="paragraph" title="Body text">Text</button>
+        <button type="button" data-command="h1" title="Heading 1">H1</button>
+        <button type="button" data-command="h2" title="Heading 2">H2</button>
+        <button type="button" data-command="h3" title="Heading 3">H3</button>
+        <span class="od-sep"></span>
+        <button type="button" data-command="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-command="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-command="link" title="Link">Link</button>
+        <span class="od-sep"></span>
+        <button type="button" data-command="bullets" title="Bulleted list">• List</button>
+        <button type="button" data-command="numbers" title="Numbered list">1. List</button>
+      </div>
+      <div class="od-editor"></div>
+      <button class="od-comment-button" type="button" hidden>Comment</button>
+    </section>
+
+    <aside class="od-pane" aria-label="Comments">
+      <div class="od-pane-head">
+        <button class="od-new-doc-comment" type="button">Comment on document</button>
+        <label class="od-toggle"><input class="od-show-resolved" type="checkbox"> Resolved <span class="od-resolved-count"></span></label>
+      </div>
+      <div class="od-threads"></div>
+    </aside>
+  </main>
+</body>
+</html>

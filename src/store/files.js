@@ -124,7 +124,7 @@ async function acquireLock(docPath) {
 
 // Write a temp file next to the target and rename it into place. On Windows a
 // rename can fail briefly while another process has the target open.
-async function writeAtomic(path, content) {
+export async function writeAtomic(path, content) {
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temp, content);
   for (let attempt = 0; ; attempt++) {

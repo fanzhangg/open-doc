@@ -2,13 +2,15 @@
 // sidecar directly, so they work with or without a running editor.
 
 import { parseArgs } from 'node:util';
-import { resolve as resolvePath } from 'node:path';
+import { spawn } from 'node:child_process';
+import { basename, resolve as resolvePath } from 'node:path';
 import {
   AnchorError, FormatError, OpError,
   activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, lineOf, newId, project, sourceRange,
 } from '../core/index.js';
 import { StoreError, load, moveDoc, update } from '../store/files.js';
 import { watchDoc } from '../store/watch.js';
+import { startServer } from '../server/server.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -16,6 +18,7 @@ const DEFAULT_WAIT_SECONDS = 900;
 const USAGE = `opendoc — co-author markdown with agents through comment threads
 
 Usage:
+  opendoc serve    <doc> [--port <n>] [--no-open]
   opendoc comments <doc> [--status open|resolved|all] [--json]
   opendoc inbox    <doc> --as <name> [--json]
   opendoc wait     <doc> --as <name> [--timeout <seconds>] [--json]
@@ -40,6 +43,8 @@ const OPTIONS = {
   quote: { type: 'string' },
   occurrence: { type: 'string' },
   timeout: { type: 'string' },
+  port: { type: 'string' },
+  'no-open': { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -63,6 +68,21 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
 }
 
 const COMMANDS = {
+  async serve([docArg], values, { out }) {
+    const docPath = requireDoc(docArg);
+    const port = values.port === undefined ? 0 : Number(values.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError('--port must be a port number');
+    const server = await startServer(docPath, { port });
+    out(`opendoc: editing ${basename(docPath)} at ${server.url}`);
+    out('Press Ctrl+C to stop.');
+    if (!values['no-open']) openBrowser(server.url);
+    await new Promise((resolve) => {
+      process.once('SIGINT', resolve);
+      process.once('SIGTERM', resolve);
+    });
+    await server.close();
+  },
+
   async comments([docArg], values, { out }) {
     const docPath = requireDoc(docArg);
     const status = values.status ?? 'open';
@@ -202,6 +222,17 @@ async function writeAndPrint(docPath, values, out, threadId, change) {
     return change(s);
   });
   print(out, values.json, markdown, sidecar, [findThread(sidecar, threadId)]);
+}
+
+function openBrowser(url) {
+  const [command, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]]
+    : process.platform === 'darwin' ? ['open', [url]]
+    : ['xdg-open', [url]];
+  try {
+    spawn(command, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).on('error', () => {}).unref();
+  } catch {
+    // no browser launcher: the URL is printed above
+  }
 }
 
 function message(author, body) {
