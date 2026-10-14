@@ -1,8 +1,9 @@
 // The comment margin, Google Docs style: one card per thread beside the text it
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. The agent shows up like any other collaborator: an avatar, its
-// replies, "working on it" while it runs, and "Resolved by …" when it is done,
-// kept in place until the human dismisses it.
+// replies (with what it changed in the doc, and Undo), "working on it" while
+// it runs, and "Resolved by …" when it is done, kept in place until the human
+// dismisses it.
 
 import { activeWorking } from '../src/core/ops.js';
 
@@ -15,6 +16,7 @@ const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83
  * @param {{ onCreate: (body: string) => Promise<void>, onCancelDraft: () => void,
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
+ *           onUndo: (threadId: string, message: object) => Promise<void>,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number> }} handlers
  */
@@ -29,6 +31,8 @@ export function createCommentMargin(margin, handlers) {
   const dismissed = new Set();
   const knownOpen = new Set();
   const replyDrafts = new Map();
+  const undoing = new Set(); // message ids
+  const undoErrors = new Map(); // message id → why undo was refused
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
@@ -42,14 +46,27 @@ export function createCommentMargin(margin, handlers) {
     const focused = document.activeElement?.closest?.('[data-box]')?.dataset.box;
     const caret = document.activeElement?.selectionStart;
 
-    margin.replaceChildren();
     margin.classList.toggle('od-margin-list', showResolved);
-    if (draft) margin.append(draftCard());
+    const cards = [];
+    if (draft) cards.push(draftCard());
     const threads = visibleThreads();
-    for (const thread of threads) margin.append(threadCard(thread));
-    if (showResolved && threads.length === 0) margin.append(el('p', 'od-empty', 'No resolved comments.'));
+    for (const thread of threads) cards.push(threadCard(thread));
+    if (showResolved && threads.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
+    if (!showResolved && cards.length === 0) cards.push(emptyHint());
 
-    if (focused) {
+    // Live updates arrive while the human types: keep the card they are typing
+    // in attached, updated around its text box, so text, caret and IME input survive.
+    const typingIn = focused && document.activeElement.closest('.od-card');
+    const at = typingIn ? cards.findIndex((c) => c.dataset.thread === typingIn.dataset.thread) : -1;
+    const kept = at !== -1 && patchCard(typingIn, cards[at]) ? typingIn : null;
+    if (kept) cards[at] = kept;
+    for (const child of [...margin.children]) if (child !== kept) child.remove();
+    cards.forEach((card, i) => {
+      if (kept && i < at) margin.insertBefore(card, kept);
+      else if (card !== kept) margin.append(card);
+    });
+
+    if (focused && !kept) {
       const box = margin.querySelector(`[data-box="${focused}"] textarea`);
       if (box) {
         box.focus();
@@ -82,7 +99,9 @@ export function createCommentMargin(margin, handlers) {
         if (i === 1) card.append(el('div', 'od-more', `${messages.length - 2} more ${messages.length - 2 === 1 ? 'reply' : 'replies'}`));
         return;
       }
-      card.append(messageRow(message, i === 0 && thread.status === 'open' ? resolveButton(thread) : null));
+      const row = messageRow(message, i === 0 && thread.status === 'open' ? resolveButton(thread) : null);
+      if (message.edits?.length) row.append(editRow(thread, message));
+      card.append(row);
     });
 
     if (working) {
@@ -124,6 +143,46 @@ export function createCommentMargin(margin, handlers) {
     return row;
   }
 
+  // "Changed: before → after" under a reply that edited the doc, with Undo.
+  function editRow(thread, message) {
+    const [first, ...rest] = message.edits;
+    const row = el('div', 'od-edit');
+    const text = el('div', 'od-edit-text');
+    const run = message.edits.some((e) => e.scope === 'run');
+    const verb = !first.before ? 'Added' : !first.after ? 'Removed' : 'Changed';
+    text.append(el('span', 'od-edit-label', `${verb}${run ? ' in this run' : ''}: `));
+    if (first.before) text.append(el('del', 'od-edit-before', clip(first.before)));
+    if (first.before && first.after) text.append(el('span', 'od-edit-arrow', ' → '));
+    if (first.after) text.append(el('ins', 'od-edit-after', clip(first.after)));
+    if (rest.length) text.append(el('span', 'od-edit-more', ` and ${rest.length} more ${rest.length === 1 ? 'change' : 'changes'}`));
+    text.title = message.edits.map((e) => `${e.before || '∅'} → ${e.after || '∅'}`).join('\n').slice(0, 1000);
+    row.append(text);
+
+    const undone = thread.messages.some((m) => m.undoes === message.id);
+    if (undone) {
+      row.append(el('span', 'od-edit-undone', 'Undone'));
+    } else {
+      const button = linkButton(undoing.has(message.id) ? 'Undoing…' : 'Undo', async () => {
+        if (undoing.has(message.id)) return;
+        undoing.add(message.id);
+        undoErrors.delete(message.id);
+        render();
+        try {
+          await handlers.onUndo(thread.id, message);
+        } catch (error) {
+          undoErrors.set(message.id, error.message);
+        } finally {
+          undoing.delete(message.id);
+          render();
+        }
+      });
+      button.title = `Revert ${message.author.name}'s change in the doc`;
+      row.append(button);
+    }
+    if (undoErrors.has(message.id)) row.append(el('div', 'od-edit-error', undoErrors.get(message.id)));
+    return row;
+  }
+
   function resolveButton(thread) {
     const button = el('button', 'od-icon-button');
     button.type = 'button';
@@ -147,15 +206,25 @@ export function createCommentMargin(margin, handlers) {
     card.append(composer('draft', placeholder, 'Comment', async (body) => {
       await handlers.onCreate(body);
       draft = null;
+      replyDrafts.delete('draft');
       render();
     }, () => {
       draft = null;
+      replyDrafts.delete('draft');
       handlers.onCancelDraft();
       render();
-    }));
+    }, 'draft'));
     const hint = agentHint();
     if (hint) card.append(el('div', 'od-hint', hint));
     return card;
+  }
+
+  // What to do when there is nothing in the margin yet.
+  function emptyHint() {
+    const hint = el('div', 'od-margin-hint', 'Select text and choose Comment, or press ');
+    const keys = el('kbd', '', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⌥M' : 'Ctrl+Alt+M');
+    hint.append(keys, agentAnswers() && !agent.mentionsOnly ? `. ${agent.name} reads every comment and can edit the doc.` : '.');
+    return hint;
   }
 
   function agentAnswers() {
@@ -334,6 +403,7 @@ export function createCommentMargin(margin, handlers) {
     },
     startDraft(hint) {
       draft = { hint };
+      replyDrafts.delete('draft');
       showResolved = false;
       render();
       margin.querySelector('.od-card-draft textarea')?.focus();
@@ -352,6 +422,22 @@ export function createCommentMargin(margin, handlers) {
     layout,
     rerender: render,
   };
+}
+
+// Give `card` the content of `fresh` (same thread) but keep its own text box
+// element. False when either has no text box, so the caller replaces the card.
+function patchCard(card, fresh) {
+  const box = card.querySelector('.od-composer');
+  const freshBox = fresh.querySelector('.od-composer');
+  if (!box || !freshBox) return false;
+  const keep = [...card.children].find((child) => child.contains(box));
+  const kids = [...fresh.childNodes];
+  const slot = kids.findIndex((child) => child.contains(freshBox));
+  for (const child of [...card.childNodes]) if (child !== keep) child.remove();
+  for (const child of kids.slice(0, slot)) card.insertBefore(child, keep);
+  for (const child of kids.slice(slot + 1)) card.append(child);
+  card.className = fresh.className;
+  return true;
 }
 
 const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start });
@@ -407,6 +493,7 @@ function el(tag, className, text) {
 }
 
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const clip = (s) => truncate(s.replace(/\s+/g, ' ').trim() || '⏎', 60);
 
 function relativeTime(iso) {
   const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);

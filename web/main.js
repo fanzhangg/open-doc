@@ -8,9 +8,12 @@ import { api } from './api.js';
 import { createDocEditor } from './editor.js';
 import { avatar, createCommentMargin } from './threads.js';
 import { createAgentPresence } from './agent.js';
+import { createChrome } from './ui.js';
+import { icon } from './icons.js';
 import { merge3 } from './merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
+import { revertEdits } from '../src/core/diff.js';
 import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
@@ -18,10 +21,12 @@ const SAVE_DELAY_MS = 800;
 const NAME_KEY = 'opendoc.name';
 
 const status = document.querySelector('.od-status');
+const STATUS_ICONS = { saved: 'check', saving: null, error: 'alert', offline: 'alert', conflict: 'alert' };
 const banner = document.querySelector('.od-banner');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 
 let editor;
+let chrome;
 let margin;
 let presence;
 let me;
@@ -51,22 +56,23 @@ async function start() {
 
   editor = await createDocEditor({
     stage: document.querySelector('.od-stage'),
-    toolbar: document.querySelector('.od-toolbar'),
     markdown: initial.markdown,
     onChange: () => {
       dirty = true;
       version++;
-      setStatus('Saving…');
+      setStatus('Saving…', 'saving');
       scheduleSave();
     },
     onSelectThread: select,
     onCommentRequest: (hint) => {
+      chrome?.hideBubble();
       pendingSelection = hint;
       editor.setDraft(hint);
       margin.startDraft(hint);
     },
   });
   synced = editor.getMarkdown();
+  chrome = createChrome({ editor, onComment: () => editor.requestComment() });
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
     onCreate: createThread,
@@ -77,6 +83,7 @@ async function start() {
     onReply: (threadId, body) => sendOp({ type: 'addMessage', threadId, message: newMessage(body) }),
     onResolve: (threadId) => sendOp({ type: 'resolve', threadId, by: me }),
     onReopen: (threadId) => sendOp({ type: 'reopen', threadId }),
+    onUndo: undoEdit,
     onSelect: select,
     anchorTops: (items) => editor.anchorTops(items),
   });
@@ -95,14 +102,14 @@ async function start() {
     margin.setShowResolved(on);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'm') {
+    if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'KeyM') {
       event.preventDefault();
       editor.requestComment();
     }
   });
   // Clicking empty page space deselects the active comment, as in Docs.
   document.querySelector('.od-canvas').addEventListener('mousedown', (event) => {
-    if (!event.target.closest('.od-card, [data-thread], .od-add-comment')) select(null);
+    if (!event.target.closest('.od-card, [data-thread], .od-bubble')) select(null);
   });
 
   const events = api.events();
@@ -113,8 +120,8 @@ async function start() {
     presence.render(next);
     margin.setAgent(next);
   });
-  events.addEventListener('error', () => setStatus('Reconnecting…'));
-  events.addEventListener('hello', () => setStatus(dirty ? 'Saving…' : 'Saved'));
+  events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
+  events.addEventListener('hello', () => (dirty ? setStatus('Saving…', 'saving') : setStatus('Saved')));
 }
 
 // ---- saving ----
@@ -130,7 +137,7 @@ async function save() {
   const savedVersion = version;
   const markdown = editor.getMarkdown();
   let conflicted = false;
-  setStatus('Saving…');
+  setStatus('Saving…', 'saving');
   try {
     const { status: code, data } = await api.saveDoc(markdown, baseHash);
     if (code === 409) {
@@ -139,10 +146,11 @@ async function save() {
       baseHash = data.docHash;
       synced = markdown;
       if (version === savedVersion) dirty = false;
-      setStatus(dirty ? 'Saving…' : 'Saved');
+      if (dirty) setStatus('Saving…', 'saving');
+      else setStatus('Saved');
     }
   } catch (error) {
-    setStatus(`Save failed: ${error.message}`);
+    setStatus(`Save failed: ${error.message}`, 'error');
   } finally {
     saving = false;
   }
@@ -220,7 +228,7 @@ function editorName(nextSidecar) {
 
 function showConflict(by) {
   clearTimeout(saveTimer);
-  setStatus('Needs your choice');
+  setStatus('Needs your choice', 'conflict');
   banner.querySelector('.od-banner-text').textContent = by === 'Edited on disk'
     ? 'The file changed on disk in a paragraph you are editing.'
     : `${by} edited a paragraph you are editing.`;
@@ -260,8 +268,7 @@ function applySidecar(next) {
   sidecar = next;
   editor.setThreads(sidecar.threads);
   margin.update(sidecar, me);
-  const resolved = margin.resolvedCount();
-  resolvedToggle.textContent = resolved ? `Resolved (${resolved})` : 'Resolved';
+  chrome.setResolvedCount(margin.resolvedCount());
 }
 
 async function createThread(body) {
@@ -286,9 +293,30 @@ async function sendOp(op) {
   try {
     applySidecar((await api.op(op)).sidecar);
   } catch (error) {
-    setStatus(`Could not save comment: ${error.message}`);
+    setStatus(`Could not save comment: ${error.message}`, 'error');
     throw error;
   }
+}
+
+// Revert what an agent reply changed in the doc (SPEC.md §2.5): only while its
+// text is still there, saved like any edit, then reopen the thread with a
+// notice that does not ask the agent to try again.
+async function undoEdit(threadId, message) {
+  await flushSave();
+  let fresh = await api.state();
+  if (fresh.docHash !== baseHash) {
+    await syncFromDisk();
+    await flushSave();
+    fresh = await api.state();
+  }
+  const reverted = revertEdits(fresh.markdown, message.edits);
+  if (reverted === null) throw new Error('Cannot undo: that text has changed since.');
+  editor.applyMarkdown(reverted, 'Undo');
+  dirty = true;
+  version++;
+  await flushSave();
+  const body = `Undid ${message.author.name}'s edit`;
+  await sendOp({ type: 'addMessage', threadId, message: { ...newMessage(body), undoes: message.id } });
 }
 
 function newMessage(body) {
@@ -330,8 +358,18 @@ function setupNameChip() {
   });
 }
 
-function setStatus(text) {
-  status.textContent = text;
+// Save state beside the title: an icon plus text; "Saved" fades to just the
+// icon after a moment, problems stay until they are fixed.
+let quietTimer;
+function setStatus(text, state = 'saved') {
+  status.dataset.state = state;
+  status.querySelector('.od-status-text').textContent = text;
+  const glyph = STATUS_ICONS[state];
+  status.querySelector('.od-status-icon').replaceChildren(...(glyph ? [icon(glyph)] : []));
+  status.title = text;
+  status.classList.remove('od-status-quiet');
+  clearTimeout(quietTimer);
+  if (state === 'saved') quietTimer = setTimeout(() => status.classList.add('od-status-quiet'), 2500);
 }
 
 start();

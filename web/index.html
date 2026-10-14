@@ -10,10 +10,14 @@
 <body>
   <header class="od-header">
     <div class="od-title">
+      <span class="od-doc-icon" data-icon="file"></span>
       <span class="od-doc-name"></span>
-      <span class="od-status" role="status" aria-live="polite"></span>
+      <span class="od-status" role="status" aria-live="polite" data-state="saved">
+        <span class="od-status-icon"></span><span class="od-status-text"></span>
+      </span>
     </div>
     <span class="od-spacer"></span>
+    <span class="od-count" title="Word count"></span>
     <div class="od-people">
       <span class="od-agent" hidden>
         <span class="od-agent-line" role="status" aria-live="polite" hidden></span>
@@ -21,6 +25,7 @@
       </span>
       <button class="od-me" type="button" title="You · click to change your name"></button>
     </div>
+    <button class="od-icon-btn od-display-toggle" type="button" data-icon="display" title="Display options" aria-label="Display options" aria-haspopup="dialog" aria-expanded="false"></button>
   </header>
 
   <div class="od-panel" hidden>
@@ -30,39 +35,113 @@
     <pre class="od-panel-log"></pre>
   </div>
 
+  <div class="od-display" role="dialog" aria-label="Display options" hidden>
+    <div class="od-display-label">Font</div>
+    <div class="od-fonts" role="radiogroup" aria-label="Font">
+      <button type="button" role="radio" data-font="sans"><span class="od-font-sample">Ag</span>Sans</button>
+      <button type="button" role="radio" data-font="serif"><span class="od-font-sample">Ag</span>Serif</button>
+      <button type="button" role="radio" data-font="mono"><span class="od-font-sample">Ag</span>Mono</button>
+    </div>
+    <div class="od-display-row">
+      <span>Theme</span>
+      <div class="od-segmented" role="radiogroup" aria-label="Theme">
+        <button type="button" role="radio" data-theme-choice="system">Auto</button>
+        <button type="button" role="radio" data-theme-choice="light">Light</button>
+        <button type="button" role="radio" data-theme-choice="dark">Dark</button>
+      </div>
+    </div>
+    <div class="od-display-row">
+      <span>Width</span>
+      <div class="od-segmented" role="radiogroup" aria-label="Text width">
+        <button type="button" role="radio" data-width="normal">Normal</button>
+        <button type="button" role="radio" data-width="wide">Wide</button>
+      </div>
+    </div>
+    <label class="od-display-row od-switch-row">
+      <span>Focus mode <kbd data-keys="Mod+Shift+F"></kbd></span>
+      <input type="checkbox" class="od-switch" data-setting="focus">
+    </label>
+    <button type="button" class="od-display-link" data-action="shortcuts">Keyboard shortcuts <kbd data-keys="Mod+/"></kbd></button>
+  </div>
+
   <div class="od-toolbar" role="toolbar" aria-label="Formatting">
-    <button type="button" data-command="paragraph" title="Body text">Text</button>
-    <button type="button" data-command="h1" title="Heading 1">H1</button>
-    <button type="button" data-command="h2" title="Heading 2">H2</button>
-    <button type="button" data-command="h3" title="Heading 3">H3</button>
+    <div class="od-tool-group">
+      <button type="button" data-command="undo" data-icon="undo" data-tip="Undo" data-keys="Mod+Z" aria-label="Undo"></button>
+      <button type="button" data-command="redo" data-icon="redo" data-tip="Redo" data-keys="Mod+Shift+Z" aria-label="Redo"></button>
+    </div>
     <span class="od-sep"></span>
-    <button type="button" data-command="bold" title="Bold (Ctrl+B)"><b>B</b></button>
-    <button type="button" data-command="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-    <button type="button" data-command="link" title="Link">Link</button>
+    <div class="od-block-picker">
+      <button type="button" class="od-block-button" aria-haspopup="listbox" aria-expanded="false" data-tip="Text style">
+        <span class="od-block-label">Normal text</span>
+      </button>
+      <ul class="od-block-menu" role="listbox" aria-label="Text style" hidden>
+        <li role="option" data-command="paragraph" data-block="paragraph"><span class="od-sample-p">Normal text</span><kbd data-keys="Mod+Alt+0"></kbd></li>
+        <li role="option" data-command="h1" data-block="h1"><span class="od-sample-h1">Heading 1</span><kbd data-keys="Mod+Alt+1"></kbd></li>
+        <li role="option" data-command="h2" data-block="h2"><span class="od-sample-h2">Heading 2</span><kbd data-keys="Mod+Alt+2"></kbd></li>
+        <li role="option" data-command="h3" data-block="h3"><span class="od-sample-h3">Heading 3</span><kbd data-keys="Mod+Alt+3"></kbd></li>
+      </ul>
+    </div>
     <span class="od-sep"></span>
-    <button type="button" data-command="bullets" title="Bulleted list">• List</button>
-    <button type="button" data-command="numbers" title="Numbered list">1. List</button>
+    <div class="od-tool-group">
+      <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" data-keys="Mod+B" aria-label="Bold"></button>
+      <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
+      <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
+      <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
+      <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link"></button>
+    </div>
+    <span class="od-sep"></span>
+    <div class="od-tool-group">
+      <button type="button" data-command="bullets" data-icon="bullets" data-tip="Bulleted list" data-keys="Mod+Alt+8" aria-label="Bulleted list"></button>
+      <button type="button" data-command="numbers" data-icon="numbers" data-tip="Numbered list" data-keys="Mod+Alt+7" aria-label="Numbered list"></button>
+      <button type="button" data-command="quote" data-icon="quote" data-tip="Quote" data-keys="Mod+Shift+B" aria-label="Quote"></button>
+      <button type="button" data-command="codeBlock" data-icon="codeBlock" data-tip="Code block" data-keys="Mod+Alt+C" aria-label="Code block"></button>
+    </div>
     <span class="od-spacer"></span>
-    <button type="button" class="od-tool-comment" data-action="comment" title="Add comment (Ctrl+Alt+M)">+ Comment</button>
-    <button type="button" class="od-show-resolved" aria-pressed="false" title="Show resolved comments">Resolved</button>
+    <button type="button" class="od-pill od-tool-comment" data-action="comment" data-icon="comment" data-tip="Add comment" data-keys="Mod+Alt+M">Comment</button>
+    <button type="button" class="od-pill od-show-resolved" data-icon="checkCircle" aria-pressed="false" data-tip="Show resolved comments"><span class="od-resolved-label">Resolved</span></button>
   </div>
 
   <div class="od-banner" hidden>
+    <span class="od-banner-icon" data-icon="alert"></span>
     <span class="od-banner-text"></span>
     <button type="button" data-action="reload">Use their version</button>
     <button type="button" data-action="keep">Keep mine</button>
   </div>
 
   <main class="od-canvas">
+    <nav class="od-outline" aria-label="Outline" hidden>
+      <div class="od-outline-ticks" aria-hidden="true"></div>
+      <div class="od-outline-panel">
+        <div class="od-outline-title">Outline</div>
+        <ol class="od-outline-list"></ol>
+      </div>
+    </nav>
     <div class="od-stage">
       <article class="od-page" aria-label="Document">
         <div class="od-editor"></div>
       </article>
       <aside class="od-margin" aria-label="Comments"></aside>
-      <button class="od-add-comment" type="button" title="Add comment (Ctrl+Alt+M)" aria-label="Add comment" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-3 9h-4v4h-2v-4H7V9h4V5h2v4h4z"/></svg>
-      </button>
+      <div class="od-bubble" role="toolbar" aria-label="Selection" hidden>
+        <button type="button" class="od-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
+        <span class="od-sep"></span>
+        <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" data-keys="Mod+B" aria-label="Bold"></button>
+        <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
+        <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
+        <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
+        <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link"></button>
+      </div>
+      <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
     </div>
   </main>
+
+  <div class="od-tip" role="tooltip" hidden></div>
+
+  <dialog class="od-shortcuts" aria-label="Keyboard shortcuts">
+    <div class="od-shortcuts-head">
+      <h2>Keyboard shortcuts</h2>
+      <button type="button" class="od-icon-btn" data-icon="close" data-action="close" aria-label="Close"></button>
+    </div>
+    <div class="od-shortcuts-body"></div>
+  </dialog>
 </body>
 </html>

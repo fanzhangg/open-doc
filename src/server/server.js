@@ -24,6 +24,7 @@ const ASSETS = {
   '/assets/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/assets/app.css': ['app.css', 'text/css; charset=utf-8'],
 };
+const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
 const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);
 const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
 
@@ -59,6 +60,19 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     checkHost(req, actualPort);
+
+    const font = req.method === 'GET' && url.pathname.match(FONT_PATH);
+    if (font) {
+      let body;
+      try {
+        body = await readFile(join(assetsDir, 'fonts', font[1]));
+      } catch {
+        throw new HttpError(404, 'not_found', 'not found');
+      }
+      res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'max-age=86400', ...SECURITY_HEADERS });
+      res.end(body);
+      return;
+    }
 
     if (req.method === 'GET' && ASSETS[url.pathname]) {
       if (url.pathname === '/' && !tokenMatches(url.searchParams.get('t'), token)) {

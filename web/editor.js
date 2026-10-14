@@ -1,26 +1,30 @@
 // The page: a Milkdown (ProseMirror) WYSIWYG editor with comment highlights,
-// a margin "add comment" button for selections, and collaborator-style
-// application of changes made on disk: only the blocks that changed are
-// replaced (the caret stays put) and the new text glows with the author's name.
+// named formatting commands for the toolbar, selection bubble and "/" menu,
+// and collaborator-style application of changes made on disk: only the blocks
+// that changed are replaced (the caret stays put) and the new text glows with
+// the author's name.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
   commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
-  wrapInBulletListCommand, wrapInOrderedListCommand, toggleLinkCommand, turnIntoTextCommand,
+  wrapInBulletListCommand, wrapInOrderedListCommand, toggleLinkCommand, updateLinkCommand, turnIntoTextCommand,
+  toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
 } from '@milkdown/kit/preset/commonmark';
-import { gfm } from '@milkdown/kit/preset/gfm';
-import { history } from '@milkdown/kit/plugin/history';
+import { gfm, toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
+import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { $prose, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
+import { lift } from '@milkdown/kit/prose/commands';
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
-import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
+import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
 import { docRange, projectDoc, textRange } from './pm-text.js';
 
 const FLASH_MS = 6000;
+const PLACEHOLDER = 'Type / for blocks, or select text to comment';
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 
@@ -34,16 +38,48 @@ const decorationPlugin = (key) => $prose(() => new Plugin({
   props: { decorations: (state) => key.getState(state) },
 }));
 
+// Reports every view update and lets the page take keys first (for the "/"
+// menu). Marks the top-level block holding the caret (for focus mode) and
+// shows a hint in an empty line the caret is in.
+const uiPlugin = (hooks) => $prose(() => new Plugin({
+  view: () => ({ update: (view) => hooks.onUpdate(view) }),
+  props: {
+    handleKeyDown: (_view, event) => hooks.onKeyDown(event),
+    handleDOMEvents: {
+      focus: (view) => hooks.onUpdate(view),
+      blur: (view) => hooks.onUpdate(view),
+    },
+    decorations(state) {
+      const { $from, empty } = state.selection;
+      if ($from.depth === 0) return null;
+      const decorations = [];
+      const top = $from.before(1);
+      decorations.push(Decoration.node(top, top + $from.node(1).nodeSize, { class: 'od-current' }));
+      const parent = $from.parent;
+      if (empty && parent.type.name === 'paragraph' && parent.content.size === 0) {
+        decorations.push(Decoration.node($from.before(), $from.after(), { class: 'od-placeholder', 'data-placeholder': PLACEHOLDER }));
+      }
+      return DecorationSet.create(state.doc, decorations);
+    },
+  },
+}));
+
 /**
- * @param {{ stage: HTMLElement, toolbar: HTMLElement, markdown: string,
+ * @param {{ stage: HTMLElement, markdown: string,
  *           onChange: () => void, onSelectThread: (id: string) => void,
  *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
  */
-export async function createDocEditor({ stage, toolbar, markdown, onChange, onSelectThread, onCommentRequest }) {
+export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest }) {
   // Markdown as last loaded or applied; an update that serializes to the same
   // text is an echo of that, not a local edit (markdownUpdated is debounced).
   let baseline = null;
   let onDocUpdated = () => {};
+  const uiListeners = new Set();
+  let keyHandler = () => false;
+  const hooks = {
+    onUpdate: () => { for (const fn of uiListeners) fn(); },
+    onKeyDown: (event) => keyHandler(event),
+  };
   const host = stage.querySelector('.od-editor');
   const editor = await Editor.make()
     .config((ctx) => {
@@ -60,7 +96,7 @@ export async function createDocEditor({ stage, toolbar, markdown, onChange, onSe
         .updated(() => onDocUpdated());
     })
     .use(commonmark).use(gfm).use(history).use(clipboard).use(listener)
-    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey))
+    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(uiPlugin(hooks))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
@@ -123,61 +159,134 @@ export async function createDocEditor({ stage, toolbar, markdown, onChange, onSe
     };
   }
 
-  const button = stage.querySelector('.od-add-comment');
-  function placeButton() {
-    const v = view();
-    const { from, to, empty } = v.state.selection;
-    if (empty || !v.hasFocus() || textRange(projectDoc(v.state.doc), from, to) === null) {
-      button.hidden = true;
-      return;
-    }
-    const box = stage.getBoundingClientRect();
-    const page = stage.querySelector('.od-page').getBoundingClientRect();
-    button.style.top = `${v.coordsAtPos(from).top - box.top - 6}px`;
-    button.style.left = `${Math.min(page.right - box.left - 18, box.width - 44)}px`; // straddles the page edge
-    button.hidden = false;
-  }
-  document.addEventListener('selectionchange', () => requestAnimationFrame(placeButton));
-  host.addEventListener('blur', () => setTimeout(placeButton, 150), true);
-  button.addEventListener('mousedown', (event) => event.preventDefault());
-  button.addEventListener('click', () => requestComment());
-
   function requestComment() {
     const hint = view().state.selection.empty ? null : selectionHint();
-    button.hidden = true;
     onCommentRequest(hint);
   }
 
-  // ---- toolbar ----
+  // ---- formatting commands, shared by the toolbar, the selection bubble and "/" ----
 
+  const listCommand = (type, wrap) => (state, dispatch) => {
+    const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
+    if (!list) return editor.action(callCommand(wrap.key));
+    if (list.node.type.name === type) return editor.action(callCommand(liftListItemCommand.key));
+    dispatch(state.tr.setNodeMarkup(list.pos, state.schema.nodes[type]));
+    return true;
+  };
+  const headingCommand = (level) => (state) => editor.action(blockType(state) === `h${level}`
+    ? callCommand(turnIntoTextCommand.key)
+    : callCommand(wrapInHeadingCommand.key, level));
   const commands = {
-    paragraph: () => callCommand(turnIntoTextCommand.key),
-    h1: () => callCommand(wrapInHeadingCommand.key, 1),
-    h2: () => callCommand(wrapInHeadingCommand.key, 2),
-    h3: () => callCommand(wrapInHeadingCommand.key, 3),
-    bold: () => callCommand(toggleStrongCommand.key),
-    italic: () => callCommand(toggleEmphasisCommand.key),
-    bullets: () => callCommand(wrapInBulletListCommand.key),
-    numbers: () => callCommand(wrapInOrderedListCommand.key),
+    undo: () => editor.action(callCommand(undoCommand.key)),
+    redo: () => editor.action(callCommand(redoCommand.key)),
+    paragraph: () => editor.action(callCommand(turnIntoTextCommand.key)),
+    h1: headingCommand(1),
+    h2: headingCommand(2),
+    h3: headingCommand(3),
+    bold: () => editor.action(callCommand(toggleStrongCommand.key)),
+    italic: () => editor.action(callCommand(toggleEmphasisCommand.key)),
+    strike: () => editor.action(callCommand(toggleStrikethroughCommand.key)),
+    code: () => editor.action(callCommand(toggleInlineCodeCommand.key)),
+    bullets: listCommand('bullet_list', wrapInBulletListCommand),
+    numbers: listCommand('ordered_list', wrapInOrderedListCommand),
+    quote: (state, dispatch) => (ancestor(state, (node) => node.type.name === 'blockquote')
+      ? lift(state, dispatch)
+      : editor.action(callCommand(wrapInBlockquoteCommand.key))),
+    codeBlock: () => editor.action(callCommand(createCodeBlockCommand.key)),
+    divider: () => editor.action(callCommand(insertHrCommand.key)),
+    table: () => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })),
     link: () => {
-      const href = window.prompt('Link URL');
-      return href ? callCommand(toggleLinkCommand.key, { href }) : null;
+      const current = markActive(view().state, 'link');
+      const href = window.prompt(current ? 'Link URL (empty to remove)' : 'Link URL', current?.attrs.href ?? 'https://');
+      if (href === null) return;
+      if (current && !href.trim()) return editor.action(callCommand(toggleLinkCommand.key));
+      if (current) return editor.action(callCommand(updateLinkCommand.key, { href: href.trim() }));
+      if (href.trim()) editor.action(callCommand(toggleLinkCommand.key, { href: href.trim() }));
     },
   };
-  toolbar.addEventListener('mousedown', (event) => {
-    const target = event.target.closest('button');
-    if (!target) return;
-    event.preventDefault(); // keep the selection in the editor
-    if (target.dataset.action === 'comment') {
-      requestComment();
-      return;
+
+  /** Run a named formatting command against the current selection. */
+  function run(name) {
+    const v = view();
+    commands[name]?.(v.state, (tr) => v.dispatch(tr));
+    v.focus();
+  }
+
+  /** What the toolbar reflects: active marks, the block type and lists at the caret. */
+  function formatState() {
+    const { state } = view();
+    const active = new Set();
+    for (const [name, mark] of [['bold', 'strong'], ['italic', 'emphasis'], ['strike', 'strike_through'], ['code', 'inlineCode'], ['link', 'link']]) {
+      if (markActive(state, mark)) active.add(name);
     }
-    const name = target.dataset.command;
-    if (!name) return;
-    const command = commands[name]();
-    if (command) editor.action(command);
-    view().focus();
-  });
+    const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
+    if (list) active.add(list.node.type.name === 'bullet_list' ? 'bullets' : 'numbers');
+    if (ancestor(state, (node) => node.type.name === 'blockquote')) active.add('quote');
+    const block = blockType(state);
+    active.add(block);
+    return { active, block };
+  }
+
+  // ---- "/" menu: the query typed after a slash at the caret ----
+
+  function slashQuery() {
+    const v = view();
+    const { selection } = v.state;
+    if (!selection.empty || !v.hasFocus()) return null;
+    const { $from } = selection;
+    if ($from.parent.type.name === 'code_block' || !$from.parent.isTextblock) return null;
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '￼');
+    const match = before.match(/(?:^|\s)\/([A-Za-z0-9]{0,20})$/);
+    if (!match) return null;
+    return { query: match[1], from: selection.from - match[1].length - 1, to: selection.from };
+  }
+
+  /** Remove the typed "/query", then run `name`. */
+  function runSlash(range, name) {
+    const v = view();
+    v.dispatch(v.state.tr.delete(range.from, range.to));
+    if (name === 'comment') requestComment();
+    else run(name);
+  }
+
+  // ---- outline and counts ----
+
+  function headings() {
+    const result = [];
+    view().state.doc.forEach((node, pos) => {
+      if (node.type.name === 'heading' && node.textContent.trim()) result.push({ level: node.attrs.level, text: node.textContent, pos });
+    });
+    return result;
+  }
+
+  function scrollToHeading(pos) {
+    const v = view();
+    const dom = v.nodeDOM(pos);
+    if (!(dom instanceof HTMLElement)) return;
+    dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, pos + 1)));
+    v.focus();
+  }
+
+  function counts() {
+    const { state } = view();
+    const words = (text) => (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
+    const { from, to, empty } = state.selection;
+    return {
+      words: words(state.doc.textBetween(0, state.doc.content.size, ' ', ' ')),
+      selected: empty ? 0 : words(state.doc.textBetween(from, to, ' ', ' ')),
+    };
+  }
+
+  /** Viewport rectangle of the selection, or null when there is none to point at. */
+  function selectionRect() {
+    const v = view();
+    const { from, to, empty } = v.state.selection;
+    if (empty || !v.hasFocus()) return null;
+    const start = v.coordsAtPos(from);
+    const end = v.coordsAtPos(to);
+    return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right), commentable: textRange(projectDoc(v.state.doc), from, to) !== null };
+  }
 
   // ---- changes from disk ----
 
@@ -248,6 +357,23 @@ export async function createDocEditor({ stage, toolbar, markdown, onChange, onSe
       paintHighlights();
     },
     requestComment,
+    run,
+    formatState,
+    slashQuery,
+    runSlash,
+    headings,
+    scrollToHeading,
+    counts,
+    selectionRect,
+    coordsAt: (pos) => view().coordsAtPos(pos),
+    /** Called after every editor update: typing, selection, focus. */
+    onUi(listener) {
+      uiListeners.add(listener);
+    },
+    /** Sees editor keydowns first; return true to consume one. */
+    setKeyHandler(handler) {
+      keyHandler = handler;
+    },
     focus: () => view().focus(),
     /** Viewport top of each anchor (or of the draft), by thread id. */
     anchorTops(items) {
@@ -265,6 +391,35 @@ export async function createDocEditor({ stage, toolbar, markdown, onChange, onSe
       layoutListeners.add(listener);
     },
   };
+}
+
+// The nearest ancestor of the selection start matching `test`: { node, pos }.
+function ancestor(state, test) {
+  const { $from } = state.selection;
+  for (let depth = $from.depth; depth > 0; depth--) {
+    const node = $from.node(depth);
+    if (test(node)) return { node, pos: $from.before(depth) };
+  }
+  return null;
+}
+
+// The mark of type `name` at the caret or across the selection, or null.
+function markActive(state, name) {
+  const type = state.schema.marks[name];
+  if (!type) return null;
+  const { from, to, empty, $from } = state.selection;
+  if (empty) return type.isInSet(state.storedMarks ?? $from.marks()) ?? null;
+  let found = null;
+  state.doc.nodesBetween(from, to, (node) => {
+    found ??= type.isInSet(node.marks) ?? null;
+  });
+  return found;
+}
+
+// 'paragraph', 'h1'…'h6', 'code_block' or another node name, for the block at the caret.
+function blockType(state) {
+  const parent = state.selection.$from.parent;
+  return parent.type.name === 'heading' ? `h${parent.attrs.level}` : parent.type.name;
 }
 
 function flag(name) {

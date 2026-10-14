@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startServer } from '../src/server/server.js';
@@ -57,6 +57,24 @@ test('the page and API require the token and our own Host', async () => {
     assert.equal((await call(server, 'GET', '/api/state', { headers: { host: 'evil.example:80' } })).status, 403);
     assert.equal((await call(server, 'GET', '/etc/passwd')).status, 404);
   });
+});
+
+test('bundled fonts are served from the assets fonts folder only', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  await mkdir(join(assetsDir, 'fonts'));
+  await writeFile(join(assetsDir, 'fonts', 'inter-latin-wght-normal.woff2'), 'wOF2');
+  const server = await startServer(docPath, { assetsDir });
+  const get = (path) => new Promise((resolve) => request({ port: server.port, path, headers: { host: `127.0.0.1:${server.port}` } }, resolve).end());
+  try {
+    const font = await get('/assets/fonts/inter-latin-wght-normal.woff2');
+    assert.equal(font.statusCode, 200);
+    assert.equal(font.headers['content-type'], 'font/woff2');
+    assert.equal((await get('/assets/fonts/missing.woff2')).statusCode, 404);
+    assert.equal((await get('/assets/fonts/..%2Findex.woff2')).statusCode, 404);
+  } finally {
+    await server.close();
+  }
 });
 
 test('state returns the doc, its hash and the sidecar', async () => {
