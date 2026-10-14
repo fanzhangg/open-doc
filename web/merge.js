@@ -3,7 +3,7 @@
 // close to a block: edits to different paragraphs merge, edits to the same
 // paragraph conflict.
 
-const MAX_DIFF_CELLS = 4_000_000;
+import { lineMatches as matches } from '../src/core/diff.js';
 
 /**
  * @param {string} base the text both sides started from
@@ -49,52 +49,6 @@ export function merge3(base, ours, theirs) {
     ti = tEnd;
   }
   return { text: out.join('\n'), conflict: false };
-}
-
-// For each line of `a`, the index of the matching line of `b` in a longest
-// common subsequence, or -1. Null when the inputs are too large to diff.
-function matches(a, b) {
-  const map = new Array(a.length).fill(-1);
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) {
-    map[start] = start;
-    start++;
-  }
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-    map[endA] = endB;
-  }
-  const n = endA - start;
-  const m = endB - start;
-  if (n === 0 || m === 0) return map;
-  if ((n + 1) * (m + 1) > MAX_DIFF_CELLS) return null;
-
-  const width = m + 1;
-  const table = new Uint32Array((n + 1) * width);
-  for (let x = n - 1; x >= 0; x--) {
-    for (let y = m - 1; y >= 0; y--) {
-      table[x * width + y] = a[start + x] === b[start + y]
-        ? table[(x + 1) * width + y + 1] + 1
-        : Math.max(table[(x + 1) * width + y], table[x * width + y + 1]);
-    }
-  }
-  let x = 0;
-  let y = 0;
-  while (x < n && y < m) {
-    if (a[start + x] === b[start + y]) {
-      map[start + x] = start + y;
-      x++;
-      y++;
-    } else if (table[(x + 1) * width + y] >= table[x * width + y + 1]) {
-      x++;
-    } else {
-      y++;
-    }
-  }
-  return map;
 }
 
 function same(a, b) {

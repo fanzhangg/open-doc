@@ -55,3 +55,28 @@ test('invalid sidecars are rejected', () => {
     assert.equal(validate(sidecar), false, name);
   }
 });
+
+test('edits and undo notices on messages are valid; malformed ones are rejected', () => {
+  const sidecar = clone(example);
+  const edit = { before: 'load', after: 'peak load', prefix: 'the extra ', suffix: '.', start: 120 };
+  const [first] = sidecar.threads[0].messages;
+  sidecar.threads[0].messages.push(
+    { id: 'm_reply01', author: { name: 'claude', kind: 'agent' }, body: 'Done.', mentions: [], createdAt: first.createdAt, edits: [edit, { ...edit, before: '', scope: 'run' }] },
+    { id: 'm_undo001', author: first.author, body: "Undid claude's edit", mentions: [], createdAt: first.createdAt, undoes: 'm_reply01' },
+  );
+  assert.ok(validate(sidecar), JSON.stringify(validate.errors, null, 2));
+
+  const cases = {
+    'empty edits': (m) => { m.edits = []; },
+    'edit without after': (m) => { delete m.edits[0].after; },
+    'edit context longer than 32': (m) => { m.edits[0].suffix = 's'.repeat(33); },
+    'negative start': (m) => { m.edits[0].start = -1; },
+    'unknown scope': (m) => { m.edits[0].scope = 'doc'; },
+    'undoes not a message id': (m) => { m.undoes = 'reply'; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const copy = clone(sidecar);
+    mutate(copy.threads[0].messages.at(-2));
+    assert.equal(validate(copy), false, name);
+  }
+});

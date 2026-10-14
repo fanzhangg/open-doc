@@ -6,6 +6,7 @@ import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
 
 export const FORMAT_VERSION = 1;
 export const WORKING_TTL_MS = 5 * 60 * 1000;
+const MESSAGE_ID = /^m_[A-Za-z0-9_-]{6,}$/;
 
 export class OpError extends Error {
   /** @param {'unknown_thread' | 'bad_input'} code */
@@ -38,6 +39,10 @@ export function newId(prefix) {
  *   { type: 'resolve', threadId, by, at }
  *   { type: 'reopen', threadId }
  *   { type: 'setWorking', threadId, by, since }   // since: null clears
+ *   { type: 'attachEdits', threadId, messageId, edits }
+ *
+ * A message may carry `edits` (what its author changed in the doc, §2.5) and
+ * `undoes` (the id of the message whose edits it reverted).
  */
 export function applyOp(sidecar, op) {
   switch (op.type) {
@@ -58,6 +63,8 @@ export function applyOp(sidecar, op) {
         ...t,
         working: op.since ? { by: op.by, since: op.since } : null,
       }));
+    case 'attachEdits':
+      return attachEdits(sidecar, op);
     default:
       throw new OpError('bad_input', `unknown operation: ${op.type}`);
   }
@@ -101,15 +108,42 @@ function addMessage(sidecar, { threadId, message }) {
   }));
 }
 
-function buildMessage(sidecar, { id, author, body, createdAt }) {
+function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes }) {
   if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
-  return {
+  const message = {
     id,
     author: { name: canonicalName(sidecar, author.name), kind: author.kind },
     body,
     mentions: parseMentions(body, sidecar.participants),
     createdAt,
   };
+  if (edits !== undefined) message.edits = validateEdits(edits);
+  if (undoes !== undefined) {
+    if (!MESSAGE_ID.test(undoes ?? '')) throw new OpError('bad_input', `invalid message id: ${undoes}`);
+    message.undoes = undoes;
+  }
+  return message;
+}
+
+function attachEdits(sidecar, { threadId, messageId, edits }) {
+  validateEdits(edits);
+  return updateThread(sidecar, threadId, (t) => {
+    const current = t.messages.find((m) => m.id === messageId);
+    if (!current) throw new OpError('bad_input', `no message ${messageId} in thread ${threadId}`);
+    if (JSON.stringify(current.edits) === JSON.stringify(edits)) return t;
+    return { ...t, messages: t.messages.map((m) => (m === current ? { ...m, edits } : m)) };
+  });
+}
+
+function validateEdits(edits) {
+  const ok = Array.isArray(edits) && edits.length > 0 && edits.every((e) => e
+    && typeof e.before === 'string' && typeof e.after === 'string' && e.before !== e.after
+    && typeof e.prefix === 'string' && e.prefix.length <= 32
+    && typeof e.suffix === 'string' && e.suffix.length <= 32
+    && Number.isInteger(e.start) && e.start >= 0
+    && (e.scope === undefined || e.scope === 'thread' || e.scope === 'run'));
+  if (!ok) throw new OpError('bad_input', 'invalid edits');
+  return edits;
 }
 
 function updateThread(sidecar, threadId, change) {

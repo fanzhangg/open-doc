@@ -8,6 +8,7 @@ export {
   reanchorThreads,
   refreshSidecar,
 } from './anchor.js';
+export { diffEdits, findEdit, revertEdits } from './diff.js';
 export { parseMentions } from './mentions.js';
 export {
   FORMAT_VERSION,

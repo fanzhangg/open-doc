@@ -255,7 +255,12 @@ function validateOp(op) {
   };
   const message = (m) => {
     if (!m || !ID.m.test(m.id ?? '') || typeof m.body !== 'string') throw new HttpError(400, 'bad_input', 'invalid message');
-    return { id: m.id, author: human(m.author), body: m.body, createdAt: now };
+    const out = { id: m.id, author: human(m.author), body: m.body, createdAt: now };
+    if (m.undoes !== undefined) {
+      if (!ID.m.test(m.undoes ?? '')) throw new HttpError(400, 'bad_input', 'invalid undoes');
+      out.undoes = m.undoes;
+    }
+    return out;
   };
   const threadId = (id) => {
     if (!ID.t.test(id ?? '')) throw new HttpError(400, 'bad_input', 'invalid thread id');

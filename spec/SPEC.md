@@ -105,6 +105,8 @@ clears it too.
 | `body` | string | Plain text. Tools MUST NOT interpret it as markup. |
 | `mentions` | array of strings | Participant names mentioned in `body` (§4). |
 | `createdAt` | string | RFC 3339 UTC timestamp. |
+| `edits` | array, optional | What the author changed in the doc while answering this thread (§2.5). |
+| `undoes` | string, optional | Id of a message whose `edits` this message reverted. Such a message is an **undo notice** (§5). |
 
 ### 2.4 Participants
 
@@ -112,6 +114,38 @@ Each entry is `{ "name", "kind" }`. A name matches
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is unique, compared case-insensitively.
 A participant is added the first time they post, or when an agent starts
 waiting for comments. Editors use this list for @ autocompletion.
+
+### 2.5 Edits
+
+A tool that runs an agent on a thread MAY record what the agent changed in
+the doc as `edits` on the agent's reply, so a human can review and undo it.
+Each edit is a change to the doc's **markdown source** (not the rendered
+text):
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `before` | string | The source text that was replaced. Empty for an insertion. |
+| `after` | string | The source text that replaced it. Empty for a deletion. |
+| `prefix` | string | Up to 32 characters of source immediately before `after`, just after the change. |
+| `suffix` | string | Up to 32 characters of source immediately after `after`, just after the change. |
+| `start` | integer | Offset of `after` in the source just after the change. A hint. |
+| `scope` | `"thread"` or `"run"`, optional | `"run"` when the change could not be tied to this thread because one agent run answered several threads; it is then recorded on each of them. Default `"thread"`. |
+
+`before` and `after` differ. A change is usually trimmed to the characters
+that differ and widened to whole words where it splits one: `extra load`
+becoming `extra peak load` is recorded as an insertion of `peak `, and
+`colour` becoming `color` as `colour` → `color`. A change is tied to
+the thread whose anchor it overlaps or touches; when a run answered one
+thread, every change in it belongs to that thread.
+
+To **undo** an edit, a tool finds `after` in the current source as if it
+were an anchor (`exact` = `after`, §3.3 step 1 only), requiring that the
+match also keeps `prefix` or `suffix` next to it; an empty `after` is found
+as the place where `prefix` is directly followed by `suffix` (closest to
+`start`). If any edit of the message cannot be found this way, the text has
+changed since and the tool MUST NOT undo. Otherwise it replaces each match
+with `before` and posts an undo notice: a human message with `undoes` set
+to the reverted message's id, which reopens the thread.
 
 ## 3. Anchors
 
@@ -221,11 +255,13 @@ mention.
 A thread is in participant `P`'s inbox when all of these hold:
 
 - `status` is `"open"`;
-- its latest message's author has `kind: "human"`;
+- its latest message that is not an undo notice (§2.3) has an author with
+  `kind: "human"`;
 - that message mentions `P`, or mentions no one;
 - it is not marked `working` by `P` (a stale value does not count).
 
-A comment addressed only to someone else does not wake `P`. The last rule
+A comment addressed only to someone else does not wake `P`, and undoing an
+edit does not ask the agent to try again. The last rule
 keeps a participant who is still answering a thread from being handed it
 again. The inbox is
 computed from the sidecar alone; tools need no cursor or other state.
@@ -244,7 +280,7 @@ Writers MUST NOT lose each other's changes:
 4. Remove the lock.
 
 Changes are expressed as operations (add thread, add message, resolve, reopen,
-set working, join) carrying client-generated ids, so a retried operation is
+set working, join, attach edits) carrying client-generated ids, so a retried operation is
 applied at most once.
 
 ## 7. Compatibility

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { agentEnv, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
+import { revertEdits } from '../src/core/diff.js';
 
 import { sidecarPath } from '../src/store/files.js';
 import { SAMPLE, tempDoc } from './helpers.js';
@@ -133,6 +134,40 @@ test('an agent that edits the doc and resolves', { timeout: 30_000 }, async () =
     }, { what: 'resolved' });
     assert.match(await readFile(docPath, 'utf8'), /extra peak load/);
     assert.equal(s.threads[0].anchor.exact, 'extra peak load');
+  });
+});
+
+test('the agent reply records what the run changed, and undoing it restores the doc', { timeout: 30_000 }, async () => {
+  await withAgent('edit', async ({ docPath, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@claude add "peak"');
+    const s = await until(async () => {
+      const current = await sidecar();
+      return replies(current.threads[0])[0]?.edits && current;
+    }, { what: 'recorded edits' });
+    const [reply] = replies(s.threads[0]);
+    assert.equal(reply.body, 'Handled by fake agent');
+    assert.equal(reply.edits.length, 1);
+    const [edit] = reply.edits;
+    assert.deepEqual({ before: edit.before, after: edit.after, scope: edit.scope }, { before: '', after: 'peak ', scope: undefined });
+    const markdown = await readFile(docPath, 'utf8');
+    assert.equal(markdown.slice(edit.start - edit.prefix.length, edit.start + edit.after.length + edit.suffix.length), edit.prefix + edit.after + edit.suffix);
+    assert.equal(revertEdits(markdown, reply.edits), SAMPLE);
+  });
+});
+
+test('in a run for several threads, a change goes to the thread whose quote it touches', { timeout: 30_000 }, async () => {
+  await withAgent('edit', async ({ runs, sidecar, comment }) => {
+    await comment('--quote', 'gather feedback', '@claude one');
+    await comment('--quote', 'extra load', '@claude two');
+    const s = await until(async () => {
+      const current = await sidecar();
+      return current.threads.some((t) => replies(t)[0]?.edits) && current;
+    }, { what: 'recorded edits' });
+    assert.ok(s.threads.every((t) => t.status === 'resolved' && replies(t).length === 1));
+    assert.equal((await runs()).length, 1, 'one run handled both');
+    const [feedback, load] = s.threads;
+    assert.equal(replies(feedback)[0].edits, undefined);
+    assert.deepEqual(replies(load)[0].edits.map((e) => [e.before, e.after]), [['', 'peak ']]);
   });
 });
 

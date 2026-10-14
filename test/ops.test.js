@@ -92,3 +92,34 @@ test('inbox: addressed to me or to no one, from a human, open, not already mine'
   s = applyOp(s, { type: 'addMessage', threadId: 't_noone1', message: msg(claude, 'Rewrote it.') });
   assert.ok(!inbox(s, 'claude', now).some((t) => t.id === 't_noone1'), 'an agent reply hands the turn back');
 });
+
+test('edits: recorded on an agent reply, validated, idempotent; an undo notice wakes no one', () => {
+  const edit = { before: 'load', after: 'peak load', prefix: 'the extra ', suffix: '.', start: 120 };
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_edit01', anchor: null, message: msg(human, 'add peak') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(claude, 'Done.', 'm_reply1') });
+  s = applyOp(s, { type: 'resolve', threadId: 't_edit01', by: 'claude', at });
+  s = applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits: [edit] });
+  assert.deepEqual(s.threads[0].messages[1].edits, [edit]);
+  assert.equal(s.threads[0].status, 'resolved', 'attaching edits does not reopen');
+  assert.equal(applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits: [{ ...edit }] }), s);
+
+  const bad = [[], [{ ...edit, after: 'load' }], [{ ...edit, prefix: 'p'.repeat(33) }], [{ ...edit, start: -1 }], [{ ...edit, scope: 'all' }]];
+  for (const edits of bad) {
+    assert.throws(() => applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits }), OpError);
+  }
+  assert.throws(() => applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_nope00', edits: [edit] }), OpError);
+
+  // A message can carry edits from the start; messages without them stay as they were.
+  const withEdits = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: { ...msg(claude, 'Edited the doc.'), edits: [edit] } });
+  assert.deepEqual(withEdits.threads[0].messages.at(-1).edits, [edit]);
+  assert.ok(!('edits' in s.threads[0].messages[0]) && !('undoes' in s.threads[0].messages[0]));
+
+  const undo = { ...msg(human, "Undid claude's edit"), undoes: 'm_reply1' };
+  s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: undo });
+  assert.equal(s.threads[0].status, 'open', 'the notice reopens the thread');
+  assert.equal(s.threads[0].messages.at(-1).undoes, 'm_reply1');
+  assert.deepEqual(inbox(s, 'claude'), [], 'and does not ask the agent to try again');
+  s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(human, 'Try "heavy" instead') });
+  assert.deepEqual(inbox(s, 'claude').map((t) => t.id), ['t_edit01']);
+  assert.throws(() => applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: { ...msg(human, 'x'), undoes: 'nope' } }), OpError);
+});

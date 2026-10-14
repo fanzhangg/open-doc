@@ -104,7 +104,30 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/name" }
         },
-        "createdAt": { "$ref": "#/$defs/timestamp" }
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "edits": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/edit" },
+          "description": "Optional. What the author changed in the doc for this thread (SPEC.md §2.5)."
+        },
+        "undoes": {
+          "type": "string",
+          "pattern": "^m_[A-Za-z0-9_-]{6,}$",
+          "description": "Optional. Id of the message whose edits this message reverted."
+        }
+      }
+    },
+    "edit": {
+      "type": "object",
+      "required": ["before", "after", "prefix", "suffix", "start"],
+      "properties": {
+        "before": { "type": "string" },
+        "after": { "type": "string" },
+        "prefix": { "type": "string", "maxLength": 32 },
+        "suffix": { "type": "string", "maxLength": 32 },
+        "start": { "type": "integer", "minimum": 0 },
+        "scope": { "enum": ["thread", "run"] }
       }
     }
   }

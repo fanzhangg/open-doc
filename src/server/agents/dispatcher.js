@@ -10,7 +10,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyOp, inbox } from '../../core/index.js';
+import { applyOp, diffEdits, inbox, newId, project, sourceRange } from '../../core/index.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
 import { load, update } from '../../store/files.js';
@@ -226,7 +226,7 @@ export class Dispatcher {
       if (over) return;
       over = true;
       clearTimeout(timer);
-      this.#finish({ threads, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }).finally(finish);
+      this.#finish({ threads, markdown, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }).finally(finish);
     };
     child.on('error', (error) => {
       spawnError = error;
@@ -235,19 +235,23 @@ export class Dispatcher {
     child.on('close', (code) => ended(code));
   }
 
-  async #finish({ threads, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
+  async #finish({ threads, markdown, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
     const result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
       : this.adapter.parse({ stdout, stderr, code });
 
-    // Threads the agent did not answer go back to the inbox.
+    // Record what the run changed in the doc on the agent's replies; threads
+    // the agent did not answer go back to the inbox.
     const ids = new Set(threads.map((t) => t.id));
     try {
-      await update(this.docPath, (s) => s.threads
-        .filter((t) => ids.has(t.id) && t.working && sameName(t.working.by, this.name))
-        .reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since: null }), s));
+      await update(this.docPath, (s, doc) => {
+        const recorded = this.#recordEdits(s, threads, markdown, doc.markdown);
+        return recorded.threads
+          .filter((t) => ids.has(t.id) && t.working && sameName(t.working.by, this.name))
+          .reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since: null }), recorded);
+      });
     } catch {
-      // the doc may be gone; nothing to clear
+      // the doc may be gone; nothing to record or clear
     }
 
     this.lastRun = {
@@ -282,12 +286,70 @@ export class Dispatcher {
     this.notify();
   }
 
+  // Attach each change to the reply this run posted in the thread it belongs
+  // to (adding a short reply when there is none), so the human can review and
+  // undo it from the comment.
+  #recordEdits(sidecar, threads, before, after) {
+    const byThread = attributeEdits(threads, before, after);
+    const now = new Date().toISOString();
+    let next = sidecar;
+    for (const claimed of threads) {
+      const edits = byThread.get(claimed.id);
+      const thread = next.threads.find((t) => t.id === claimed.id);
+      if (!edits?.length || !thread) continue;
+      const known = new Set(claimed.messages.map((m) => m.id));
+      const reply = thread.messages.findLast((m) => !known.has(m.id) && sameName(m.author.name, this.name));
+      if (reply) {
+        next = applyOp(next, { type: 'attachEdits', threadId: thread.id, messageId: reply.id, edits });
+        continue;
+      }
+      const message = { id: newId('m'), author: { name: this.name, kind: 'agent' }, body: 'Edited the doc.', createdAt: now, edits };
+      next = applyOp(next, { type: 'addMessage', threadId: thread.id, message });
+      // Adding a message reopens; keep a thread the agent resolved resolved.
+      if (thread.status === 'resolved') next = applyOp(next, { type: 'resolve', threadId: thread.id, by: thread.resolvedBy, at: thread.resolvedAt });
+    }
+    return next;
+  }
+
   #setState(state, error = null) {
     if (this.state === 'stopped') return;
     this.state = state;
     this.error = error;
     this.onStatus(this.status());
   }
+}
+
+/**
+ * Which thread each change between `before` and `after` belongs to: the one
+ * whose anchor (as claimed, against `before`) it overlaps or touches, the
+ * most overlapped first. A change no anchor claims belongs to the only thread
+ * of a one-thread run, or else to every thread of the run, as scope "run".
+ * @returns {Map<string, object[]>} thread id → edits
+ */
+export function attributeEdits(threads, before, after) {
+  const result = new Map();
+  const changes = diffEdits(before, after);
+  if (changes.length === 0) return result;
+  const anchored = threads.filter((t) => t.anchor && !t.detached);
+  const projection = anchored.length > 0 ? project(before) : null;
+  const ranges = anchored.flatMap((t) => {
+    const start = t.anchor.start;
+    const end = Math.min(start + t.anchor.exact.length, projection.text.length);
+    return start < end ? [{ id: t.id, ...sourceRange(projection, start, end) }] : [];
+  });
+  const add = (id, edit) => result.set(id, [...(result.get(id) ?? []), edit]);
+  for (const { from, to, edit } of changes) {
+    let best = null;
+    for (const r of ranges) {
+      if (from > r.end || to < r.start) continue;
+      const overlap = Math.min(to, r.end) - Math.max(from, r.start);
+      if (!best || overlap > best.overlap) best = { id: r.id, overlap };
+    }
+    if (best) add(best.id, edit);
+    else if (threads.length === 1) add(threads[0].id, edit);
+    else for (const t of threads) add(t.id, { ...edit, scope: 'run' });
+  }
+  return result;
 }
 
 // A thread is retried after a failure only once a human adds a new message.
