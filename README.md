@@ -4,8 +4,16 @@ Co-author plain markdown with AI agents. Comments live in a sidecar file next
 to the doc (`plan.md` → `plan.md.opendoc.json`), anchored to the text so they
 survive edits by either side.
 
-Status: early. This repo holds the format spec, the core library, the CLI
-and the local editor; the agent skill comes next.
+Status: early, but complete end to end: the format spec, the core library,
+the CLI, the local editor and the agent skill.
+
+## Agent skill
+
+[`skills/opendoc/SKILL.md`](skills/opendoc/SKILL.md) teaches an agent the
+loop: `opendoc wait` in the background, read and edit the doc, reply (and
+resolve completed edits), wait again. For Claude Code, copy the
+`skills/opendoc` folder into `~/.claude/skills/` (all projects) or
+`.claude/skills/` (one project).
 
 ## Editor
 
