@@ -92,7 +92,9 @@ The sidecar is a UTF-8 JSON object. The JSON Schema is
 | `messages` | array | At least one message, oldest first. |
 
 Anyone may resolve or reopen any thread. Reopening sets `resolvedBy` and
-`resolvedAt` to `null`.
+`resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
+message from the participant named in `working` clears `working`; resolving
+clears it too.
 
 ### 2.3 Message
 
@@ -220,9 +222,12 @@ A thread is in participant `P`'s inbox when all of these hold:
 
 - `status` is `"open"`;
 - its latest message's author has `kind: "human"`;
-- that message mentions `P`, or mentions no one.
+- that message mentions `P`, or mentions no one;
+- it is not marked `working` by `P` (a stale value does not count).
 
-A comment addressed only to someone else does not wake `P`. The inbox is
+A comment addressed only to someone else does not wake `P`. The last rule
+keeps a participant who is still answering a thread from being handed it
+again. The inbox is
 computed from the sidecar alone; tools need no cursor or other state.
 
 ## 6. Writing
@@ -231,7 +236,8 @@ Writers MUST NOT lose each other's changes:
 
 1. Take an exclusive lock by creating `X.md.opendoc.json.lock` with
    exclusive-create semantics. A lock file older than 2 seconds is stale and
-   MAY be removed.
+   MAY be removed. A writer that cannot take the lock within 5 seconds gives
+   up and reports a conflict.
 2. Re-read the sidecar and apply the change to the latest content.
 3. Write the result to a temporary file in the same directory and rename it
    over the sidecar.

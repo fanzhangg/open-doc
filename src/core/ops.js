@@ -1,0 +1,146 @@
+// Sidecar operations (SPEC.md §6). Pure functions: each returns a new sidecar
+// (or the same object when the operation was already applied), so a retried
+// operation is applied at most once and unknown fields are preserved.
+
+import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
+
+export const FORMAT_VERSION = 1;
+export const WORKING_TTL_MS = 5 * 60 * 1000;
+
+export class OpError extends Error {
+  /** @param {'unknown_thread' | 'bad_input'} code */
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+export function emptySidecar(docName) {
+  return { opendoc: FORMAT_VERSION, doc: docName, docHash: null, participants: [], threads: [] };
+}
+
+const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+/** Random id such as `t_k3x9q2m7pa` (prefix `t` or `m`). */
+export function newId(prefix) {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(10));
+  let id = '';
+  for (const byte of bytes) id += ID_ALPHABET[byte % ID_ALPHABET.length];
+  return `${prefix}_${id}`;
+}
+
+/**
+ * Apply one operation.
+ *
+ *   { type: 'join', participant: { name, kind } }
+ *   { type: 'addThread', id, anchor | null, message: { id, author, body, createdAt } }
+ *   { type: 'addMessage', threadId, message }
+ *   { type: 'resolve', threadId, by, at }
+ *   { type: 'reopen', threadId }
+ *   { type: 'setWorking', threadId, by, since }   // since: null clears
+ */
+export function applyOp(sidecar, op) {
+  switch (op.type) {
+    case 'join':
+      return join(sidecar, op.participant);
+    case 'addThread':
+      return addThread(sidecar, op);
+    case 'addMessage':
+      return addMessage(sidecar, op);
+    case 'resolve':
+      return updateThread(sidecar, op.threadId, (t) =>
+        t.status === 'resolved' ? t : { ...t, status: 'resolved', resolvedBy: op.by, resolvedAt: op.at, working: null });
+    case 'reopen':
+      return updateThread(sidecar, op.threadId, (t) =>
+        t.status === 'open' ? t : { ...t, status: 'open', resolvedBy: null, resolvedAt: null });
+    case 'setWorking':
+      return updateThread(sidecar, op.threadId, (t) => ({
+        ...t,
+        working: op.since ? { by: op.by, since: op.since } : null,
+      }));
+    default:
+      throw new OpError('bad_input', `unknown operation: ${op.type}`);
+  }
+}
+
+function join(sidecar, participant) {
+  validateParticipant(participant);
+  if (sidecar.participants.some((p) => sameName(p.name, participant.name))) return sidecar;
+  return { ...sidecar, participants: [...sidecar.participants, { name: participant.name, kind: participant.kind }] };
+}
+
+function addThread(sidecar, { id, anchor, message }) {
+  if (sidecar.threads.some((t) => t.id === id)) return sidecar;
+  const joined = join(sidecar, message.author);
+  const thread = {
+    id,
+    anchor: anchor ?? null,
+    detached: false,
+    status: 'open',
+    resolvedBy: null,
+    resolvedAt: null,
+    working: null,
+    messages: [buildMessage(joined, message)],
+  };
+  return { ...joined, threads: [...joined.threads, thread] };
+}
+
+function addMessage(sidecar, { threadId, message }) {
+  const thread = findThread(sidecar, threadId);
+  if (thread.messages.some((m) => m.id === message.id)) return sidecar;
+  const joined = join(sidecar, message.author);
+  return updateThread(joined, threadId, (t) => ({
+    ...t,
+    // Replying to a resolved thread reopens it.
+    status: 'open',
+    resolvedBy: null,
+    resolvedAt: null,
+    // The agent's reply ends its "responding…" state.
+    working: t.working && sameName(t.working.by, message.author.name) ? null : t.working,
+    messages: [...t.messages, buildMessage(joined, message)],
+  }));
+}
+
+function buildMessage(sidecar, { id, author, body, createdAt }) {
+  if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
+  return {
+    id,
+    author: { name: canonicalName(sidecar, author.name), kind: author.kind },
+    body,
+    mentions: parseMentions(body, sidecar.participants),
+    createdAt,
+  };
+}
+
+function updateThread(sidecar, threadId, change) {
+  const current = findThread(sidecar, threadId);
+  const next = change(current);
+  if (next === current) return sidecar;
+  return { ...sidecar, threads: sidecar.threads.map((t) => (t === current ? next : t)) };
+}
+
+export function findThread(sidecar, threadId) {
+  const thread = sidecar.threads.find((t) => t.id === threadId);
+  if (!thread) throw new OpError('unknown_thread', `no thread ${threadId}`);
+  return thread;
+}
+
+function canonicalName(sidecar, name) {
+  return sidecar.participants.find((p) => sameName(p.name, name))?.name ?? name;
+}
+
+function validateParticipant(participant) {
+  if (!participant || !NAME_PATTERN.test(participant.name ?? '')) {
+    throw new OpError('bad_input', `invalid participant name: ${participant?.name}`);
+  }
+  if (participant.kind !== 'human' && participant.kind !== 'agent') {
+    throw new OpError('bad_input', `invalid participant kind: ${participant.kind}`);
+  }
+}
+
+/** `working` as seen at `now`: values older than 5 minutes count as null. */
+export function activeWorking(thread, now = Date.now()) {
+  const w = thread.working;
+  if (!w) return null;
+  return now - Date.parse(w.since) < WORKING_TTL_MS ? w : null;
+}

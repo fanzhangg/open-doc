@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "description": "Co-author plain markdown with AI agents: comment threads in a sidecar file, a CLI, and a local editor.",
   "type": "module",
+  "bin": {
+    "opendoc": "./bin/opendoc.js"
+  },
   "exports": {
     ".": "./src/core/index.js"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "spec/"
+  ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "engines": {
     "node": ">=20"
