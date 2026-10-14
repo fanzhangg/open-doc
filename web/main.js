@@ -21,7 +21,6 @@ const SAVE_DELAY_MS = 800;
 const NAME_KEY = 'opendoc.name';
 
 const status = document.querySelector('.od-status');
-const STATUS_ICONS = { saved: 'check', saving: null, error: 'alert', offline: 'alert', conflict: 'alert' };
 const banner = document.querySelector('.od-banner');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 
@@ -52,7 +51,7 @@ async function start() {
   me = loadName(initial.defaultName);
   document.title = `${initial.doc} — opendoc`;
   document.querySelector('.od-doc-name').textContent = initial.doc;
-  setupNameChip();
+  paintNameChip();
 
   editor = await createDocEditor({
     stage: document.querySelector('.od-stage'),
@@ -72,7 +71,7 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
-  chrome = createChrome({ editor, onComment: () => editor.requestComment() });
+  chrome = createChrome({ editor, onComment: () => editor.requestComment(), getName: () => me, setName });
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
     onCreate: createThread,
@@ -91,7 +90,6 @@ async function start() {
 
   presence = createAgentPresence(document.querySelector('.od-agent'), document.querySelector('.od-panel'));
   presence.render(initial.agent);
-  margin.setAgent(initial.agent);
   applySidecar(initial.sidecar);
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
@@ -118,7 +116,6 @@ async function start() {
   events.addEventListener('agent', (event) => {
     const next = JSON.parse(event.data);
     presence.render(next);
-    margin.setAgent(next);
   });
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('hello', () => (dirty ? setStatus('Saving…', 'saving') : setStatus('Saved')));
@@ -268,7 +265,6 @@ function applySidecar(next) {
   sidecar = next;
   editor.setThreads(sidecar.threads);
   margin.update(sidecar, me);
-  chrome.setResolvedCount(margin.resolvedCount());
 }
 
 async function createThread(body) {
@@ -340,36 +336,35 @@ function loadName(fallback) {
   return fallback;
 }
 
-function setupNameChip() {
-  const chip = document.querySelector('.od-me');
-  const paint = () => chip.replaceChildren(avatar(me, 'human'));
-  paint();
-  chip.addEventListener('click', () => {
-    const next = window.prompt('Your name in comments (letters, digits, . _ -)', me)?.trim();
-    if (!next || !NAME_PATTERN.test(next)) return;
-    me = next;
-    paint();
-    try {
-      localStorage.setItem(NAME_KEY, me);
-    } catch {
-      // storage unavailable
-    }
-    margin.update(sidecar, me);
-  });
+function paintNameChip() {
+  document.querySelector('.od-me').replaceChildren(avatar(me, 'human'));
 }
 
-// Save state beside the title: an icon plus text; "Saved" fades to just the
-// icon after a moment, problems stay until they are fixed.
-let quietTimer;
+/** Rename the human in comments; false when the name is not allowed. */
+function setName(next) {
+  if (!NAME_PATTERN.test(next)) return false;
+  if (next === me) return true;
+  me = next;
+  paintNameChip();
+  try {
+    localStorage.setItem(NAME_KEY, me);
+  } catch {
+    // storage unavailable
+  }
+  margin.update(sidecar, me);
+  return true;
+}
+
+// Saving is automatic and local, so the header says nothing while it works;
+// it speaks up only when a save fails, the server is unreachable or a
+// conflict needs a choice.
 function setStatus(text, state = 'saved') {
+  const problem = state === 'error' || state === 'offline' || state === 'conflict';
+  status.hidden = !problem;
   status.dataset.state = state;
-  status.querySelector('.od-status-text').textContent = text;
-  const glyph = STATUS_ICONS[state];
-  status.querySelector('.od-status-icon').replaceChildren(...(glyph ? [icon(glyph)] : []));
-  status.title = text;
-  status.classList.remove('od-status-quiet');
-  clearTimeout(quietTimer);
-  if (state === 'saved') quietTimer = setTimeout(() => status.classList.add('od-status-quiet'), 2500);
+  status.querySelector('.od-status-text').textContent = problem ? text : '';
+  status.querySelector('.od-status-icon').replaceChildren(...(problem ? [icon('alert')] : []));
+  status.title = problem ? text : '';
 }
 
 start();

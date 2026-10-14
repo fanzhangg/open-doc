@@ -24,7 +24,6 @@ import { activeWorking } from '../src/core/ops.js';
 import { docRange, projectDoc, textRange } from './pm-text.js';
 
 const FLASH_MS = 6000;
-const PLACEHOLDER = 'Type / for blocks, or select text to comment';
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 
@@ -39,8 +38,7 @@ const decorationPlugin = (key) => $prose(() => new Plugin({
 }));
 
 // Reports every view update and lets the page take keys first (for the "/"
-// menu). Marks the top-level block holding the caret (for focus mode) and
-// shows a hint in an empty line the caret is in.
+// menu), and marks the top-level block holding the caret (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
   view: () => ({ update: (view) => hooks.onUpdate(view) }),
   props: {
@@ -50,16 +48,10 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
       blur: (view) => hooks.onUpdate(view),
     },
     decorations(state) {
-      const { $from, empty } = state.selection;
+      const { $from } = state.selection;
       if ($from.depth === 0) return null;
-      const decorations = [];
       const top = $from.before(1);
-      decorations.push(Decoration.node(top, top + $from.node(1).nodeSize, { class: 'od-current' }));
-      const parent = $from.parent;
-      if (empty && parent.type.name === 'paragraph' && parent.content.size === 0) {
-        decorations.push(Decoration.node($from.before(), $from.after(), { class: 'od-placeholder', 'data-placeholder': PLACEHOLDER }));
-      }
-      return DecorationSet.create(state.doc, decorations);
+      return DecorationSet.create(state.doc, [Decoration.node(top, top + $from.node(1).nodeSize, { class: 'od-current' })]);
     },
   },
 }));

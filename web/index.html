@@ -12,20 +12,20 @@
     <div class="od-title">
       <span class="od-doc-icon" data-icon="file"></span>
       <span class="od-doc-name"></span>
-      <span class="od-status" role="status" aria-live="polite" data-state="saved">
+      <span class="od-status" role="status" aria-live="polite" hidden>
         <span class="od-status-icon"></span><span class="od-status-text"></span>
       </span>
     </div>
     <span class="od-spacer"></span>
-    <span class="od-count" title="Word count"></span>
+    <span class="od-count" title="Word count" hidden></span>
     <div class="od-people">
       <span class="od-agent" hidden>
         <span class="od-agent-line" role="status" aria-live="polite" hidden></span>
         <button class="od-agent-face" type="button" aria-label="Agent status"></button>
       </span>
-      <button class="od-me" type="button" title="You · click to change your name"></button>
+      <button class="od-me" type="button" title="You · change your name in Settings"></button>
     </div>
-    <button class="od-icon-btn od-display-toggle" type="button" data-icon="display" title="Display options" aria-label="Display options" aria-haspopup="dialog" aria-expanded="false"></button>
+    <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
 
   <div class="od-panel" hidden>
@@ -33,35 +33,6 @@
     <div class="od-panel-text"></div>
     <button class="od-panel-action od-secondary" type="button"></button>
     <pre class="od-panel-log"></pre>
-  </div>
-
-  <div class="od-display" role="dialog" aria-label="Display options" hidden>
-    <div class="od-display-label">Font</div>
-    <div class="od-fonts" role="radiogroup" aria-label="Font">
-      <button type="button" role="radio" data-font="sans"><span class="od-font-sample">Ag</span>Sans</button>
-      <button type="button" role="radio" data-font="serif"><span class="od-font-sample">Ag</span>Serif</button>
-      <button type="button" role="radio" data-font="mono"><span class="od-font-sample">Ag</span>Mono</button>
-    </div>
-    <div class="od-display-row">
-      <span>Theme</span>
-      <div class="od-segmented" role="radiogroup" aria-label="Theme">
-        <button type="button" role="radio" data-theme-choice="system">Auto</button>
-        <button type="button" role="radio" data-theme-choice="light">Light</button>
-        <button type="button" role="radio" data-theme-choice="dark">Dark</button>
-      </div>
-    </div>
-    <div class="od-display-row">
-      <span>Width</span>
-      <div class="od-segmented" role="radiogroup" aria-label="Text width">
-        <button type="button" role="radio" data-width="normal">Normal</button>
-        <button type="button" role="radio" data-width="wide">Wide</button>
-      </div>
-    </div>
-    <label class="od-display-row od-switch-row">
-      <span>Focus mode <kbd data-keys="Mod+Shift+F"></kbd></span>
-      <input type="checkbox" class="od-switch" data-setting="focus">
-    </label>
-    <button type="button" class="od-display-link" data-action="shortcuts">Keyboard shortcuts <kbd data-keys="Mod+/"></kbd></button>
   </div>
 
   <div class="od-toolbar" role="toolbar" aria-label="Formatting">
@@ -98,7 +69,7 @@
     </div>
     <span class="od-spacer"></span>
     <button type="button" class="od-pill od-tool-comment" data-action="comment" data-icon="comment" data-tip="Add comment" data-keys="Mod+Alt+M">Comment</button>
-    <button type="button" class="od-pill od-show-resolved" data-icon="checkCircle" aria-pressed="false" data-tip="Show resolved comments"><span class="od-resolved-label">Resolved</span></button>
+    <button type="button" class="od-pill od-show-resolved" data-icon="checkCircle" aria-pressed="false" data-tip="Show resolved comments">Resolved</button>
   </div>
 
   <div class="od-banner" hidden>
@@ -136,12 +107,90 @@
 
   <div class="od-tip" role="tooltip" hidden></div>
 
-  <dialog class="od-shortcuts" aria-label="Keyboard shortcuts">
-    <div class="od-shortcuts-head">
-      <h2>Keyboard shortcuts</h2>
-      <button type="button" class="od-icon-btn" data-icon="close" data-action="close" aria-label="Close"></button>
+  <dialog class="od-settings" aria-label="Settings">
+    <nav class="od-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
+      <div class="od-settings-title">Settings</div>
+      <button type="button" role="tab" data-section="general" data-icon="user">General</button>
+      <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
+      <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
+      <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
+    </nav>
+    <div class="od-settings-main">
+      <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
+
+      <section class="od-settings-section" role="tabpanel" data-section="general">
+        <h2>General</h2>
+        <div class="od-setting">
+          <div class="od-setting-text">
+            <label for="od-name-input">Your name</label>
+          </div>
+          <div class="od-setting-control">
+            <input id="od-name-input" class="od-input" type="text" autocomplete="off" spellcheck="false" maxlength="64">
+            <div class="od-input-error" role="alert" hidden>Use letters, digits, . _ or -</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-settings-section" role="tabpanel" data-section="appearance" hidden>
+        <h2>Appearance</h2>
+        <div class="od-setting">
+          <div class="od-setting-text">
+            <span class="od-setting-label">Theme</span>
+          </div>
+          <div class="od-segmented" role="radiogroup" aria-label="Theme">
+            <button type="button" role="radio" data-theme-choice="system">Auto</button>
+            <button type="button" role="radio" data-theme-choice="light">Light</button>
+            <button type="button" role="radio" data-theme-choice="dark">Dark</button>
+          </div>
+        </div>
+        <div class="od-setting od-setting-stacked">
+          <div class="od-setting-text">
+            <span class="od-setting-label">Document font</span>
+          </div>
+          <div class="od-fonts" role="radiogroup" aria-label="Document font">
+            <button type="button" role="radio" data-font="sans"><span class="od-font-sample">Ag</span>Sans</button>
+            <button type="button" role="radio" data-font="serif"><span class="od-font-sample">Ag</span>Serif</button>
+            <button type="button" role="radio" data-font="mono"><span class="od-font-sample">Ag</span>Mono</button>
+          </div>
+        </div>
+        <div class="od-setting">
+          <div class="od-setting-text">
+            <span class="od-setting-label">Text width</span>
+          </div>
+          <div class="od-segmented" role="radiogroup" aria-label="Text width">
+            <button type="button" role="radio" data-width="normal">Normal</button>
+            <button type="button" role="radio" data-width="wide">Wide</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-settings-section" role="tabpanel" data-section="editor" hidden>
+        <h2>Editor</h2>
+        <label class="od-setting">
+          <span class="od-setting-text">
+            <span class="od-setting-label">Outline</span>
+          </span>
+          <input type="checkbox" class="od-switch" data-setting="outline">
+        </label>
+        <label class="od-setting">
+          <span class="od-setting-text">
+            <span class="od-setting-label">Word count</span>
+          </span>
+          <input type="checkbox" class="od-switch" data-setting="wordCount">
+        </label>
+        <label class="od-setting">
+          <span class="od-setting-text">
+            <span class="od-setting-label">Focus mode</span>
+          </span>
+          <input type="checkbox" class="od-switch" data-setting="focus">
+        </label>
+      </section>
+
+      <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
+        <h2>Keyboard shortcuts</h2>
+        <div class="od-shortcuts-body"></div>
+      </section>
     </div>
-    <div class="od-shortcuts-body"></div>
   </dialog>
 </body>
 </html>

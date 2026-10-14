@@ -7,7 +7,6 @@
 
 import { activeWorking } from '../src/core/ops.js';
 
-const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
 const GAP = 10;
 const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83', '#5f6368'];
 
@@ -23,7 +22,6 @@ const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83
 export function createCommentMargin(margin, handlers) {
   let sidecar = { participants: [], threads: [] };
   let me = '';
-  let agent = null; // dispatcher status, or null
   let activeId = null;
   let draft = null; // { hint } while composing; hint null for a comment on the whole doc
   let showResolved = false;
@@ -52,7 +50,6 @@ export function createCommentMargin(margin, handlers) {
     const threads = visibleThreads();
     for (const thread of threads) cards.push(threadCard(thread));
     if (showResolved && threads.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
-    if (!showResolved && cards.length === 0) cards.push(emptyHint());
 
     // Live updates arrive while the human types: keep the card they are typing
     // in attached, updated around its text box, so text, caret and IME input survive.
@@ -202,8 +199,7 @@ export function createCommentMargin(margin, handlers) {
     if (!draft.hint) who.append(el('span', 'od-time', 'On the whole document'));
     head.append(avatar(me, 'human'), who);
     card.append(head);
-    const placeholder = agentAnswers() ? `Comment, or ask ${agent.name} to change something…` : 'Comment… (@ to mention)';
-    card.append(composer('draft', placeholder, 'Comment', async (body) => {
+    card.append(composer('draft', 'Comment', 'Comment', async (body) => {
       await handlers.onCreate(body);
       draft = null;
       replyDrafts.delete('draft');
@@ -214,31 +210,10 @@ export function createCommentMargin(margin, handlers) {
       handlers.onCancelDraft();
       render();
     }, 'draft'));
-    const hint = agentHint();
-    if (hint) card.append(el('div', 'od-hint', hint));
     return card;
   }
 
-  // What to do when there is nothing in the margin yet.
-  function emptyHint() {
-    const hint = el('div', 'od-margin-hint', 'Select text and choose Comment, or press ');
-    const keys = el('kbd', '', /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⌥M' : 'Ctrl+Alt+M');
-    hint.append(keys, agentAnswers() && !agent.mentionsOnly ? `. ${agent.name} reads every comment and can edit the doc.` : '.');
-    return hint;
-  }
-
-  function agentAnswers() {
-    return agent && !['unavailable', 'stopped'].includes(agent.state);
-  }
-
-  function agentHint() {
-    if (!agent) return '';
-    if (agent.state === 'unavailable') return `${agent.name} is unavailable.`;
-    if (agent.state === 'paused') return `${agent.name} is paused and will reply when resumed.`;
-    return agent.mentionsOnly ? `Mention @${agent.name} to have them reply.` : `${agent.name} will reply. @mention someone else to keep ${agent.name} out of it.`;
-  }
-
-  // A growing text box: Enter posts, Shift+Enter breaks the line, Escape cancels, @ autocompletes names.
+  // A growing text box: Enter posts, Shift+Enter breaks the line, Escape cancels.
   function composer(id, placeholder, submitLabel, submit, cancel, draftKey) {
     const wrap = el('div', 'od-composer');
     wrap.dataset.box = id;
@@ -246,16 +221,12 @@ export function createCommentMargin(margin, handlers) {
     box.rows = 1;
     box.placeholder = placeholder;
     box.value = draftKey ? replyDrafts.get(draftKey) ?? '' : '';
-    const menu = el('ul', 'od-mentions');
-    menu.hidden = true;
     const buttons = el('div', 'od-composer-buttons');
     const send = el('button', 'od-primary', submitLabel);
     send.type = 'button';
     const cancelButton = el('button', 'od-secondary', 'Cancel');
     cancelButton.type = 'button';
     buttons.append(send, cancelButton);
-    let choices = [];
-    let selected = 0;
 
     const grow = () => {
       box.style.height = 'auto';
@@ -265,34 +236,7 @@ export function createCommentMargin(margin, handlers) {
     const update = () => {
       if (draftKey) replyDrafts.set(draftKey, box.value);
       grow();
-      const match = box.value.slice(0, box.selectionStart).match(MENTION_BEFORE_CARET);
-      choices = match
-        ? sidecar.participants.filter((p) => p.name.toLowerCase().startsWith(match[2].toLowerCase()) && p.name !== me)
-        : [];
-      selected = 0;
-      drawMenu();
       layout();
-    };
-    const drawMenu = () => {
-      menu.replaceChildren(...choices.map((p, i) => {
-        const item = el('li', i === selected ? 'od-selected' : '');
-        item.append(avatar(p.name, p.kind), el('span', '', p.name));
-        if (p.kind === 'agent') item.append(el('span', 'od-ai', 'AI'));
-        item.addEventListener('mousedown', (event) => {
-          event.preventDefault();
-          pick(p.name);
-        });
-        return item;
-      }));
-      menu.hidden = choices.length === 0;
-    };
-    const pick = (name) => {
-      const before = box.value.slice(0, box.selectionStart).replace(/@[A-Za-z0-9._-]*$/, `@${name} `);
-      box.value = before + box.value.slice(box.selectionStart);
-      box.setSelectionRange(before.length, before.length);
-      choices = [];
-      drawMenu();
-      if (draftKey) replyDrafts.set(draftKey, box.value);
     };
     const post = async () => {
       const body = box.value.trim();
@@ -309,16 +253,7 @@ export function createCommentMargin(margin, handlers) {
     };
 
     box.addEventListener('input', update);
-    box.addEventListener('blur', () => setTimeout(() => { menu.hidden = true; }, 100));
     box.addEventListener('keydown', (event) => {
-      if (choices.length > 0 && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(event.key)) {
-        event.preventDefault();
-        if (event.key === 'ArrowDown') selected = (selected + 1) % choices.length;
-        else if (event.key === 'ArrowUp') selected = (selected - 1 + choices.length) % choices.length;
-        else pick(choices[selected].name);
-        drawMenu();
-        return;
-      }
       if (event.key === 'Escape') {
         event.preventDefault();
         cancel();
@@ -329,7 +264,7 @@ export function createCommentMargin(margin, handlers) {
     });
     send.addEventListener('click', post);
     cancelButton.addEventListener('click', cancel);
-    wrap.append(box, menu, buttons);
+    wrap.append(box, buttons);
     requestAnimationFrame(() => {
       grow();
       layout();
@@ -397,10 +332,6 @@ export function createCommentMargin(margin, handlers) {
       me = nextMe;
       render();
     },
-    setAgent(status) {
-      agent = status;
-      if (draft) render();
-    },
     startDraft(hint) {
       draft = { hint };
       replyDrafts.delete('draft');
@@ -418,7 +349,6 @@ export function createCommentMargin(margin, handlers) {
       showResolved = value;
       render();
     },
-    resolvedCount: () => sidecar.threads.filter((t) => t.status === 'resolved').length,
     layout,
     rerender: render,
   };

@@ -1,31 +1,31 @@
 // The chrome around the editor: the toolbar (reflecting the formatting at the
 // caret), a formatting bubble over selections, the "/" block menu, a floating
-// outline, the word count, display options (font, theme, width, focus
-// mode), tooltips that show shortcuts, and the keyboard shortcut sheet.
+// outline, the word count, tooltips that show shortcuts, and the Settings
+// dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
 
 import { hydrateIcons, icon } from './icons.js';
 
 const DISPLAY_KEY = 'opendoc.display';
-const DEFAULTS = { font: 'sans', theme: 'system', width: 'normal', focus: false };
+const DEFAULTS = { font: 'sans', theme: 'system', width: 'normal', outline: true, wordCount: false, focus: false };
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
-  { command: 'paragraph', icon: 'text', label: 'Text', hint: 'Plain paragraph', words: 'text paragraph normal p' },
-  { command: 'h1', icon: 'heading', label: 'Heading 1', hint: 'Big section heading', words: 'heading h1 title' },
-  { command: 'h2', icon: 'heading', label: 'Heading 2', hint: 'Medium section heading', words: 'heading h2 subtitle' },
-  { command: 'h3', icon: 'heading', label: 'Heading 3', hint: 'Small section heading', words: 'heading h3' },
-  { command: 'bullets', icon: 'bullets', label: 'Bulleted list', hint: 'A simple list', words: 'bullet list ul unordered' },
-  { command: 'numbers', icon: 'numbers', label: 'Numbered list', hint: 'A list with numbers', words: 'numbered list ol ordered' },
-  { command: 'quote', icon: 'quote', label: 'Quote', hint: 'Capture a quotation', words: 'quote blockquote' },
-  { command: 'codeBlock', icon: 'codeBlock', label: 'Code block', hint: 'Fenced code', words: 'code block fence pre' },
-  { command: 'table', icon: 'table', label: 'Table', hint: '3 × 3 table', words: 'table grid' },
-  { command: 'divider', icon: 'divider', label: 'Divider', hint: 'Horizontal rule', words: 'divider hr rule line separator' },
-  { command: 'comment', icon: 'comment', label: 'Comment on the doc', hint: 'Ask a question or request a change', words: 'comment ask ai agent' },
+  { command: 'paragraph', icon: 'text', label: 'Text', words: 'text paragraph normal p' },
+  { command: 'h1', icon: 'heading', label: 'Heading 1', words: 'heading h1 title' },
+  { command: 'h2', icon: 'heading', label: 'Heading 2', words: 'heading h2 subtitle' },
+  { command: 'h3', icon: 'heading', label: 'Heading 3', words: 'heading h3' },
+  { command: 'bullets', icon: 'bullets', label: 'Bulleted list', words: 'bullet list ul unordered' },
+  { command: 'numbers', icon: 'numbers', label: 'Numbered list', words: 'numbered list ol ordered' },
+  { command: 'quote', icon: 'quote', label: 'Quote', words: 'quote blockquote' },
+  { command: 'codeBlock', icon: 'codeBlock', label: 'Code block', words: 'code block fence pre' },
+  { command: 'table', icon: 'table', label: 'Table', words: 'table grid' },
+  { command: 'divider', icon: 'divider', label: 'Divider', words: 'divider hr rule line separator' },
+  { command: 'comment', icon: 'comment', label: 'Comment', words: 'comment ask ai agent' },
 ];
 const SHORTCUTS = [
   ['Comments', [['Add comment', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
   ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E']]],
   ['Blocks', [['Insert block', '/'], ['Normal text', 'Mod+Alt+0'], ['Heading 1–3', 'Mod+Alt+1…3'], ['Bulleted list', 'Mod+Alt+8'], ['Numbered list', 'Mod+Alt+7'], ['Quote', 'Mod+Shift+B'], ['Code block', 'Mod+Alt+C']]],
-  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Keyboard shortcuts', 'Mod+/']]],
+  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -38,21 +38,21 @@ export function keyLabel(keys) {
 }
 
 /**
- * @param {{ editor: object, onComment: () => void }} options
+ * @param {{ editor: object, onComment: () => void,
+ *           getName: () => string, setName: (name: string) => boolean }} options
  */
-export function createChrome({ editor, onComment }) {
+export function createChrome({ editor, onComment, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
 
-  const display = setupDisplay();
+  const settings = setupSettings({ getName, setName });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
   const outline = setupOutline(editor);
   const blockPicker = setupBlockPicker(editor);
   const count = document.querySelector('.od-count');
-  const shortcuts = setupShortcuts();
 
   // Toolbar and bubble buttons act on the editor without taking its selection.
   for (const bar of [toolbar, bubble]) {
@@ -130,38 +130,39 @@ export function createChrome({ editor, onComment }) {
 
   document.addEventListener('keydown', (event) => {
     const mod = mac ? event.metaKey : event.ctrlKey;
-    if (mod && !event.altKey && event.key === '/') {
+    if (mod && !event.altKey && (event.key === '/' || event.key === ',')) {
       event.preventDefault();
-      shortcuts.toggle();
+      settings.toggle(event.key === '/' ? 'shortcuts' : 'general');
     } else if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault();
-      display.set({ focus: !display.get().focus });
+      settings.set({ focus: !settings.get().focus });
     }
   });
 
   refresh();
   return {
-    /** Show "Resolved (n)" on the toolbar toggle. */
-    setResolvedCount(n) {
-      document.querySelector('.od-resolved-label').textContent = n ? `Resolved · ${n}` : 'Resolved';
-    },
     hideBubble() {
       bubble.hidden = true;
     },
   };
 }
 
-// ---- display options: font, theme, width, focus ----
+// ---- settings: a dialog with General, Appearance, Editor and Shortcuts ----
 
-function setupDisplay() {
-  const toggle = document.querySelector('.od-display-toggle');
-  const panel = document.querySelector('.od-display');
+function setupSettings({ getName, setName }) {
+  const dialog = document.querySelector('.od-settings');
+  const tabs = [...dialog.querySelectorAll('[role="tab"]')];
+  const sections = [...dialog.querySelectorAll('.od-settings-section')];
+  const nameInput = dialog.querySelector('#od-name-input');
+  const nameError = dialog.querySelector('.od-input-error');
   let settings = { ...DEFAULTS };
   try {
     settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(DISPLAY_KEY) ?? '{}') };
   } catch {
     // storage unavailable or corrupt: defaults
   }
+
+  fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
 
   function apply() {
     const root = document.documentElement;
@@ -170,13 +171,15 @@ function setupDisplay() {
     root.dataset.font = settings.font;
     root.dataset.width = settings.width;
     root.toggleAttribute('data-focus', settings.focus);
+    root.toggleAttribute('data-no-outline', !settings.outline);
+    document.querySelector('.od-count').hidden = !settings.wordCount;
     const mark = (selector, attr, value) => {
-      for (const button of panel.querySelectorAll(selector)) button.setAttribute('aria-checked', String(button.dataset[attr] === value));
+      for (const button of dialog.querySelectorAll(selector)) button.setAttribute('aria-checked', String(button.dataset[attr] === value));
     };
     mark('[data-font]', 'font', settings.font);
     mark('[data-theme-choice]', 'themeChoice', settings.theme);
     mark('[data-width]', 'width', settings.width);
-    panel.querySelector('[data-setting="focus"]').checked = settings.focus;
+    for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
     window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
   }
 
@@ -190,36 +193,88 @@ function setupDisplay() {
     apply();
   }
 
-  panel.addEventListener('click', (event) => {
+  function show(section) {
+    for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
+    for (const panel of sections) panel.hidden = panel.dataset.section !== section;
+  }
+
+  function open(section = 'general') {
+    nameInput.value = getName();
+    nameError.hidden = true;
+    show(section);
+    if (!dialog.open) dialog.showModal();
+    if (section === 'general') nameInput.focus();
+    else tabs.find((tab) => tab.dataset.section === section).focus();
+  }
+
+  // The name takes effect as soon as it is valid; an invalid one is pointed out and not kept.
+  nameInput.addEventListener('input', () => {
+    const next = nameInput.value.trim();
+    nameError.hidden = next === '' || setName(next);
+  });
+  nameInput.addEventListener('blur', () => {
+    nameInput.value = getName();
+    nameError.hidden = true;
+  });
+
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) return dialog.close(); // backdrop
     const button = event.target.closest('button');
     if (!button) return;
-    if (button.dataset.font) set({ font: button.dataset.font });
+    if (button.dataset.action === 'close') dialog.close();
+    else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
     else if (button.dataset.width) set({ width: button.dataset.width });
-    else if (button.dataset.action === 'shortcuts') {
-      close();
-      document.querySelector('.od-shortcuts').showModal();
-    }
   });
-  panel.querySelector('[data-setting="focus"]').addEventListener('change', (event) => set({ focus: event.target.checked }));
+  dialog.addEventListener('change', (event) => {
+    const key = event.target.dataset?.setting;
+    if (key) set({ [key]: event.target.checked });
+  });
+  // Up and down move between sections, as in a vertical tab list.
+  dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    const at = tabs.indexOf(document.activeElement);
+    const next = tabs[(at + (event.key === 'ArrowDown' ? 1 : tabs.length - 1)) % tabs.length];
+    show(next.dataset.section);
+    next.focus();
+  });
 
-  const close = () => {
-    panel.hidden = true;
-    toggle.setAttribute('aria-expanded', 'false');
-  };
-  toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    toggle.setAttribute('aria-expanded', String(!panel.hidden));
-  });
-  document.addEventListener('mousedown', (event) => {
-    if (!panel.hidden && !panel.contains(event.target) && !toggle.contains(event.target)) close();
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !panel.hidden) close();
-  });
+  document.querySelector('.od-settings-toggle').addEventListener('click', () => open('general'));
+  document.querySelector('.od-me').addEventListener('click', () => open('general'));
 
   apply();
-  return { get: () => settings, set };
+  return {
+    get: () => settings,
+    set,
+    /** Open on `section`, or close when it is already showing that section. */
+    toggle(section) {
+      const showing = dialog.open && !sections.find((panel) => panel.dataset.section === section).hidden;
+      if (showing) dialog.close();
+      else open(section);
+    },
+  };
+}
+
+function fillShortcuts(body) {
+  for (const [group, rows] of SHORTCUTS) {
+    const section = document.createElement('section');
+    const title = document.createElement('h3');
+    title.textContent = group;
+    section.append(title);
+    for (const [label, keys] of rows) {
+      const row = document.createElement('div');
+      row.className = 'od-shortcut';
+      const name = document.createElement('span');
+      name.textContent = label;
+      const kbd = document.createElement('kbd');
+      kbd.textContent = keyLabel(keys);
+      row.append(name, kbd);
+      section.append(row);
+    }
+    body.append(section);
+  }
 }
 
 // ---- "Normal text ▾" block style picker ----
@@ -293,19 +348,13 @@ function setupSlash(editor) {
       const li = document.createElement('li');
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(i === selected));
-      const text = document.createElement('span');
-      text.className = 'od-slash-text';
       const label = document.createElement('span');
       label.className = 'od-slash-label';
       label.textContent = item.label;
-      const hint = document.createElement('span');
-      hint.className = 'od-slash-hint';
-      hint.textContent = item.hint;
-      text.append(label, hint);
       const glyph = document.createElement('span');
       glyph.className = 'od-slash-icon';
       glyph.append(icon(item.icon));
-      li.append(glyph, text);
+      li.append(glyph, label);
       li.addEventListener('mousedown', (event) => {
         event.preventDefault();
         pick(i);
@@ -441,37 +490,6 @@ function setupTooltips() {
   });
   document.addEventListener('mousedown', hide, true);
   document.addEventListener('scroll', hide, true);
-}
-
-// ---- keyboard shortcut sheet ----
-
-function setupShortcuts() {
-  const dialog = document.querySelector('.od-shortcuts');
-  const body = dialog.querySelector('.od-shortcuts-body');
-  for (const [group, rows] of SHORTCUTS) {
-    const section = document.createElement('section');
-    const title = document.createElement('h3');
-    title.textContent = group;
-    section.append(title);
-    for (const [label, keys] of rows) {
-      const row = document.createElement('div');
-      row.className = 'od-shortcut';
-      const name = document.createElement('span');
-      name.textContent = label;
-      const kbd = document.createElement('kbd');
-      kbd.textContent = keyLabel(keys);
-      row.append(name, kbd);
-      section.append(row);
-    }
-    body.append(section);
-  }
-  dialog.querySelector('[data-action="close"]').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) dialog.close(); // backdrop
-  });
-  return {
-    toggle: () => (dialog.open ? dialog.close() : dialog.showModal()),
-  };
 }
 
 function plural(n, word) {
