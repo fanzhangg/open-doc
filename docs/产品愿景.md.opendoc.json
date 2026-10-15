@@ -1,7 +1,7 @@
 {
   "opendoc": 1,
   "doc": "产品愿景.md",
-  "docHash": "sha256:16fe95149117f499bb16b95127cd0fb467dbd5f44a014d0c2a15b49cd6b61896",
+  "docHash": "sha256:5ea0d15823ae55301117e148b76683662710cedf828728c08fbcfa43c2f1fe67",
   "participants": [
     {
       "name": "claude",
@@ -1145,15 +1145,15 @@
     {
       "id": "t_mvw1eem139",
       "anchor": {
-        "exact": "成功指标\n用户在驾驶位：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n减少等待：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n多agent协作：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n写作体验更好：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n开放：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+        "exact": "成功指标\n不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n用户在驾驶位：整篇文章不被AI牵着鼻子走\n减少等待：不用等AI改完才能继续写，AI也不用等我写完所有评论\n多agent协作：多个agent像真人同事一样和我一起写作\n写作体验更好：比Markdown/代码编辑器+AI插件更好\n开放：文档在任何Markdown编辑器里都能正常打开，想用哪个agent就用哪个",
         "prefix": "Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n",
-        "suffix": "\n路线图\n单agent和人通过评论的协作体验\n精细的历史修改视图",
+        "suffix": "\n路线图\n单agent和人通过评论的协作体验\n多agent和人的",
         "start": 1758
       },
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T10:18:50.125Z",
       "working": null,
       "messages": [
         {
@@ -1204,6 +1204,51 @@
             }
           ],
           "applies": "m_eacaixrak2"
+        }
+      ]
+    },
+    {
+      "id": "t_m7ok2dkjtm",
+      "anchor": {
+        "exact": "成功指标",
+        "prefix": "Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n",
+        "suffix": "\n不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n用户",
+        "start": 1758
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_04az1xz8zr",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "不需要具体的用户指标。我自己用起来爽就足够了。修改一下。",
+          "mentions": [],
+          "createdAt": "2026-10-15T10:23:52.530Z"
+        },
+        {
+          "id": "m_30jbo4tsms",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已改：成功指标改成“我自己用起来爽就够了”，删掉了所有衡量方式（撤销比例、回复时长、留存等），保留五条作为“爽”的具体含义，并改成第一人称。如果连这五条也不想要，我可以只留那一句。",
+          "mentions": [],
+          "createdAt": "2026-10-15T10:24:10.110Z",
+          "edits": [
+            {
+              "before": "- **用户在驾驶位**：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n- **减少等待**：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n- **多agent协作**：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n- **开放**：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+              "after": "不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n\n- **用户在驾驶位**：整篇文章不被AI牵着鼻子走\n- **减少等待**：不用等AI改完才能继续写，AI也不用等我写完所有评论\n- **多agent协作**：多个agent像真人同事一样和我一起写作\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好\n- **开放**：文档在任何Markdown编辑器里都能正常打开，想用哪个agent就用哪个",
+              "prefix": "一份文档里工作，如同很多同事和你一起协作。\n\n## 成功指标\n\n",
+              "suffix": "\n\n## 路线图\n\n- 单agent和人通过评论的协作体验\n- ",
+              "start": 2478
+            }
+          ]
         }
       ]
     }
