@@ -1,7 +1,7 @@
 {
   "opendoc": 1,
-  "doc": "产品愿景.md",
-  "docHash": "sha256:5ea0d15823ae55301117e148b76683662710cedf828728c08fbcfa43c2f1fe67",
+  "doc": "product-vision.md",
+  "docHash": "sha256:ca569abe172910ff186968b20bdd937aaf5a8e2d630e28034d96eaa7f27a079c",
   "participants": [
     {
       "name": "claude",
@@ -9,6 +9,14 @@
     },
     {
       "name": "fanzhangg",
+      "kind": "human"
+    },
+    {
+      "name": "Dobby",
+      "kind": "agent"
+    },
+    {
+      "name": "fanzhang",
       "kind": "human"
     }
   ],
@@ -21,7 +29,7 @@
         "suffix": "\n我们的方案\n我的产品把AI和人的协作推进到并行阶段：AI不再是",
         "start": 45
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T06:55:24.520Z",
@@ -102,7 +110,7 @@
         "suffix": "用停下来等它，可以同时编辑文档的其他部分\n可控：评论锚定在你选中",
         "start": 290
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T07:28:52.012Z",
@@ -181,7 +189,7 @@
         "suffix": "\n开放：开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里",
         "start": 434
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:04:23.032Z",
@@ -226,7 +234,7 @@
         "suffix": "几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markd",
         "start": 262
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:04:21.082Z",
@@ -332,7 +340,7 @@
         "suffix": "\n背景与问题\n文档编辑是计算机最基础最持久的需求。人类的文档协作",
         "start": 10
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:04:20.189Z",
@@ -397,7 +405,7 @@
         "suffix": "\n核心使用场景\nAI写，人改：AI起草了一份设计文档，我边读边审",
         "start": 773
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:09:55.543Z",
@@ -469,7 +477,7 @@
         "suffix": "\n竞品与差异化\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点",
         "start": 910
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:10:30.141Z",
@@ -514,7 +522,7 @@
         "suffix": "\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点\n在线文档内置",
         "start": 1060
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:22:08.269Z",
@@ -579,7 +587,7 @@
         "suffix": "\n我们的区别：\n同步协作，而不是异步交接：现有方案里，人和AI轮",
         "start": 1078
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:47:40.656Z",
@@ -750,7 +758,7 @@
         "suffix": "，支持多智能体：任何能跑命令行的Agent都能接入，可以和用户已",
         "start": 1667
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:31:18.376Z",
@@ -795,7 +803,7 @@
         "suffix": "\n同步协作，而不是异步交接：现有方案里，人和AI轮流操作：人提要",
         "start": 1446
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:29:39.897Z",
@@ -840,7 +848,7 @@
         "suffix": "\n熟悉：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；",
         "start": 353
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T08:29:34.661Z",
@@ -982,7 +990,7 @@
         "suffix": "\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点\n在线文档内置",
         "start": 1060
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
       "resolvedBy": "fanzhangg",
       "resolvedAt": "2026-10-15T09:52:36.017Z",
@@ -1145,15 +1153,15 @@
     {
       "id": "t_mvw1eem139",
       "anchor": {
-        "exact": "成功指标\n不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n用户在驾驶位：整篇文章不被AI牵着鼻子走\n减少等待：不用等AI改完才能继续写，AI也不用等我写完所有评论\n多agent协作：多个agent像真人同事一样和我一起写作\n写作体验更好：比Markdown/代码编辑器+AI插件更好\n开放：文档在任何Markdown编辑器里都能正常打开，想用哪个agent就用哪个",
+        "exact": "成功指标\n用户在驾驶位：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n减少等待：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n多agent协作：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n写作体验更好：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n开放：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
         "prefix": "Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n",
         "suffix": "\n路线图\n单agent和人通过评论的协作体验\n多agent和人的",
         "start": 1758
       },
-      "detached": false,
+      "detached": true,
       "status": "resolved",
-      "resolvedBy": "fanzhangg",
-      "resolvedAt": "2026-10-15T10:18:50.125Z",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-15T19:20:41.014Z",
       "working": null,
       "messages": [
         {
@@ -1208,12 +1216,253 @@
       ]
     },
     {
-      "id": "t_m7ok2dkjtm",
+      "id": "t_tkkrftobni",
       "anchor": {
-        "exact": "成功指标",
-        "prefix": "Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n",
-        "suffix": "\n不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n用户",
-        "start": 1758
+        "exact": "产品愿景\n一句话愿景\n让AI agent像同事一样，和你在同一份文档里同时写作\n背景与问题\n文档编辑是计算机最基础最持久的需求。人类的文档协作经历了两个阶段：\n用户串行协作 （Word为代表）：用户A编辑完word文档，邮件发给用户B，用户B用修订和批注标出改动，再发回用户A审阅\n文档并行编辑（Google Docs为代表）：用户A和用户B在一个文档里同时编辑内容\n现在AI和人类协同写作已经是不可避免的趋势，然而AI和人类的协作还停留在串行阶段：人类在文档或者聊天框评论，AI审阅评论修改文档，再返回给人类。\n我们的方案\n我的产品把AI和人的协作推进到并行阶段：AI不再是聊天框里的工具，而是文档里的一位协作者。人和AI同时在同一份文档上工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。\n设计原则\n熟悉：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复\n实时：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n可控：评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定\n开放：开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里。\n多智能体：多个智能体可以在一个文档同时编辑合作。\n不做什么\n在线文档：文档只存在本地，不做云存储\n多人实时合作：只做人和AI的协作，不做人和人的实时协同\n私有的文档格式：只用纯Markdown\n知识库：只专注单篇文档，不做笔记管理\n聊天界面：交流都在评论里，不做聊天窗口\n目标用户\n最先服务的是已经在和AI一起写文档的人，他们：\n希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和文档之间来回复制粘贴\n主要在本地写作，文档和代码放在一起（比如在GitHub仓库里写README、设计文档）\n看重开放的标准和软件，不想被锁在某个订阅服务里\n核心使用场景\nAI写，人改：AI起草了一份设计文档，我边读边审阅，在评论里让AI微调具体的段落\n人写，AI改：我写了一篇1万字的小说，不想让AI大范围改动把整篇改乱，只让它微调某几个段落\n和聊天式Agent配合使用：大改动交给Chat Agent的CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器\n竞品与差异化\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点\n在线文档内置AI\nGoogle Docs + Gemini、Notion AI、Word + Copilot\n人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents）\n绑定自家AI；云端、格式私有\n聊天式AI的画布\nChatGPT Canvas、Claude Artifacts等\n对话里直接生成和修改文档\n以聊天为中心；不在本地，没有多人评论\nAI代码编辑器和命令行Agent\nCursor、VS Code + Copilot、Claude Code等\n改本地文件，Agent能力强\n为代码设计，不适合长文写作和逐段讨论\n本地Markdown编辑器\nObsidian、Typora等，加AI插件\n本地、开放格式\nAI只是插件，没有评论，接不了外部Agent\n我们的区别：\n同步协作，而不是异步交接：现有方案里，人和AI轮流操作：人提要求，等AI改完，再审阅。我们让人和AI同时在同一份文档上工作，AI处理评论时，人可以继续写其他部分，不同等AI修改完。AI也不用等人写完所有评论后再批量修改。\n评论就是协作接口：人在文档里评论，AI读评论、改文档、回复，人决定是否解决，而不是在聊天框和文档之间来回切换\n本地纯Markdown + 开放：文档就是仓库里的普通文件，评论单独存放，不被任何订阅服务锁住\n不绑定某个AI，支持多智能体：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合。多个Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n成功指标\n用户在驾驶位：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n减少等待：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n多agent协作：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n写作体验更好：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n开放：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量\n路线图\n单agent和人通过评论的协作体验\n多agent和人的协作体验\n风险\nAgent权限的管理\n能否模拟真人协作的体验",
+        "prefix": "",
+        "suffix": "",
+        "start": 0
+      },
+      "detached": true,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_rrgecf7rhi",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "can you translate this to English. Follow the common practice and vocabulary for a software product in English.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:20:30.880Z"
+        },
+        {
+          "id": "m_dswx7j2i71",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Translated the whole doc to English, keeping the structure, table, and bold labels. Used standard product-doc terms: Vision Statement, Non-Goals, Target Users, Core Use Cases, Competitive Landscape and Differentiation, Success Metrics, Roadmap, Risks. I also bolded the two collaboration stages in Background, and changed \"我的产品\" to \"Our product\" so it matches the \"we\" used in the rest of the doc. The file name is still 产品愿景.md. If you want an English file name, I can rename it with opendoc mv (e.g. product-vision.md) so the comments move with it.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:21:04.176Z",
+          "edits": [
+            {
+              "before": "产品愿景",
+              "after": "Product Vision",
+              "prefix": "# ",
+              "suffix": "\n\n## Vision Statement\n\nAI agents",
+              "start": 2
+            },
+            {
+              "before": "一句话愿景",
+              "after": "Vision Statement",
+              "prefix": "# Product Vision\n\n## ",
+              "suffix": "\n\nAI agents write alongside you ",
+              "start": 21
+            },
+            {
+              "before": "让AI agent像同事一样，和你在同一份文档里同时写作",
+              "after": "AI agents write alongside you in the same doc, at the same time, like a teammate.",
+              "prefix": "ct Vision\n\n## Vision Statement\n\n",
+              "suffix": "\n\n## Background and Problem\n\nDoc",
+              "start": 39
+            },
+            {
+              "before": "背景与问题",
+              "after": "Background and Problem",
+              "prefix": "same time, like a teammate.\n\n## ",
+              "suffix": "\n\nDocument editing is one of the",
+              "start": 125
+            },
+            {
+              "before": "文档编辑是计算机最基础最持久的需求。人类的文档协作经历了两个阶段：",
+              "after": "Document editing is one of the most fundamental and enduring uses of computers. Human collaboration on documents has gone through two stages:",
+              "prefix": "te.\n\n## Background and Problem\n\n",
+              "suffix": "\n\n- **Sequential collaboration**",
+              "start": 149
+            },
+            {
+              "before": "用户串行协作 （Word为代表）：用户A编辑完word文档，邮件发给用户B，用户B用修订和批注标出改动，再发回用户A审阅\n- 文档并行编辑（Google Docs为代表）：用户A和用户B在一个文档里同时编辑内容",
+              "after": "**Sequential collaboration** (e.g., Word): User A finishes editing a Word doc and emails it to User B, who marks changes with Track Changes and comments, then sends it back to User A for review\n- **Real-time co-editing** (e.g., Google Docs): User A and User B edit the same doc at the same time",
+              "prefix": "has gone through two stages:\n\n- ",
+              "suffix": "\n\nWriting with AI is now inevita",
+              "start": 294
+            },
+            {
+              "before": "现在AI和人类协同写作已经是不可避免的趋势，然而AI和人类的协作还停留在串行阶段：人类在文档或者聊天框评论，AI审阅评论修改文档，再返回给人类。",
+              "after": "Writing with AI is now inevitable, yet human–AI collaboration is still stuck in the sequential stage: a person leaves comments in the doc or in a chat box, the AI reads them and revises the doc, then hands it back.",
+              "prefix": " the same doc at the same time\n\n",
+              "suffix": "\n\n## Our Solution\n\nOur product m",
+              "start": 590
+            },
+            {
+              "before": "我们的方案",
+              "after": "Our Solution",
+              "prefix": "he doc, then hands it back.\n\n## ",
+              "suffix": "\n\nOur product moves human–AI col",
+              "start": 809
+            },
+            {
+              "before": "我的产品把AI和人的协作推进到并行阶段：AI不再是聊天框里的工具，而是文档里的一位协作者。人和AI同时在同一份文档上工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。",
+              "after": "Our product moves human–AI collaboration into the real-time stage: the AI is no longer a tool in a chat box, but a collaborator in the doc. People and AI work on the same doc at the same time, discussing in comments and each making their own edits, just like two teammates reviewing a proposal together.",
+              "prefix": "ands it back.\n\n## Our Solution\n\n",
+              "suffix": "\n\n## Design Principles\n\n- **Fami",
+              "start": 823
+            },
+            {
+              "before": "设计原则",
+              "after": "Design Principles",
+              "prefix": "iewing a proposal together.\n\n## ",
+              "suffix": "\n\n- **Familiar**: The interface ",
+              "start": 1131
+            },
+            {
+              "before": "熟悉**：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复\n- **实时**：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- **可控**：评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定\n- **开放：**开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里。\n- **多智能体：**多个智能体可以在一个文档同时编辑合作。",
+              "after": "Familiar**: The interface uses the familiar \"edit + comment\" interaction, so there is almost no learning curve. Under the hood, it is built for AI: the doc is a local plain Markdown file, comments are stored separately, and the AI reads comments, edits the file directly, and replies through the command line\n- **Real-time**: The agent stands by in the background. As soon as you comment, it starts working and replies in the thread. You don't have to stop and wait; you can keep editing other parts of the doc\n- **In control**: Comments are anchored to the text you select, and the agent only changes what the comment is about, leaving unrelated sections alone. Every change is explained in the thread and can be undone. You can also ask the agent to only suggest changes and decide yourself whether to accept them. Only you decide when a comment is resolved\n- **Open**: An open-source document format and editor, so you never have to worry about being locked into a subscription service.\n- **Multi-agent**: Multiple agents can edit and collaborate in the same doc at the same time.",
+              "prefix": "her.\n\n## Design Principles\n\n- **",
+              "suffix": "\n\n## Non-Goals\n\n- **Cloud docume",
+              "start": 1154
+            },
+            {
+              "before": "不做什么",
+              "after": "Non-Goals",
+              "prefix": " same doc at the same time.\n\n## ",
+              "suffix": "\n\n- **Cloud documents**: Docs li",
+              "start": 2242
+            },
+            {
+              "before": "在线文档**：文档只存在本地，不做云存储\n- **多人实时合作**：只做人和AI的协作，不做人和人的实时协同\n- **私有的文档格式**：只用纯Markdown\n- **知识库**：只专注单篇文档，不做笔记管理\n- **聊天界面**：交流都在评论里，不做聊天窗口",
+              "after": "Cloud documents**: Docs live only on your machine; no cloud storage\n- **Real-time collaboration between people**: We focus on human–AI collaboration, not real-time collaboration between people\n- **Proprietary document formats**: Plain Markdown only\n- **Knowledge base**: We focus on a single doc, not note management\n- **Chat interface**: All communication happens in comments; no chat window",
+              "prefix": "e same time.\n\n## Non-Goals\n\n- **",
+              "suffix": "\n\n## Target Users\n\nWe start with",
+              "start": 2257
+            },
+            {
+              "before": "目标用户",
+              "after": "Target Users",
+              "prefix": "in comments; no chat window\n\n## ",
+              "suffix": "\n\nWe start with people who alrea",
+              "start": 2654
+            },
+            {
+              "before": "最先服务的是已经在和AI一起写文档的人，他们：",
+              "after": "We start with people who already write docs with AI. They:",
+              "prefix": "o chat window\n\n## Target Users\n\n",
+              "suffix": "\n\n- Want working with AI to feel",
+              "start": 2668
+            },
+            {
+              "before": "希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和文档之间来回复制粘贴\n- 主要在本地写作，文档和代码放在一起（比如在GitHub仓库里写README、设计文档）\n- 看重开放的标准和软件，不想被锁在某个订阅服务里",
+              "after": "Want working with AI to feel as smooth as working with a human teammate, without copying and pasting between a chat box and a doc\n- Mostly write locally and keep docs next to their code (e.g., READMEs and design docs in a GitHub repo)\n- Value open standards and software, and don't want to be locked into a subscription service",
+              "prefix": "dy write docs with AI. They:\n\n- ",
+              "suffix": "\n\n## Core Use Cases\n\n- **AI writ",
+              "start": 2730
+            },
+            {
+              "before": "核心使用场景",
+              "after": "Core Use Cases",
+              "prefix": "into a subscription service\n\n## ",
+              "suffix": "\n\n- **AI writes, human edits**: ",
+              "start": 3062
+            },
+            {
+              "before": "AI写，人改**：AI起草了一份设计文档，我边读边审阅，在评论里让AI微调具体的段落\n- **人写，AI改**：我写了一篇1万字的小说，不想让AI大范围改动把整篇改乱，只让它微调某几个段落\n- **和聊天式Agent配合使用**：大改动交给Chat Agent的CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器",
+              "after": "AI writes, human edits**: The AI drafts a design doc; I review it as I read and use comments to ask the AI to fine-tune specific paragraphs\n- **Human writes, AI edits**: I've written a 10,000-word novel. I don't want the AI making sweeping changes that mess up the whole thing, only fine-tuning a few paragraphs\n- **Alongside chat-based agents**: Hand big changes to a chat agent's CLI or desktop app, and make small changes by commenting directly in the doc. The page also works as a reader",
+              "prefix": "service\n\n## Core Use Cases\n\n- **",
+              "suffix": "\n\n## Competitive Landscape and D",
+              "start": 3082
+            },
+            {
+              "before": "竞品与差异化",
+              "after": "Competitive Landscape and Differentiation",
+              "prefix": "page also works as a reader\n\n## ",
+              "suffix": "\n\nExisting solutions fall into f",
+              "start": 3578
+            },
+            {
+              "before": "现有方案大致分四类：",
+              "after": "Existing solutions fall into four categories:",
+              "prefix": " Landscape and Differentiation\n\n",
+              "suffix": "\n\n| Category                    ",
+              "start": 3621
+            },
+            {
+              "before": "类别                   | 代表产品                                          | 优点                                                   | 缺点                     |\n| -------------------- | --------------------------------------------- | ---------------------------------------------------- | ---------------------- |\n| **在线文档内置AI**         | Google Docs + Gemini、Notion AI、Word + Copilot | 人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents） | 绑定自家AI；云端、格式私有         |\n| **聊天式AI的画布**         | ChatGPT Canvas、Claude Artifacts等              | 对话里直接生成和修改文档                                         | 以聊天为中心；不在本地，没有多人评论     |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等         | 改本地文件，Agent能力强                                       | 为代码设计，不适合长文写作和逐段讨论     |\n| **本地Markdown编辑器**    | Obsidian、Typora等，加AI插件                        | 本地、开放格式                                              | AI只是插件，没有评论，接不了外部Agent",
+              "after": "Category                          | Examples                                            | Strengths                                                                                                      | Weaknesses                                                            |\n| --------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |\n| **Cloud docs with built-in AI**   | Google Docs + Gemini, Notion AI, Word + Copilot     | Real-time collaboration between people; AI can make multi-step edits in the doc (Copilot Agent Mode, Notion Agents) | Tied to the vendor's own AI; cloud-based, proprietary format          |\n| **Chat AI canvases**              | ChatGPT Canvas, Claude Artifacts, etc.              | Generate and edit docs directly in the conversation                                                            | Chat-centric; not local, no multi-user comments                       |\n| **AI code editors and CLI agents** | Cursor, VS Code + Copilot, Claude Code, etc.        | Edit local files; powerful agents                                                                              | Built for code, not for long-form writing or paragraph-by-paragraph discussion |\n| **Local Markdown editors**        | Obsidian, Typora, etc., with AI plugins             | Local, open format                                                                                             | AI is just a plugin; no comments; can't connect external agents       ",
+              "prefix": "s fall into four categories:\n\n| ",
+              "suffix": " |\n\nHow we're different:\n\n- **Re",
+              "start": 3670
+            },
+            {
+              "before": "我们的区别：",
+              "after": "How we're different:",
+              "prefix": "nnect external agents        |\n\n",
+              "suffix": "\n\n- **Real-time collaboration, n",
+              "start": 5347
+            },
+            {
+              "before": "同步协作，而不是异步交接**：现有方案里，人和AI轮流操作：人提要求，等AI改完，再审阅。我们让人和AI同时在同一份文档上工作，AI处理评论时，人可以继续写其他部分，不同等AI修改完。AI也不用等人写完所有评论后再批量修改。\n- **评论就是协作接口**：人在文档里评论，AI读评论、改文档、回复，人决定是否解决，而不是在聊天框和文档之间来回切换\n- **本地纯Markdown + 开放**：文档就是仓库里的普通文件，评论单独存放，不被任何订阅服务锁住\n- **不绑定某个AI，支持多智能体**：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合。多个Agent还能同时在一份文档里工作，如同很多同事和你一起协作。",
+              "after": "Real-time collaboration, not async handoffs**: In existing solutions, people and AI take turns: the person makes a request, waits for the AI to finish, then reviews. We let people and AI work on the same doc at the same time. While the AI handles a comment, you can keep writing other parts instead of waiting for it to finish. The AI doesn't have to wait for you to finish all your comments before making changes in a batch either.\n- **Comments are the collaboration interface**: You comment in the doc; the AI reads comments, edits the doc, and replies; you decide whether to resolve. No more switching back and forth between a chat box and the doc\n- **Local plain Markdown + open**: The doc is just a regular file in your repo, comments are stored separately, and you're never locked into a subscription service\n- **Not tied to any one AI, multi-agent support**: Any agent that can run on the command line can plug in and work alongside the chat agents users already use. Multiple agents can also work in the same doc at once, like a group of teammates collaborating with you.",
+              "prefix": "   |\n\nHow we're different:\n\n- **",
+              "suffix": "\n\n## Success Metrics\n\n- **User i",
+              "start": 5373
+            },
+            {
+              "before": "成功指标",
+              "after": "Success Metrics",
+              "prefix": "tes collaborating with you.\n\n## ",
+              "suffix": "\n\n- **User in the driver's seat*",
+              "start": 6457
+            },
+            {
+              "before": "用户在驾驶位**：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n- **减少等待**：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n- **多agent协作**：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n- **开放**：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+              "after": "User in the driver's seat**: The AI doesn't take over the doc. Measure how often agent edits go beyond the comment's scope and the share of edits the user undoes\n- **Less waiting**: Fewer sequential handoffs between people and AI. Measure time from comment to agent reply, and total time people spend waiting on agents and agents spend waiting on people\n- **Multi-agent collaboration**: Multiple agents write with the user like human teammates. Measure the share of docs with 2 or more agents involved and the number of edit conflicts\n- **Better writing experience**: Better than a Markdown/code editor + AI plugin. Compare completion time and satisfaction on the same writing task; track weekly active docs and retention\n- **Open**: More open standards than closed-source products. Docs open correctly in any Markdown editor; number of third-party agents that can connect",
+              "prefix": "h you.\n\n## Success Metrics\n\n- **",
+              "suffix": "\n\n## Roadmap\n\n- Single agent + h",
+              "start": 6478
+            },
+            {
+              "before": "路线图",
+              "after": "Roadmap",
+              "prefix": "rty agents that can connect\n\n## ",
+              "suffix": "\n\n- Single agent + human collabo",
+              "start": 7355
+            },
+            {
+              "before": "单agent和人通过评论的协作体验\n- 多agent和人的协作体验",
+              "after": "Single agent + human collaboration through comments\n- Multiple agents + human collaboration",
+              "prefix": "that can connect\n\n## Roadmap\n\n- ",
+              "suffix": "\n\n## Risks\n\n- Managing agent per",
+              "start": 7366
+            },
+            {
+              "before": "风险",
+              "after": "Risks",
+              "prefix": "gents + human collaboration\n\n## ",
+              "suffix": "\n\n- Managing agent permissions\n-",
+              "start": 7462
+            },
+            {
+              "before": "Agent权限的管理\n- 能否模拟真人协作的体验",
+              "after": "Managing agent permissions\n- Whether we can replicate the experience of collaborating with real people",
+              "prefix": "uman collaboration\n\n## Risks\n\n- ",
+              "suffix": "\n",
+              "start": 7471
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_hpy7r60dnw",
+      "anchor": {
+        "exact": "AI agents collaborate with you in the same Markdown doc, in real time, ",
+        "prefix": "Product Vision\n",
+        "suffix": "like teammates.\nBackground and P",
+        "start": 15
       },
       "detached": false,
       "status": "open",
@@ -1222,31 +1471,175 @@
       "working": null,
       "messages": [
         {
-          "id": "m_04az1xz8zr",
+          "id": "m_tyizojs9y7",
           "author": {
-            "name": "fanzhangg",
+            "name": "fanzhang",
             "kind": "human"
           },
-          "body": "不需要具体的用户指标。我自己用起来爽就足够了。修改一下。",
+          "body": "Is this a better framing of the vision?",
           "mentions": [],
-          "createdAt": "2026-10-15T10:23:52.530Z"
+          "createdAt": "2026-10-15T19:28:51.841Z"
         },
         {
-          "id": "m_30jbo4tsms",
+          "id": "m_a7bpz5jd8i",
           "author": {
-            "name": "claude",
+            "name": "Dobby",
             "kind": "agent"
           },
-          "body": "已改：成功指标改成“我自己用起来爽就够了”，删掉了所有衡量方式（撤销比例、回复时长、留存等），保留五条作为“爽”的具体含义，并改成第一人称。如果连这五条也不想要，我可以只留那一句。",
+          "body": "Partly. It's better than the old one in two ways: it says Markdown, and it puts agents first. But it drops the one word that sets us apart. The old line was \"让AI agent像同事一样，和你在同一份文档里同时写作\", and 同时 (at the same time) is the core claim in Background, Our Solution and How we're different. Without it, this sentence also describes Copilot in Word or Canvas. \"Working buddy\" is also a bit casual, and it repeats \"collaborate\". One option: \"AI agents write alongside you in the same Markdown doc, at the same time, like a teammate.\" I haven't changed the doc. Tell me if you want this or another version applied.",
           "mentions": [],
-          "createdAt": "2026-10-15T10:24:10.110Z",
+          "createdAt": "2026-10-15T19:29:03.292Z"
+        },
+        {
+          "id": "m_vyr08t1lkt",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "how about this one?",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:30:08.475Z"
+        },
+        {
+          "id": "m_h21r5tohwy",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Yes, this one is better. \"In real time\" brings back the core claim. Two small fixes: \"in the real time\" should be \"in real time\", and \"real time ... real teammates\" says \"real\" twice. Also, \"as your teammates\" says they are teammates, while \"like teammates\" says they work like teammates, which matches the rest of the doc (\"just like two teammates\"). Suggested wording below; apply it if you agree.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:30:16.485Z",
+          "proposal": [
+            {
+              "before": "AI agents collaborate with you in the same Markdown doc and in the real time, as your real teammates.",
+              "after": "AI agents collaborate with you in the same Markdown doc, in real time, like teammates.",
+              "prefix": "# Product Vision\n\n",
+              "suffix": "\n\n## Background and Problem\n\nDoc",
+              "start": 18
+            }
+          ]
+        },
+        {
+          "id": "m_9lgcca25bc",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "Applied Dobby's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:31:19.969Z",
           "edits": [
             {
-              "before": "- **用户在驾驶位**：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n- **减少等待**：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n- **多agent协作**：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n- **开放**：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
-              "after": "不设具体的用户指标，我自己用起来爽就够了。“爽”指的是：\n\n- **用户在驾驶位**：整篇文章不被AI牵着鼻子走\n- **减少等待**：不用等AI改完才能继续写，AI也不用等我写完所有评论\n- **多agent协作**：多个agent像真人同事一样和我一起写作\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好\n- **开放**：文档在任何Markdown编辑器里都能正常打开，想用哪个agent就用哪个",
-              "prefix": "一份文档里工作，如同很多同事和你一起协作。\n\n## 成功指标\n\n",
-              "suffix": "\n\n## 路线图\n\n- 单agent和人通过评论的协作体验\n- ",
-              "start": 2478
+              "before": " and in the real time, as your real",
+              "after": ", in real time, like",
+              "prefix": "ith you in the same Markdown doc",
+              "suffix": " teammates.\n\n## Background and P",
+              "start": 73
+            }
+          ],
+          "applies": "m_h21r5tohwy"
+        }
+      ]
+    },
+    {
+      "id": "t_xd0lbdzwjq",
+      "anchor": {
+        "exact": "Competitive Landscape and Differentiation\nExisting tools fall into four categories:\nCategory\nExamples\nStrengths\nWeaknesses\nCloud docs with built-in AI\nGoogle Docs + Gemini, Notion AI, Word + Copilot\nReal-time co-editing between people; agentic edits in the doc\nLocked to the vendor's AI; cloud-only, proprietary format\nChat AI canvases\nChatGPT Canvas, Claude Artifacts\nGenerate and edit docs in a chat\nChat-centric; not local; no comment threads\nAI code editors and CLI agents\nCursor, VS Code + Copilot, Claude Code\nPowerful agents on local files\nBuilt for code, not for discussing prose paragraph by paragraph\nLocal Markdown editors\nObsidian, Typora + AI plugins\nLocal, open format\nAI is a plugin; no comments; no external agents\nHow we're different:\nReal-time, not turn-taking: You keep writing while the AI handles a comment, and it acts on each comment as it arrives instead of waiting for a batch.\nComments are the interface: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.\nLocal, plain Markdown: A regular file in your repo, comments stored alongside it; no subscription lock-in.\nAny agent, many agents: Any command-line agent can plug in, and several can work in the same doc at once.",
+        "prefix": "The page also works as a reader\n",
+        "suffix": "\nSuccess Metrics\nUser in control",
+        "start": 3413
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_fwpu93pfsm",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "Make this section more concise and on points",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:30:42.897Z"
+        },
+        {
+          "id": "m_3izt09t2ab",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Tightened the section. I kept the table and the four differentiators, but shortened every cell and bullet to its main point. I also removed the column padding and the \"etc.\" from the examples. I dropped two details: the \"(Copilot Agent Mode, Notion Agents)\" examples and \"alongside the chat agents users already use\". The second is still covered under Core Use Cases. Undo if you want either back.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:31:04.468Z",
+          "edits": [
+            {
+              "before": "solutions",
+              "after": "tools",
+              "prefix": "e and Differentiation\n\nExisting ",
+              "suffix": " fall into four categories:\n\n| C",
+              "start": 3616
+            },
+            {
+              "before": "                         | Examples                                            | Strengths                                                                                                      | Weaknesses                                                            |\n| --------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |\n| **Cloud docs with built-in AI**   | Google Docs + Gemini, Notion AI, Word + Copilot     | Real-time collaboration between people; AI can make multi-step edits in the doc (Copilot Agent Mode, Notion Agents) | Tied to the vendor's own AI; cloud-based, proprietary format          |\n| **Chat AI canvases**              | ChatGPT Canvas, Claude Artifacts, etc.              | Generate and edit docs directly in the conversation                                                            | Chat-centric; not local, no multi-user comments                       |\n| **AI code editors and CLI agents** | Cursor, VS Code + Copilot, Claude Code, etc.        | Edit local files; powerful agents                                                                              | Built for code, not for long-form writing or paragraph-by-paragraph discussion |\n| **Local Markdown editors**        | Obsidian, Typora, etc., with AI plugins             | Local, open format                                                                                             | AI is just a plugin; no comments; can't connect external agents       ",
+              "after": "| Examples | Strengths | Weaknesses |\n| --- | --- | --- | --- |\n| **Cloud docs with built-in AI** | Google Docs + Gemini, Notion AI, Word + Copilot | Real-time co-editing between people; agentic edits in the doc | Locked to the vendor's AI; cloud-only, proprietary format |\n| **Chat AI canvases** | ChatGPT Canvas, Claude Artifacts | Generate and edit docs in a chat | Chat-centric; not local; no comment threads |\n| **AI code editors and CLI agents** | Cursor, VS Code + Copilot, Claude Code | Powerful agents on local files | Built for code, not for discussing prose paragraph by paragraph |\n| **Local Markdown editors** | Obsidian, Typora + AI plugins | Local, open format | AI is a plugin; no comments; no external agents",
+              "prefix": "to four categories:\n\n| Category ",
+              "suffix": " |\n\nHow we're different:\n\n- **Re",
+              "start": 3661
+            },
+            {
+              "before": " collaboration, not async handoffs**: In existing solutions, people and AI take turns: the person makes a request, waits for the AI to finish, then reviews. We let people and AI work on the same doc at the same time. While the AI handles a comment, you can keep writing other parts instead of waiting for it to finish. The AI doesn't have to wait for you to finish all your comments before making changes in a batch either.\n- **Comments are the collaboration interface**: You comment in the doc; the AI reads comments, edits the doc, and replies; you decide whether to resolve. No more switching back and forth between a chat box and the doc\n- **Local plain Markdown + open**: The doc is just a regular file in your repo, comments are stored separately, and you're never locked into a subscription service\n- **Not tied to any one AI, multi-agent support**: Any agent that can run on the command line can plug in and work alongside the chat agents users already use. Multiple agents can also work in the same doc at once, like a group of teammates collaborating with you",
+              "after": ", not turn-taking**: You keep writing while the AI handles a comment, and it acts on each comment as it arrives instead of waiting for a batch.\n- **Comments are the interface**: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.\n- **Local, plain Markdown**: A regular file in your repo, comments stored alongside it; no subscription lock-in.\n- **Any agent, many agents**: Any command-line agent can plug in, and several can work in the same doc at once",
+              "prefix": " we're different:\n\n- **Real-time",
+              "suffix": ".\n\n## Success Metrics\n\n- **User ",
+              "start": 4425
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_e9t16xx3hb",
+      "anchor": {
+        "exact": "Success Metrics\nUser in control: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of edits users undo.\nLess waiting: Measure time from comment to agent reply, and how long people and agents wait on each other.\nMulti-agent collaboration: Measure the share of docs with 2+ agents and the number of edit conflicts.\nBetter writing experience: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.\nOpen: Docs open correctly in any Markdown editor; count the third-party agents that connect.",
+        "prefix": "n work in the same doc at once.\n",
+        "suffix": "\nRoadmap\nSingle agent + human co",
+        "start": 4651
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_tb0afc0ahn",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "Make this more concise. Use 1-2 sentences to explain each point.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:32:46.618Z"
+        },
+        {
+          "id": "m_h0xcif2bzx",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Done. Each metric is now one or two sentences. I mostly kept the measurement and cut lead-ins that repeated the bullet title (e.g. \"Fewer sequential handoffs\", \"More open standards than closed-source products\"). I also renamed \"User in the driver's seat\" to \"User in control\" to match the Design Principles wording. Undo any line you want back.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:32:57.730Z",
+          "edits": [
+            {
+              "before": "the driver's seat**: The AI doesn't take over the doc. Measure how often agent edits go beyond the comment's scope and the share of edits the user undoes\n- **Less waiting**: Fewer sequential handoffs between people and AI. Measure time from comment to agent reply, and total time people spend waiting on agents and agents spend waiting on people\n- **Multi-agent collaboration**: Multiple agents write with the user like human teammates. Measure the share of docs with 2 or more agents involved and the number of edit conflicts\n- **Better writing experience**: Better than a Markdown/code editor + AI plugin. Compare completion time and satisfaction on the same writing task; track weekly active docs and retention\n- **Open**: More open standards than closed-source products. Docs open correctly in any Markdown editor; number of third-party agents that can connect",
+              "after": "control**: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of edits users undo.\n- **Less waiting**: Measure time from comment to agent reply, and how long people and agents wait on each other.\n- **Multi-agent collaboration**: Measure the share of docs with 2+ agents and the number of edit conflicts.\n- **Better writing experience**: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.\n- **Open**: Docs open correctly in any Markdown editor; count the third-party agents that connect.",
+              "prefix": "## Success Metrics\n\n- **User in ",
+              "suffix": "\n\n## Roadmap\n\n- Single agent + h",
+              "start": 4940
             }
           ]
         }

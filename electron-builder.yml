@@ -41,6 +41,10 @@ mac:
   target: dmg
   category: public.app-category.productivity
   icon: build/icon.png
+  # Ad-hoc signature until there is a Developer ID. Without one the bundle's
+  # signature is broken, and a downloaded copy shows as "damaged".
+  identity: "-"
+  hardenedRuntime: false
   fileAssociations: &markdown
     - ext: [md, markdown]
       name: Markdown Document

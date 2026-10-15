@@ -3,3 +3,4 @@ dist/
 *.opendoc.json.lock
 release/
 .claude/
+.DS_Store
