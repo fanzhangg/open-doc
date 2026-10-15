@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
-import { DENIED_READS, agentEnv, buildPrompt, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
+import { DENIED_READS, agentEnv, buildPrompt, claudeAdapter, customAdapter, privateWorkdir, rulePath, splitCommand } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 
@@ -16,12 +16,13 @@ const FAKE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-age
 const quiet = { stdout: { write() {} }, stderr: { write() {} }, env: {} };
 const human = ['--as', 'fzhan', '--kind', 'human'];
 
-async function withAgent(mode, fn, limits = {}, { editMode = 'auto' } = {}) {
+async function withAgent(mode, fn, limits = {}, { editMode = 'auto', workdir = null } = {}) {
   const docPath = await tempDoc();
   const runLog = join(dirname(docPath), 'runs.log');
   await writeFile(runLog, '');
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = customAdapter(`"${process.execPath}" "${FAKE}" {threadsFile} ${mode} "${runLog}"`);
+  if (workdir) adapter.workdir = () => workdir;
   const statuses = [];
   const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter, limits, editMode } });
@@ -70,6 +71,17 @@ test('an @mention launches a run that replies, as the agent, in the doc folder',
     await until(() => dispatcher.status().state === 'ready', { what: 'ready' });
     assert.equal(dispatcher.status().lastRun.ok, true);
   });
+});
+
+test('a run kept to the doc starts in its own folder and names the doc by absolute path', { timeout: 30_000 }, async () => {
+  const workdir = join(await mkdtemp(join(tmpdir(), 'opendoc-workdir-')), 'not-yet');
+  await withAgent('reply', async ({ docPath, runs, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@claude quantify this');
+    await until(async () => replies((await sidecar()).threads[0]).length === 1, { what: 'a reply' });
+    const [run] = await runs();
+    assert.equal(run.cwd.toLowerCase(), workdir.toLowerCase(), 'the folder is made if missing');
+    assert.equal(run.doc, docPath.replaceAll('\\', '/'));
+  }, {}, { workdir });
 });
 
 test('a comment that mentions no one launches a run, and so does a follow-up', { timeout: 30_000 }, async () => {
@@ -273,24 +285,48 @@ test('splitCommand honours quotes', () => {
 
 test('Claude adapter: command line and result parsing', () => {
   const adapter = claudeAdapter({ bin: 'claude', model: 'sonnet', maxTurns: 12, maxBudgetUsd: 0.5 });
-  const { command, args } = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', sessionId: 'abc' });
+  const docPath = join(tmpdir(), 'docs', 'plan.md');
+  const { command, args } = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, sessionId: 'abc' });
   assert.equal(command, 'claude');
   assert.deepEqual(args.slice(0, 2), ['-p', 'PROMPT']);
   assert.ok(args.includes('dontAsk'));
   assert.deepEqual(args.slice(args.indexOf('--resume'), args.indexOf('--resume') + 2), ['--resume', 'abc']);
-  assert.deepEqual(args.slice(-5), ['--allowedTools', 'Read', 'Edit(./plan.md)', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  // Kept to the doc by default: one file, by absolute path, from a private folder.
+  assert.equal(adapter.workdir(docPath), privateWorkdir(docPath));
+  assert.notEqual(privateWorkdir(docPath), dirname(docPath));
+  const doc = rulePath(docPath);
+  assert.match(doc, /^\/\/[^/]/);
+  assert.doesNotMatch(doc, /[\\:]/);
+  const kept = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath }).args;
+  assert.deepEqual(kept.slice(kept.indexOf('--allowedTools') + 1), [`Read(${doc})`, `Edit(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.ok(!kept.some((a) => a.startsWith('Web')));
   const deny = args.indexOf('--disallowedTools');
   assert.deepEqual(args.slice(deny + 1, deny + 1 + DENIED_READS.length), DENIED_READS);
   assert.ok(DENIED_READS.includes('Read(//**/.env*)'));
   assert.ok(!args.includes('--bare'));
 
+  // Each switch on its own. The web: still only the doc, from the private folder.
+  const allowed = (options) => {
+    const a = claudeAdapter({ bin: 'claude', ...options }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath }).args;
+    return a.slice(a.indexOf('--allowedTools') + 1);
+  };
+  assert.equal(claudeAdapter({ bin: 'claude', webAccess: true }).workdir(docPath), privateWorkdir(docPath));
+  assert.deepEqual(allowed({ webAccess: true }), [`Read(${doc})`, `Edit(${doc})`, 'WebSearch', 'WebFetch', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  // Other files: any file (but the denied ones), from the doc's folder, no web.
+  assert.equal(claudeAdapter({ bin: 'claude', fileAccess: true }).workdir(docPath), null);
+  assert.deepEqual(allowed({ fileAccess: true }), ['Read', 'Edit(./plan.md)', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.deepEqual(allowed({ webAccess: true, fileAccess: true }), ['Read', 'Edit(./plan.md)', 'WebSearch', 'WebFetch', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+
   // Approve mode: the doc is not editable; the prompt asks for proposals.
-  const approve = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', editMode: 'approve' }).args;
-  assert.deepEqual(approve.slice(approve.indexOf('--allowedTools') + 1), ['Read', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  const approve = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, editMode: 'approve' }).args;
+  assert.deepEqual(approve.slice(approve.indexOf('--allowedTools') + 1), [`Read(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
   assert.ok(!approve.some((a) => a.startsWith('Edit')));
   const approvePrompt = buildPrompt({ name: 'claude', docFile: 'plan.md', editMode: 'approve' });
   assert.match(approvePrompt, /opendoc propose plan\.md <thread-id> --as claude/);
   assert.match(approvePrompt, /do not edit it/);
+  const absolute = buildPrompt({ name: 'claude', docFile: 'C:/My Docs/plan.md' });
+  assert.match(absolute, /opendoc reply "C:\/My Docs\/plan\.md" <thread-id>/);
+  assert.doesNotMatch(absolute, /working directory/);
   for (const prompt of [approvePrompt, buildPrompt({ name: 'claude', docFile: 'plan.md' })]) {
     assert.doesNotMatch(prompt, /opendoc resolve/);
     assert.match(prompt, /Never resolve a thread/);

@@ -5,7 +5,7 @@
 // At most one run per agent at a time; a failed run never loops.
 
 import { spawn } from 'node:child_process';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,19 +188,24 @@ export class Dispatcher {
   async #launch(threads, markdown) {
     const runDir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
     const lines = threadLines(markdown, threads);
-    const payload = { doc: this.docFile, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
-    const prompt = buildPrompt({ name: this.name, docFile: this.docFile, editMode: this.editMode });
+    // A run kept to the doc starts in a folder of its own, so it names the
+    // doc by absolute path.
+    const workdir = this.adapter.workdir?.(this.docPath) ?? dirname(this.docPath);
+    if (workdir !== dirname(this.docPath)) await mkdir(workdir, { recursive: true });
+    const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
+    const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
+    const prompt = buildPrompt({ name: this.name, docFile: docRef, editMode: this.editMode });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');
     await writeFile(threadsFile, JSON.stringify(payload, null, 2));
     await writeFile(promptFile, `${prompt}\n\n## Threads\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`);
 
     const { command, args } = this.adapter.command({
-      prompt, promptFile, threadsFile, docFile: this.docFile, editMode: this.editMode,
+      prompt, promptFile, threadsFile, docFile: this.docFile, docPath: this.docPath, editMode: this.editMode,
       sessionId: this.adapter.supportsSessions ? this.sessionId : null,
     });
     const child = spawn(command, args, {
-      cwd: dirname(this.docPath),
+      cwd: workdir,
       env: {
         ...agentEnv(process.env),
         PATH: `${this.shimDir}${delimiter}${process.env.PATH ?? ''}`,

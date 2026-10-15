@@ -79,8 +79,9 @@ sidecar 里，锚定、保存时保留未改动块的原始字节都保持不变
 - 永久的作者着色。
 - 让人的 Ctrl+Z 撤销智能体的修改。智能体的修改仍不进入人的撤销历史，撤销
   通过评论串上的“Undo”完成。
-- 收紧智能体读取文件的权限。保持现状：`Read` 不限路径，只用 deny 规则挡住
-  密钥类文件（`src/server/agents/adapters.js` 的 `DENIED_READS`）。
+- 收紧智能体读取文件的权限。这件事已单独完成：默认只能读写文档本身，
+  Settings > Agent 的“Other files”和“Web search”两个开关由人手动打开
+  （`src/server/agents/adapters.js` 的 `claudeAdapter`）。
 
 ### 参考 Google Docs 的地方
 

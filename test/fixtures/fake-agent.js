@@ -10,7 +10,7 @@ import { execSync } from 'node:child_process';
 
 const [threadsFile, mode, runLog] = process.argv.slice(2);
 const { doc, threads } = JSON.parse(readFileSync(threadsFile, 'utf8'));
-appendFileSync(runLog, JSON.stringify({ threads: threads.map((t) => t.id), as: process.env.OPENDOC_AS, cwd: process.cwd() }) + '\n');
+appendFileSync(runLog, JSON.stringify({ threads: threads.map((t) => t.id), as: process.env.OPENDOC_AS, cwd: process.cwd(), doc }) + '\n');
 
 if (mode === 'fail') {
   console.error('fake agent: something went wrong');

@@ -42,6 +42,9 @@ addressed only to someone else):
                                  approve: it only replies with proposals for you to apply
   --model <name>  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
   --max-budget-usd <n>  --agent-isolated (Claude --bare; needs ANTHROPIC_API_KEY)
+  --agent-web                    let Claude search and fetch the web (off by default)
+  --agent-read-files             let Claude read files other than the doc (off by default)
+                                 A web page or file could trick it into leaking what it read.
 
 Identity: --as <name> (or OPENDOC_AS), --kind agent|human (or OPENDOC_KIND; default agent).
 A thread waits on <name> when its latest message is from a human and mentions @<name> or no one.
@@ -67,6 +70,8 @@ const OPTIONS = {
   'agent-cmd': { type: 'string' },
   'agent-bin': { type: 'string' },
   'agent-isolated': { type: 'boolean' },
+  'agent-web': { type: 'boolean' },
+  'agent-read-files': { type: 'boolean' },
   model: { type: 'string' },
   'max-turns': { type: 'string' },
   'run-timeout': { type: 'string' },
@@ -302,6 +307,8 @@ function agentOptions(values, docPath) {
       maxTurns: number('max-turns', 30),
       maxBudgetUsd: values['max-budget-usd'] === undefined ? undefined : number('max-budget-usd', undefined, { min: 0.01 }),
       isolated: values['agent-isolated'] === true,
+      webAccess: values['agent-web'] === true,
+      fileAccess: values['agent-read-files'] === true,
     });
   } else {
     throw new UsageError(`no preset for agent "${values.agent}"; pass --agent-cmd "<command>"`);

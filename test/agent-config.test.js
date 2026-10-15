@@ -43,4 +43,7 @@ test('hooksWarning names the project settings that define hooks, unless runs are
   assert.match(hooksWarning(claude, false, doc), /settings\.json defines hooks/);
   assert.equal(hooksWarning(claude, true, doc), null);
   assert.equal(hooksWarning({ name: 'custom' }, false, doc), null);
+  // A run kept to the doc starts in its own folder, outside the project.
+  const elsewhere = await tempDir();
+  assert.equal(hooksWarning({ name: 'claude', workdir: () => elsewhere }, false, doc), null);
 });

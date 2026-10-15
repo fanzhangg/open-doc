@@ -24,6 +24,8 @@ export function agentFromSettings(settings, docPath) {
       maxTurns: settings.maxTurns,
       maxBudgetUsd: settings.maxBudgetUsd ?? undefined,
       isolated: settings.isolated,
+      webAccess: settings.webAccess,
+      fileAccess: settings.fileAccess,
     });
   }
   return {
@@ -38,7 +40,7 @@ export function agentFromSettings(settings, docPath) {
 /** The hooks warning for a Claude Code agent working on `docPath`, or null. */
 export function hooksWarning(adapter, isolated, docPath) {
   if (adapter.name !== 'claude' || isolated) return null;
-  const hooks = projectHooks(dirname(docPath));
+  const hooks = projectHooks(adapter.workdir?.(docPath) ?? dirname(docPath));
   return hooks ? `${hooks} defines hooks; the agent's runs will execute them (isolated runs skip them)` : null;
 }
 

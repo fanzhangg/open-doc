@@ -85,7 +85,8 @@ for comments itself and starts you once per batch, with the waiting threads
 already claimed and passed to you as JSON. In that case skip step 1 and step 5
 of the loop: handle exactly the threads you were given (steps 2 to 4), then
 stop. Do not run `opendoc wait` or `opendoc serve`. Your tools are limited to
-reading files, editing this one doc, and running `opendoc`. When the human
+reading and editing this one doc and running `opendoc`; only when the human
+allows it can you also read other files, or search and fetch the web. When the human
 has chosen to approve every change, you cannot edit the doc at all: answer
 edit requests with `opendoc propose`.
 

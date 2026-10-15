@@ -13,7 +13,8 @@ export const SETTINGS_VERSION = 1;
  * may go: 'auto' edits the doc and replies, 'approve' only replies with a
  * proposal the human applies. `presence` is when it answers: 'online', every
  * comment not addressed to someone else; 'dnd' (do not disturb), only
- * comments that @mention it.
+ * comments that @mention it. A Claude agent sees only the doc unless
+ * `webAccess` (search and fetch the web) or `fileAccess` (read other files).
  */
 export const DEFAULT_AGENT = Object.freeze({
   enabled: false,
@@ -29,6 +30,8 @@ export const DEFAULT_AGENT = Object.freeze({
   maxBudgetUsd: null,
   bin: null,
   isolated: false,
+  webAccess: false,
+  fileAccess: false,
 });
 
 /** `name: null` means "not chosen yet": the server suggests one. */
@@ -68,6 +71,8 @@ const AGENT_RULES = {
   maxBudgetUsd: orNull((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0.01 && v <= 10_000),
   bin: orNull(text(2000)),
   isolated: boolean,
+  webAccess: boolean,
+  fileAccess: boolean,
 };
 
 const RULES = {

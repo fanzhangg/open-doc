@@ -275,6 +275,22 @@
             </span>
             <input type="checkbox" class="od-switch" data-agent="isolated">
           </label>
+          <label class="od-setting" data-for="claude">
+            <span class="od-setting-text">
+              <span class="od-setting-label">Web search</span>
+              <span class="od-setting-hint">Lets the agent search the web and open web pages.</span>
+              <span class="od-setting-hint od-agent-warning">Risk: a web page can hide instructions that trick the agent into sending this doc to a website.</span>
+            </span>
+            <input type="checkbox" class="od-switch" data-agent="webAccess">
+          </label>
+          <label class="od-setting" data-for="claude">
+            <span class="od-setting-text">
+              <span class="od-setting-label">Other files</span>
+              <span class="od-setting-hint">Lets the agent read any file on this computer except keys and .env files. Off, it reads only this doc.</span>
+              <span class="od-setting-hint od-agent-warning">Risk: a file can hide instructions the agent then follows. With web search on too, it could be tricked into sending your files to a website.</span>
+            </span>
+            <input type="checkbox" class="od-switch" data-agent="fileAccess">
+          </label>
         </div>
       </section>
 

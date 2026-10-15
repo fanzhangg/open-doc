@@ -364,6 +364,21 @@ const AGENT_STATES = {
   stopped: 'Offline',
 };
 
+// Asked before the agent may reach beyond the doc (Settings > Agent).
+const BOTH_RISK = 'With web search and other files both on, the agent could be tricked into sending your files to a website.';
+const ACCESS_RISKS = {
+  webAccess: {
+    ask: 'Let the agent search the web and open web pages?\n\n'
+      + 'A web page can hide instructions that trick the agent into sending this doc to a website.',
+    other: 'fileAccess',
+  },
+  fileAccess: {
+    ask: 'Let the agent read files other than this doc?\n\n'
+      + 'It can then read any file on this computer except keys and .env files, and a file can hide instructions it follows.',
+    other: 'webAccess',
+  },
+};
+
 // The agent settings apply to every doc. Its program (the custom command or
 // the Claude Code path) is set through the desktop app, which asks the user
 // to confirm it; in a browser tab those fields are read-only.
@@ -399,6 +414,7 @@ function setupAgentSettings({ store, source }) {
     section.dataset.kind = current.kind;
     section.querySelector('[data-agent="enabled"]').checked = current.enabled;
     section.querySelector('[data-agent="isolated"]').checked = current.isolated;
+    for (const key of Object.keys(ACCESS_RISKS)) section.querySelector(`[data-agent="${key}"]`).checked = current[key];
     options.toggleAttribute('data-off', !current.enabled);
     for (const button of section.querySelectorAll('[data-agent-kind]')) {
       button.setAttribute('aria-checked', String(button.dataset.agentKind === current.kind));
@@ -457,7 +473,14 @@ function setupAgentSettings({ store, source }) {
 
   section.addEventListener('change', (event) => {
     const input = event.target;
-    if (input.type === 'checkbox' && input.dataset.agent) return set({ [input.dataset.agent]: input.checked });
+    if (input.type === 'checkbox' && input.dataset.agent) {
+      const risk = ACCESS_RISKS[input.dataset.agent];
+      if (risk && input.checked && !window.confirm(agent()[risk.other] ? `${risk.ask}\n\n${BOTH_RISK}` : risk.ask)) {
+        input.checked = false;
+        return;
+      }
+      return set({ [input.dataset.agent]: input.checked });
+    }
     if (input.dataset.agentProgram) return setProgram(input);
     const key = input.dataset.agent;
     if (!key) return;
