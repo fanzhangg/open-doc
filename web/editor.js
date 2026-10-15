@@ -5,7 +5,7 @@
 // changes are replayed as typing (web/replay.js); other changes replace only
 // the blocks that differ (the caret stays put) and glow with the author's name.
 
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
   commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
   wrapInBulletListCommand, wrapInOrderedListCommand, turnIntoTextCommand,
@@ -93,7 +93,8 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *           onChange: () => void, onSelectThread: (id: string) => void,
  *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
  */
-export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest }) {
+// `editable: false` makes a read-only view, such as an earlier version of the doc.
+export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
   // Markdown as last loaded or applied; an update that serializes to the same
   // text is an echo of that, not a local edit (markdownUpdated is debounced).
   let baseline = null;
@@ -113,6 +114,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     .config((ctx) => {
       ctx.set(rootCtx, host);
       ctx.set(defaultValueCtx, markdown);
+      if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
       // Match common markdown style so edited blocks change as little as possible.
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options, bullet: '-', emphasis: '*', strong: '*', rule: '-', fences: true, listItemIndent: 'one',

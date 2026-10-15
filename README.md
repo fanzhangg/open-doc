@@ -87,6 +87,17 @@ merge with your unsaved typing; only a change to the same paragraph you are
 editing asks you to choose. Saves keep the original bytes of every block you did
 not touch, so `git diff` shows only real edits.
 
+Version history (the clock button, or Ctrl+Alt+Shift+H) lists every version
+of the doc, newest first: who made it (you, the agent and the comment it was
+answering, or a program outside OpenDoc), when, and how many characters it
+added and removed. Pick one to read it, with what it changed from the version
+before marked in the text, and click Restore this version to put the doc back.
+A restore adds a new version, so it can be undone the same way; comments stay
+and follow the restored text. Changes by the same author within two minutes
+are one version. History is kept on this computer, in `history/` in the config
+folder below, never next to the doc, and follows the doc when you rename it in
+OpenDoc.
+
 Settings (your name, theme, font, width, outline, word count, focus mode) are
 saved for every doc in `settings.json` in your config folder
 (`%APPDATA%\OpenDoc` on Windows, `~/Library/Application Support/OpenDoc` on

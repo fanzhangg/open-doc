@@ -13,6 +13,7 @@ import { OpError, applyOp, locate, project, sourceRange } from '../core/index.js
 import { NAME_PATTERN } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
+import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
@@ -81,6 +82,11 @@ export async function startServer(docPath, {
     writes = run.catch(() => {});
     return run;
   };
+  // Version history (src/store/history.js): the hash of the doc as this
+  // server last wrote it, so the watcher does not take that write for
+  // someone else's, and the queue that keeps versions in order.
+  let lastWritten = null;
+  let chronicle = Promise.resolve();
 
   const server = createServer((req, res) => {
     handle(req, res).catch((error) => {
@@ -175,6 +181,18 @@ export async function startServer(docPath, {
         const offered = await serial(() => dispatcher.overwritten(changes));
         return sendJson(res, 200, { offered });
       }
+      case 'GET /api/history':
+        await chronicle;
+        return sendJson(res, 200, { versions: await readHistory(docPath, settingsDir) });
+      case 'GET /api/history/version': {
+        const found = await readVersion(docPath, settingsDir, versionId(url.searchParams.get('id')));
+        if (!found) throw new HttpError(404, 'not_found', 'no such version');
+        return sendJson(res, 200, found);
+      }
+      case 'POST /api/history/restore': {
+        const body = await readJson(req);
+        return sendJson(...(await serial(() => restoreVersion(body))));
+      }
       default:
         throw new HttpError(404, 'not_found', 'not found');
     }
@@ -191,9 +209,11 @@ export async function startServer(docPath, {
       } catch (error) {
         if (body.recreate !== true || error.code !== 'no_doc') throw error;
         await mkdir(dirname(docPath), { recursive: true });
+        lastWritten = hashBytes(Buffer.from(body.markdown));
         await writeAtomic(docPath, body.markdown);
         await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
-        return [res, 200, { docHash: hashBytes(Buffer.from(body.markdown)), markdown: body.markdown }];
+        await noteVersion(body.markdown, { kind: 'edit', author: await human() });
+        return [res, 200, { docHash: lastWritten, markdown: body.markdown }];
       }
       if (current.hash !== body.baseHash) {
         return [res, 409, { code: 'conflict', markdown: current.markdown, docHash: current.hash }];
@@ -201,9 +221,36 @@ export async function startServer(docPath, {
       const incoming = current.markdown.includes('\r\n') ? body.markdown.replace(/\r?\n/g, '\r\n') : body.markdown;
       const next = splice(current.markdown, incoming);
       if (next !== current.markdown) {
+        await noteDisk(current); // whatever reached the disk since, before the human's change
+        lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
         dispatcher?.humanEdited(current.markdown, next); // not the agent's edit
         await update(docPath, (s) => s); // refresh anchors against the saved doc
+        await noteVersion(next, { kind: 'edit', author: await human() });
+      }
+      return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
+    }
+
+    // Put the doc back the way it was in an earlier version, as the human's
+    // change: a new version, so the restore can itself be undone. Comments
+    // stay; their anchors follow the restored text like after any edit.
+    async function restoreVersion(body) {
+      const id = versionId(body?.id);
+      if (typeof body.baseHash !== 'string') throw new HttpError(400, 'bad_input', 'expected { id, baseHash }');
+      const current = await readDoc(docPath);
+      if (current.hash !== body.baseHash) {
+        return [res, 409, { code: 'conflict', markdown: current.markdown, docHash: current.hash }];
+      }
+      const found = await readVersion(docPath, settingsDir, id);
+      if (!found) throw new HttpError(404, 'not_found', 'no such version');
+      const next = found.markdown;
+      if (next !== current.markdown) {
+        await noteDisk(current);
+        lastWritten = hashBytes(Buffer.from(next));
+        await writeAtomic(docPath, next);
+        dispatcher?.humanEdited(current.markdown, next);
+        await update(docPath, (s) => s);
+        await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
@@ -236,6 +283,31 @@ export async function startServer(docPath, {
       agent: dispatcher?.status() ?? null,
       agentSource,
     };
+  }
+
+  // Add the doc as it now reads to its history (one version at a time, in
+  // order); a failure is logged and never stops a save.
+  function noteVersion(markdown, change) {
+    const run = chronicle.then(async () => {
+      const version = await recordVersion(docPath, settingsDir, markdown, change);
+      if (version) broadcast('history', { id: version.id });
+    });
+    chronicle = run.catch((error) => console.error('Could not record a version:', error));
+    return chronicle;
+  }
+
+  // The doc on disk changed and not by this server's hand: the agent's edit
+  // while it runs, otherwise a change made outside OpenDoc.
+  function noteDisk(doc) {
+    if (doc.hash === lastWritten) return chronicle;
+    const agentNow = dispatcher?.status();
+    return noteVersion(doc.markdown, agentNow?.state === 'running'
+      ? { kind: 'edit', author: { name: agentNow.name, kind: 'agent' }, threadIds: agentNow.threadIds }
+      : { kind: 'external', author: null });
+  }
+
+  async function human() {
+    return { name: (await readSettings(settingsDir)).settings.name ?? defaultName(), kind: 'human' };
   }
 
   async function agentAction(body) {
@@ -325,6 +397,7 @@ export async function startServer(docPath, {
       }
       if (doc.hash !== lastDocHash) {
         lastDocHash = doc.hash;
+        await noteDisk(doc);
         await load(docPath);
         broadcast('doc', { docHash: doc.hash });
       }
@@ -412,6 +485,8 @@ export async function startServer(docPath, {
       const target = (await move(docPath, newPath)) ?? newPath;
       stopWatching();
       await dispatcher?.stop();
+      await chronicle;
+      await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
@@ -422,7 +497,9 @@ export async function startServer(docPath, {
     });
   }
 
-  lastDocHash = (await readDoc(docPath)).hash;
+  const opened = await readDoc(docPath);
+  lastDocHash = opened.hash;
+  await noteDisk(opened); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   presence = JSON.parse(lastSettings).agent.presence;
@@ -540,6 +617,11 @@ function validChanges(changes) {
     && changes.every((c) => c && text(c.before) && c.before.length > 0 && text(c.after) && c.before !== c.after);
   if (!ok) throw new HttpError(400, 'bad_input', 'expected { changes: [{ before, after }] }');
   return changes.map(({ before, after }) => ({ before, after }));
+}
+
+function versionId(id) {
+  if (typeof id !== 'string' || !VERSION_ID.test(id)) throw new HttpError(400, 'bad_input', 'invalid version id');
+  return id;
 }
 
 function validAnchor(anchor) {

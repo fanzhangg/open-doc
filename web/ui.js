@@ -97,7 +97,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
 
   let pointerDown = false;
   document.addEventListener('mousedown', (event) => {
-    if (event.target.closest('.od-editor')) pointerDown = true;
+    if (event.target.closest('.od-editor') && !event.target.closest('.od-history-stage')) pointerDown = true;
   });
   document.addEventListener('mouseup', () => {
     if (!pointerDown) return;
@@ -717,7 +717,7 @@ function setupOutline(editor) {
 
   function markActive() {
     const top = canvas.getBoundingClientRect().top + 96;
-    const elements = [...document.querySelectorAll('.od-editor .ProseMirror > :is(h1, h2, h3, h4, h5, h6)')].filter((h) => h.textContent.trim());
+    const elements = [...document.querySelectorAll('.od-stage:not(.od-history-stage) .od-editor .ProseMirror > :is(h1, h2, h3, h4, h5, h6)')].filter((h) => h.textContent.trim());
     let active = 0;
     elements.forEach((h, i) => {
       if (h.getBoundingClientRect().top <= top) active = i;

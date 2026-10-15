@@ -27,6 +27,12 @@ export const api = {
   typing: (anchor) => request('POST', '/api/editing', { anchor }),
   /** Offer back agent changes the human's text was kept over: [{ before, after }]. */
   agentOverwritten: async (changes) => (await request('POST', '/api/agent/overwritten', { changes })).data.offered,
+  /** The doc's versions, oldest first (src/store/history.js). */
+  history: async () => (await request('GET', '/api/history')).data.versions,
+  /** One version: { version, markdown, before }. */
+  version: async (id) => (await request('GET', `/api/history/version?id=${encodeURIComponent(id)}`)).data,
+  /** Put the doc back to version `id`; 409 when the doc is no longer at `baseHash`. */
+  restoreVersion: (id, baseHash) => request('POST', '/api/history/restore', { id, baseHash }),
   async saveSettings(patch) {
     const { status, data } = await request('PUT', '/api/settings', patch);
     if (status !== 200) throw Object.assign(new Error(data.error ?? 'settings are busy'), { code: data.code, status });

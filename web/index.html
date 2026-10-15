@@ -64,6 +64,15 @@
     <span class="od-spacer"></span>
     <button type="button" class="od-pill od-tool-comment" data-action="comments" data-icon="comment" aria-pressed="true" aria-label="Comments" data-tip="Hide comments"><span class="od-comment-count"></span></button>
     <button type="button" class="od-pill od-show-resolved" data-icon="checkCircle" aria-pressed="false" aria-label="Resolved comments" data-tip="Show resolved comments"></button>
+    <button type="button" class="od-pill od-tool-history" data-icon="history" aria-pressed="false" aria-label="Version history" data-tip="Version history" data-keys="Mod+Alt+Shift+H"></button>
+  </div>
+
+  <div class="od-history-bar" role="toolbar" aria-label="Version history">
+    <button type="button" class="od-history-back" data-action="close" data-icon="back" data-tip="Back to editing" data-keys="Escape">Back</button>
+    <span class="od-history-heading" role="status" aria-live="polite"></span>
+    <span class="od-spacer"></span>
+    <label class="od-history-changes"><input type="checkbox" checked> Show changes</label>
+    <button type="button" class="od-primary od-history-restore" data-action="restore" hidden>Restore this version</button>
   </div>
 
   <div class="od-banner" hidden>
@@ -101,6 +110,14 @@
         <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
       </div>
       <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
+    </div>
+    <div class="od-stage od-history-stage">
+      <article class="od-page" aria-label="Earlier version of the document">
+        <div class="od-editor"></div>
+      </article>
+      <aside class="od-history" aria-label="Versions">
+        <ol class="od-history-list" role="listbox" aria-label="Versions" tabindex="0"></ol>
+      </aside>
     </div>
   </main>
 

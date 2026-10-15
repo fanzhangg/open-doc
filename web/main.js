@@ -17,6 +17,7 @@ import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
 import { canApply, editItems, openProposal, previewItems } from './review.js';
+import { createHistory } from './history.js';
 import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
@@ -35,6 +36,7 @@ let editor;
 let chrome;
 let margin;
 let presence;
+let history;
 let settings;
 let defaultName;
 let me;
@@ -153,8 +155,17 @@ async function start() {
     if (on && !commentsShown()) showComments(true);
     margin.setShowResolved(on);
   });
+  history = createHistory({
+    api,
+    commentOf: (id) => sidecar?.threads.find((t) => t.id === id)?.messages[0]?.body ?? null,
+    onRestore: restoreVersion,
+    onClose: () => editor.focus(),
+  });
   document.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'KeyM') {
+    if ((event.ctrlKey || event.metaKey) && event.altKey && event.shiftKey && event.code === 'KeyH') {
+      event.preventDefault();
+      history.toggle();
+    } else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'KeyM' && !history.isOpen()) {
       event.preventDefault();
       editor.requestComment();
     }
@@ -167,6 +178,7 @@ async function start() {
   const events = api.events();
   events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
   events.addEventListener('sidecar', refreshThreads);
+  events.addEventListener('history', () => history.changed());
   // The agent is about to edit there: its caret goes there first.
   events.addEventListener('agentTarget', (event) => {
     const { quote } = JSON.parse(event.data);
@@ -613,6 +625,40 @@ async function undoEdit(threadId, message) {
   await flushSave();
   const body = `Undid ${message.author.name}'s edit`;
   await sendOp({ type: 'addMessage', threadId, message: { ...newMessage(body), undoes: message.id } });
+}
+
+// Put the doc back the way it was in an earlier version (web/history.js). The
+// server writes that version's exact bytes; the page then shows them,
+// holding back the change event of the restore itself as it does for a save.
+async function restoreVersion(id) {
+  await flushSave();
+  if ((await api.state()).docHash !== baseHash) {
+    await syncFromDisk();
+    await flushSave();
+  }
+  saving = true;
+  let result;
+  try {
+    result = await api.restoreVersion(id, baseHash);
+  } finally {
+    saving = false;
+  }
+  if (result.status === 409) {
+    await syncFromDisk();
+    throw new Error('the doc changed just now. Try again.');
+  }
+  const { markdown, docHash } = result.data;
+  editor.applyMarkdown(markdown, 'Restore');
+  synced = editor.normalize(markdown);
+  baseHash = docHash;
+  setDisk(markdown);
+  dirty = false;
+  setStatus('Saved');
+  if (pendingExternal) {
+    const hash = pendingExternal;
+    pendingExternal = null;
+    onDocEvent(hash);
+  }
 }
 
 function newMessage(body) {
