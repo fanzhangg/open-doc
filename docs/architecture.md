@@ -99,8 +99,9 @@ same core library, so any of them can work without the others.
   are resolved to real paths, so one doc never opens twice.
 - Renderer is sandboxed with context isolation; the preload API accepts only
   user-initiated actions and never takes paths from the page.
-- Packaged with electron-builder. Windows (NSIS, unsigned) ships first; macOS
-  and Linux are configured but not yet built.
+- Packaged with electron-builder: a Windows NSIS installer (unsigned), a
+  macOS dmg (ad-hoc signed until there is a Developer ID), and a Linux
+  AppImage target.
 
 ## Local state
 

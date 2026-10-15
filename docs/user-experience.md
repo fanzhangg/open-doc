@@ -1,7 +1,7 @@
 # User Experience
 
 How a person writes with agents in OpenDoc today. For why, see the
-[vision](产品愿景.md); for how it is built, see [architecture](architecture.md).
+[product vision](product-vision.md); for how it is built, see [architecture](architecture.md).
 
 ## The basic loop
 
