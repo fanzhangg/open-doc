@@ -293,6 +293,19 @@ case-insensitive. `mentions` lists the canonical names, each once, in order of
 first appearance. `@` followed by a name that is not a participant is not a
 mention.
 
+### 4.1 Mentions in the doc text
+
+A human may also @mention an agent in the doc itself, outside code and raw
+HTML (by the same rule, applied to the rendered text, §3.1). A tool MAY turn
+such a mention into a thread: once the human has added it and paused, it
+creates a thread as that human, anchored on the rendered text from the `@` to
+the end of its block, with that text as the first message's `body`. Only a
+mention the human added counts, not one that was already there or one an
+agent wrote. The thread is then like any other; the sidecar format does not
+change and the inbox (§5) is still computed from the sidecar alone. The agent
+that answers it SHOULD remove the mention's text from the doc once it is done
+(or propose removing it).
+
 ## 5. Inbox
 
 A thread is in participant `P`'s inbox when all of these hold:

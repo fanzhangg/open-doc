@@ -2,12 +2,15 @@
 // back whether it worked. The dispatcher knows nothing about specific agents.
 //
 // Adapter shape:
-//   name, program (the executable, for display), supportsSessions
+//   name, program (the executable, for display)
 //   preflight() -> Promise<{ ok, error? }>
-//   command({ prompt, promptFile, threadsFile, docFile, docPath, editMode, sessionId }) -> { command, args }
+//   command({ prompt, promptFile, threadsFile, docFile, docPath, editMode }) -> { command, args }
 //   workdir?(docPath) -> the folder runs start in, when not the doc's own
 //   prepare?({ workdir, docPath, editMode }) -> Promise; before each run, after the workdir exists
-//   parse({ stdout, stderr, code }) -> { ok, error?, sessionId?, costUsd?, turns?, denials? }
+//   parse({ stdout, stderr, code }) -> { ok, error?, costUsd?, turns?, denials? }
+//
+// Every run is a new session: nothing an agent learns carries over to the
+// next run except what it wrote in the doc or its threads.
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -41,7 +44,7 @@ export function guardSettings() {
 
 /**
  * The folder a run starts in when it may see only the doc: an empty one of its
- * own, the same for every run on `docPath` so sessions resume. Claude Code
+ * own, emptied before each run so nothing carries over. Claude Code
  * lets read-only tools see the working folder without asking, so starting in
  * the doc's folder would expose every file next to the doc.
  */
@@ -82,7 +85,7 @@ export function buildPrompt({
   // a reply passes it on.
   const calls = autoComment
     ? 'Threads marked `"open": true` mention no one, and every agent with Auto Commenter in this doc sees them. Answer one only if it fits your persona and no earlier reply in the thread already does what it asks; otherwise leave it without a reply, and it is left to the others. Every other thread was addressed to you: answer it.'
-    : 'You answer only comments addressed to you, for your specialty: do only what each asks of you.';
+    : 'You answer only comments addressed to you: do only what each asks of you.';
   return [
     `You are ${name}, an AI agent co-authoring the markdown doc ${docFile}${isAbsolute(docFile) ? '' : ' (in your working directory)'} with a human through opendoc comment threads. Follow the opendoc skill.`,
     // The persona is the human's own words for this agent's role; it shapes
@@ -130,7 +133,6 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
   return {
     name: 'claude',
     program: executable,
-    supportsSessions: true,
     workdir(docPath) {
       return fileAccess ? null : privateWorkdir(docPath, agentName);
     },
@@ -149,17 +151,17 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
       }
       return { ok: false, error: 'Claude Code is not signed in; run "claude" once in a terminal to sign in' };
     },
-    command({ prompt, docFile, docPath, editMode = 'auto', guard = false, sessionId }) {
+    command({ prompt, docFile, docPath, editMode = 'auto', guard = false }) {
       const args = [
         '-p', prompt,
         '--output-format', 'json',
         '--permission-mode', 'dontAsk',
         '--append-system-prompt-file', SKILL_PATH,
         '--max-turns', String(maxTurns),
+        '--no-session-persistence',
       ];
       if (model) args.push('--model', model);
       if (maxBudgetUsd) args.push('--max-budget-usd', String(maxBudgetUsd));
-      if (sessionId) args.push('--resume', sessionId);
       if (isolated) args.push('--bare');
       // Before each edit, `opendoc guard` asks the server whether the human
       // is typing there and refuses the edit if so; the model reads why.
@@ -182,7 +184,6 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
       return {
         ok: !failed,
         error: failed ? (result.result || result.errors?.join('; ') || result.subtype || `exit code ${code}`) : null,
-        sessionId: result.session_id,
         costUsd: result.total_cost_usd,
         turns: result.num_turns,
         denials: result.permission_denials?.length ?? 0,
@@ -207,7 +208,6 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, co
   return {
     name: 'codex',
     program: executable,
-    supportsSessions: true,
     workdir(docPath) {
       return privateWorkdir(docPath, agentName);
     },
@@ -239,7 +239,7 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, co
       if (process.env.CODEX_API_KEY) return { ok: true };
       return { ok: false, error: 'Codex is not signed in; run "codex login" once in a terminal to sign in' };
     },
-    command({ prompt, docPath, sessionId }) {
+    command({ prompt, docPath }) {
       const user = userCodexConfig(codexHome);
       const args = [
         'exec',
@@ -258,22 +258,19 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, co
       if (user.windowsSandbox) args.push('-c', `windows.sandbox=${toml(user.windowsSandbox)}`);
       const runModel = model ?? user.model;
       if (runModel) args.push('--model', runModel);
-      // Flags go before `resume`, which takes only the session and the prompt.
-      if (sessionId) args.push('resume', sessionId);
       args.push(prompt);
       return { command: executable, args };
     },
     parse({ stdout, stderr, code }) {
       const events = jsonLines(stdout);
       if (events.length === 0) return { ok: false, error: `exited with code ${code} and no result${tail(stderr)}` };
-      const sessionId = events.find((e) => e.type === 'thread.started')?.thread_id;
       // `error` events may be retries the turn recovers from; a turn ends
       // with turn.completed or turn.failed.
       const failed = events.findLast((e) => e.type === 'turn.failed');
       const ok = code === 0 && !failed && events.some((e) => e.type === 'turn.completed');
-      if (ok) return { ok, error: null, sessionId };
+      if (ok) return { ok, error: null };
       const lastError = events.findLast((e) => e.type === 'error');
-      return { ok, error: failed?.error?.message || lastError?.message || `exited with code ${code}${tail(stderr)}`, sessionId };
+      return { ok, error: failed?.error?.message || lastError?.message || `exited with code ${code}${tail(stderr)}` };
     },
   };
 }
@@ -288,7 +285,6 @@ export function customAdapter(template) {
   return {
     name: 'custom',
     program: argv[0],
-    supportsSessions: false,
     async preflight() {
       return { ok: true };
     },

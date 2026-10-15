@@ -103,7 +103,6 @@ export class Dispatcher {
     this.error = null;
     this.run = null;
     this.lastRun = null;
-    this.sessionId = null;
     this.failed = new Set(); // "threadId:lastMessageId" of a failed run's threads
     this.runStarts = [];
   }
@@ -269,9 +268,13 @@ export class Dispatcher {
     const runDir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
     const lines = threadLines(markdown, threads);
     // A run kept to the doc starts in a folder of its own, so it names the
-    // doc by absolute path.
+    // doc by absolute path. The folder starts empty every time: nothing a run
+    // leaves there reaches the next one.
     const workdir = this.adapter.workdir?.(this.docPath) ?? dirname(this.docPath);
-    if (workdir !== dirname(this.docPath)) await mkdir(workdir, { recursive: true });
+    if (workdir !== dirname(this.docPath)) {
+      await rm(workdir, { recursive: true, force: true });
+      await mkdir(workdir, { recursive: true });
+    }
     await this.adapter.prepare?.({ workdir, docPath: this.docPath, editMode: this.editMode });
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
     // With Auto Commenter, an open ask is the agent's to take or leave (`open`).
@@ -289,7 +292,6 @@ export class Dispatcher {
 
     const { command, args } = this.adapter.command({
       prompt, promptFile, threadsFile, docFile: this.docFile, docPath: this.docPath, editMode: this.editMode, guard: Boolean(this.guard),
-      sessionId: this.adapter.supportsSessions ? this.sessionId : null,
     });
     const child = spawn(command, args, {
       cwd: workdir,
@@ -465,11 +467,8 @@ export class Dispatcher {
     if (this.state === 'stopped') return this.floor.release(this);
 
     if (result.ok) {
-      this.sessionId = result.sessionId ?? this.sessionId;
       this.failed.clear();
     } else {
-      // A broken session must not break every later run.
-      this.sessionId = null;
       for (const t of threads) this.failed.add(failureKey(t));
     }
     this.#setState(result.ok ? 'ready' : 'error', result.ok ? null : result.error);

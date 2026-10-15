@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyOp, emptySidecar, newId, OpError } from '../src/core/ops.js';
 import { parseMentions } from '../src/core/mentions.js';
+import { textMentions } from '../src/core/text-mentions.js';
 import { inbox } from '../src/core/inbox.js';
 
 const human = { name: 'fzhan', kind: 'human' };
@@ -229,4 +230,15 @@ test('edits: recorded on an agent reply, validated, idempotent; an undo notice w
   s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(human, '@claude try "heavy" instead') });
   assert.deepEqual(inbox(s, 'claude').map((t) => t.id), ['t_edit01']);
   assert.throws(() => applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: { ...msg(human, 'x'), undoes: 'nope' } }), OpError);
+});
+
+test('textMentions: @name in the doc text, to the end of its block, outside code', () => {
+  const md = '# Plan\n\nShip in Q3. @claude add the **risks** here.\n\n`@claude` in code\n\n```\n@claude fenced\n```\n\nMail a@claude.com, ask @alex, or @Claude.\n';
+  assert.deepEqual(textMentions(md, ['claude']).map((m) => [m.name, m.quote]), [
+    ['claude', '@claude add the risks here.'],
+    ['claude', '@Claude.'],
+  ]);
+  assert.deepEqual(textMentions(md, []), []);
+  const [first] = textMentions(md, ['claude']);
+  assert.equal(first.end - first.start, first.quote.length);
 });

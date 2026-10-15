@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, BUILTIN_AGENTS, checkAgentPatch, createAgent, deleteAgent, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, createAgent, deleteAgent, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -109,26 +109,10 @@ test('watchSettings sees the file appear and change', async () => {
   }
 });
 
-test('agents: the app comes with six, each owning one job with only the permissions it needs', () => {
-  const builtins = resolveSettings(null).agents;
-  assert.deepEqual(builtins.map((a) => [a.name, a.autoComment]), [['Clippy', true], ['Rocky', false], ['Will', false], ['Genius', false], ['Merlin', false], ['Links', false]]);
-  for (const agent of builtins) {
-    assert.ok(agent.tagline && agent.tagline.length <= 60 && agent.tagline.split(' ').length <= 5, `${agent.name} has an introduction of a few words`);
-    assert.ok(agent.persona.startsWith(`You are ${agent.name}, the `), `${agent.name} has a persona that says who it is`);
-    assert.ok(/Your job is /.test(agent.persona), `${agent.name}'s persona names its job`);
-    assert.equal(agent.persona.split('\n').length, 4,`${agent.name}'s persona has the four parts`);
-    assert.ok(!(agent.webAccess && agent.fileAccess), `${agent.name} never has both web and your files`);
-  }
-  const perms = Object.fromEntries(builtins.map((a) => [a.name, permissionLabels(a)]));
-  assert.deepEqual(perms, {
-    Clippy: ['Editor', 'Auto Editor', 'Auto Commenter'],
-    Rocky: ['Editor', 'Auto Editor'],
-    Will: ['Editor'],
-    Genius: ['Editor', 'Web Searcher'],
-    Merlin: ['Editor', 'File Searcher'],
-    Links: [],
-  });
-  assert.equal(new Set(builtins.map((a) => a.tagline)).size, builtins.length, 'each says something different');
+test('agents: the app comes with one plain agent and no built-in roles', () => {
+  const roster = resolveSettings(null).agents;
+  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.tagline]), [['agent', '', '']], 'no persona, no job');
+  assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'You are a poet.\nBe bold.' }), 'A poet', 'without an introduction, the persona says it');
   assert.equal(introOf({ tagline: '', persona: '' }), '');
 });
@@ -151,16 +135,16 @@ test('agents: each permission is a switch, and Auto Editor needs Editor', () => 
 
 test('agents: each field checked; any number of agents with Auto Commenter', () => {
   const muse = { ...AGENT_DEFAULTS, id: 'a_muse01', name: 'muse', persona: 'You are a poet.\nBe bold.' };
-  const clippy = { ...BUILTIN_AGENTS[0] };
-  assert.doesNotThrow(() => checkSettingsPatch({ agents: [clippy, muse] }));
+  const plainAgent = { ...DEFAULT_AGENTS[0] };
+  assert.doesNotThrow(() => checkSettingsPatch({ agents: [plainAgent, muse] }));
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [muse] }), 'none with Auto Commenter');
-  assert.doesNotThrow(() => checkSettingsPatch({ agents: [clippy, { ...muse, autoComment: true }] }), 'two with Auto Commenter');
+  assert.doesNotThrow(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, autoComment: true }] }), 'two with Auto Commenter');
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [] }));
-  assert.throws(() => checkSettingsPatch({ agents: [clippy, { ...muse, maxTurns: 0 }] }), /invalid value for agents/);
-  assert.throws(() => checkSettingsPatch({ agents: [clippy, { ...muse, runtime: 'robot' }] }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agents: [clippy, { ...muse, name: 'two words' }] }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agents: [clippy, { ...muse, role: 'pilot' }] }), SettingsError, 'roles are gone');
-  assert.throws(() => checkSettingsPatch({ agents: [clippy, muse, { ...muse, id: 'a_muse02', name: 'MUSE' }] }), SettingsError, 'names are unique, case-insensitively');
+  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, maxTurns: 0 }] }), /invalid value for agents/);
+  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, runtime: 'robot' }] }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, name: 'two words' }] }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, role: 'pilot' }] }), SettingsError, 'roles are gone');
+  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, muse, { ...muse, id: 'a_muse02', name: 'MUSE' }] }), SettingsError, 'names are unique, case-insensitively');
   assert.throws(() => checkAgentPatch({ tagline: 'x'.repeat(61) }), AgentError);
   assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(4001) }), AgentError);
   assert.throws(() => checkAgentPatch({ editMode: 'sometimes' }), /editMode/);
@@ -173,33 +157,35 @@ test('agents: each field checked; any number of agents with Auto Commenter', () 
   const old = resolveRoster([{ ...before, role: 'pilot' }, { ...before, id: 'a_muse02', name: 'muse2', role: 'copilot' }]);
   assert.deepEqual(old.map((a) => [a.autoComment, Object.hasOwn(a, 'role')]), [[true, false], [false, false]]);
   assert.deepEqual(resolveSettings({ agents: [] }).agents, [], 'the user may have no agents');
-  // Settings from the single-agent version: the built-ins, and where Claude Code is.
+  // Settings from the single-agent version: the default agent, and where Claude Code is.
   const legacy = resolveSettings({ agent: { enabled: true, name: 'helper', bin: '/opt/claude' } });
-  assert.deepEqual(legacy.agents.map((a) => a.name), BUILTIN_AGENTS.map((a) => a.name));
+  assert.deepEqual(legacy.agents.map((a) => a.name), DEFAULT_AGENTS.map((a) => a.name));
   assert.equal(legacy.claudeBin, '/opt/claude');
   // Grants from the ask-at-first-use version are dropped.
   assert.equal(Object.hasOwn(resolveSettings({ grants: [] }), 'grants'), false);
 });
 
 test('agents: new ones get a free name; any agent can be changed or deleted', () => {
-  const roster = resolveSettings(null).agents;
+  const plain = resolveSettings(null).agents;
+  const roster = [...plain, createAgent(plain, { name: 'Rocky' }), createAgent(plain, { name: 'Will' })];
   const one = createAgent(roster, { name: 'Rocky' });
   assert.match(one.id, /^a_/);
   assert.equal(one.name, 'Rocky-2');
+  assert.equal(createAgent(plain).name, 'agent-2', 'not the default agent\'s name');
   assert.equal(one.autoComment, false, 'a new agent answers when @mentioned');
   assert.equal(createAgent([], { name: 'fzhan' }, ['fzhan']).name, 'fzhan-2', "not the human's name");
   assert.throws(() => createAgent([], { maxTurns: 0 }), AgentError);
 
   const will = roster.find((a) => a.name === 'Will');
-  const clippy = roster.find((a) => a.name === 'Clippy');
+  const plainAgent = roster.find((a) => a.name === 'agent');
   assert.equal(updateAgent(roster, will.id, { persona: 'Sonnets only.' }).find((a) => a.id === will.id).persona, 'Sonnets only.');
   assert.throws(() => updateAgent(roster, will.id, { name: 'ROCKY' }), /taken/);
   assert.throws(() => updateAgent(roster, will.id, { id: 'a_other1' }), AgentError);
   assert.throws(() => updateAgent(roster, 'a_nobody', { persona: '' }), /no such agent/);
   const both = updateAgent(roster, will.id, { autoComment: true });
-  assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['Clippy', 'Will']);
-  assert.equal(updateAgent(roster, clippy.id, { autoComment: false }).some((a) => a.autoComment), false);
-  assert.deepEqual(deleteAgent(roster, clippy.id).map((a) => a.name), ['Rocky', 'Will', 'Genius', 'Merlin', 'Links']);
+  assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['agent', 'Will']);
+  assert.equal(updateAgent(roster, plainAgent.id, { autoComment: false }).some((a) => a.autoComment), false);
+  assert.deepEqual(deleteAgent(roster, plainAgent.id).map((a) => a.name), ['Rocky', 'Will']);
   assert.throws(() => deleteAgent(roster, 'a_nobody'), /no such agent/);
 });
 
@@ -211,10 +197,10 @@ test('agents: editAgents changes the roster under the lock and keeps other setti
     created = createAgent(agents, { name: 'muse' });
     return [...agents, created];
   }, dir);
-  assert.deepEqual(after.agents.map((a) => a.name), ['Clippy', 'Rocky', 'Will', 'Genius', 'Merlin', 'Links', 'muse']);
+  assert.deepEqual(after.agents.map((a) => a.name), ['agent', 'muse']);
   assert.equal(after.font, 'serif');
   await assert.rejects(editAgents((agents) => [...agents, { ...created }], dir), SettingsError, 'the same agent twice');
-  assert.equal((await readSettings(dir)).settings.agents.length, 7);
+  assert.equal((await readSettings(dir)).settings.agents.length, 2);
 });
 
 test('claudeBin and codexBin: where Claude Code and Codex are, for every agent', () => {

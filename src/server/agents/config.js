@@ -108,7 +108,6 @@ function unavailableAdapter(name, error) {
   return {
     name,
     program: null,
-    supportsSessions: false,
     async preflight() {
       return { ok: false, error };
     },

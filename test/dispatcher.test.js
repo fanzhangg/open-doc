@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -70,7 +70,7 @@ test('an @mention launches a run that replies, as the agent, in the doc folder',
     assert.equal(s.threads[0].working, null);
     const [run] = await runs();
     assert.equal(run.as, 'claude');
-    assert.equal(run.cwd.toLowerCase(), dirname(docPath).toLowerCase());
+    assert.equal(realpathSync(run.cwd).toLowerCase(), realpathSync(dirname(docPath)).toLowerCase());
     await until(() => dispatcher.status().state === 'ready', { what: 'ready' });
     assert.equal(dispatcher.status().lastRun.ok, true);
   });
@@ -79,15 +79,22 @@ test('an @mention launches a run that replies, as the agent, in the doc folder',
 test('a run kept to the doc starts in its own folder and names the doc by absolute path', { timeout: 30_000 }, async () => {
   const workdir = join(await mkdtemp(join(tmpdir(), 'opendoc-workdir-')), 'not-yet');
   const prepared = [];
-  const prepare = async (options) => { prepared.push({ ...options, made: existsSync(options.workdir) }); };
+  const prepare = async (options) => {
+    prepared.push({ ...options, made: existsSync(options.workdir), left: readdirSync(options.workdir) });
+    writeFileSync(join(options.workdir, 'notes.md'), 'what I learned last time');
+  };
   await withAgent('reply', async ({ docPath, runs, sidecar, comment }) => {
     await comment('--quote', 'extra load', '@claude quantify this');
     await until(async () => replies((await sidecar()).threads[0]).length === 1, { what: 'a reply' });
     const [run] = await runs();
-    assert.equal(run.cwd.toLowerCase(), workdir.toLowerCase(), 'the folder is made if missing');
+    assert.equal(realpathSync(run.cwd).toLowerCase(), realpathSync(workdir).toLowerCase(), 'the folder is made if missing');
     assert.equal(run.doc, docPath.replaceAll('\\', '/'));
     // The adapter readies the folder before each run, once it exists.
-    assert.deepEqual(prepared, [{ workdir, docPath, editMode: 'auto', made: true }]);
+    assert.deepEqual(prepared, [{ workdir, docPath, editMode: 'auto', made: true, left: [] }]);
+    // Nothing a run leaves in its folder reaches the next run.
+    await comment('--quote', 'extra load', '@claude and again');
+    await until(async () => prepared.length === 2, { what: 'a second run' });
+    assert.deepEqual(prepared[1].left, []);
   }, {}, { workdir, prepare });
 });
 
@@ -310,11 +317,13 @@ test('splitCommand honours quotes', () => {
 test('Claude adapter: command line and result parsing', () => {
   const adapter = claudeAdapter({ bin: 'claude', model: 'sonnet', maxTurns: 12, maxBudgetUsd: 0.5 });
   const docPath = join(tmpdir(), 'docs', 'plan.md');
-  const { command, args } = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, sessionId: 'abc' });
+  const { command, args } = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath });
   assert.equal(command, 'claude');
   assert.deepEqual(args.slice(0, 2), ['-p', 'PROMPT']);
   assert.ok(args.includes('dontAsk'));
-  assert.deepEqual(args.slice(args.indexOf('--resume'), args.indexOf('--resume') + 2), ['--resume', 'abc']);
+  // Every run is a new session, and none is kept to resume.
+  assert.ok(args.includes('--no-session-persistence'));
+  assert.ok(!args.includes('--resume'));
   // Kept to the doc by default: one file, by absolute path, from a private folder.
   assert.equal(adapter.workdir(docPath), privateWorkdir(docPath));
   assert.notEqual(privateWorkdir(docPath), dirname(docPath));
@@ -357,7 +366,7 @@ test('Claude adapter: command line and result parsing', () => {
   }
 
   const ok = adapter.parse({ stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: false, session_id: 's1', total_cost_usd: 0.02, num_turns: 4, permission_denials: [] }), stderr: '', code: 0 });
-  assert.deepEqual(ok, { ok: true, error: null, sessionId: 's1', costUsd: 0.02, turns: 4, denials: 0 });
+  assert.deepEqual(ok, { ok: true, error: null, costUsd: 0.02, turns: 4, denials: 0 });
   // Seen in practice: an auth failure reports subtype "success" with is_error true and exit code 0.
   const authFailure = adapter.parse({ stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'Failed to authenticate', session_id: 's2' }), stderr: '', code: 0 });
   assert.equal(authFailure.ok, false);
@@ -393,11 +402,7 @@ test('Codex adapter: command line and result parsing', async () => {
   assert.equal(JSON.parse(skill.slice('developer_instructions='.length)), await readFile(SKILL_PATH, 'utf8'));
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);
   assert.equal(args.at(-1), 'PROMPT');
-  assert.ok(!args.includes('resume'));
-  // Resuming: every flag comes before `resume <id> <prompt>`.
-  const resumed = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, sessionId: 'thread-1' }).args;
-  assert.deepEqual(resumed.slice(-3), ['resume', 'thread-1', 'PROMPT']);
-  assert.deepEqual(resumed.slice(0, -3), args.slice(0, -1));
+  assert.ok(!args.includes('resume'), 'every run is a new session');
 
   const lines = (...events) => events.map((e) => JSON.stringify(e)).join('\n');
   const ok = adapter.parse({
@@ -411,9 +416,9 @@ test('Codex adapter: command line and result parsing', async () => {
     stderr: '',
     code: 0,
   });
-  assert.deepEqual(ok, { ok: true, error: null, sessionId: 't1' });
+  assert.deepEqual(ok, { ok: true, error: null });
   const failed = adapter.parse({ stdout: lines({ type: 'thread.started', thread_id: 't2' }, { type: 'turn.failed', error: { message: 'usage limit reached' } }), stderr: '', code: 1 });
-  assert.deepEqual(failed, { ok: false, error: 'usage limit reached', sessionId: 't2' });
+  assert.deepEqual(failed, { ok: false, error: 'usage limit reached' });
   const errored = adapter.parse({ stdout: lines({ type: 'thread.started', thread_id: 't3' }, { type: 'error', message: 'stream disconnected' }), stderr: '', code: 1 });
   assert.equal(errored.error, 'stream disconnected');
   const none = adapter.parse({ stdout: 'not json', stderr: 'boom', code: 2 });

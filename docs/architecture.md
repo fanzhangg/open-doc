@@ -37,6 +37,12 @@ same core library, so any of them can work without the others.
 - **Inbox** is computed from the sidecar alone: a thread waits on an agent when
   its latest human message mentions it (or no one, for agents taking open
   asks) and the agent has not answered since. No cursors or server state.
+- **Mentions in the doc text** (SPEC §4.1) become threads, so the inbox rule
+  stays the same. When a human save adds an `@agent` outside code
+  (`src/core/text-mentions.js`), the server waits for a 3-second pause in the
+  human's saves, then adds a thread as the human, anchored from the `@` to the
+  end of its block. Only saves that raise the number of mentions of an agent
+  count, so edits around an old mention, and agents' own writes, ask nothing.
 - **Writes** take a short exclusive lock file, re-read, apply an operation with
   a client-generated id, and rename a temp file over the sidecar. Concurrent
   writers never lose changes; retries apply at most once.
@@ -46,7 +52,7 @@ same core library, so any of them can work without the others.
 | Path | Role |
 | --- | --- |
 | `spec/` | Format spec, JSON Schema, example doc. The contract between tools. |
-| `src/core/` | Pure library, same output in Node and the browser: rendered text (`project`), anchors, sidecar ops, inbox, mentions, diffs/edits/proposals, three-way merge, settings and agent profiles. |
+| `src/core/` | Pure library, same output in Node and the browser: rendered text (`project`), anchors, sidecar ops, inbox, mentions (in comments and in the doc text), diffs/edits/proposals, three-way merge, settings and agent profiles. |
 | `src/store/` | Disk: locked sidecar writes, file watching, user settings, version history. |
 | `src/server/` | Local HTTP server per doc: API, SSE, byte-preserving saves (`splice.js`), and the agent runner (`agents/`). |
 | `src/cli/` | `opendoc` CLI: `comment`, `comments`, `inbox`, `wait`, `reply`, `propose`, `resolve`, `mv`, `serve`, `guard`. `--json` and stable exit codes. |
@@ -69,7 +75,8 @@ same core library, so any of them can work without the others.
 ## Agents
 
 - **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
-  name, introduction, persona, runtime, permissions, limits. **Membership**
+  name, introduction, persona (plain text), runtime, permissions, limits. A
+  new user has one plain agent, `agent`; there are no built-in roles. **Membership**
   lives in the sidecar's participants, so it travels with the doc.
 - **Team** (`agents/team.js`): one dispatcher per agent in the open doc. They
   share a `Floor`, so only one runs at a time. This keeps each run's file
@@ -80,8 +87,12 @@ same core library, so any of them can work without the others.
   failures, limits and restarts when settings change.
 - **Runtimes** (`agents/config.js`, `adapters.js`): an adapter per program
   (Claude Code, Codex, custom command) that checks the program, builds the
-  command line, prepares a private working folder and session per agent per
-  doc, and parses the result. The agent acts only through its file tools and
+  command line, prepares an empty private working folder per agent per doc,
+  and parses the result.
+- **Nothing remembered in private.** Every run is a new session: no
+  `--resume`, Claude Code runs with `--no-session-persistence`, and the
+  private folder is emptied before each run. What an agent knows comes from
+  the doc and its threads, which the human sees too. The agent acts only through its file tools and
   the `opendoc` CLI, so a new runtime needs no other changes.
 - **Permissions are enforced by the run's tools**, not just the prompt: a
   permission that is off is absent from the command line. Secrets (`.env*`,

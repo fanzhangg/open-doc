@@ -1,7 +1,7 @@
 {
   "opendoc": 1,
   "doc": "product-vision.md",
-  "docHash": "sha256:ca569abe172910ff186968b20bdd937aaf5a8e2d630e28034d96eaa7f27a079c",
+  "docHash": "sha256:9065653366673d70b81008d5c38f7b04152ae9f70fb9458df7832a7a5fe40979",
   "participants": [
     {
       "name": "claude",
@@ -1544,10 +1544,10 @@
     {
       "id": "t_xd0lbdzwjq",
       "anchor": {
-        "exact": "Competitive Landscape and Differentiation\nExisting tools fall into four categories:\nCategory\nExamples\nStrengths\nWeaknesses\nCloud docs with built-in AI\nGoogle Docs + Gemini, Notion AI, Word + Copilot\nReal-time co-editing between people; agentic edits in the doc\nLocked to the vendor's AI; cloud-only, proprietary format\nChat AI canvases\nChatGPT Canvas, Claude Artifacts\nGenerate and edit docs in a chat\nChat-centric; not local; no comment threads\nAI code editors and CLI agents\nCursor, VS Code + Copilot, Claude Code\nPowerful agents on local files\nBuilt for code, not for discussing prose paragraph by paragraph\nLocal Markdown editors\nObsidian, Typora + AI plugins\nLocal, open format\nAI is a plugin; no comments; no external agents\nHow we're different:\nReal-time, not turn-taking: You keep writing while the AI handles a comment, and it acts on each comment as it arrives instead of waiting for a batch.\nComments are the interface: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.\nLocal, plain Markdown: A regular file in your repo, comments stored alongside it; no subscription lock-in.\nAny agent, many agents: Any command-line agent can plug in, and several can work in the same doc at once.",
+        "exact": "Competitive Landscape and Differentiation\nExisting tools fall into four categories:\nCategory\nExamples\nStrengths\nWeaknesses\nCloud docs with built-in AI\nGoogle Docs + Gemini, Notion AI, Word + Copilot\nReal-time co-editing between people; agentic edits in the doc\nLocked to the vendor's AI; cloud-only, proprietary format\nChat AI canvases\nChatGPT Canvas, Claude Artifacts\nGenerate and edit docs in a chat\nChat-centric; not local; no comment threads\nAI code editors and CLI agents\nCursor, VS Code + Copilot, Claude Code\nPowerful agents on local files\nBuilt for code, not for discussing prose paragraph by paragraph\nLocal Markdown editors\nObsidian, Typora + AI plugins\nLocal, open format\nAI is a plugin; no comments; no external agents\nHow we're different:\nA shared live doc, not handoffs: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it (or comment, in auto-commenter mode) instead of waiting for you to hand the doc over.\nComments are the interface: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.\nLocal, plain Markdown: A regular file in your repo, comments stored alongside it; no subscription lock-in.\nAny agent, many agents: Any command-line agent can plug in, several can work in the same doc at once, and they @ each other to hand off work.\nEverything is in the doc: An agent knows only what the doc and its threads say, so its behavior can always be explained from what you can see.",
         "prefix": "The page also works as a reader\n",
         "suffix": "\nSuccess Metrics\nUser in control",
-        "start": 3413
+        "start": 5843
       },
       "detached": false,
       "status": "open",
@@ -1603,10 +1603,10 @@
     {
       "id": "t_e9t16xx3hb",
       "anchor": {
-        "exact": "Success Metrics\nUser in control: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of edits users undo.\nLess waiting: Measure time from comment to agent reply, and how long people and agents wait on each other.\nMulti-agent collaboration: Measure the share of docs with 2+ agents and the number of edit conflicts.\nBetter writing experience: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.\nOpen: Docs open correctly in any Markdown editor; count the third-party agents that connect.",
-        "prefix": "n work in the same doc at once.\n",
-        "suffix": "\nRoadmap\nSingle agent + human co",
-        "start": 4651
+        "exact": "Success Metrics\nUser in control: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of edits users undo.\nLess waiting: Measure time from a comment or @ to the agent's reply, and how long people and agents wait on each other.\nMulti-agent collaboration: Measure the share of docs with 2+ agents, the number of edit conflicts, and how often a person has to pass a message from one agent to another (the target is never).\nBetter writing experience: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.\nOpen: Docs open correctly in any Markdown editor; count the third-party agents that connect.",
+        "prefix": "xplained from what you can see.\n",
+        "suffix": "\nRoadmap\nSingle agent + human: @",
+        "start": 7346
       },
       "detached": false,
       "status": "open",

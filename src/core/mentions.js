@@ -1,6 +1,6 @@
 // @mentions (SPEC.md §4).
 
-const TOKEN = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g;
+export const MENTION_TOKEN = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g;
 export const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
@@ -10,7 +10,7 @@ export const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export function parseMentions(body, participants) {
   const byLower = new Map(participants.map((p) => [p.name.toLowerCase(), p.name]));
   const found = [];
-  for (const match of body.matchAll(TOKEN)) {
+  for (const match of body.matchAll(MENTION_TOKEN)) {
     let token = match[2];
     // Sentence punctuation after a name ("@claude.") is not part of it.
     while (!byLower.has(token.toLowerCase()) && token.endsWith('.')) token = token.slice(0, -1);

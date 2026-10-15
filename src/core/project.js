@@ -21,10 +21,7 @@ const WHITESPACE = /\s/;
  *   is the source length.
  */
 export function project(markdown) {
-  const tree = fromMarkdown(markdown, {
-    extensions: [gfm(), cjkFriendlyExtension()],
-    mdastExtensions: [gfmFromMarkdown()],
-  });
+  const tree = parseMarkdown(markdown);
 
   const lines = [];
   collectBlocks(tree, markdown, lines);
@@ -43,6 +40,14 @@ export function project(markdown) {
   offsets.push(markdown.length);
 
   return { text, offsets: Int32Array.from(offsets), source: markdown };
+}
+
+/** The markdown syntax tree (mdast) that the projection is built from. */
+export function parseMarkdown(markdown) {
+  return fromMarkdown(markdown, {
+    extensions: [gfm(), cjkFriendlyExtension()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
 }
 
 /** Source range `[start, end)` covering rendered range `[start, end)`. */

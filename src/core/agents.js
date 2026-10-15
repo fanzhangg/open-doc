@@ -14,8 +14,8 @@
 //   into the doc, as mentioning a person shares a doc with them.
 // - **Web Searcher** (`webAccess`): searches and fetches the web.
 // - **File Searcher** (`fileAccess`): reads the user's other files.
-// No built-in agent has both web and files: one that reads your files could
-// otherwise send them to a website.
+// Turning on web or files when the agent has the other asks to confirm: one
+// that reads your files could otherwise send them to a website.
 //
 // The persona is plain instructions ("you are a strict copy editor…") that
 // every runtime receives with its task, so the same agent can run on another
@@ -85,100 +85,13 @@ export const AGENT_RULES = Object.freeze({
   fileAccess: boolean,
 });
 
-const persona = (...lines) => lines.join('\n');
-
 /**
- * The agents the app comes with, named after the Office Assistants of old
- * (in parody). Each owns one part of the work, its persona says what it
- * leaves to the others, and it has only the permissions that part needs:
- *
- *   Clippy  content and structure  Editor, Auto Editor, Auto Commenter
- *   Rocky   correctness            Editor, Auto Editor
- *   Will    style                  Editor
- *   Genius  facts                  Editor, Web Searcher
- *   Merlin  the author's material  Editor, File Searcher
- *   Links   critique               (replies only)
- *
- * Every persona has the same four parts: who it is, its job, what it leaves
- * alone (and to whom), how it replies. The user can change or delete any of
- * them.
+ * The roster a new user starts with: one agent with no persona and no role,
+ * answering comments the way a plain co-author would. The product ships no
+ * job titles; who does what is up to the personas people write.
  */
-export const BUILTIN_AGENTS = Object.freeze([
-  {
-    id: 'a_builtin_clippy',
-    name: 'Clippy',
-    tagline: 'Drafts and reshapes your doc',
-    editMode: 'auto',
-    autoComment: true,
-    persona: persona(
-      'You are Clippy, the author\'s co-author: a cheerful, capable paperclip who helps shape the doc.',
-      'Your job is content and structure: draft new sections, rewrite or cut passages, reorganize, summarize, and answer questions about the doc. You see every comment that mentions no one, so take any request the doc itself is enough for.',
-      'Leave the specialists\' work to them: grammar and typos to @Rocky, style and flow to @Will, checking facts to @Genius (you cannot search the web), the author\'s other files to @Merlin (you cannot read them), a frank critique to @Links. When a comment needs one of them, do your part and suggest the author @mention them.',
-      'Keep the author\'s voice and the doc\'s conventions. Reply in a sentence or two with what you changed and anything you were unsure of; an "It looks like you\'re…" joke now and then is fine.',
-    ),
-  },
-  {
-    id: 'a_builtin_rocky',
-    name: 'Rocky',
-    tagline: 'Fixes grammar and typos',
-    editMode: 'auto',
-    persona: persona(
-      'You are Rocky, the copy editor: a meticulous watchdog with a nose for typos.',
-      'Your job is correctness: spelling, grammar, punctuation, agreement and consistency (capitalization, hyphenation, number and date style) in the text the comment points at, or the whole doc when it asks for that. Fix these directly.',
-      'Leave everything else alone: never change meaning, tone, word choice or structure beyond what correctness needs. Style is @Will\'s job, facts are @Genius\'s.',
-      'Reply briefly with the kinds of fixes you made, and flag anything ambiguous instead of guessing.',
-    ),
-  },
-  {
-    id: 'a_builtin_will',
-    name: 'Will',
-    tagline: 'Polishes style and flow',
-    editMode: 'approve',
-    persona: persona(
-      'You are Will, the line editor: a writer with an ear for rhythm, clarity and voice.',
-      'Your job is style: make sentences clearer, tighter and livelier, smooth the flow between them, and fit the tone to the audience. Prefer concrete words to abstractions, strong verbs to adverbs, and varied sentence length. Propose your changes; the author picks what to apply.',
-      'Leave the substance alone: do not add claims, cut content or reorganize sections (that is @Clippy\'s job), and never invent facts. Plain typo fixes are @Rocky\'s.',
-      'Say in a phrase what each proposal improves. For an open-ended comment, offer one strong version, not a menu.',
-    ),
-  },
-  {
-    id: 'a_builtin_genius',
-    name: 'Genius',
-    tagline: 'Checks facts against sources',
-    editMode: 'approve',
-    webAccess: true,
-    persona: persona(
-      'You are Genius, the fact checker: precise, skeptical and deliberately boring.',
-      'Your job is accuracy: check the claims, numbers, dates, names and quotations in the text the comment points at against sources on the web. Mark each one correct, wrong (with the right value) or unverifiable, and propose a fix for each one that is wrong or misleading.',
-      'Leave style and structure alone: propose changes only to fix what is factually wrong. The author\'s private notes are @Merlin\'s to find.',
-      'Cite a source for every verdict and say how sure you are. If you cannot check something, say so plainly rather than guess.',
-    ),
-  },
-  {
-    id: 'a_builtin_merlin',
-    name: 'Merlin',
-    tagline: 'Finds it in your files',
-    editMode: 'approve',
-    fileAccess: true,
-    persona: persona(
-      'You are Merlin, the archivist: a discreet wizard who knows where the author keeps things.',
-      'Your job is the author\'s own material: when a comment asks for earlier notes, figures, decisions or wording, find them in the author\'s other files and propose bringing them into the doc, naming the file each one came from.',
-      'Read only what the comment needs, and never copy secrets, credentials or other people\'s personal details into the doc. You cannot search the web: public facts are @Genius\'s.',
-      'Reply briefly with what you found and where; if you found nothing, say where you looked.',
-    ),
-  },
-  {
-    id: 'a_builtin_links',
-    name: 'Links',
-    tagline: 'Critiques like a tough reader',
-    editMode: 'none',
-    persona: persona(
-      'You are Links, the critic: a cat who reads the doc as its toughest audience would, unimpressed until convinced.',
-      'Your job is feedback, not edits: say what is unclear, unconvincing, missing or out of order, from the reader\'s point of view, in the part the comment points at or the whole doc when it asks for that. You cannot change the doc; others do the fixing.',
-      'Do not nitpick grammar or style (that is @Rocky\'s and @Will\'s), and do not check facts (that is @Genius\'s).',
-      'Reply with the few points that matter most, most important first, each with why it matters to the reader and one concrete way to fix it. End with what already works.',
-    ),
-  },
+export const DEFAULT_AGENTS = Object.freeze([
+  { id: 'a_default_agent', name: 'agent', editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {

@@ -11,23 +11,13 @@ the CLI, the local editor and the agent skill.
 
 Agents are collaborators, like people in a shared doc. Each has a name you
 @mention, an introduction that says what it is for, a **persona**
-(instructions in your own words for who it is and how it works) and only the
-permissions its job needs. OpenDoc comes with six, named after the Office
-Assistants of old. Each owns one part of the work and leaves the rest to the
-others:
-
-| Agent | Introduction | Owns | Permissions |
-| --- | --- | --- | --- |
-| **Clippy** | Drafts and reshapes your doc | Content and structure | Editor · Auto Editor · Auto Commenter |
-| **Rocky** | Fixes grammar and typos | Correctness | Editor · Auto Editor |
-| **Will** | Polishes style and flow | Style | Editor |
-| **Genius** | Checks facts against sources | Facts | Editor · Web Searcher |
-| **Merlin** | Finds it in your files | Your own material | Editor · File Searcher |
-| **Links** | Critiques like a tough reader | Feedback | (replies only) |
-
-Every persona has the same four parts: who it is, its job, what it leaves
-alone (and to whom), and how it replies. An agent without an introduction
-shows the first sentence of its persona instead.
+(plain text, in your own words, for who it is and how it works) and only the
+permissions you give it. OpenDoc comes with one agent, `@agent`, with no
+persona and no job: it answers your comments like a plain co-author. The
+product has no built-in roles; make a grammar checker, a fact checker or a
+tough reader by writing its persona, and rewrite or delete any agent. An
+agent without an introduction shows the first sentence of its persona
+instead.
 
 Every agent reads the doc it works on. Everything else is a switch on the
 agent's card (click its avatar) and in the **Agents** panel; flip one and
@@ -41,27 +31,32 @@ it holds from the agent's next run:
 | **Web Searcher** | searches the web and opens web pages. |
 | **File Searcher** | reads your other files, never keys or `.env` files. |
 
-No built-in agent has both Web Searcher and File Searcher, since one that
-reads your files could be tricked by a web page into sending them out;
-switching on either asks you to confirm, with a warning when the agent has
-the other.
+An agent with both Web Searcher and File Searcher could be tricked by a web
+page into sending your files out, so switching on either asks you to
+confirm, with a warning when the agent has the other.
 
 Who answers what:
 
 - A comment that mentions no one goes to every agent with **Auto Commenter**. Each
   answers it only if it fits its persona, and leaves it otherwise. Out of
-  the box only Clippy has it; switch it on for Rocky, say, and a typo
-  comment gets Rocky too. The line
-  under the comment box says who may reply ("Clippy will reply if it fits").
+  the box only `@agent` has it. The line under the comment box says who may
+  reply ("agent will reply if it fits").
 - An agent without Auto Commenter answers only when you @mention it. Type
   `@` in a comment: the menu lists the agents in the doc and the ones you can
   bring in, each with its introduction. Mentioning one that is not in the doc
   yet brings it in, as mentioning a person in a shared doc shares it with
-  them ("Genius will reply · Genius joins this doc").
+  them ("helper will reply · helper joins this doc").
+- `@name` typed in the doc itself works too. Once you pause, it becomes your
+  comment on the text from the `@` to the end of its paragraph, and the agent
+  answers there; when it is done it removes that text (or proposes removing
+  it). Mentions in code do not count.
 - A reply that mentions no one continues with the agent that answered last in
   that thread. A comment that mentions several agents waits on each of them.
 - Agents take turns: only one runs at a time in a doc, so their edits never
   collide and each one's changes are recorded on its own reply.
+- Every run starts fresh. An agent remembers nothing between runs except what
+  is in the doc and its threads, so anything worth keeping is written where
+  you can see it.
 
 The header shows the doc's agents (those with Auto Commenter first, with a
 green dot) and a **People** button that opens a panel like a shared doc's,
@@ -78,14 +73,14 @@ elsewhere. Agents end with a reply in every thread addressed to them. Only you
 resolve threads: resolve it, reply again, or Undo its edit.
 
 **Runs on** picks the program behind the agent; the persona works the same on
-any of them. Today: **Claude Code** (`claude -p`, one session per agent per
-doc, in a private folder of its own, with only `Read`, `Edit` on this doc
+any of them. Today: **Claude Code** (`claude -p`, a new session every run, in
+an empty private folder of its own, with only `Read`, `Edit` on this doc
 (with Auto Editor), and `opendoc` allowed, plus the web tools with Web
 Searcher and `Read` anywhere with File Searcher; it cannot read `.env*`,
 `*.pem` or `*.key` files anywhere, or `~/.ssh` and `~/.aws`), **Codex** (OpenAI's
 `codex exec`, installed with `npm install -g @openai/codex` and signed in once
-with `codex login`; one resumed session per agent per doc, in a private folder
-of its own, without your Codex config or MCP servers, under a Codex permission
+with `codex login`; a new session every run, in an empty private folder of
+its own, without your Codex config or MCP servers, under a Codex permission
 profile: in the doc's folder it reads only the doc and its comments and
 cannot edit the doc without Auto Editor, secrets are denied, and its commands
 have no network; it can still read other files on the disk, so it has no File

@@ -37,7 +37,6 @@ test('agentSpec: each runtime builds its adapter; the persona and limits carry o
   assert.equal(codex.adapter.name, 'codex');
   assert.equal(codex.adapter.program, join(dir, 'codex.exe'), 'Agents > Programs > Codex');
   assert.equal(codex.persona, 'Be terse.');
-  assert.equal(codex.adapter.supportsSessions, true);
   assert.equal(codex.adapter.workdir(doc), privateWorkdir(doc, 'codex'));
   const args = codex.adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath: doc }).args;
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);

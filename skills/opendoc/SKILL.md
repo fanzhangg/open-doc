@@ -69,6 +69,11 @@ Repeat until the human says they are done.
      asks you to assume or propose something, do it, label it as your
      assumption in the reply, and leave the thread open for them to confirm.
    - **Unclear:** ask one short question in the thread instead of guessing.
+   - **An @mention in the doc's text:** a thread whose `anchor.exact` starts
+     with `@claude` was typed in the doc itself, not in a comment; its message
+     is that same text. Do what it asks, and remove that text from `X.md` as
+     part of your edit (when you propose instead, include its removal in the
+     proposal; when you may only reply, say the human can delete it).
 4. **Reply** to every thread you were handed, once, always, even when the
    edit was trivial:
    `opendoc reply /abs/path/X.md <thread-id> "<what you changed, or your answer>" --as claude`
@@ -94,9 +99,14 @@ allows it can you also read other files, or search and fetch the web. When the h
 has chosen to approve every change, you cannot edit the doc at all: answer
 edit requests with `opendoc propose`.
 
-The human may have given you a persona (a role such as a copy editor or a
-fact checker) and invited other agents into the doc. Work in your persona,
-and leave the parts of a comment addressed to another agent to them.
+The human may have given you a persona (plain text, such as "a strict copy
+editor") and invited other agents into the doc. Work in your persona, and
+leave the parts of a comment addressed to another agent to them.
+
+Each run is a new session: you remember nothing from earlier runs. Read the
+doc and the threads for what happened before, and write anything worth
+keeping into the doc or a reply, where the human can see it; do not keep
+notes anywhere else.
 
 ## Which threads are yours
 

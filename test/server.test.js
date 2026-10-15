@@ -517,6 +517,31 @@ test('an agent with Auto Commenter is in every doc and answers what mentions no 
   });
 });
 
+test('an @mention typed in the doc becomes the human\'s comment once they pause, and the agent answers it', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'helper' }], async ({ server, state }) => {
+    const save = async (markdown) => {
+      const { docHash } = await state();
+      assert.equal((await call(server, 'PUT', '/api/doc', { body: { markdown, baseHash: docHash } })).status, 200);
+    };
+    // Typed in two saves: the comment waits for the whole ask.
+    await save(`${SAMPLE}\nShip it. @helper\n`);
+    await save(`${SAMPLE}\nShip it. @helper add the risks here\n`);
+    assert.equal((await state()).sidecar.threads.length, 0, 'not while typing');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads.length === 1), 'a comment after the pause');
+    let [thread] = (await state()).sidecar.threads;
+    assert.equal(thread.anchor.exact, '@helper add the risks here');
+    assert.deepEqual([thread.messages[0].author, thread.messages[0].mentions], [{ name: 'fzhan', kind: 'human' }, ['helper']]);
+    assert.ok((await state()).sidecar.participants.some((p) => p.name === 'helper' && p.kind === 'agent'), 'the mention brought it in');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 2), 'helper answered');
+    assert.equal((await state()).sidecar.threads[0].messages[1].author.name, 'helper');
+
+    // Editing around it, or a mention in code, asks nothing new.
+    await save(`${SAMPLE}\nShip it soon. @helper add the risks here, please\n\nSee \`@helper\` in code.\n`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.equal((await state()).sidecar.threads.length, 1);
+  }, { options: { mentionSettleMs: 200 } });
+});
+
 test('several agents with Auto Commenter each answer the open comments that fit them, and pass on the rest', { timeout: 30_000 }, async () => {
   await withRoster([{ name: 'second' }], async ({ server, state }) => {
     // Switching Auto Commenter on brings an agent into the doc.

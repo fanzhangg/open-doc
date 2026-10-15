@@ -21,17 +21,12 @@ How a person writes with agents in OpenDoc today. For why, see the
 ## Agents are collaborators
 
 Each agent is set up like a person in a shared doc: a name you @mention, a
-short introduction, a persona written in your own words, and only the
-permissions its job needs. OpenDoc ships six, each owning one part of the work:
-
-| Agent | Job | Permissions |
-| --- | --- | --- |
-| Clippy | Drafts and reshapes your doc | Editor, Auto Editor, Auto Commenter |
-| Rocky | Fixes grammar and typos | Editor, Auto Editor |
-| Will | Polishes style and flow | Editor |
-| Genius | Checks facts against sources | Editor, Web Searcher |
-| Merlin | Finds it in your files | Editor, File Searcher |
-| Links | Critiques like a tough reader | replies only |
+short introduction, a persona, and only the permissions you give it. The
+persona is plain text in your own words ("a strict copy editor who never
+changes meaning"), and anyone can rewrite it. OpenDoc comes with one agent,
+`@agent`, with no persona and no job, and Editor, Auto Editor and Auto
+Commenter switched on. There are no built-in roles: a grammar checker, a fact
+checker or a tough reader is an agent whose persona you wrote.
 
 **Permissions** are plain switches on the agent's card:
 
@@ -45,11 +40,19 @@ permissions its job needs. OpenDoc ships six, each owning one part of the work:
 **Who answers what:**
 
 - A comment that mentions no one goes to every agent with Auto Commenter
-  (by default only Clippy). Each answers only if it fits its job.
+  (by default `@agent`). Each answers only if it fits its persona.
 - `@name` calls a specific agent. Mentioning one that is not in the doc yet
   brings it in. The line under the comment box says who will reply.
+- `@name` in the doc's text works like a comment. Type
+  `@agent add the risks here` in a paragraph; once you pause (3 seconds), it
+  becomes your comment on the text from the `@` to the end of the paragraph,
+  and the agent answers there and removes that text when it is done (or
+  proposes removing it). Mentions in code do not count, and editing around
+  an old mention does not ask again.
 - A follow-up with no mention continues with the agent that answered last.
 - Agents never wake each other, and take turns: one runs at a time per doc.
+- Nothing is remembered in private. Every run starts a fresh session that
+  reads the doc and its threads; anything worth keeping is written there.
 
 ## Seeing and steering agent work
 

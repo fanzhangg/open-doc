@@ -11,8 +11,7 @@ import { icon } from './icons.js';
 
 const GAP = 10;
 const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
-// Twelve hues; the built-in agents land on different ones (Clippy steel blue,
-// Rocky rust, Will violet, Genius teal, Merlin rose).
+// Twelve hues, so agents in one doc usually land on different ones.
 const AGENT_HUES = [25, 50, 262, 165, 90, 345, 120, 190, 300, 210, 140, 325];
 const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83', '#5f6368'];
 

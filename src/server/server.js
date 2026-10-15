@@ -9,7 +9,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, locate, project, sourceRange } from '../core/index.js';
+import { OpError, applyOp, createAnchor, locate, newId, project, sourceRange, textMentions } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, AgentError, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
@@ -25,6 +25,7 @@ export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..'
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
 const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
+const MENTION_SETTLE_MS = 3_000; // an @mention typed in the doc becomes a comment once the human pauses this long
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/assets/app.js': ['app.js', 'text/javascript; charset=utf-8'],
@@ -60,7 +61,7 @@ class HttpError extends Error {
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS,
+  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -270,6 +271,7 @@ export async function startServer(docPath, {
         team.humanEdited(current.markdown, next); // not the agent's edit
         await update(docPath, (s) => s); // refresh anchors against the saved doc
         await noteVersion(next, { kind: 'edit', author: await human() });
+        await noteTextMentions(current.markdown, next);
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
@@ -490,6 +492,82 @@ export async function startServer(docPath, {
     return member.status();
   }
 
+  // An @mention of an agent typed in the doc's text, not in a comment, works
+  // like one: once the human pauses, it becomes the human's comment on the
+  // text from the @ to the end of its paragraph, and the agent answers it.
+  // Only the human's saves count, and only when they add a mention (more
+  // @name than before), so editing around an old one does not ask again.
+  // `pendingMentions` holds, per agent, its mentions before the human added one.
+  const pendingMentions = new Map();
+  let mentionTimer = null;
+  async function noteTextMentions(before, after) {
+    for (const name of after.includes('@') ? await mentionableAgents() : []) {
+      if (pendingMentions.has(name.toLowerCase())) continue;
+      const was = textMentions(before, [name]);
+      if (textMentions(after, [name]).length > was.length) pendingMentions.set(name.toLowerCase(), { name, was: was.map((m) => m.quote) });
+    }
+    if (pendingMentions.size === 0) return;
+    clearTimeout(mentionTimer); // still typing: wait for the pause
+    mentionTimer = setTimeout(() => {
+      serial(settleTextMentions).catch((error) => console.error('Could not turn an @mention in the doc into a comment:', error));
+    }, mentionSettleMs);
+  }
+
+  async function settleTextMentions() {
+    const pending = [...pendingMentions.values()];
+    pendingMentions.clear();
+    const { markdown } = await readDoc(docPath);
+    const { text } = project(markdown);
+    const author = await human();
+    const asks = [];
+    for (const { name, was } of pending) {
+      const now = textMentions(markdown, [name]);
+      const added = now.length - was.length;
+      if (added <= 0) continue; // deleted again before the pause
+      const left = [...was];
+      const fresh = now.filter((m) => {
+        const i = left.indexOf(m.quote);
+        if (i === -1) return true;
+        left.splice(i, 1);
+        return false;
+      });
+      asks.push(...fresh.slice(-added).map((m) => ({ ...m, name })));
+    }
+    if (asks.length === 0) return;
+    const roster = useSettings ? (await currentSettings()).agents : [];
+    let joined = false;
+    await update(docPath, (s) => {
+      let next = s;
+      for (const ask of asks) {
+        if (!next.participants.some((p) => sameName(p.name, ask.name))) {
+          if (!roster.some((a) => sameName(a.name, ask.name))) continue;
+          next = applyOp(next, { type: 'join', participant: { name: ask.name, kind: 'agent' } });
+          joined = true;
+        }
+        const message = { id: newId('m'), author, body: ask.quote, createdAt: new Date().toISOString() };
+        next = applyOp(next, { type: 'addThread', id: newId('t'), anchor: createAnchor(text, ask.start, ask.end), message });
+      }
+      return next;
+    });
+    if (joined) await syncAgents();
+  }
+
+  // Agents an @mention in the text can reach: the doc's agents, and the
+  // user's other agents (a mention brings one in, as in a comment).
+  async function mentionableAgents() {
+    const names = team.statuses().map((s) => s.name);
+    let participants = [];
+    try {
+      participants = (await readSidecar(docPath)).participants;
+    } catch {
+      // no sidecar yet: no participants
+    }
+    names.push(...participants.filter((p) => p.kind === 'agent').map((p) => p.name));
+    if (useSettings) names.push(...(await currentSettings()).agents.map((a) => a.name));
+    const people = participants.filter((p) => p.kind === 'human');
+    return names.filter((name, i) => names.findIndex((n) => sameName(n, name)) === i && !people.some((p) => sameName(p.name, name)));
+  }
+
   // A comment that @mentions one of the user's agents not in the doc yet
   // brings it in first, as mentioning a person in Docs shares the doc with
   // them; then the mention counts, and that agent answers.
@@ -660,6 +738,7 @@ export async function startServer(docPath, {
     moveTo,
     async close() {
       clearInterval(heartbeat);
+      clearTimeout(mentionTimer);
       stopWatching();
       stopWatchingSettings();
       closed = true;
