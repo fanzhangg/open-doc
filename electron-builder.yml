@@ -19,6 +19,7 @@ files:
   - src/**
   - skills/**
   - dist/web/**
+  - build/icon.png
 
 # No asar archive: agent runs read the skill file and run the bundled CLI
 # (`opendoc`) from these files directly, outside the app.
@@ -26,7 +27,7 @@ asar: false
 
 win:
   target: nsis
-  icon: build/icon.png
+  icon: build/icon.ico
 
 nsis:
   oneClick: false

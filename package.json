@@ -18,6 +18,7 @@
     "skills/"
   ],
   "scripts": {
+    "icon:desktop": "electron scripts/make-icon.cjs",
     "build": "node scripts/build.js",
     "desktop": "npm run build && electron desktop/main.js",
     "prepack": "npm run build",

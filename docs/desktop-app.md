@@ -381,8 +381,12 @@ Each phase is usable on its own and lands as its own PR.
      folder and its own profile, so it never touches a running OpenDoc; it
      checks the doc loads, a setting survives a relaunch, and the bundled
      `opendoc` runs with `ELECTRON_RUN_AS_NODE`.
-   - The icon is `build/icon.svg`, rendered to `build/icon.png` by
-     `scripts/make-icon.cjs`.
+   - The desktop icon is the approved 3D paperclip on a matte blue tile,
+     saved in `build/icon-source.png`. Run `npm run icon:desktop` to generate
+     `build/icon.png` (1024px) and `build/icon.ico` (16-256px). Windows uses
+     the ICO; macOS and Linux packaging uses the PNG. App windows also use
+     the PNG. The browser favicon is maintained separately in
+     `build/icon.svg`.
 
 ### Risks
 
