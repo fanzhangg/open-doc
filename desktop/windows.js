@@ -3,6 +3,7 @@
 // window shown when no doc is open.
 
 import { BrowserWindow, dialog, screen, shell } from 'electron';
+import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,9 @@ const CASCADE = 26;
 const CLOSE_RETRY_MS = 200;
 const CLOSE_PATIENCE_MS = 5000;
 const EXTERNAL = new Set(['http:', 'https:', 'mailto:']);
+// Installed apps take their icon from the installer; this one shows in dev runs.
+const ICON = join(here, '..', 'build', 'icon.png');
+const WINDOW_ICON = existsSync(ICON) ? { icon: ICON } : {};
 
 /** @type {Map<string, { win: BrowserWindow, server: Awaited<ReturnType<typeof startServer>>, docPath: string }>} */
 const docs = new Map();
@@ -59,6 +63,7 @@ async function createDocWindow(docPath) {
     ...MIN_SIZE,
     show: false,
     title: basename(docPath),
+    ...WINDOW_ICON,
     webPreferences: securePreferences(),
   });
   const entry = { win, server, docPath };
@@ -119,6 +124,7 @@ export function showStartWindow() {
     autoHideMenuBar: true,
     show: false,
     title: 'OpenDoc',
+    ...WINDOW_ICON,
     webPreferences: securePreferences(),
   });
   restrictNavigation(startWindow, null);

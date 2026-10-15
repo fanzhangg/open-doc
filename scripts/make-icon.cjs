@@ -1,26 +1,47 @@
-// Render build/icon.svg to build/icon.png (512x512) with Electron, which
-// electron-builder turns into the app icons. Run after changing the SVG:
-//   npx electron scripts/make-icon.cjs
-
-const { app, BrowserWindow } = require('electron');
-const { readFileSync, writeFileSync } = require('node:fs');
+// Generate desktop assets from the approved artwork: npm run icon:desktop.
+const { app, nativeImage } = require('electron');
+const { writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const build = join(__dirname, '..', 'build');
 
 app.whenReady().then(() => {
-  const svg = readFileSync(join(build, 'icon.svg'), 'utf8');
-  const win = new BrowserWindow({
-    width: 512, height: 512, show: false, transparent: true, frame: false, useContentSize: true,
-    webPreferences: { offscreen: true },
+  const source = nativeImage.createFromPath(join(build, 'icon-source.png'));
+  if (source.isEmpty()) throw new Error('Cannot load build/icon-source.png');
+  // Pad to a square rather than stretching the approved artwork.
+  const { width, height } = source.getSize();
+  const side = Math.max(width, height);
+  const pixels = Buffer.alloc(side * side * 4);
+  const input = source.toBitmap();
+  const left = Math.floor((side - width) / 2);
+  const top = Math.floor((side - height) / 2);
+  for (let y = 0; y < height; y++) {
+    input.copy(pixels, ((top + y) * side + left) * 4,
+      y * width * 4, (y + 1) * width * 4);
+  }
+  const square = nativeImage.createFromBitmap(pixels, { width: side, height: side });
+  const png = (size) => square.resize({ width: size, height: size, quality: 'best' }).toPNG();
+  writeFileSync(join(build, 'icon.png'), png(1024));
+  // PNG-backed ICO entries for Windows taskbar and shell sizes.
+  const sizes = [16, 24, 32, 48, 64, 128, 256];
+  const images = sizes.map(png);
+  const header = Buffer.alloc(6 + sizes.length * 16);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(sizes.length, 4);
+  let offset = header.length;
+  sizes.forEach((size, i) => {
+    const entry = 6 + i * 16;
+    header[entry] = header[entry + 1] = size === 256 ? 0 : size;
+    header.writeUInt16LE(1, entry + 4);
+    header.writeUInt16LE(32, entry + 6);
+    header.writeUInt32LE(images[i].length, entry + 8);
+    header.writeUInt32LE(offset, entry + 12);
+    offset += images[i].length;
   });
-  let loaded = false;
-  win.webContents.on('did-finish-load', () => { loaded = true; });
-  win.webContents.on('paint', (_event, _dirty, image) => {
-    if (!loaded || image.isEmpty()) return;
-    writeFileSync(join(build, 'icon.png'), image.resize({ width: 512, height: 512 }).toPNG());
-    app.quit();
-  });
-  const html = `<html><body style="margin:0;background:transparent;overflow:hidden">${svg}</body></html>`;
-  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  writeFileSync(join(build, 'icon.ico'), Buffer.concat([header, ...images]));
+  console.log('Generated build/icon.png (1024px) and build/icon.ico (16-256px).');
+  app.quit();
+}).catch((error) => {
+  console.error(error);
+  app.exit(1);
 });
