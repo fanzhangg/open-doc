@@ -1,4 +1,4 @@
-# Installers for the OpenDoc desktop app (docs/desktop-app.md, phase 5).
+# Installers for the OpenDoc desktop app (docs/architecture.md, Desktop app).
 # Build with `npm run dist:desktop`; output goes to release/.
 
 appId: dev.opendoc.desktop

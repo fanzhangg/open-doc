@@ -90,7 +90,7 @@ profile: in the doc's folder it reads only the doc and its comments and
 cannot edit the doc without Auto Editor, secrets are denied, and its commands
 have no network; it can still read other files on the disk, so it has no File
 Searcher; Web Searcher turns on Codex's web search; see
-[docs/multi-agent.md](docs/multi-agent.md#runtimes)), or a **Custom command** that receives the task (persona
+[docs/architecture.md](docs/architecture.md#agents)), or a **Custom command** that receives the task (persona
 included) in `{promptFile}`. Supporting another agent program (a local open
 model) is one more runtime in `src/server/agents/config.js`. A failed run takes the agent offline (its card
 has the log) and is not retried until you reply or click Try again.
@@ -166,7 +166,7 @@ change applies at once in every open editor.
 ## Desktop app (preview)
 
 The same editor in its own window, without a terminal or a browser tab
-([design and plan](docs/desktop-app.md)). Build the Windows installer with
+([architecture](docs/architecture.md#desktop-app)). Build the Windows installer with
 `npm run dist:desktop` (it lands in `release/`), or run it from a checkout:
 
 ```bash
