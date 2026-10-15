@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
+import { Readable } from 'node:stream';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -551,6 +552,44 @@ test('typed over after the run ended: the edit leaves the reply and comes back a
     const [, reply, offer] = (await thread()).messages;
     assert.equal(reply.edits, undefined, 'the replaced edit is gone from the reply');
     assert.deepEqual(offer.proposal.map((c) => [c.before, c.after]), [[humanLine, agentLine]]);
+  } finally {
+    await server.close();
+  }
+});
+
+test('the guard refuses an agent edit where the human is typing, until they stop', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const adapter = customAdapter(`"${process.execPath}" -e "process.exit(0)"`);
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter }, typingMs: 1500 });
+  const { url, token } = server.dispatcher.guard;
+  const guard = async (oldString) => {
+    let out = '';
+    const stdout = { write: (s) => { out += s; } };
+    const stdin = Readable.from([JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: { file_path: docPath, old_string: oldString, new_string: 'x' } })]);
+    const code = await main(['guard'], { stdout, stderr: { write() {} }, stdin, env: { OPENDOC_GUARD_URL: url, OPENDOC_GUARD_TOKEN: token } });
+    assert.equal(code, 0);
+    return out ? JSON.parse(out).hookSpecificOutput : null;
+  };
+  try {
+    // The page reports the paragraph the human is typing in, as they see it.
+    const anchor = { exact: 'The main risk is that the sync service cannot handle the extra loa', prefix: 'Risks\n', suffix: '', start: 0 };
+    assert.equal((await call(server, 'POST', '/api/editing', { body: { anchor } })).status, 200);
+
+    const refused = await guard('cannot handle the extra load');
+    assert.equal(refused.permissionDecision, 'deny');
+    assert.match(refused.permissionDecisionReason, /typing in the paragraph that starts "The main risk is that/);
+    assert.equal(await guard('ship all six features'), null, 'elsewhere is fine');
+    assert.equal(await guard('not in the doc at all'), null);
+    assert.equal(await server.dispatcher.typingIn(), 'The main risk is that the sync service cannot handle the ext');
+
+    // Only the guard token opens the guard, and the page's token does not.
+    assert.equal((await call(server, 'POST', '/api/guard', { body: { oldString: 'x' } })).status, 403);
+
+    // The human stops typing: the paragraph is free again.
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    assert.equal(await guard('cannot handle the extra load'), null);
+    assert.equal(await server.dispatcher.typingIn(), null);
   } finally {
     await server.close();
   }

@@ -23,6 +23,8 @@ export const api = {
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
   agentAction: async (action) => (await request('POST', '/api/agent', { action })).data.status,
   agentDetails: async () => (await request('GET', '/api/agent')).data,
+  /** The human is typing in the block `anchor` points at (an anchor on the rendered text). */
+  typing: (anchor) => request('POST', '/api/editing', { anchor }),
   /** Offer back agent changes the human's text was kept over: [{ before, after }]. */
   agentOverwritten: async (changes) => (await request('POST', '/api/agent/overwritten', { changes })).data.offered,
   async saveSettings(patch) {

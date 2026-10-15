@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
-import { DENIED_READS, agentEnv, buildPrompt, claudeAdapter, customAdapter, privateWorkdir, rulePath, splitCommand } from '../src/server/agents/adapters.js';
+import { DENIED_READS, GUARD_SETTINGS, agentEnv, buildPrompt, claudeAdapter, customAdapter, privateWorkdir, rulePath, splitCommand } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 
@@ -354,4 +354,17 @@ test('an unavailable agent does not launch and says why', { timeout: 30_000 }, a
   } finally {
     await server.close();
   }
+});
+
+test('the guard: a hook on Edit when the run may edit, and the prompt names the paragraph being typed in', () => {
+  const docPath = join(tmpdir(), 'plan.md');
+  const args = (options) => claudeAdapter({ bin: 'claude' }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, ...options }).args;
+  const settings = (list) => (list.includes('--settings') ? JSON.parse(list[list.indexOf('--settings') + 1]) : null);
+  assert.deepEqual(settings(args({ guard: true })), GUARD_SETTINGS);
+  assert.equal(GUARD_SETTINGS.hooks.PreToolUse[0].hooks[0].command, 'opendoc guard');
+  assert.equal(settings(args({ guard: true, editMode: 'approve' })), null, 'nothing to guard when the run cannot edit');
+  assert.equal(settings(args({})), null);
+
+  assert.match(buildPrompt({ name: 'claude', docFile: 'plan.md', typing: 'The main risk is' }), /typing in the paragraph that starts "The main risk is"/);
+  assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md' }), /typing in the paragraph/);
 });

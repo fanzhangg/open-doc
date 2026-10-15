@@ -9,7 +9,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp } from '../core/index.js';
+import { OpError, applyOp, locate, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
@@ -22,6 +22,7 @@ import { agentFromSettings } from './agents/config.js';
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
+const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/assets/app.js': ['app.js', 'text/javascript; charset=utf-8'],
@@ -45,14 +46,15 @@ class HttpError extends Error {
  * `agentFromSettings: true` takes the agent from the user's settings
  * (Settings > Agent) and restarts it whenever they change.
  * `settingsDir` is the folder of the user's settings file (default: the
- * per-user config folder).
+ * per-user config folder). `typingMs` is how long the human counts as typing
+ * in a paragraph after their last keystroke there (default 15 s).
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
  * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(),
+  settingsDir = configDir(), typingMs = TYPING_MS,
 } = {}) {
   let agent = fixedAgent;
   const agentSource = fixedAgent ? 'flags' : useSettings ? 'settings' : 'none';
@@ -64,6 +66,11 @@ export async function startServer(docPath, {
   let lastSidecarHash = null;
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
+  // Where the human last typed ({ anchor, at }, from the page), and the key
+  // the agent's runs use to ask the guard before each edit: not the page's
+  // token, which would let a run act as the human.
+  let editing = null;
+  const guardToken = randomBytes(16).toString('hex');
   // Writes to the doc and its sidecar run one at a time, so a rename never
   // lands in the middle of a save.
   let writes = Promise.resolve();
@@ -116,6 +123,11 @@ export async function startServer(docPath, {
     }
 
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'not_found', 'not found');
+    if (req.method === 'POST' && url.pathname === '/api/guard') {
+      checkWriteRequest(req, actualPort);
+      if (!tokenMatches(req.headers['x-opendoc-guard'], guardToken)) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
+      return sendJson(res, 200, await guard(await readJson(req)));
+    }
     if (!tokenMatches(req.headers['x-opendoc-token'] ?? url.searchParams.get('t'), token)) {
       throw new HttpError(403, 'forbidden', 'missing or wrong token');
     }
@@ -149,6 +161,11 @@ export async function startServer(docPath, {
         return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
       case 'POST /api/agent':
         return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
+      case 'POST /api/editing': {
+        const anchor = (await readJson(req))?.anchor;
+        editing = anchor ? { anchor: validAnchor(anchor), at: Date.now() } : null;
+        return sendJson(res, 200, {});
+      }
       case 'POST /api/agent/overwritten': {
         const changes = validChanges((await readJson(req))?.changes);
         if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
@@ -243,6 +260,41 @@ export async function startServer(docPath, {
     req.on('close', () => clients.delete(res));
   }
 
+  // An edit a run is about to make (from `opendoc guard`): refused while it
+  // would change the paragraph the human typed in during the last
+  // `typingMs`; otherwise the page is told where it is about to land.
+  async function guard(body) {
+    const old = typeof body?.oldString === 'string' ? body.oldString.replace(/\r\n/g, '\n') : '';
+    if (!old) return { allow: true };
+    const markdown = (await readDoc(docPath)).markdown.replace(/\r\n/g, '\n');
+    const at = markdown.indexOf(old);
+    if (at === -1) return { allow: true }; // the edit fails on its own
+    const human = typingIn(markdown);
+    if (human && at < human.end && human.start < at + old.length) {
+      dispatcher?.avoided();
+      return {
+        allow: false,
+        reason: `The human is typing in the paragraph that starts "${human.quote}" right now. Edit other parts first. If you still need to change this paragraph, try once more after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
+      };
+    }
+    broadcast('agentTarget', { quote: project(old).text.trim().slice(0, 300) });
+    return { allow: true };
+  }
+
+  // The whole lines of `markdown` the human typed in during the last
+  // `typingMs`, with the start of their text: { start, end, quote }, or null.
+  function typingIn(markdown) {
+    if (!editing || Date.now() - editing.at > typingMs) return null;
+    const projection = project(markdown);
+    const found = locate(projection.text, editing.anchor);
+    if (!found) return null;
+    const range = sourceRange(projection, found.start, found.end);
+    const start = markdown.lastIndexOf('\n', range.start - 1) + 1;
+    const lineEnd = markdown.indexOf('\n', range.end);
+    const quote = projection.text.slice(found.start, found.end).split('\n')[0].slice(0, 60);
+    return { start, end: lineEnd === -1 ? markdown.length : lineEnd, quote };
+  }
+
   function broadcast(event, data) {
     const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const res of clients) res.write(chunk);
@@ -300,7 +352,11 @@ export async function startServer(docPath, {
   }
 
   async function startDispatcher() {
-    dispatcher = new Dispatcher({ docPath, ...agent, presence, onStatus: (status) => broadcast('agent', status) });
+    dispatcher = new Dispatcher({
+      docPath, ...agent, presence, onStatus: (status) => broadcast('agent', status),
+      guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken },
+      typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
+    });
     await dispatcher.start();
   }
 

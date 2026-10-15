@@ -209,6 +209,24 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     };
   }
 
+  // The top-level block holding the caret, as an anchor on the rendered text
+  // ({ exact, prefix, suffix, start }); null when it has no text.
+  function caretBlock() {
+    const v = view();
+    const { $from } = v.state.selection;
+    if ($from.depth === 0) return null;
+    const projection = projectDoc(v.state.doc);
+    const range = textRange(projection, $from.before(1), $from.after(1));
+    if (!range || range.start === range.end) return null;
+    const { text } = projection;
+    return {
+      exact: text.slice(range.start, range.end),
+      prefix: text.slice(Math.max(0, range.start - 32), range.start),
+      suffix: text.slice(range.end, range.end + 32),
+      start: range.start,
+    };
+  }
+
   function requestComment() {
     const hint = view().state.selection.empty ? null : selectionHint();
     onCommentRequest(hint);
@@ -527,6 +545,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       paintHighlights();
     },
     requestComment,
+    caretBlock,
     run,
     formatState,
     slashQuery,

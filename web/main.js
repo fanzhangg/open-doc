@@ -22,6 +22,7 @@ import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
+const TYPING_REPORT_MS = 1000;
 
 const status = document.querySelector('.od-status');
 const banner = document.querySelector('.od-banner');
@@ -83,6 +84,7 @@ async function start() {
       version++;
       setStatus('Saving…', 'saving');
       scheduleSave();
+      reportTyping();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onSelectThread: (id) => select(id, { focus: false }),
@@ -151,6 +153,12 @@ async function start() {
   const events = api.events();
   events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
   events.addEventListener('sidecar', refreshThreads);
+  // The agent is about to edit there: its caret goes there first.
+  events.addEventListener('agentTarget', (event) => {
+    const { quote } = JSON.parse(event.data);
+    const agent = presence.status();
+    if (agent && quote) editor.agentLooking(agent.name, [{ exact: quote, prefix: '', suffix: '', start: 0 }]);
+  });
   events.addEventListener('agent', (event) => {
     const next = JSON.parse(event.data);
     showAgentCaret(presence.status(), next);
@@ -295,6 +303,21 @@ async function doSync() {
     version++;
     scheduleSave();
   }
+}
+
+// Tell the server which paragraph the human is typing in, at most once a
+// second, so the agent's runs keep out of it (the server forgets it 15
+// seconds after the last report).
+let typingTimer = null;
+let typingSentAt = 0;
+function reportTyping() {
+  if (typingTimer || !presence?.status()) return;
+  typingTimer = setTimeout(() => {
+    typingTimer = null;
+    typingSentAt = Date.now();
+    const anchor = editor.caretBlock();
+    if (anchor) api.typing(anchor).catch(() => {});
+  }, Math.max(0, TYPING_REPORT_MS - (Date.now() - typingSentAt)));
 }
 
 // Remember what a merge left out of the agent's change, following anything

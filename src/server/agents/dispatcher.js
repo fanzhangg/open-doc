@@ -31,7 +31,12 @@ export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
  * to someone else, 'dnd' (do not disturb) only comments that @mention it.
  */
 export class Dispatcher {
-  constructor({ docPath, name, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null, onStatus = () => {}, settleMs = 300 }) {
+  /**
+   * `guard` ({ url, token }) is where a run asks before each edit whether the
+   * human is typing there (`opendoc guard`); `typingIn()` resolves to the
+   * start of the paragraph the human is typing in, or null.
+   */
+  constructor({ docPath, name, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null, onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
     this.name = name;
@@ -42,6 +47,8 @@ export class Dispatcher {
     this.warning = warning;
     this.onStatus = onStatus;
     this.settleMs = settleMs;
+    this.guard = guard;
+    this.typingIn = typingIn;
     this.state = 'starting';
     this.error = null;
     this.run = null;
@@ -194,14 +201,15 @@ export class Dispatcher {
     if (workdir !== dirname(this.docPath)) await mkdir(workdir, { recursive: true });
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
     const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
-    const prompt = buildPrompt({ name: this.name, docFile: docRef, editMode: this.editMode });
+    const typing = this.editMode === 'auto' ? await this.typingIn().catch(() => null) : null;
+    const prompt = buildPrompt({ name: this.name, docFile: docRef, editMode: this.editMode, typing });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');
     await writeFile(threadsFile, JSON.stringify(payload, null, 2));
     await writeFile(promptFile, `${prompt}\n\n## Threads\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`);
 
     const { command, args } = this.adapter.command({
-      prompt, promptFile, threadsFile, docFile: this.docFile, docPath: this.docPath, editMode: this.editMode,
+      prompt, promptFile, threadsFile, docFile: this.docFile, docPath: this.docPath, editMode: this.editMode, guard: Boolean(this.guard),
       sessionId: this.adapter.supportsSessions ? this.sessionId : null,
     });
     const child = spawn(command, args, {
@@ -211,6 +219,7 @@ export class Dispatcher {
         PATH: `${this.shimDir}${delimiter}${process.env.PATH ?? ''}`,
         OPENDOC_AS: this.name,
         OPENDOC_KIND: 'agent',
+        ...(this.guard ? { OPENDOC_GUARD_URL: this.guard.url, OPENDOC_GUARD_TOKEN: this.guard.token } : {}),
       },
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
@@ -237,7 +246,8 @@ export class Dispatcher {
     // `base` is the doc as it would be without this run: the doc it started
     // from, plus every change the human saved meanwhile (humanEdited).
     // `overwritten` holds changes to offer back once the run has replied.
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [] };
+    // `avoided` counts the edits the guard refused because the human was typing there.
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0 };
     this.run = run;
     this.#setState('running');
 
@@ -264,6 +274,11 @@ export class Dispatcher {
   humanEdited(before, after) {
     if (!this.run || before === after) return;
     this.run.base = merge3(before, after, this.run.base, { prefer: 'ours' }).text;
+  }
+
+  /** The guard refused an edit of the run because the human is typing there. */
+  avoided() {
+    if (this.run) this.run.avoided++;
   }
 
   /**
@@ -353,7 +368,10 @@ export class Dispatcher {
       threads: threads.length,
       costUsd: result.costUsd ?? null,
       turns: result.turns ?? null,
-      denials: result.denials ?? 0,
+      // Edits the guard refused are the agent keeping out of the human's
+      // way, not permissions it lacked.
+      denials: Math.max(0, (result.denials ?? 0) - run.avoided),
+      avoided: run.avoided,
       log: lastLines(`${stderr}\n${stdout}`, LOG_LINES),
     };
     this.run = null;

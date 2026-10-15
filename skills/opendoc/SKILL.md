@@ -58,7 +58,10 @@ Repeat until the human says they are done.
      approves every change, propose it instead (see
      [Proposing edits](#proposing-edits)). If your `Edit` fails because the
      file changed since you read it (the human saves as they type), read it
-     again and retry once.
+     again and retry once. If an `Edit` is refused because the human is
+     typing in that paragraph, make your other edits first and try it once
+     more; if it is refused again, propose that change instead and say so in
+     your reply.
    - **A question:** answer it in the thread; edit the doc only if asked.
    - **Partly doable:** do the parts you can, and in the same reply say what
      you did and ask about the rest. Never present invented facts (names,

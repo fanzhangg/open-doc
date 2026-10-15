@@ -33,6 +33,7 @@ Usage:
   opendoc resolve  <doc> <thread-id> --as <name> --kind human
   opendoc reopen   <doc> <thread-id> --as <name> --kind human
   opendoc mv       <old.md> <new.md>
+  opendoc guard    (a Claude Code hook the server sets up for its runs; reads the hook input on stdin)
 
 Agent options for serve (the server starts a headless run for each new comment, except one
 addressed only to someone else):
@@ -184,6 +185,39 @@ const COMMANDS = {
     const body = requireBody(bodyParts);
     return writeAndPrint(docPath, values, out, threadId, (s) =>
       applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
+  },
+
+  // A Claude Code PreToolUse hook for Edit, which the server sets up for its
+  // runs (OPENDOC_GUARD_URL and _TOKEN): asks the server whether the edit
+  // lands where the human is typing, and refuses it if so. Anything
+  // unexpected lets the edit through; the editor still merges it safely.
+  async guard(_args, _values, { out, env, stdin }) {
+    const url = env.OPENDOC_GUARD_URL;
+    const token = env.OPENDOC_GUARD_TOKEN;
+    if (!url || !token) return;
+    let input;
+    try {
+      let text = '';
+      for await (const chunk of stdin) text += chunk;
+      input = JSON.parse(text);
+    } catch {
+      return;
+    }
+    if (input?.tool_name !== 'Edit') return;
+    try {
+      const response = await fetch(`${url}/api/guard`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-opendoc-guard': token },
+        body: JSON.stringify({ oldString: input.tool_input?.old_string ?? '' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      const verdict = await response.json();
+      if (verdict.allow === false) {
+        out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: verdict.reason } }));
+      }
+    } catch {
+      // the server is gone or slow: let the edit through
+    }
   },
 
   async propose([docArg, threadId], values, { out, env, stdin }) {
