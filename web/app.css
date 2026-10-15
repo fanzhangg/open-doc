@@ -179,7 +179,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-toolbar button, .od-bubble button { border: 0; background: none; border-radius: 6px; height: 30px; min-width: 30px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--text); flex: none; }
 .od-toolbar button:hover, .od-bubble button:hover { background: var(--hover); }
 .od-toolbar button[aria-pressed="true"], .od-bubble button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.od-toolbar .od-pill { border-radius: 15px; padding: 0 12px 0 10px; font-weight: 500; }
+.od-toolbar .od-pill { border-radius: 15px; padding: 0 8px; font-weight: 500; }
 .od-toolbar .od-tool-comment { color: var(--text-soft); }
 .od-comment-count { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--hover); font-size: 11.5px; line-height: 18px; font-variant-numeric: tabular-nums; }
 .od-comment-count:empty { display: none; }
@@ -535,7 +535,6 @@ label.od-setting { cursor: pointer; }
 }
 @media (max-width: 560px) {
   .od-doc-icon, .od-toolbar .od-block-picker, .od-toolbar .od-block-picker + .od-sep { display: none; }
-  .od-toolbar .od-pill { padding: 0 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
