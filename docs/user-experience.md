@@ -24,9 +24,19 @@ Each agent is set up like a person in a shared doc: a name you @mention, a
 short introduction, a persona, and only the permissions you give it. The
 persona is plain text in your own words ("a strict copy editor who never
 changes meaning"), and anyone can rewrite it. OpenDoc comes with one agent,
-`@agent`, with no persona and no job, and Editor, Auto Editor and Auto
-Commenter switched on. There are no built-in roles: a grammar checker, a fact
-checker or a tough reader is an agent whose persona you wrote.
+**Clippy**, starred, with no persona and no job, and Editor, Auto Editor and
+Auto Commenter switched on. There are no built-in roles: a grammar checker, a
+fact checker or a tough reader is an agent whose persona you wrote.
+
+Agents are light and disposable:
+
+- **New agent** (People panel) pops a new agent into the doc and opens its
+  card, ready to name. Name, introduction and persona are edited right on the
+  card; each saves when you leave it. More settings opens the Agents panel.
+- A new agent lasts as long as the doc window (or `opendoc serve` run) it was
+  made in. Closing it deletes the agent; its comments stay under its name.
+- **Star** an agent on its card to keep it for every doc. Agents made before
+  stars existed count as starred.
 
 **Permissions** are plain switches on the agent's card:
 
@@ -40,11 +50,11 @@ checker or a tough reader is an agent whose persona you wrote.
 **Who answers what:**
 
 - A comment that mentions no one goes to every agent with Auto Commenter
-  (by default `@agent`). Each answers only if it fits its persona.
+  (by default Clippy). Each answers only if it fits its persona.
 - `@name` calls a specific agent. Mentioning one that is not in the doc yet
   brings it in. The line under the comment box says who will reply.
 - `@name` in the doc's text works like a comment. Type
-  `@agent add the risks here` in a paragraph; once you pause (3 seconds), it
+  `@Clippy add the risks here` in a paragraph; once you pause (3 seconds), it
   becomes your comment on the text from the `@` to the end of the paragraph,
   and the agent answers there and removes that text when it is done (or
   proposes removing it). Mentions in code do not count, and editing around
@@ -56,7 +66,10 @@ checker or a tough reader is an agent whose persona you wrote.
 
 ## Seeing and steering agent work
 
-- **Presence.** While an agent works, its avatar and the comment card pulse.
+- **Presence.** People's avatars are circles, agents' are flowers, side by
+  side in the header. While an agent works its flower turns like a spinner
+  and the comment card pulses; an agent that is not running, still starting
+  or failing is greyed out.
   Its edits are typed into the page as a collaborator would, highlighted with
   its name, merged with whatever you are typing elsewhere.
 - **Proposals.** An agent without Auto Editor replies with suggested changes.
@@ -73,12 +86,13 @@ checker or a tough reader is an agent whose persona you wrote.
 
 ## Managing agents
 
-- **People** panel (header): who is in this doc. Add (+) or remove (×) agents.
-- **Agent card** (click an avatar): introduction, permission switches, and a
-  pencil to edit the profile.
-- **Agents** panel: create, edit or delete agents. Name, introduction,
-  permissions, persona, and under Advanced the runtime (Claude Code, Codex, or
-  a custom command), model and limits.
+- **People** button (round, after the avatars): who is in this doc. New
+  agent, add (+) or remove (×) agents.
+- **Agent card** (click an avatar): introduction, permission switches, a star
+  to keep it, and a pencil to edit name, introduction and persona in place.
+- **Agents** panel: every agent, with the finer settings. Name, introduction,
+  starred, permissions, persona, and under Advanced the runtime (Claude Code,
+  Codex, or a custom command), model and limits.
 
 ## Around the doc
 

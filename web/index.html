@@ -20,9 +20,9 @@
     <span class="od-spacer"></span>
     <span class="od-count" title="Word count" hidden></span>
     <div class="od-people">
-      <div class="od-agents" aria-label="Agents in this doc"></div>
-      <button class="od-pill od-invite" type="button" data-icon="users" data-tip="People and agents in this doc" aria-label="People and agents" aria-haspopup="dialog">People</button>
       <button class="od-me" type="button" title="You"></button>
+      <div class="od-agents" aria-label="Agents in this doc"></div>
+      <button class="od-invite" type="button" data-icon="users" data-tip="People and agents in this doc" aria-label="People and agents" aria-haspopup="dialog"></button>
     </div>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
@@ -243,6 +243,13 @@
           <button type="button" class="od-link-button" data-action="agent-check">Check again</button>
         </div>
         <p class="od-agent-where"></p>
+        <label class="od-setting od-agent-keep">
+          <span class="od-setting-text">
+            <span class="od-setting-label">Starred</span>
+            <span class="od-setting-hint">Kept for every doc. Not starred, it goes away when the doc it was made in closes.</span>
+          </span>
+          <input type="checkbox" class="od-switch" data-agent="starred">
+        </label>
 
         <section class="od-agent-block">
           <h3>What it can do</h3>

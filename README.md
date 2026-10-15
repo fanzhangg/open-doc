@@ -12,12 +12,19 @@ the CLI, the local editor and the agent skill.
 Agents are collaborators, like people in a shared doc. Each has a name you
 @mention, an introduction that says what it is for, a **persona**
 (plain text, in your own words, for who it is and how it works) and only the
-permissions you give it. OpenDoc comes with one agent, `@agent`, with no
-persona and no job: it answers your comments like a plain co-author. The
-product has no built-in roles; make a grammar checker, a fact checker or a
-tough reader by writing its persona, and rewrite or delete any agent. An
+permissions you give it. OpenDoc comes with one agent, **Clippy**, starred,
+with no persona and no job: it answers your comments like a plain co-author.
+The product has no built-in roles; make a grammar checker, a fact checker or
+a tough reader by writing its persona, and rewrite or delete any agent. An
 agent without an introduction shows the first sentence of its persona
 instead.
+
+Agents are light and disposable. **New agent** in the People panel pops one
+into the doc and opens its card, where you name it and write its persona in
+place; the Agents panel holds the finer settings. A new agent lasts as long
+as the doc window (or `opendoc serve` run) it was made in: close it and the
+agent is deleted, its comments staying under its name. **Star** it on its card
+to keep it for every doc.
 
 Every agent reads the doc it works on. Everything else is a switch on the
 agent's card (click its avatar) and in the **Agents** panel; flip one and
@@ -39,8 +46,8 @@ Who answers what:
 
 - A comment that mentions no one goes to every agent with **Auto Commenter**. Each
   answers it only if it fits its persona, and leaves it otherwise. Out of
-  the box only `@agent` has it. The line under the comment box says who may
-  reply ("agent will reply if it fits").
+  the box only Clippy has it. The line under the comment box says who may
+  reply ("Clippy will reply if it fits").
 - An agent without Auto Commenter answers only when you @mention it. Type
   `@` in a comment: the menu lists the agents in the doc and the ones you can
   bring in, each with its introduction. Mentioning one that is not in the doc
@@ -58,16 +65,17 @@ Who answers what:
   is in the doc and its threads, so anything worth keeping is written where
   you can see it.
 
-The header shows the doc's agents (those with Auto Commenter first, with a
-green dot) and a **People** button that opens a panel like a shared doc's,
-one line per person or agent: you, the agents here (× to remove one, except
-those with Auto Commenter), and the ones you can add (+). Click an agent for
-its card: name, introduction, permission switches, and a pencil to edit its
-profile.
-**Offline** (grey) means it cannot answer until something is fixed, for
-example a failed run, Claude Code not signed in, or the hourly run limit; the
-card then says what is wrong and offers Try again. Leave a comment and the
-agent's avatar and the comment card pulse while it works; its edits appear in
+The header shows you and the doc's agents side by side (people are circles,
+agents are flowers; those with Auto Commenter first), then a round **People**
+button that opens a panel like a shared doc's, one line per person or agent:
+you, the agents here (× to remove one, except those with Auto Commenter), and
+the ones you can add (+). Click an agent for its card: name, introduction,
+permission switches, a star, and a pencil to edit it in place.
+A **grey** agent cannot answer here: it is not running, still starting, or
+something needs fixing, such as a failed run, Claude Code not signed in, or
+the hourly run limit; the card then says what is wrong and offers Try again.
+Leave a comment and the agent's flower turns while it works, and the comment
+card pulses; its edits appear in
 the page highlighted with its name, merged with anything you are typing
 elsewhere. Agents end with a reply in every thread addressed to them. Only you
 resolve threads: resolve it, reply again, or Undo its edit.

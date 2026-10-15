@@ -17,6 +17,12 @@
 // Turning on web or files when the agent has the other asks to confirm: one
 // that reads your files could otherwise send them to a website.
 //
+// Agents are light and disposable. A new one belongs to the doc session that
+// made it (`session`: the editor window, or `opendoc serve` run) and is
+// deleted when that session ends, unless the user **stars** it (`starred`),
+// which keeps it for every doc. Agents saved before stars existed count as
+// starred.
+//
 // The persona is plain instructions ("you are a strict copy editor…") that
 // every runtime receives with its task, so the same agent can run on another
 // runtime without being rewritten. The runtime is what executes it: 'claude'
@@ -41,6 +47,8 @@ export const MAX_AGENTS = 50;
  * `maxBudgetUsd`, `isolated` and `fileAccess` only to Claude.
  */
 export const AGENT_DEFAULTS = Object.freeze({
+  starred: false,
+  session: null,
   tagline: '',
   persona: '',
   runtime: 'claude',
@@ -60,6 +68,12 @@ export const AGENT_DEFAULTS = Object.freeze({
 /** Agent fields that choose the program to run: set only in the desktop app or settings.json. */
 export const AGENT_PROGRAM_KEYS = Object.freeze(['command']);
 
+/** Agent fields only the server sets: which doc session an unstarred agent belongs to. */
+export const AGENT_SERVER_KEYS = Object.freeze(['session']);
+
+/** A doc session's id: the process, and a random part for each session in it. */
+export const SESSION_PATTERN = /^\d{1,10}:[a-f0-9]{8,32}$/;
+
 const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
 const integer = (min, max) => (v) => Number.isInteger(v) && v >= min && v <= max;
@@ -69,6 +83,8 @@ const orNull = (rule) => (v) => v === null || rule(v);
 export const AGENT_RULES = Object.freeze({
   id: (v) => typeof v === 'string' && /^a_[A-Za-z0-9_-]{4,40}$/.test(v),
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
+  starred: boolean,
+  session: orNull((v) => typeof v === 'string' && SESSION_PATTERN.test(v)),
   tagline: (v) => typeof v === 'string' && v.length <= MAX_TAGLINE && !/[\0\r\n]/.test(v),
   persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !v.includes('\0'),
   runtime: oneOf(...RUNTIMES),
@@ -86,12 +102,12 @@ export const AGENT_RULES = Object.freeze({
 });
 
 /**
- * The roster a new user starts with: one agent with no persona and no role,
- * answering comments the way a plain co-author would. The product ships no
- * job titles; who does what is up to the personas people write.
+ * The roster a new user starts with: Clippy, starred, with no persona and no
+ * role, answering comments the way a plain co-author would. The product
+ * ships no job titles; who does what is up to the personas people write.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: 'a_default_agent', name: 'agent', editMode: 'auto', autoComment: true },
+  { id: 'a_default_clippy', name: 'Clippy', starred: true, tagline: 'Your co-author', editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -124,7 +140,14 @@ export function resolveAgent(stored) {
     if (Object.hasOwn(stored, key) && AGENT_RULES[key](stored[key])) out[key] = stored[key];
   }
   if (!Object.hasOwn(stored, 'autoComment') && (stored.autoPilot === true || stored.role === 'pilot')) out.autoComment = true;
+  if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
+  if (out.starred) out.session = null;
   return out;
+}
+
+/** Whether `agent` goes away with its doc session: not starred, and made in one. */
+export function disposable(agent) {
+  return !agent.starred && agent.session !== null;
 }
 
 /** A stored roster → valid agents, each id and name once (names case-insensitively), at most MAX_AGENTS. */

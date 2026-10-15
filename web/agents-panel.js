@@ -116,6 +116,7 @@ export function createAgentsPanel({ store, onResult }) {
       input.removeAttribute('aria-invalid');
     }
     form.querySelector('[data-agent="isolated"]').checked = agent.isolated;
+    form.querySelector('[data-agent="starred"]').checked = agent.starred;
     form.querySelector('.od-agent-intro').placeholder = introOf({ persona: agent.persona }) || 'What it is for, in a few words';
     paintStatus();
   }
@@ -128,7 +129,7 @@ export function createAgentsPanel({ store, onResult }) {
     row.dataset.agentId = agent.id;
     const face = el('span', 'od-profile-face');
     face.dataset.presence = agent.autoComment ? 'autocomment' : 'idle';
-    face.append(avatar(agent.name, 'agent', true), el('span', 'od-presence-dot'));
+    face.append(avatar(agent.name, 'agent', true));
     if (agent.autoComment) face.title = 'Auto Commenter';
     const who = el('span', 'od-agents-who');
     who.append(el('span', 'od-agents-name', agent.name), el('span', 'od-agents-sub', introOf(agent) || 'No introduction yet'));

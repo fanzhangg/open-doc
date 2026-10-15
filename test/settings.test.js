@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, createAgent, deleteAgent, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, createAgent, deleteAgent, disposable, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -109,9 +109,9 @@ test('watchSettings sees the file appear and change', async () => {
   }
 });
 
-test('agents: the app comes with one plain agent and no built-in roles', () => {
+test('agents: the app comes with Clippy, starred, generic, and no built-in roles', () => {
   const roster = resolveSettings(null).agents;
-  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.tagline]), [['agent', '', '']], 'no persona, no job');
+  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.starred, a.session]), [['Clippy', '', true, null]], 'no persona, no job, kept');
   assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'You are a poet.\nBe bold.' }), 'A poet', 'without an introduction, the persona says it');
   assert.equal(introOf({ tagline: '', persona: '' }), '');
@@ -171,22 +171,38 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   const one = createAgent(roster, { name: 'Rocky' });
   assert.match(one.id, /^a_/);
   assert.equal(one.name, 'Rocky-2');
-  assert.equal(createAgent(plain).name, 'agent-2', 'not the default agent\'s name');
+  assert.equal(createAgent(plain).name, 'agent', 'a plain name to start with');
+  assert.deepEqual([one.starred, one.session], [false, null], 'new agents are not starred');
   assert.equal(one.autoComment, false, 'a new agent answers when @mentioned');
   assert.equal(createAgent([], { name: 'fzhan' }, ['fzhan']).name, 'fzhan-2', "not the human's name");
   assert.throws(() => createAgent([], { maxTurns: 0 }), AgentError);
 
   const will = roster.find((a) => a.name === 'Will');
-  const plainAgent = roster.find((a) => a.name === 'agent');
+  const plainAgent = roster.find((a) => a.name === 'Clippy');
   assert.equal(updateAgent(roster, will.id, { persona: 'Sonnets only.' }).find((a) => a.id === will.id).persona, 'Sonnets only.');
   assert.throws(() => updateAgent(roster, will.id, { name: 'ROCKY' }), /taken/);
   assert.throws(() => updateAgent(roster, will.id, { id: 'a_other1' }), AgentError);
   assert.throws(() => updateAgent(roster, 'a_nobody', { persona: '' }), /no such agent/);
   const both = updateAgent(roster, will.id, { autoComment: true });
-  assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['agent', 'Will']);
+  assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['Clippy', 'Will']);
   assert.equal(updateAgent(roster, plainAgent.id, { autoComment: false }).some((a) => a.autoComment), false);
   assert.deepEqual(deleteAgent(roster, plainAgent.id).map((a) => a.name), ['Rocky', 'Will']);
   assert.throws(() => deleteAgent(roster, 'a_nobody'), /no such agent/);
+});
+
+test('agents: stars keep an agent; an unstarred one belongs to a doc session', () => {
+  const session = '4242:0123456789abcdef';
+  assert.doesNotThrow(() => checkAgentPatch({ starred: true, session }));
+  assert.throws(() => checkAgentPatch({ session: 'any doc' }), /session/);
+  assert.throws(() => checkAgentPatch({ starred: 'yes' }), /starred/);
+  const [kept, made, old] = resolveRoster([
+    { id: 'a_kept01', name: 'kept', starred: true, session },
+    { id: 'a_made01', name: 'made', starred: false, session },
+    { id: 'a_old001', name: 'old' },
+  ]);
+  assert.deepEqual([kept.starred, kept.session, disposable(kept)], [true, null, false], 'a starred agent belongs to no session');
+  assert.deepEqual([made.session, disposable(made)], [session, true]);
+  assert.deepEqual([old.starred, disposable(old)], [true, false], 'saved before stars: kept');
 });
 
 test('agents: editAgents changes the roster under the lock and keeps other settings', async () => {
@@ -197,7 +213,7 @@ test('agents: editAgents changes the roster under the lock and keeps other setti
     created = createAgent(agents, { name: 'muse' });
     return [...agents, created];
   }, dir);
-  assert.deepEqual(after.agents.map((a) => a.name), ['agent', 'muse']);
+  assert.deepEqual(after.agents.map((a) => a.name), ['Clippy', 'muse']);
   assert.equal(after.font, 'serif');
   await assert.rejects(editAgents((agents) => [...agents, { ...created }], dir), SettingsError, 'the same agent twice');
   assert.equal((await readSettings(dir)).settings.agents.length, 2);

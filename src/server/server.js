@@ -11,7 +11,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp, createAnchor, locate, newId, project, sourceRange, textMentions } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, AgentError, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
+import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, createAgent, deleteAgent, disposable, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
@@ -25,6 +25,21 @@ export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..'
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
 const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
+// The doc sessions open in this process. An unstarred agent belongs to one
+// and is deleted when it closes, or, after a crash, by the next session that
+// finds its process gone.
+const LIVE_SESSIONS = new Set();
+function sessionLive(session) {
+  const pid = Number(session.split(':')[0]);
+  if (pid === process.pid) return LIVE_SESSIONS.has(session);
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
 const MENTION_SETTLE_MS = 3_000; // an @mention typed in the doc becomes a comment once the human pauses this long
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
@@ -65,6 +80,8 @@ export async function startServer(docPath, {
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
+  const session = `${process.pid}:${randomBytes(8).toString('hex')}`;
+  LIVE_SESSIONS.add(session);
   // The doc's agents; they start once the server listens (syncAgents).
   const broadcastAgents = () => broadcast('agents', team.statuses());
   const team = new Team({
@@ -413,6 +430,9 @@ export async function startServer(docPath, {
   async function rosterCreate(body) {
     const { id: _id, ...fields } = body?.agent ?? {};
     await checkProgram(AGENT_PROGRAM_KEYS, fields, {});
+    checkServerKeys(fields);
+    // Unless starred, it lasts as long as this doc session.
+    fields.session = fields.starred === true ? null : session;
     const me = (await human()).name;
     let created;
     const settings = await editAgents((agents) => {
@@ -434,6 +454,10 @@ export async function startServer(docPath, {
     const before = (await currentSettings()).agents.find((a) => a.id === id);
     if (!before) throw new HttpError(404, 'not_found', 'no such agent');
     await checkProgram(AGENT_PROGRAM_KEYS, patch, before);
+    checkServerKeys(patch);
+    // Starring keeps it for every doc; unstarring hands it to this doc session.
+    if (patch.starred === true) patch.session = null;
+    if (patch.starred === false && !before.session) patch.session = session;
     const me = (await human()).name;
     const settings = await editAgents((agents) => updateAgent(agents, id, patch, [me]), settingsDir).catch(agentError);
     const after = settings.agents.find((a) => a.id === id);
@@ -456,6 +480,23 @@ export async function startServer(docPath, {
     await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name: agent.name })));
     await syncAgents();
     return { settings, agents: team.statuses() };
+  }
+
+  // Which doc session an agent belongs to is the server's to say.
+  function checkServerKeys(fields) {
+    const key = AGENT_SERVER_KEYS.find((k) => Object.hasOwn(fields, k));
+    if (key) throw new HttpError(400, 'bad_input', `${key} is set by the server`);
+  }
+
+  // Delete the unstarred agents whose doc session is over (`gone`): from the
+  // user's agents, and from this doc's participants. Their comments stay,
+  // under their names.
+  async function dropAgents(gone) {
+    const roster = (await currentSettings()).agents;
+    const doomed = roster.filter((a) => disposable(a) && gone(a.session));
+    if (doomed.length === 0) return;
+    await editAgents((agents) => agents.filter((a) => !doomed.some((d) => d.id === a.id)), settingsDir);
+    await serial(() => update(docPath, (s) => doomed.reduce((next, a) => applyOp(next, { type: 'leave', name: a.name }), s)));
   }
 
   // Add the doc as it now reads to its history (one version at a time, in
@@ -713,6 +754,11 @@ export async function startServer(docPath, {
   lastDocHash = opened.hash;
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
+  if (useSettings) {
+    // Unstarred agents left over from a session that crashed.
+    await dropAgents((s) => !sessionLive(s))
+      .catch((error) => console.error('Could not clear old agents:', error));
+  }
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
@@ -745,6 +791,9 @@ export async function startServer(docPath, {
       await team.stop(); // ends runs in progress, which a pending agent change may be waiting on
       await agentChanges;
       await team.stop();
+      // This session's unstarred agents go with it.
+      LIVE_SESSIONS.delete(session);
+      if (useSettings) await dropAgents((s) => s === session).catch((error) => console.error('Could not delete this session\'s agents:', error));
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
     },

@@ -561,8 +561,10 @@ const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: 
 
 export function avatar(name, kind, small = false) {
   const node = el('span', `od-avatar${kind === 'agent' ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`, initials(name));
-  // Each agent its own hue, so several in one doc are told apart at a glance.
-  node.style.background = kind === 'agent' ? agentColor(name) : colorFor(name);
+  // Each agent its own hue, so several in one doc are told apart at a glance;
+  // its flower shape (app.css) tells agents from people.
+  if (kind === 'agent') node.style.setProperty('--agent-fill', agentColor(name));
+  else node.style.background = colorFor(name);
   node.title = name;
   return node;
 }

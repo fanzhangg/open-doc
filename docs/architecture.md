@@ -38,7 +38,7 @@ same core library, so any of them can work without the others.
   its latest human message mentions it (or no one, for agents taking open
   asks) and the agent has not answered since. No cursors or server state.
 - **Mentions in the doc text** (SPEC §4.1) become threads, so the inbox rule
-  stays the same. When a human save adds an `@agent` outside code
+  stays the same. When a human save adds an `@name` of an agent outside code
   (`src/core/text-mentions.js`), the server waits for a 3-second pause in the
   human's saves, then adds a thread as the human, anchored from the `@` to the
   end of its block. Only saves that raise the number of mentions of an agent
@@ -75,8 +75,13 @@ same core library, so any of them can work without the others.
 ## Agents
 
 - **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
-  name, introduction, persona (plain text), runtime, permissions, limits. A
-  new user has one plain agent, `agent`; there are no built-in roles. **Membership**
+  name, introduction, persona (plain text), runtime, permissions, limits,
+  and whether it is starred. A new user has one plain agent, Clippy, starred;
+  there are no built-in roles. An unstarred agent records the doc session
+  that made it (`session`: process id and a random part, set only by the
+  server); closing that session's server deletes it from the profiles and the
+  doc's participants, and a server that starts deletes the ones whose process
+  is gone (a crash). **Membership**
   lives in the sidecar's participants, so it travels with the doc.
 - **Team** (`agents/team.js`): one dispatcher per agent in the open doc. They
   share a `Floor`, so only one runs at a time. This keeps each run's file

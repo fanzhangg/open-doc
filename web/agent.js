@@ -1,6 +1,11 @@
 // The people in the header, laid out like a shared doc's: avatars of the
 // doc's agents, a People button, then yours.
 //
+// Agents are light and disposable: New agent pops one into the doc and opens
+// its card, where its name, introduction and persona are edited in place (the
+// Agents panel holds the finer settings). An agent goes away when this doc
+// closes unless it is starred on its card.
+//
 // Agents with **Auto Commenter** are in every doc and answer the new comments that
 // fit their persona; the others answer only when @mentioned, and mentioning
 // one brings it into the doc. The People panel works like Docs' share
@@ -14,7 +19,8 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';
 import { parseMentions } from '../src/core/mentions.js';
-import { PERMISSIONS, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { PERMISSIONS, disposable, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
 
@@ -34,6 +40,8 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
   let showing = null; // 'me' | 'people' | 'agent:<name>' | null
   let log = null; // the shown agent's last run log, fetched when its card opens
   let busy = false;
+  let editing = null; // id of the agent whose card is open for editing in place
+  const fresh = new Set(); // names of agents just made, whose avatars pop in
 
   invite.addEventListener('click', () => toggle('people'));
   me.addEventListener('click', () => toggle('me'));
@@ -49,7 +57,9 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     if (showing && ![panel, root, me, invite].some((n) => n.contains(event.target))) close();
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && showing) close();
+    if (event.key !== 'Escape' || !showing) return;
+    if (panel.contains(document.activeElement)) document.activeElement.blur(); // saves the field
+    close();
   });
 
   async function toggle(which) {
@@ -71,6 +81,7 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
 
   function close() {
     showing = null;
+    editing = null;
     panel.hidden = true;
   }
 
@@ -96,7 +107,7 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     root.replaceChildren(...names.map((name) => {
       const status = statusOf(name);
       const mode = modeOf(status);
-      const wrap = el('span', 'od-agent');
+      const wrap = el('span', `od-agent${fresh.has(name.toLowerCase()) ? ' od-agent-new' : ''}`);
       wrap.dataset.presence = mode;
       wrap.dataset.state = status?.state ?? 'away';
       const face = el('button', 'od-agent-face');
@@ -105,11 +116,12 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
       const label = `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`;
       face.title = label;
       face.setAttribute('aria-label', label);
-      face.append(avatar(name, 'agent'), el('span', 'od-presence-dot'));
+      face.append(avatar(name, 'agent'));
       wrap.append(face);
       return wrap;
     }));
-    if (agentShown() && !names.some((n) => same(n, agentShown()))) close();
+    // A renamed agent's card stays open while the doc catches up with the new name.
+    if (agentShown() && !names.some((n) => same(n, agentShown())) && !profileOf(agentShown())) close();
   }
 
   // ---- the cards ----
@@ -162,7 +174,9 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
       for (const agent of available) parts.push(agentRow(agent.name, iconButton('plus', `Add ${agent.name} to this doc`, () => add(agent.id)), agent));
     }
     const actions = el('div', 'od-profile-actions od-profile-footer');
-    actions.append(button('New agent', 'od-link-button', () => createBlank()), button('Manage agents', 'od-link-button', () => {
+    const create = button('New agent', 'od-primary od-new-agent', () => createBlank());
+    create.prepend(icon('plus'));
+    actions.append(create, button('Manage agents', 'od-link-button', () => {
       close();
       openSettings('agents');
     }));
@@ -185,7 +199,7 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     const status = statusOf(name);
     const face = el('span', 'od-profile-face');
     face.dataset.presence = modeOf(status);
-    face.append(avatar(name, 'agent', true), ...(status ? [el('span', 'od-presence-dot')] : []));
+    face.append(avatar(name, 'agent', true));
     const intro = profileOf(name) || status ? introOf(info) || 'No introduction yet' : 'Not one of your agents';
     row.append(face, el('span', 'od-people-name', name), el('span', 'od-people-sub', intro));
     if (action) row.append(action);
@@ -200,22 +214,12 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     const info = infoOf(name);
     const parts = [];
 
-    const head = el('div', 'od-profile');
-    head.dataset.presence = modeOf(status);
-    const pic = el('span', 'od-profile-face');
-    pic.append(avatar(name, 'agent'), el('span', 'od-presence-dot'));
-    const who = el('div', 'od-profile-who');
-    who.append(el('div', 'od-profile-name', name));
-    if (introOf(info)) who.append(el('div', 'od-profile-slogan', introOf(info)));
-    head.append(pic, who);
-    if (profile) {
-      const edit = iconButton('pencil', 'Edit profile', () => editProfile(profile.id));
-      edit.classList.add('od-profile-edit');
-      head.append(edit);
-    }
-    parts.push(head);
+    parts.push(cardHead(name));
+    if (profile && disposable(profile)) parts.push(el('p', 'od-card-hint od-disposable', 'Goes away when you close this doc. Star it to keep it.'));
+    if (profile && editing === profile.id) parts.push(quickEdit(profile));
 
     if (info.editMode) parts.push(permissionSwitches(info, profile));
+    if (profile && editing === profile.id) parts.push(quickEditEnd(profile));
 
     if (!status && !profile) {
       // In the doc, but not run here: someone else's agent, or one you deleted.
@@ -241,6 +245,31 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
       parts.push(problem);
     }
     return parts;
+  }
+
+  // The top of an agent's card: its face, name, introduction, star and edit.
+  function cardHead(name) {
+    const status = statusOf(name);
+    const profile = profileOf(name);
+    const info = infoOf(name);
+    const head = el('div', 'od-profile');
+    head.dataset.presence = modeOf(status);
+    const pic = el('span', 'od-profile-face');
+    pic.append(avatar(name, 'agent'));
+    const who = el('div', 'od-profile-who');
+    who.append(el('div', 'od-profile-name', name));
+    if (introOf(info)) who.append(el('div', 'od-profile-slogan', introOf(info)));
+    head.append(pic, who);
+    if (profile) {
+      const tools = el('div', 'od-profile-tools');
+      const star = iconButton('star', profile.starred ? `Unstar ${name}: it goes away when this doc closes` : `Star ${name} to keep it for every doc`, () => toggleStar(profile));
+      star.classList.add('od-star');
+      star.setAttribute('aria-pressed', String(profile.starred));
+      tools.append(star);
+      if (editing !== profile.id) tools.append(iconButton('pencil', 'Edit here', () => startEditing(profile.id)));
+      head.append(tools);
+    }
+    return head;
   }
 
   // The permissions as switches. One of your agents' switches change it at
@@ -308,11 +337,93 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
 
   const add = (id) => act(async () => take(await api.invite(id)), 'Could not add the agent');
 
+  // One click: the new agent pops into the doc, its card open for editing.
   const createBlank = () => act(async () => {
-    const result = await api.createAgent({ name: 'agent', tagline: 'Your own agent' }, { invite: true });
+    const result = await api.createAgent({}, { invite: true });
+    const name = result.agent.name;
+    fresh.add(name.toLowerCase());
+    setTimeout(() => fresh.delete(name.toLowerCase()), 800);
     take(result);
-    editProfile(result.agent.id);
+    editing = result.agent.id;
+    showing = `agent:${name}`;
+    panel.hidden = false;
+    paintCard();
+    const field = panel.querySelector('.od-quick-name');
+    field?.focus();
+    field?.select();
   }, 'Could not create the agent');
+
+  const toggleStar = (agent) => act(async () => {
+    take(await api.updateAgent(agent.id, { starred: !agent.starred }));
+  }, 'Could not change the agent');
+
+  function startEditing(id) {
+    editing = id;
+    paintCard();
+    panel.querySelector('.od-quick-persona')?.focus();
+  }
+
+  // Name, introduction and persona, edited on the card; each saves when you
+  // leave it. The rest is in the Agents panel.
+  function quickEdit(agent) {
+    const box = el('div', 'od-quick');
+    const error = el('div', 'od-input-error');
+    error.hidden = true;
+    const field = (tag, key, className, label, placeholder) => {
+      const node = el(tag, `od-input od-input-full ${className}`);
+      if (tag === 'input') node.type = 'text';
+      node.value = agent[key] ?? '';
+      node.placeholder = placeholder;
+      node.setAttribute('aria-label', label);
+      node.dataset.key = key;
+      node.addEventListener('change', () => saveField(agent, key, node, error));
+      if (tag === 'input') node.addEventListener('keydown', (e) => { if (e.key === 'Enter') node.blur(); });
+      return node;
+    };
+    const name = field('input', 'name', 'od-quick-name', 'Name', 'Name, as you @mention it');
+    name.maxLength = 64;
+    name.spellcheck = false;
+    const intro = field('input', 'tagline', 'od-quick-intro', 'Introduction', 'What it is for, in a few words');
+    intro.maxLength = 60;
+    const persona = field('textarea', 'persona', 'od-quick-persona od-persona', 'Persona', 'Who it is and how it works, in your own words. Blank: a plain co-author.');
+    persona.rows = 4;
+    persona.maxLength = 4000;
+    box.append(name, error, intro, persona);
+    return box;
+  }
+
+  function quickEditEnd(agent) {
+    const actions = el('div', 'od-profile-actions od-quick-end');
+    actions.append(button('More settings', 'od-link-button', () => editProfile(agent.id)), button('Done', 'od-primary', () => {
+      editing = null;
+      paintCard();
+    }));
+    return actions;
+  }
+
+  async function saveField(agent, key, node, error) {
+    const value = key === 'persona' ? node.value : node.value.trim();
+    error.hidden = true;
+    node.removeAttribute('aria-invalid');
+    if (key === 'name' && !NAME_PATTERN.test(value)) {
+      error.textContent = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
+      error.hidden = false;
+      node.setAttribute('aria-invalid', 'true');
+      return;
+    }
+    try {
+      const result = await api.updateAgent(agent.id, { [key]: value });
+      if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
+      take(result);
+      // The fields stay as typed; the top of the card catches up at once.
+      const name = agentShown();
+      if (name) panel.querySelector('.od-profile')?.replaceWith(cardHead(name));
+    } catch (failure) {
+      error.textContent = failure.message;
+      error.hidden = false;
+      node.setAttribute('aria-invalid', 'true');
+    }
+  }
 
   const setUp = (name) => act(async () => {
     take(await api.createAgent({ name }, { invite: false }));
@@ -341,7 +452,8 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     if (nextRoster) saved = nextRoster;
     roster = saved.map((a) => (flipped.has(a.id) ? { ...a, ...flipped.get(a.id) } : a));
     paintFaces();
-    if (showing && showing !== 'me') paintCard();
+    // Not while a field on the card is being typed in.
+    if (showing && showing !== 'me' && !(editing && panel.contains(document.activeElement))) paintCard();
   }
 
   // ---- the comment box ----

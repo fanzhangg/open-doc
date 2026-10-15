@@ -542,6 +542,33 @@ test('an @mention typed in the doc becomes the human\'s comment once they pause,
   }, { options: { mentionSettleMs: 200 } });
 });
 
+test('a new agent lasts as long as its doc session unless starred; a crashed session\'s agents are cleared', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const dead = { id: 'a_dead01', name: 'ghost', starred: false, session: '999999999:0123456789abcdef' };
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: [{ id: 'a_kept01', name: 'kept', starred: true }, dead] }));
+  const roster = async () => JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).agents.map((a) => a.name);
+  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
+  try {
+    assert.deepEqual(await roster(), ['kept'], 'the crashed session\'s agent is gone');
+    const made = await call(server, 'POST', '/api/roster', { body: { agent: {}, invite: true } });
+    assert.equal(made.status, 200);
+    assert.deepEqual([made.body.agent.name, made.body.agent.starred], ['agent', false]);
+    assert.match(made.body.agent.session, /^\d+:[a-f0-9]+$/, 'it belongs to this session');
+    assert.ok(made.body.sidecar.participants.some((p) => p.name === 'agent'), 'and joins the doc at once');
+    const other = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'keeper' } } });
+    const starred = await call(server, 'PUT', '/api/roster', { body: { id: other.body.agent.id, patch: { starred: true } } });
+    assert.equal(starred.body.settings.agents.find((a) => a.name === 'keeper').session, null);
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { session: 'x' } } })).status, 400, 'the page cannot pick a session');
+  } finally {
+    await server.close();
+  }
+  assert.deepEqual(await roster(), ['kept', 'keeper'], 'the unstarred one went with the session');
+  const sidecar = JSON.parse(await readFile(sidecarPath(docPath), 'utf8'));
+  assert.ok(!sidecar.participants.some((p) => p.name === 'agent'), 'and left the doc');
+});
+
 test('several agents with Auto Commenter each answer the open comments that fit them, and pass on the rest', { timeout: 30_000 }, async () => {
   await withRoster([{ name: 'second' }], async ({ server, state }) => {
     // Switching Auto Commenter on brings an agent into the doc.
@@ -601,7 +628,9 @@ test('several agents take turns: a comment for two gets both answers, never two 
     assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 3, 15_000), 'both answered');
     assert.deepEqual(authorsOf((await state()).sidecar.threads[0]).sort(), ['checker', 'muse']);
 
-    // The runs did not overlap, and each had its own persona.
+    // The runs did not overlap, and each had its own persona. (A run logs its
+    // end just after its reply lands, so wait for both ends.)
+    assert.ok(await waitUntil(async () => (await log()).filter((e) => e.end).length >= 2), 'both runs ended');
     const entries = await log();
     const spans = (await runs()).map((run) => ({ as: run.as, start: run.start, end: entries.find((e) => e.end && e.as === run.as && e.end >= run.start).end, persona: run.persona }));
     assert.equal(spans.length, 2);
