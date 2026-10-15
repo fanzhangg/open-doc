@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
-import { agentEnv, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
+import { DENIED_READS, agentEnv, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 
@@ -250,6 +250,9 @@ test('Claude adapter: command line and result parsing', () => {
   assert.ok(args.includes('dontAsk'));
   assert.deepEqual(args.slice(args.indexOf('--resume'), args.indexOf('--resume') + 2), ['--resume', 'abc']);
   assert.deepEqual(args.slice(-5), ['--allowedTools', 'Read', 'Edit(./plan.md)', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  const deny = args.indexOf('--disallowedTools');
+  assert.deepEqual(args.slice(deny + 1, deny + 1 + DENIED_READS.length), DENIED_READS);
+  assert.ok(DENIED_READS.includes('Read(//**/.env*)'));
   assert.ok(!args.includes('--bare'));
 
   const ok = adapter.parse({ stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: false, session_id: 's1', total_cost_usd: 0.02, num_turns: 4, permission_denials: [] }), stderr: '', code: 0 });

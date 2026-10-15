@@ -16,6 +16,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const SKILL_PATH = join(ROOT, 'skills', 'opendoc', 'SKILL.md');
 
+// Secrets a run may not read, anywhere on disk (`//` roots a pattern at the
+// file system, so this covers folders above the doc too). Deny beats allow,
+// so these hold even though `Read` is otherwise unrestricted.
+export const DENIED_READS = [
+  'Read(//**/.env*)',
+  'Read(//**/*.pem)',
+  'Read(//**/*.key)',
+  'Read(~/.ssh/**)',
+  'Read(~/.aws/**)',
+];
+
 /** The instruction every adapter sends; the threads themselves go on stdin or in files. */
 export function buildPrompt({ name, docFile }) {
   return [
@@ -76,7 +87,9 @@ export function claudeAdapter({ bin, model, maxTurns = 30, maxBudgetUsd, isolate
       if (maxBudgetUsd) args.push('--max-budget-usd', String(maxBudgetUsd));
       if (sessionId) args.push('--resume', sessionId);
       if (isolated) args.push('--bare');
-      // Variadic: keep last so it cannot swallow other arguments.
+      // Variadic: each list ends at the next flag; keep the last one last so it
+      // cannot swallow other arguments.
+      args.push('--disallowedTools', ...DENIED_READS);
       args.push('--allowedTools', 'Read', `Edit(./${docFile})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)');
       return { command: executable, args };
     },

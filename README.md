@@ -26,8 +26,9 @@ is done; the card stays as "Resolved by claude" until you dismiss it.
 Every comment that mentions `@claude` or no one goes to Claude; a comment that
 mentions only someone else does not. `--mentions-only` limits runs to comments
 that mention `@claude`. Each run uses `claude -p` in the doc's folder with only
-`Read`, `Edit` on this doc, and `opendoc` allowed. Runs are batched, one at a
-time, and resume the same Claude session while the server runs. A failed run
+`Read`, `Edit` on this doc, and `opendoc` allowed; it cannot read `.env*`,
+`*.pem` or `*.key` files anywhere, or `~/.ssh` and `~/.aws`. Runs are
+batched, one at a time, and resume the same Claude session while the server runs. A failed run
 shows a note next to Claude's avatar (click it for the log) and is not retried
 until you reply or click Try again.
 
