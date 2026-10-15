@@ -33,6 +33,7 @@ export function createCommentMargin(margin, handlers) {
   const replyDrafts = new Map();
   const busy = new Set(); // ids of messages being undone or applied
   const errors = new Map(); // message id → why undo or apply failed
+  const unfolded = new Set(); // ids of long messages shown in full
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
@@ -133,8 +134,24 @@ export function createCommentMargin(margin, handlers) {
     who.append(name, el('time', 'od-time', relativeTime(message.createdAt)));
     head.append(avatar(message.author.name, message.author.kind), who);
     if (action) head.append(action);
-    row.append(head, el('div', 'od-body', message.body));
+    const open = unfolded.has(message.id);
+    const body = el('div', `od-body${open ? '' : ' od-body-folded'}`, message.body);
+    row.append(head, body, foldButton(message.id, open));
     return row;
+  }
+
+  // Show more / Show less under a long message. Folded, it stays hidden until
+  // layout finds the text actually overflows its clamp.
+  function foldButton(id, open) {
+    const button = el('button', 'od-fold', open ? 'Show less' : 'Show more');
+    button.type = 'button';
+    button.hidden = !open;
+    button.addEventListener('click', () => {
+      if (open) unfolded.delete(id);
+      else unfolded.add(id);
+      render();
+    });
+    return button;
   }
 
   // What a reply changed in the doc: an inline diff with a little context,
@@ -337,6 +354,7 @@ export function createCommentMargin(margin, handlers) {
   // ---- layout: cards beside their text, never overlapping ----
 
   function layout() {
+    foldBodies();
     const cards = [...margin.querySelectorAll('.od-card')];
     if (showResolved || narrow.matches) {
       for (const card of cards) card.style.top = '';
@@ -377,6 +395,13 @@ export function createCommentMargin(margin, handlers) {
     }
     margin.style.height = `${bottom + 40}px`;
     clipChanges();
+  }
+
+  // Offer Show more only on messages cut off by their line clamp.
+  function foldBodies() {
+    for (const body of margin.querySelectorAll('.od-body-folded')) {
+      body.nextElementSibling.hidden = body.scrollHeight <= body.clientHeight + 1;
+    }
   }
 
   // Fade out the bottom of change lines taller than their cap.
