@@ -385,10 +385,22 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-body { margin-top: 2px; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: var(--text); }
 .od-body-folded { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .od-card:not(.od-card-active) .od-body-folded { -webkit-line-clamp: 3; }
-.od-fold { display: block; border: 0; background: none; padding: 0; margin-top: 2px; font-size: 12.5px; font-weight: 500; color: var(--accent); cursor: pointer; }
+/* Show more / less and folded replies: a chevron that flips, so each reads as a toggle */
+.od-fold, .od-more { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--accent); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+/* padded for a hover fill, pulled left so the text lines up with the body */
+.od-fold { border: 0; background: none; margin: 2px 0 0 26px; padding: 2px 6px; border-radius: 6px; }
 .od-fold[hidden] { display: none; }
-.od-fold:hover { text-decoration: underline; }
-.od-more { margin-top: 10px; font-size: 12px; color: var(--accent); font-weight: 500; }
+.od-fold:hover, .od-fold:focus-visible { background: var(--accent-soft); }
+.od-fold .od-icon, .od-more .od-icon { width: 14px; height: 14px; transition: transform 0.15s; }
+.od-fold[aria-expanded="true"] .od-icon, .od-more[aria-expanded="true"] .od-icon { transform: rotate(180deg); }
+/* folded replies: a pill with the repliers' faces, so it reads as openable */
+.od-more { gap: 6px; margin-top: 10px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
+.od-more[aria-expanded="false"] { padding-left: 4px; }
+.od-more:hover, .od-more:focus-visible { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.od-more + .od-msg { margin-top: 10px; }
+.od-more-faces { display: inline-flex; }
+.od-more-faces .od-avatar { --size: 18px; box-shadow: 0 0 0 2px var(--bg); }
+.od-more-faces .od-avatar + .od-avatar { margin-left: -5px; }
 
 .od-icon-button { border: 0; background: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; }
 .od-icon-button:hover { background: var(--accent-soft); color: var(--accent); }

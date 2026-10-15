@@ -34,6 +34,7 @@ export function createCommentMargin(margin, handlers) {
   const busy = new Set(); // ids of messages being undone or applied
   const errors = new Map(); // message id → why undo or apply failed
   const unfolded = new Set(); // ids of long messages shown in full
+  const expanded = new Set(); // ids of long threads shown with every reply
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
@@ -92,12 +93,11 @@ export function createCommentMargin(margin, handlers) {
     if (!thread.anchor) card.append(el('div', 'od-card-note', 'On the whole document'));
 
     const messages = thread.messages;
-    const collapse = !active && messages.length > 3;
+    const long = !active && messages.length > 3;
+    const collapse = long && !expanded.has(thread.id);
     messages.forEach((message, i) => {
-      if (collapse && i > 0 && i < messages.length - 1) {
-        if (i === 1) card.append(el('div', 'od-more', `${messages.length - 2} more ${messages.length - 2 === 1 ? 'reply' : 'replies'}`));
-        return;
-      }
+      if (long && i === 1) card.append(moreButton(thread.id, messages.slice(1, -1), !collapse));
+      if (collapse && i > 0 && i < messages.length - 1) return;
       const row = messageRow(message, i === 0 && thread.status === 'open' ? resolveButton(thread) : null);
       if (message.proposal?.length) row.append(proposalBlock(thread, message, active));
       // An apply notice's edits are shown, and undone, on the proposal it applied.
@@ -140,11 +140,35 @@ export function createCommentMargin(margin, handlers) {
     return row;
   }
 
+  // The replies folded out of a long thread: who wrote them, how many, and a
+  // chevron, so it reads as something to open. It opens and closes in place.
+  function moreButton(threadId, hidden, open) {
+    const button = el('button', 'od-more');
+    button.type = 'button';
+    button.setAttribute('aria-expanded', String(open));
+    const n = `${hidden.length} ${hidden.length === 1 ? 'reply' : 'replies'}`;
+    if (!open) {
+      const faces = el('span', 'od-more-faces');
+      const authors = new Map(hidden.map((m) => [m.author.name, m.author.kind]));
+      for (const [name, kind] of [...authors].slice(0, 3)) faces.append(avatar(name, kind, true));
+      button.append(faces);
+    }
+    button.append(el('span', '', open ? `Hide ${n}` : `Show ${hidden.length} more ${hidden.length === 1 ? 'reply' : 'replies'}`), icon('chevron'));
+    button.addEventListener('click', () => {
+      if (open) expanded.delete(threadId);
+      else expanded.add(threadId);
+      render();
+    });
+    return button;
+  }
+
   // Show more / Show less under a long message. Folded, it stays hidden until
   // layout finds the text actually overflows its clamp.
   function foldButton(id, open) {
-    const button = el('button', 'od-fold', open ? 'Show less' : 'Show more');
+    const button = el('button', 'od-fold');
     button.type = 'button';
+    button.setAttribute('aria-expanded', String(open));
+    button.append(el('span', '', open ? 'Show less' : 'Show more'), icon('chevron'));
     button.hidden = !open;
     button.addEventListener('click', () => {
       if (open) unfolded.delete(id);
