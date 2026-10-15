@@ -155,6 +155,10 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     agentStatus(status) {
       agentSettings.showStatus(status);
     },
+    /** Where the agent comes from now: 'flags' until the human changes its settings here. */
+    agentSource(source) {
+      agentSettings.setSource(source);
+    },
     /** A command from the desktop app's menu: 'settings' or 'shortcuts'. */
     command(name) {
       if (name === 'settings') settings.toggle('general');
@@ -391,7 +395,10 @@ function setupAgentSettings({ store, source }) {
   const options = section.querySelector('.od-agent-options');
   let status = null;
 
-  section.querySelector('.od-agent-flags').hidden = source !== 'flags';
+  // Started with --agent options, those apply until the human changes a
+  // setting here; then the server switches to the settings (setSource).
+  const flagsNote = section.querySelector('.od-agent-flags');
+  flagsNote.hidden = source !== 'flags';
   section.querySelector('.od-program-note').hidden = Boolean(desktop);
   section.querySelector('[data-action="choose-claude"]').hidden = !desktop;
   for (const input of section.querySelectorAll('[data-agent-program]')) input.readOnly = !desktop;
@@ -514,9 +521,15 @@ function setupAgentSettings({ store, source }) {
     paintStatus();
   }
 
+  function setSource(next) {
+    source = next;
+    flagsNote.hidden = source !== 'flags';
+    paintStatus();
+  }
+
   store.subscribe(paint);
   paint();
-  return { showStatus };
+  return { showStatus, setSource };
 }
 
 function fillShortcuts(body) {

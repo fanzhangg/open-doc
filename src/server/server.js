@@ -42,7 +42,9 @@ class HttpError extends Error {
 
 /**
  * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
- * a headless agent run whenever a comment waits on that agent. Without it,
+ * a headless agent run whenever a comment waits on that agent, until the
+ * human changes the agent's settings in this editor; then they apply as if
+ * `agentFromSettings` had been given. Without it,
  * `agentFromSettings: true` takes the agent from the user's settings
  * (Settings > Agent) and restarts it whenever they change.
  * `settingsDir` is the folder of the user's settings file (default: the
@@ -57,7 +59,7 @@ export async function startServer(docPath, {
   settingsDir = configDir(), typingMs = TYPING_MS,
 } = {}) {
   let agent = fixedAgent;
-  const agentSource = fixedAgent ? 'flags' : useSettings ? 'settings' : 'none';
+  let agentSource = fixedAgent ? 'flags' : useSettings ? 'settings' : 'none';
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
   let dispatcher = null;
@@ -154,6 +156,7 @@ export async function startServer(docPath, {
         await checkAgentProgram(patch);
         const settings = await updateSettings(patch, settingsDir);
         setPresence(settings.agent.presence); // at once, without waiting for the file watcher
+        if (agentSource === 'flags' && Object.keys(patch.agent ?? {}).some((key) => key !== 'presence')) useSettingsFromNow(settings.agent);
         return sendJson(res, 200, { settings });
       }
       case 'GET /api/agent':
@@ -392,6 +395,16 @@ export async function startServer(docPath, {
       else broadcast('agent', null);
     }).catch((error) => console.error('Could not start the agent:', error));
     return agentChanges;
+  }
+
+  // The human changed the agent's settings in an editor started with --agent
+  // options: from now on the settings decide here, as if it had been started
+  // without them. Changes made in other windows do not count.
+  function useSettingsFromNow(next) {
+    agentSource = 'settings';
+    useSettings = true;
+    broadcast('agentSource', { agentSource });
+    return configureAgent(next);
   }
 
   async function moveTo(newPath, move = moveDoc) {

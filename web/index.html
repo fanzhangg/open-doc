@@ -195,11 +195,11 @@
 
       <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
         <h2>Agent</h2>
-        <p class="od-agent-note od-agent-flags" hidden>This editor was started with <code>--agent</code> options; they apply instead of these settings until it is restarted.</p>
+        <p class="od-agent-note od-agent-flags" hidden>This editor was started with <code>--agent</code> options, which apply for now. Change any setting below and these settings take their place here.</p>
         <label class="od-setting">
           <span class="od-setting-text">
             <span class="od-setting-label">AI co-author</span>
-            <span class="od-setting-hint">Answers comments in every doc: reads the doc, edits it and replies in the thread. A run may only read files, edit the open doc and run <code>opendoc</code>.</span>
+            <span class="od-setting-hint">Answers comments in every doc: reads the doc, edits it and replies in the thread. A run reads and edits only the open doc and runs <code>opendoc</code>, unless you allow more below.</span>
           </span>
           <input type="checkbox" class="od-switch" data-agent="enabled">
         </label>

@@ -463,6 +463,40 @@ test('agent from settings: starts when on, follows changes, stops when off', { t
   }
 });
 
+test('agent from flags: changing its settings in this editor replaces the flags', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const runLog = join(settingsDir, 'runs.log');
+  const command = `"${process.execPath}" "${FAKE_AGENT}" {threadsFile} reply "${runLog}"`;
+  const saved = (extra) => writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ agent: { enabled: true, kind: 'custom', name: 'helper', command, ...extra } }));
+  await saved({});
+  const server = await startServer(docPath, { assetsDir, settingsDir, agent: { name: 'flagbot', adapter: customAdapter(command) } });
+  const state = async () => (await call(server, 'GET', '/api/state')).body;
+  try {
+    assert.equal((await state()).agentSource, 'flags');
+    assert.equal((await state()).agent.name, 'flagbot');
+
+    // Presence applies to an agent from flags too, without replacing them.
+    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'dnd' } } });
+    assert.equal((await state()).agent.presence, 'dnd');
+    assert.equal((await state()).agentSource, 'flags');
+
+    // A change saved by another window does not count.
+    await saved({ runsPerHour: 5 });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal((await state()).agentSource, 'flags');
+    assert.equal((await state()).agent.name, 'flagbot');
+
+    // Any other agent setting changed here: the settings take over.
+    await call(server, 'PUT', '/api/settings', { body: { agent: { runsPerHour: 7 } } });
+    assert.equal((await state()).agentSource, 'settings');
+    assert.ok(await waitUntil(async () => (await state()).agent?.name === 'helper'), 'restarted from settings');
+  } finally {
+    await server.close();
+  }
+});
+
 test("agent settings: the page cannot set the agent's program, only clear it", async () => {
   await withSettingsServer(async ({ server, settingsDir }) => {
     assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: 'evil --do-things' } } })).status, 403);

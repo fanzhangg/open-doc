@@ -166,6 +166,7 @@ async function start() {
     chrome.agentStatus(next);
   });
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
+  events.addEventListener('agentSource', (event) => chrome.agentSource(JSON.parse(event.data).agentSource));
   events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
