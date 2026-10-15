@@ -183,10 +183,10 @@ test('browser operations: an apply notice carries applies and edits', async () =
   });
 });
 
-test('agent endpoints: status in state, presence from settings, retry, details; 404 without an agent', async () => {
+test('agent endpoints: statuses in state, retry, details; 404 for an agent not here', async () => {
   await withServer(async ({ server }) => {
-    assert.equal((await call(server, 'GET', '/api/state')).body.agent, null);
-    assert.equal((await call(server, 'GET', '/api/agent')).status, 404);
+    assert.deepEqual((await call(server, 'GET', '/api/state')).body.agents, []);
+    assert.equal((await call(server, 'GET', '/api/agent?name=claude')).status, 404);
   });
 
   const docPath = await tempDoc();
@@ -195,20 +195,15 @@ test('agent endpoints: status in state, presence from settings, retry, details; 
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
   try {
     const state = await call(server, 'GET', '/api/state');
-    assert.equal(state.body.agent.name, 'claude');
-    assert.equal(state.body.agent.state, 'ready');
-    assert.equal(state.body.agent.presence, 'online');
-    // Presence is the user's setting; saving it applies at once, without a restart.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'dnd' } } });
-    assert.equal(server.dispatcher.status().presence, 'dnd');
-    assert.equal((await call(server, 'GET', '/api/state')).body.agent.presence, 'dnd');
-    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'online' } } });
-    assert.equal(server.dispatcher.status().presence, 'online');
-    const retried = await call(server, 'POST', '/api/agent', { body: { action: 'retry' } });
+    assert.equal(state.body.agents.length, 1);
+    assert.equal(state.body.agents[0].name, 'claude');
+    assert.equal(state.body.agents[0].state, 'ready');
+    assert.equal(state.body.agents[0].presence, 'online');
+    const retried = await call(server, 'POST', '/api/agent', { body: { name: 'claude', action: 'retry' } });
     assert.equal(retried.body.status.state, 'ready');
-    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'pause' } })).status, 400, 'pause is gone');
-    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'retry' }, token: false })).status, 403);
-    const details = await call(server, 'GET', '/api/agent');
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { name: 'claude', action: 'pause' } })).status, 400, 'pause is gone');
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { name: 'claude', action: 'retry' }, token: false })).status, 403);
+    const details = await call(server, 'GET', '/api/agent?name=CLAUDE');
     assert.equal(details.status, 200);
     assert.equal(typeof details.body.log, 'string');
   } finally {
@@ -428,83 +423,153 @@ async function waitUntil(check, ms = 8000) {
   return false;
 }
 
-test('agent from settings: starts when on, follows changes, stops when off', { timeout: 30_000 }, async () => {
+// A server running the user's agents, from a settings.json written here (an
+// agent's program can only be set outside the page): a pilot, Pilot, then
+// `agents` as co-pilots. Each runs the fake agent in `mode`, which logs to `runLog`.
+async function withRoster(agents, fn, { mode = 'reply', agent, options = {} } = {}) {
   const docPath = await tempDoc(SAMPLE);
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
   const runLog = join(settingsDir, 'runs.log');
-  // The program can only be set outside the page: here, in settings.json.
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({
-    agent: { enabled: true, kind: 'custom', name: 'helper', command: `"${process.execPath}" "${FAKE_AGENT}" {threadsFile} reply "${runLog}"` },
-  }));
-  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
-  try {
-    let state = (await call(server, 'GET', '/api/state')).body;
-    assert.equal(state.agentSource, 'settings');
-    assert.equal(state.agent.name, 'helper');
-    assert.equal(state.agent.kind, 'custom');
-
-    // A comment wakes the agent configured in settings, which replies through the shim.
-    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_settings1', anchor: null, message: { id: 'm_settings1', author: human, body: '@helper please look' } } } });
-    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages.length === 2), 'the agent replied');
-
-    // Changing an agent setting restarts it with the new options.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { name: 'helper2', editMode: 'approve' } } });
-    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.agent?.name === 'helper2'), 'restarted with the new name');
-    state = (await call(server, 'GET', '/api/state')).body;
-    assert.equal(state.agent.editMode, 'approve');
-
-    // Turning it off stops it.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { enabled: false } } });
-    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.agent === null), 'stopped');
-    assert.equal((await call(server, 'GET', '/api/agent')).status, 404);
-  } finally {
-    await server.close();
-  }
-});
-
-test('agent from flags: changing its settings in this editor replaces the flags', { timeout: 30_000 }, async () => {
-  const docPath = await tempDoc(SAMPLE);
-  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
-  const runLog = join(settingsDir, 'runs.log');
-  const command = `"${process.execPath}" "${FAKE_AGENT}" {threadsFile} reply "${runLog}"`;
-  const saved = (extra) => writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ agent: { enabled: true, kind: 'custom', name: 'helper', command, ...extra } }));
-  await saved({});
-  const server = await startServer(docPath, { assetsDir, settingsDir, agent: { name: 'flagbot', adapter: customAdapter(command) } });
+  await writeFile(runLog, '');
+  const command = `"${process.execPath}" "${FAKE_AGENT}" {threadsFile} ${mode} "${runLog}" {promptFile}`;
+  const roster = [{ name: 'Pilot', role: 'pilot', persona: 'You answer everything.' }, ...agents]
+    .map((a, i) => ({ id: `a_test0${i}`, runtime: 'custom', command, role: 'copilot', ...a }));
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: roster }));
+  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true, agent, ...options });
+  const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const state = async () => (await call(server, 'GET', '/api/state')).body;
   try {
-    assert.equal((await state()).agentSource, 'flags');
-    assert.equal((await state()).agent.name, 'flagbot');
-
-    // Presence applies to an agent from flags too, without replacing them.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'dnd' } } });
-    assert.equal((await state()).agent.presence, 'dnd');
-    assert.equal((await state()).agentSource, 'flags');
-
-    // A change saved by another window does not count.
-    await saved({ runsPerHour: 5 });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    assert.equal((await state()).agentSource, 'flags');
-    assert.equal((await state()).agent.name, 'flagbot');
-
-    // Any other agent setting changed here: the settings take over.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { runsPerHour: 7 } } });
-    assert.equal((await state()).agentSource, 'settings');
-    assert.ok(await waitUntil(async () => (await state()).agent?.name === 'helper'), 'restarted from settings');
+    await fn({ server, docPath, settingsDir, command, log, state, runs: async () => (await log()).filter((e) => e.threads) });
   } finally {
     await server.close();
   }
+}
+
+const comment = (server, id, body) => call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id, anchor: null, message: { id: `m_${id.slice(2)}`, author: human, body } } } });
+const authorsOf = (thread) => thread.messages.slice(1).map((m) => m.author.name);
+
+test('the pilot is in every doc and answers what mentions no one; a co-pilot answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'helper', persona: 'You are terse.', tagline: 'Says it short' }], async ({ server, state, runs }) => {
+    // The pilot joins at once; the co-pilot is not in the doc yet.
+    let now = await state();
+    assert.deepEqual(now.agents.map((a) => [a.name, a.role]), [['Pilot', 'pilot']]);
+    assert.ok(now.sidecar.participants.some((p) => p.name === 'Pilot' && p.kind === 'agent'));
+
+    // A comment for no one: the pilot answers.
+    await comment(server, 't_noone001', 'Is this clear?');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 2), 'the pilot answered');
+    assert.deepEqual(authorsOf((await state()).sidecar.threads[0]), ['Pilot']);
+
+    // @helper brings the co-pilot into the doc, and only it answers, in its persona.
+    const posted = await comment(server, 't_helper01', '@helper shorten this');
+    assert.equal(posted.status, 200);
+    assert.ok(posted.body.sidecar.participants.some((p) => p.name === 'helper' && p.kind === 'agent'), 'it joined');
+    assert.deepEqual(posted.body.sidecar.threads[1].messages[0].mentions, ['helper'], 'the mention counts');
+    assert.ok(posted.body.agents.some((a) => a.name === 'helper' && a.role === 'copilot' && a.tagline === 'Says it short'));
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[1].messages.length === 2), 'the co-pilot answered');
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.deepEqual(authorsOf((await state()).sidecar.threads[1]), ['helper'], 'the pilot left it to the co-pilot');
+    assert.equal((await runs()).find((r) => r.as === 'helper').persona, 'You are terse.', 'the persona reaches the run');
+
+    // A comment for no one still goes to the pilot only.
+    await comment(server, 't_noone002', 'And this?');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[2].messages.length === 2));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.deepEqual(authorsOf((await state()).sidecar.threads[2]), ['Pilot']);
+
+    // Renamed: it stays in this doc under its new name.
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { name: 'editor' } } })).status, 200);
+    assert.ok(await waitUntil(async () => (await state()).agents.some((a) => a.name === 'editor')), 'restarted under the new name');
+    now = await state();
+    assert.ok(now.sidecar.participants.some((p) => p.name === 'editor') && !now.sidecar.participants.some((p) => p.name === 'helper'));
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { name: 'fzhan' } } })).status, 400, "not the human's name");
+
+    // Removed: it stops and leaves; its comment stays. The pilot cannot be removed.
+    const removed = await call(server, 'POST', '/api/agents/remove', { body: { name: 'editor' } });
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.body.agents.map((a) => a.name), ['Pilot']);
+    assert.ok(!removed.body.sidecar.participants.some((p) => p.name === 'editor'));
+    assert.equal(removed.body.sidecar.threads[1].messages[1].author.name, 'helper');
+    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'Pilot' } })).status, 409);
+
+    // Added back from the People panel.
+    const added = await call(server, 'POST', '/api/agents/invite', { body: { id: 'a_test01' } });
+    assert.equal(added.status, 200);
+    assert.ok(added.body.agents.some((a) => a.name === 'editor'));
+    assert.equal((await call(server, 'POST', '/api/agents/invite', { body: { id: 'a_nobody' } })).status, 404);
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { name: 'Pilot', action: 'presence', presence: 'dnd' } })).status, 400, 'presence is gone');
+  });
 });
 
-test("agent settings: the page cannot set the agent's program, only clear it", async () => {
-  await withSettingsServer(async ({ server, settingsDir }) => {
-    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: 'evil --do-things' } } })).status, 403);
-    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { bin: 'C:\evil.exe' } } })).status, 403);
-    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { enabled: true, maxTurns: 9 } } })).status, 200);
-    await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ agent: { command: 'mybot {promptFile}' } }));
-    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: 'mybot {promptFile}', kind: 'custom' } } })).status, 200, 'unchanged is fine');
-    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: null } } })).status, 200, 'clearing is fine');
+test('making another agent the pilot hands over open comments; the pilot cannot be deleted', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'second' }], async ({ server, state }) => {
+    assert.equal((await call(server, 'POST', '/api/roster/delete', { body: { id: 'a_test00' } })).status, 400, 'the pilot');
+    const swapped = await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { role: 'pilot' } } });
+    assert.equal(swapped.status, 200);
+    assert.deepEqual(swapped.body.settings.agents.map((a) => [a.name, a.role]), [['Pilot', 'copilot'], ['second', 'pilot']]);
+    assert.ok(await waitUntil(async () => (await state()).agents.some((a) => a.name === 'second' && a.role === 'pilot')), 'the new pilot joined');
+    await comment(server, 't_noone001', 'Who answers now?');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 2));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.deepEqual(authorsOf((await state()).sidecar.threads[0]), ['second']);
+  });
+});
+
+test('agents are created from the page as co-pilots, added at once, and deleted', { timeout: 30_000 }, async () => {
+  await withRoster([], async ({ server, state }) => {
+    const created = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar', persona: 'Fix grammar only.', tagline: 'Fixes grammar', role: 'pilot' }, invite: true } });
+    assert.equal(created.status, 200);
+    const { agent } = created.body;
+    assert.match(agent.id, /^a_/);
+    assert.equal(agent.runtime, 'claude');
+    assert.equal(agent.role, 'copilot', 'a new agent is a co-pilot');
+    assert.ok(created.body.sidecar.participants.some((p) => p.name === 'grammar'));
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar' } } })).body.agent.name, 'grammar-2', 'a free name');
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { maxTurns: 0 } } })).status, 400);
+
+    const deleted = await call(server, 'POST', '/api/roster/delete', { body: { id: agent.id } });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(deleted.body.settings.agents.map((a) => a.name), ['Pilot', 'grammar-2']);
+    assert.ok(!(await state()).sidecar.participants.some((p) => p.name === 'grammar'), 'it left this doc');
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agents: [] } })).status, 400, 'the roster changes only through /api/roster');
+  });
+});
+
+test('several agents take turns: a comment for two gets both answers, never two runs at once', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'muse', persona: 'You are a poet.' }, { name: 'checker', persona: 'You check facts.' }], async ({ server, state, log, runs }) => {
+    await comment(server, 't_both0001', '@muse @checker what do you make of this?');
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 3, 15_000), 'both answered');
+    assert.deepEqual(authorsOf((await state()).sidecar.threads[0]).sort(), ['checker', 'muse']);
+
+    // The runs did not overlap, and each had its own persona.
+    const entries = await log();
+    const spans = (await runs()).map((run) => ({ as: run.as, start: run.start, end: entries.find((e) => e.end && e.as === run.as && e.end >= run.start).end, persona: run.persona }));
+    assert.equal(spans.length, 2);
+    spans.sort((a, b) => a.start - b.start);
+    assert.ok(spans[0].end <= spans[1].start, 'the second run started after the first ended');
+    assert.deepEqual(spans.map((s) => [s.as, s.persona]).sort(), [['checker', 'You check facts.'], ['muse', 'You are a poet.']]);
+  }, { mode: 'slow' });
+});
+
+test('an agent from flags works next to yours and cannot be removed from the page', { timeout: 30_000 }, async () => {
+  await withRoster([], async ({ server, state }) => {
+    assert.deepEqual((await state()).agents.map((a) => [a.name, a.source]).sort(), [['Pilot', 'roster'], ['flagbot', 'flags']]);
+    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'flagbot' } })).status, 409);
+  }, { agent: { name: 'flagbot', adapter: customAdapter(`"${process.execPath}" -e "process.exit(0)"`) } });
+});
+
+test("the page cannot set an agent's program, only clear it", async () => {
+  await withRoster([{ name: 'helper' }], async ({ server, settingsDir, command }) => {
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'evil', runtime: 'custom', command: 'evil --do-things' } } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { command: 'evil --do-things' } } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { command } } })).status, 200, 'unchanged is fine');
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { command: null } } })).status, 200, 'clearing is fine');
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { claudeBin: 'C:\\evil.exe' } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { claudeBin: null } })).status, 200);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { codexBin: 'C:\\evil.exe' } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { codexBin: null } })).status, 200);
+    assert.equal(JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).agents[1].command, null);
   });
 });
 
@@ -522,7 +587,7 @@ test("what the human saves during a run is not recorded as the agent's edit", { 
     const saved = await call(server, 'PUT', '/api/doc', { body: { markdown: markdown.replace('six features', 'seven features'), baseHash: docHash } });
     assert.equal(saved.status, 200);
 
-    assert.ok(await waitUntil(async () => server.dispatcher.status().state === 'ready' && server.dispatcher.status().lastRun), 'the run ended');
+    assert.ok(await waitUntil(async () => server.team.get('claude').status().state === 'ready' && server.team.get('claude').status().lastRun), 'the run ended');
     const thread = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0];
     const reply = thread.messages.at(-1);
     assert.equal(reply.author.name, 'claude');
@@ -579,7 +644,7 @@ test('typed over after the run ended: the edit leaves the reply and comes back a
   try {
     await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_overwr02', anchor: null, message: { id: 'm_overwr02', author: human, body: 'Mention the peak.' } } } });
     const thread = async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0];
-    assert.ok(await waitUntil(async () => (await thread()).messages.at(-1).edits?.length === 1 && server.dispatcher.status().state === 'ready'), 'the run recorded its edit');
+    assert.ok(await waitUntil(async () => (await thread()).messages.at(-1).edits?.length === 1 && server.team.get('claude').status().state === 'ready'), 'the run recorded its edit');
     const { markdown, docHash } = (await call(server, 'GET', '/api/state')).body;
     await call(server, 'PUT', '/api/doc', { body: { markdown: markdown.replace(agentLine, humanLine), baseHash: docHash } });
     assert.deepEqual((await call(server, 'POST', '/api/agent/overwritten', { body: { changes: [{ before: humanLine, after: agentLine }] } })).body, { offered: true });
@@ -596,7 +661,7 @@ test('the guard refuses an agent edit where the human is typing, until they stop
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = customAdapter(`"${process.execPath}" -e "process.exit(0)"`);
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter }, typingMs: 1500 });
-  const { url, token } = server.dispatcher.guard;
+  const { url, token } = server.team.get('claude').guard;
   const guard = async (oldString) => {
     let out = '';
     const stdout = { write: (s) => { out += s; } };
@@ -615,7 +680,7 @@ test('the guard refuses an agent edit where the human is typing, until they stop
     assert.match(refused.permissionDecisionReason, /typing in the paragraph that starts "The main risk is that/);
     assert.equal(await guard('ship all six features'), null, 'elsewhere is fine');
     assert.equal(await guard('not in the doc at all'), null);
-    assert.equal(await server.dispatcher.typingIn(), 'The main risk is that the sync service cannot handle the ext');
+    assert.equal(await server.team.get('claude').typingIn(), 'The main risk is that the sync service cannot handle the ext');
 
     // Only the guard token opens the guard, and the page's token does not.
     assert.equal((await call(server, 'POST', '/api/guard', { body: { oldString: 'x' } })).status, 403);
@@ -623,8 +688,76 @@ test('the guard refuses an agent edit where the human is typing, until they stop
     // The human stops typing: the paragraph is free again.
     await new Promise((resolve) => setTimeout(resolve, 1600));
     assert.equal(await guard('cannot handle the extra load'), null);
-    assert.equal(await server.dispatcher.typingIn(), null);
+    assert.equal(await server.team.get('claude').typingIn(), null);
   } finally {
     await server.close();
   }
+});
+
+test('an agent asks before reading your files: once, deny, always, revoke, and no answer in time', { timeout: 60_000 }, async () => {
+  await withRoster([{ name: 'Merlin', fileAccess: true }, { name: 'Rocky' }], async ({ server, docPath, state, log }) => {
+    const replyOn = async (id) => {
+      assert.ok(await waitUntil(async () => (await state()).sidecar.threads.find((t) => t.id === id)?.messages.length === 2, 15_000), `a reply on ${id}`);
+      return (await state()).sidecar.threads.find((t) => t.id === id).messages[1].body;
+    };
+    const asking = async () => {
+      assert.ok(await waitUntil(async () => (await state()).permissions.length === 1, 15_000), 'a request waits on the human');
+      return (await state()).permissions[0];
+    };
+    const answer = (id, value, extra = {}) => call(server, 'POST', '/api/permissions/answer', { body: { id, answer: value, ...extra } });
+
+    // The run asks: the page sees who, what and in which thread.
+    await comment(server, 't_ask00001', '@Merlin find my Q3 notes');
+    const request = await asking();
+    assert.equal(request.agent, 'Merlin');
+    assert.equal(request.permission, 'files');
+    assert.equal(request.target, join(dirname(docPath), 'notes', 'q3.md'));
+    assert.equal(request.folder, join(dirname(docPath), 'notes'));
+    assert.deepEqual(request.threadIds, ['t_ask00001']);
+    assert.equal((await call(server, 'POST', '/api/permissions/answer', { body: { id: request.id, answer: 'maybe' } })).status, 400);
+    const once = await answer(request.id, 'once');
+    assert.equal(once.status, 200);
+    assert.deepEqual(once.body.permissions, []);
+    assert.equal(await replyOn('t_ask00001'), 'Read allow');
+    assert.equal((await answer(request.id, 'once')).status, 404, 'answered already');
+
+    // Deny: the run learns why.
+    await comment(server, 't_ask00002', '@Merlin and the Q2 ones?');
+    await answer((await asking()).id, 'deny');
+    assert.equal(await replyOn('t_ask00002'), 'Read deny');
+    assert.match((await log()).findLast((e) => e.hook).hook.permissionDecisionReason, /did not allow Your files for this reply/);
+
+    // Always: kept in the settings, listed for the page, and not asked again.
+    await comment(server, 't_ask00003', '@Merlin once more');
+    const always = await answer((await asking()).id, 'always', { folderOnly: true });
+    assert.deepEqual(always.body.grants.map((g) => [g.agentId, g.permission, g.scope, g.folder]), [['a_test01', 'files', 'always', join(dirname(docPath), 'notes')]]);
+    assert.equal(await replyOn('t_ask00003'), 'Read allow');
+    await comment(server, 't_ask00004', '@Merlin and again');
+    assert.equal(await replyOn('t_ask00004'), 'Read allow');
+    assert.ok(!(await log()).some((e) => e.hook && e.hook.permissionDecision !== 'allow' && e.hook.permissionDecision !== 'deny'));
+    assert.equal((await state()).grants.length, 1);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { grants: [] } })).status, 400, 'not through settings');
+
+    // Revoked: it asks again; nobody answers, so it is denied.
+    const revoked = await call(server, 'POST', '/api/grants/revoke', { body: { id: always.body.grants[0].id } });
+    assert.deepEqual(revoked.body.grants, []);
+    await comment(server, 't_ask00005', '@Merlin last time');
+    await asking();
+    assert.equal(await replyOn('t_ask00005'), 'Read deny');
+    assert.match((await log()).findLast((e) => e.hook).hook.permissionDecisionReason, /did not answer within/);
+    assert.deepEqual((await state()).permissions, []);
+
+    // An agent that may not ask for files is refused at once.
+    await comment(server, 't_ask00006', '@Rocky look at my notes');
+    assert.equal(await replyOn('t_ask00006'), 'Read deny');
+    assert.match((await log()).findLast((e) => e.hook).hook.permissionDecisionReason, /Rocky does not have Your files access/);
+
+    // Allowing in advance (how a Codex agent gets the web) only for what the agent may ask for.
+    assert.equal((await call(server, 'POST', '/api/grants', { body: { agentId: 'a_test02', permission: 'files', scope: 'doc' } })).status, 409);
+    const ahead = await call(server, 'POST', '/api/grants', { body: { agentId: 'a_test01', permission: 'files', scope: 'doc' } });
+    assert.deepEqual(ahead.body.grants.map((g) => [g.agentId, g.scope, g.folder]), [['a_test01', 'doc', null]]);
+    // Deleting the agent deletes its grants.
+    await call(server, 'POST', '/api/roster/delete', { body: { id: 'a_test01' } });
+    assert.deepEqual((await state()).grants, []);
+  }, { mode: 'ask', options: { askTimeoutMs: 1500 } });
 });

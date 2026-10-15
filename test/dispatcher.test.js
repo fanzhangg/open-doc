@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
-import { DENIED_READS, GUARD_SETTINGS, agentEnv, buildPrompt, claudeAdapter, customAdapter, privateWorkdir, rulePath, splitCommand } from '../src/server/agents/adapters.js';
+import { CODEX_DENIED_GLOBS, DENIED_READS, SKILL_PATH, agentEnv, buildPrompt, claudeAdapter, codexAdapter, codexPermissions, customAdapter, findCodex, privateWorkdir, rulePath, splitCommand, userCodexConfig } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 
@@ -16,21 +17,23 @@ const FAKE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-age
 const quiet = { stdout: { write() {} }, stderr: { write() {} }, env: {} };
 const human = ['--as', 'fzhan', '--kind', 'human'];
 
-async function withAgent(mode, fn, limits = {}, { editMode = 'auto', workdir = null } = {}) {
+async function withAgent(mode, fn, limits = {}, { editMode = 'auto', workdir = null, prepare = null } = {}) {
   const docPath = await tempDoc();
   const runLog = join(dirname(docPath), 'runs.log');
   await writeFile(runLog, '');
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = customAdapter(`"${process.execPath}" "${FAKE}" {threadsFile} ${mode} "${runLog}"`);
   if (workdir) adapter.workdir = () => workdir;
+  if (prepare) adapter.prepare = prepare;
   const statuses = [];
   const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter, limits, editMode } });
-  server.dispatcher.onStatus = (s) => statuses.push(s.state);
+  const dispatcher = server.team.get('claude');
+  dispatcher.onStatus = (s) => statuses.push(s.state);
   try {
     await fn({
       docPath,
-      dispatcher: server.dispatcher,
+      dispatcher,
       statuses,
       runs: async () => (await log()).filter((entry) => entry.threads),
       log,
@@ -75,13 +78,17 @@ test('an @mention launches a run that replies, as the agent, in the doc folder',
 
 test('a run kept to the doc starts in its own folder and names the doc by absolute path', { timeout: 30_000 }, async () => {
   const workdir = join(await mkdtemp(join(tmpdir(), 'opendoc-workdir-')), 'not-yet');
+  const prepared = [];
+  const prepare = async (options) => { prepared.push({ ...options, made: existsSync(options.workdir) }); };
   await withAgent('reply', async ({ docPath, runs, sidecar, comment }) => {
     await comment('--quote', 'extra load', '@claude quantify this');
     await until(async () => replies((await sidecar()).threads[0]).length === 1, { what: 'a reply' });
     const [run] = await runs();
     assert.equal(run.cwd.toLowerCase(), workdir.toLowerCase(), 'the folder is made if missing');
     assert.equal(run.doc, docPath.replaceAll('\\', '/'));
-  }, {}, { workdir });
+    // The adapter readies the folder before each run, once it exists.
+    assert.deepEqual(prepared, [{ workdir, docPath, editMode: 'auto', made: true }]);
+  }, {}, { workdir, prepare });
 });
 
 test('a comment that mentions no one launches a run, and so does a follow-up', { timeout: 30_000 }, async () => {
@@ -343,14 +350,155 @@ test('Claude adapter: command line and result parsing', () => {
   assert.equal(adapter.parse({ stdout: 'not json', stderr: 'boom', code: 2 }).ok, false);
 });
 
+test('Codex adapter: command line and result parsing', async () => {
+  const noConfig = await mkdtemp(join(tmpdir(), 'opendoc-codex-home-'));
+  const adapter = codexAdapter({ bin: 'codex', agentName: 'codex', model: 'gpt-5', codexHome: noConfig });
+  const docPath = join(tmpdir(), 'docs', 'plan.md');
+  const { command, args } = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, editMode: 'auto' });
+  assert.equal(command, 'codex');
+  assert.equal(args[0], 'exec');
+  assert.ok(args.includes('--json'));
+  assert.ok(args.includes('--skip-git-repo-check'));
+  // The user's config.toml stays out (a sandbox_mode there would switch the
+  // permission profile off), and so do the legacy sandbox flags. No prompts.
+  assert.ok(args.includes('--ignore-user-config'));
+  assert.ok(!args.includes('--sandbox') && !args.includes('--add-dir'));
+  assert.ok(!args.some((a) => /^sandbox_/.test(a)));
+  assert.ok(args.includes('approval_policy="never"'));
+  // The profile is in the private folder's project config, trusted here.
+  assert.ok(args.includes('default_permissions="opendoc"'));
+  assert.ok(args.includes(`projects={ ${JSON.stringify(privateWorkdir(docPath, 'codex'))} = { "trust_level" = "trusted" } }`));
+  assert.ok(args.includes('web_search="disabled"'));
+  assert.ok(codexAdapter({ bin: 'codex', webAccess: true, codexHome: noConfig }).command({ prompt: 'P', docPath }).args.includes('web_search="live"'));
+  assert.equal(adapter.workdir(docPath), privateWorkdir(docPath, 'codex'));
+  // The skill rides along as developer instructions, a TOML string.
+  const skill = args.find((a) => a.startsWith('developer_instructions='));
+  assert.equal(JSON.parse(skill.slice('developer_instructions='.length)), await readFile(SKILL_PATH, 'utf8'));
+  assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);
+  assert.equal(args.at(-1), 'PROMPT');
+  assert.ok(!args.includes('resume'));
+  // Resuming: every flag comes before `resume <id> <prompt>`.
+  const resumed = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, sessionId: 'thread-1' }).args;
+  assert.deepEqual(resumed.slice(-3), ['resume', 'thread-1', 'PROMPT']);
+  assert.deepEqual(resumed.slice(0, -3), args.slice(0, -1));
+
+  const lines = (...events) => events.map((e) => JSON.stringify(e)).join('\n');
+  const ok = adapter.parse({
+    stdout: lines(
+      { type: 'thread.started', thread_id: 't1' },
+      { type: 'turn.started' },
+      { type: 'error', message: 'Reconnecting... 1/5' },
+      { type: 'item.completed', item: { id: 'item_1', type: 'agent_message', text: 'Done.' } },
+      { type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } },
+    ),
+    stderr: '',
+    code: 0,
+  });
+  assert.deepEqual(ok, { ok: true, error: null, sessionId: 't1' });
+  const failed = adapter.parse({ stdout: lines({ type: 'thread.started', thread_id: 't2' }, { type: 'turn.failed', error: { message: 'usage limit reached' } }), stderr: '', code: 1 });
+  assert.deepEqual(failed, { ok: false, error: 'usage limit reached', sessionId: 't2' });
+  const errored = adapter.parse({ stdout: lines({ type: 'thread.started', thread_id: 't3' }, { type: 'error', message: 'stream disconnected' }), stderr: '', code: 1 });
+  assert.equal(errored.error, 'stream disconnected');
+  const none = adapter.parse({ stdout: 'not json', stderr: 'boom', code: 2 });
+  assert.equal(none.ok, false);
+  assert.match(none.error, /exited with code 2 and no result: boom/);
+});
+
+test('Codex permissions: in the doc folder only the doc and its sidecar; secrets denied above it', async () => {
+  const home = join(tmpdir(), 'home');
+  const folder = join(tmpdir(), 'work', 'docs');
+  const docPath = join(folder, 'plan.md');
+  const siblings = ['plan.md', 'plan.md.opendoc.json', 'plan.md.opendoc.json.lock', 'secret.txt', '.env', 'drafts'];
+  const table = codexPermissions(docPath, { siblings, home });
+  assert.equal(table[':root'], 'read', "Codex's elevated Windows sandbox needs the whole disk readable");
+  // The folder is writable so the sandboxed `opendoc reply` can make the
+  // sidecar's lock and temp files; every other file there is denied.
+  assert.deepEqual(table[folder], {
+    '.': 'write',
+    '.env': 'deny',
+    drafts: 'deny',
+    'secret.txt': 'deny',
+    'plan.md': 'write',
+    'plan.md.opendoc.json': 'read',
+  });
+  assert.equal(codexPermissions(docPath, { siblings, home, editMode: 'approve' })[folder]['plan.md'], 'read', 'approve mode: the doc is read-only');
+  for (const dir of [join(tmpdir(), 'work'), tmpdir(), join(tmpdir(), '..')]) {
+    assert.deepEqual(Object.keys(table[resolve(dir)] ?? {}), CODEX_DENIED_GLOBS, `secrets denied in ${dir}`);
+  }
+  for (const dir of ['.ssh', '.aws', '.codex']) assert.equal(table[join(home, dir)], 'deny');
+  assert.equal(codexPermissions(docPath, { home, codexHome: join(tmpdir(), 'codex') })[join(tmpdir(), 'codex')], 'deny');
+
+  // prepare writes it to the private folder's project config, where the run's -c names it.
+  const doc = await tempDoc();
+  await writeFile(join(dirname(doc), 'secret.txt'), 'x');
+  const workdir = await mkdtemp(join(tmpdir(), 'opendoc-codex-run-'));
+  await codexAdapter({ bin: 'codex' }).prepare({ workdir, docPath: doc, editMode: 'approve' });
+  const config = await readFile(join(workdir, '.codex', 'config.toml'), 'utf8');
+  assert.match(config, /^\[permissions\.opendoc\.filesystem\]$/m);
+  assert.match(config, /^\[permissions\.opendoc\.network\]\nenabled = false$/m);
+  const line = config.split('\n').find((l) => l.startsWith(JSON.stringify(dirname(doc))));
+  assert.ok(line.includes('"secret.txt" = "deny"'));
+  assert.ok(line.includes(`${JSON.stringify(basename(doc))} = "read"`));
+});
+
+test("Codex runs keep only the model and Windows sandbox of the user's config", async () => {
+  const codexHome = await mkdtemp(join(tmpdir(), 'opendoc-codex-home-'));
+  const docPath = join(tmpdir(), 'docs', 'plan.md');
+  await writeFile(join(codexHome, 'config.toml'), [
+    'model = "gpt-6"',
+    'sandbox_mode = "danger-full-access"',
+    '[mcp_servers.repl]',
+    'command = "repl.exe"',
+    '[windows]',
+    "sandbox = 'elevated' # set up once",
+    '',
+  ].join('\r\n'));
+  assert.deepEqual(userCodexConfig(codexHome), { model: 'gpt-6', windowsSandbox: 'elevated' });
+  const args = codexAdapter({ bin: 'codex', codexHome }).command({ prompt: 'P', docPath }).args;
+  assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-6']);
+  assert.ok(args.includes('windows.sandbox="elevated"'));
+  assert.ok(!args.some((a) => a.includes('danger-full-access') || a.includes('repl.exe')));
+  // The agent's own model wins; a model of another provider is not carried over.
+  const own = codexAdapter({ bin: 'codex', codexHome, model: 'gpt-5' }).command({ prompt: 'P', docPath }).args;
+  assert.equal(own[own.indexOf('--model') + 1], 'gpt-5');
+  await writeFile(join(codexHome, 'config.toml'), 'model = "llama3"\nmodel_provider = "ollama"\n');
+  assert.deepEqual(userCodexConfig(codexHome), {});
+  assert.deepEqual(userCodexConfig(join(tmpdir(), 'no-such-codex-home')), {});
+});
+
+test('Codex preflight: says why when Codex is missing, cannot run or is signed out', async () => {
+  const saved = { PATH: process.env.PATH, CODEX_API_KEY: process.env.CODEX_API_KEY };
+  delete process.env.CODEX_API_KEY;
+  try {
+    process.env.PATH = await mkdtemp(join(tmpdir(), 'opendoc-nopath-'));
+    assert.equal(findCodex(), null);
+    const missing = await codexAdapter().preflight();
+    assert.equal(missing.ok, false);
+    assert.match(missing.error, /Codex was not found; install it/);
+    process.env.PATH = saved.PATH;
+    const broken = await codexAdapter({ bin: join(tmpdir(), 'definitely-not-codex.exe') }).preflight();
+    assert.match(broken.error, /could not run/);
+    // Exiting 1 for `login status` (node finds no "login" script) is how a signed-out Codex answers.
+    const signedOut = await codexAdapter({ bin: process.execPath }).preflight();
+    assert.equal(signedOut.ok, false);
+    assert.match(signedOut.error, /Codex is not signed in; run "codex login"/);
+    process.env.CODEX_API_KEY = 'test-key';
+    assert.equal((await codexAdapter({ bin: process.execPath }).preflight()).ok, true);
+  } finally {
+    process.env.PATH = saved.PATH;
+    if (saved.CODEX_API_KEY === undefined) delete process.env.CODEX_API_KEY;
+    else process.env.CODEX_API_KEY = saved.CODEX_API_KEY;
+  }
+});
+
 test('an unavailable agent does not launch and says why', { timeout: 30_000 }, async () => {
   const docPath = await tempDoc(SAMPLE);
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = claudeAdapter({ bin: join(tmpdir(), 'definitely-not-claude.exe') });
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
   try {
-    assert.equal(server.dispatcher.status().state, 'unavailable');
-    assert.match(server.dispatcher.status().error, /could not run/);
+    assert.equal(server.team.get('claude').status().state, 'unavailable');
+    assert.match(server.team.get('claude').status().error, /could not run/);
   } finally {
     await server.close();
   }
@@ -360,11 +508,33 @@ test('the guard: a hook on Edit when the run may edit, and the prompt names the 
   const docPath = join(tmpdir(), 'plan.md');
   const args = (options) => claudeAdapter({ bin: 'claude' }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, ...options }).args;
   const settings = (list) => (list.includes('--settings') ? JSON.parse(list[list.indexOf('--settings') + 1]) : null);
-  assert.deepEqual(settings(args({ guard: true })), GUARD_SETTINGS);
-  assert.equal(GUARD_SETTINGS.hooks.PreToolUse[0].hooks[0].command, 'opendoc guard');
+  assert.deepEqual(settings(args({ guard: true })), { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout: 10 }] }] } });
   assert.equal(settings(args({ guard: true, editMode: 'approve' })), null, 'nothing to guard when the run cannot edit');
   assert.equal(settings(args({})), null);
 
   assert.match(buildPrompt({ name: 'claude', docFile: 'plan.md', typing: 'The main risk is' }), /typing in the paragraph that starts "The main risk is"/);
   assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md' }), /typing in the paragraph/);
+});
+
+test('permissions asked at first use: their tools stay out of the allowed ones and a guard hook asks; no guard, no access', () => {
+  const docPath = join(tmpdir(), 'plan.md');
+  const doc = rulePath(docPath);
+  const run = (options, command = {}) => claudeAdapter({ bin: 'claude', ...options }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, guard: true, ...command }).args;
+  const allowed = (a) => a.slice(a.indexOf('--allowedTools') + 1);
+  const hooks = (a) => (a.includes('--settings') ? JSON.parse(a[a.indexOf('--settings') + 1]).hooks.PreToolUse : []);
+
+  const both = run({ asks: ['web', 'files'] });
+  assert.deepEqual(allowed(both), [`Read(${doc})`, `Edit(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)'], 'only the doc is allowed outright');
+  assert.deepEqual(hooks(both).map((h) => h.matcher), ['Edit', 'WebSearch|WebFetch|Read|Glob|Grep']);
+  assert.ok(hooks(both)[1].hooks[0].timeout > 300, 'the hook outlasts the wait for the human');
+  assert.equal(claudeAdapter({ bin: 'claude', asks: ['files'] }).workdir(docPath), privateWorkdir(docPath), 'asking for files still starts in a private folder');
+
+  assert.deepEqual(hooks(run({ asks: ['web'] }, { editMode: 'approve' })).map((h) => h.matcher), ['WebSearch|WebFetch']);
+  assert.deepEqual(hooks(run({ asks: ['web'] }, { guard: false })), [], 'without the guard nothing can say yes: the tools stay denied');
+  assert.deepEqual(hooks(run({ asks: ['web'], webAccess: true })).map((h) => h.matcher), ['Edit'], 'granted outright (serve flags): nothing to ask');
+
+  const prompt = buildPrompt({ name: 'Merlin', docFile: 'plan.md', asks: ['files'], docFolder: '/home/me/notes' });
+  assert.match(prompt, /read the human's other files \(the doc is in \/home\/me\/notes\)/);
+  assert.match(prompt, /approves this access the first time you use it/);
+  assert.doesNotMatch(buildPrompt({ name: 'Rocky', docFile: 'plan.md' }), /approves this access/);
 });

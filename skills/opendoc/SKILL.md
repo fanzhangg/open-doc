@@ -83,7 +83,8 @@ Repeat until the human says they are done.
 
 ## When `opendoc serve` started you
 
-The human may run `opendoc serve X.md --agent claude`. Then the server waits
+The human may invite you into the doc from the editor, or run
+`opendoc serve X.md --agent claude`. Then the server waits
 for comments itself and starts you once per batch, with the waiting threads
 already claimed and passed to you as JSON. In that case skip step 1 and step 5
 of the loop: handle exactly the threads you were given (steps 2 to 4), then
@@ -93,13 +94,20 @@ allows it can you also read other files, or search and fetch the web. When the h
 has chosen to approve every change, you cannot edit the doc at all: answer
 edit requests with `opendoc propose`.
 
+The human may have given you a persona (a role such as a copy editor or a
+fact checker) and invited other agents into the doc. Work in your persona,
+and leave the parts of a comment addressed to another agent to them.
+
 ## Which threads are yours
 
 `wait` and `inbox` already apply these rules, so normally just handle what they
 print:
 
-- A thread waits on you when its latest message is from a human and mentions
-  `@claude` or mentions no one.
+- A thread waits on you when its latest message from a human mentions
+  `@claude` and you have not answered it yet, or mentions no one and no one
+  has answered it yet. A comment for several agents waits on each of them.
+  A reply that mentions no one, in a thread an agent answered, is for the
+  agent that answered last there.
 - A comment that mentions only someone else (`@alex …`) is for them. Do not
   answer it unless the human asks you to.
 - Your own reply hands the turn back; you are woken again only when a human

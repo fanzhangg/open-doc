@@ -5,7 +5,8 @@
 
 import { hydrateIcons, icon } from './icons.js';
 import { api } from './api.js';
-import { checkSettingsPatch } from '../src/core/settings.js';
+import { checkAgentPatch } from '../src/core/agents.js';
+import { avatar } from './threads.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
@@ -39,15 +40,15 @@ export function keyLabel(keys) {
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean,
- *           agentSource: 'settings' | 'flags' | 'none' }} options
+ *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, agentSource }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
 
   const settings = setupSettings({ store, getName, setName });
-  const agentSettings = setupAgentSettings({ store, source: agentSource });
+  const agentSettings = setupAgentSettings({ store, onResult: onAgentResult });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -154,18 +155,19 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     hideBubble() {
       bubble.hidden = true;
     },
-    /** The agent's status changed (or it stopped: null). */
-    agentStatus(status) {
-      agentSettings.showStatus(status);
+    /** The statuses of the doc's agents changed. */
+    agentStatus(statuses) {
+      agentSettings.showStatus(statuses);
     },
-    /** Where the agent comes from now: 'flags' until the human changes its settings here. */
-    agentSource(source) {
-      agentSettings.setSource(source);
+    /** Open Settings > Agents on agent `id` (or the first one). */
+    openAgent(id) {
+      agentSettings.select(id);
+      settings.open('agents');
     },
-    /** A command from the desktop app's menu: 'settings' or 'shortcuts'. */
+    /** A command from the desktop app's menu: 'settings', 'agent-settings' or 'shortcuts'. */
     command(name) {
       if (name === 'settings') settings.toggle('general');
-      else if (name === 'agent-settings') settings.toggle('agent');
+      else if (name === 'agent-settings') settings.toggle('agents');
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },
   };
@@ -350,6 +352,7 @@ function setupSettings({ store, getName, setName }) {
   return {
     get: () => store.get(),
     set,
+    open,
     /** Open on `section`, or close when it is already showing that section. */
     toggle(section) {
       const showing = dialog.open && !sections.find((panel) => panel.dataset.section === section).hidden;
@@ -359,142 +362,217 @@ function setupSettings({ store, getName, setName }) {
   };
 }
 
-// ---- Settings > Agent ----
+// ---- Settings > Agents ----
 
 const AGENT_STATES = {
   starting: 'Connecting…',
-  ready: 'Online',
-  running: 'Online',
+  ready: 'Online in this doc',
+  queued: 'Online in this doc · waiting for its turn',
+  running: 'Online in this doc · working',
   error: 'Offline: the last run failed',
   limited: 'Offline: hourly run limit reached',
   unavailable: 'Offline',
   stopped: 'Offline',
 };
 
-// Asked before the agent may reach beyond the doc (Settings > Agent).
+// Asked before an agent may ask to reach beyond the doc. It still asks the
+// human at first use (src/core/grants.js), but a yes there is quick.
 const BOTH_RISK = 'With web search and other files both on, the agent could be tricked into sending your files to a website.';
 const ACCESS_RISKS = {
   webAccess: {
-    ask: 'Let the agent search the web and open web pages?\n\n'
-      + 'A web page can hide instructions that trick the agent into sending this doc to a website.',
+    ask: 'Let the agent ask to search the web and open web pages?\n\n'
+      + 'It asks you the first time. A web page can hide instructions that trick the agent into sending this doc to a website.',
     other: 'fileAccess',
   },
   fileAccess: {
-    ask: 'Let the agent read files other than this doc?\n\n'
-      + 'It can then read any file on this computer except keys and .env files, and a file can hide instructions it follows.',
+    ask: 'Let the agent ask to read files other than this doc?\n\n'
+      + 'It asks you the first time. Allowed, it can read files on this computer except keys and .env files, and a file can hide instructions it follows.',
     other: 'webAccess',
   },
 };
 
-// The agent settings apply to every doc. Its program (the custom command or
-// the Claude Code path) is set through the desktop app, which asks the user
-// to confirm it; in a browser tab those fields are read-only.
-function setupAgentSettings({ store, source }) {
-  const section = document.querySelector('.od-settings-section[data-section="agent"]');
+// The user's agents, for every doc: a list to pick one from (the pilot
+// first), and its profile (name, job, persona, role, permissions, what it runs
+// on, limits).
+// Changes save through the server as they are made. An agent's program (a
+// custom command, or where Claude Code is) is set through the desktop app,
+// which asks the user to confirm it; in a browser tab those fields are read-only.
+function setupAgentSettings({ store, onResult }) {
+  const section = document.querySelector('.od-settings-section[data-section="agents"]');
   const desktop = window.opendocDesktop;
+  const list = section.querySelector('.od-roster-list');
+  const form = section.querySelector('.od-agent-editor');
   const stateText = section.querySelector('.od-agent-state-text');
   const check = section.querySelector('[data-action="agent-check"]');
-  const warning = section.querySelector('.od-agent-warning');
-  const options = section.querySelector('.od-agent-options');
-  let status = null;
+  const hooks = section.querySelector('.od-agent-hooks');
+  const nameError = form.querySelector('.od-input-error');
+  const roleHint = form.querySelector('.od-agent-role-hint');
+  const makePilot = form.querySelector('[data-action="make-pilot"]');
+  const remove = form.querySelector('[data-action="delete-agent"]');
+  let statuses = [];
+  let selected = null; // the id of the agent shown
 
-  // Started with --agent options, those apply until the human changes a
-  // setting here; then the server switches to the settings (setSource).
-  const flagsNote = section.querySelector('.od-agent-flags');
-  flagsNote.hidden = source !== 'flags';
   section.querySelector('.od-program-note').hidden = Boolean(desktop);
-  section.querySelector('[data-action="choose-claude"]').hidden = !desktop;
-  for (const input of section.querySelectorAll('[data-agent-program]')) input.readOnly = !desktop;
+  for (const button of section.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
+  for (const input of section.querySelectorAll('[data-agent-program], [data-program]')) input.readOnly = !desktop;
 
-  const agent = () => store.get().agent;
+  const agents = () => store.get().agents;
+  const current = () => agents().find((a) => a.id === selected) ?? null;
+  const statusOf = (agent) => statuses.find((s) => (s.id ? s.id === agent.id : s.name.toLowerCase() === agent.name.toLowerCase())) ?? null;
   const valid = (patch) => {
     try {
-      checkSettingsPatch({ agent: patch });
+      checkAgentPatch(patch);
       return true;
     } catch {
       return false;
     }
   };
-  const set = (patch) => {
-    if (valid(patch)) store.set({ agent: patch });
-  };
+
+  async function save(patch) {
+    const agent = current();
+    if (!agent || !valid(patch)) return false;
+    try {
+      onResult(await api.updateAgent(agent.id, patch));
+      return true;
+    } catch (error) {
+      if (Object.hasOwn(patch, 'name')) {
+        nameError.textContent = error.message;
+        nameError.hidden = false;
+      }
+      paint();
+      return false;
+    }
+  }
 
   function paint() {
-    const current = agent();
-    section.dataset.kind = current.kind;
-    section.querySelector('[data-agent="enabled"]').checked = current.enabled;
-    section.querySelector('[data-agent="isolated"]').checked = current.isolated;
-    for (const key of Object.keys(ACCESS_RISKS)) section.querySelector(`[data-agent="${key}"]`).checked = current[key];
-    options.toggleAttribute('data-off', !current.enabled);
-    for (const button of section.querySelectorAll('[data-agent-kind]')) {
-      button.setAttribute('aria-checked', String(button.dataset.agentKind === current.kind));
-    }
-    for (const button of section.querySelectorAll('[data-agent-edit-mode]')) {
-      button.setAttribute('aria-checked', String(button.dataset.agentEditMode === current.editMode));
-    }
-    for (const input of section.querySelectorAll('input[data-agent]:not([type="checkbox"]), input[data-agent-program]')) {
+    const roster = [...agents()].sort((a, b) => Number(b.role === 'pilot') - Number(a.role === 'pilot'));
+    if (selected && !roster.some((a) => a.id === selected)) selected = null;
+    selected ??= roster[0]?.id ?? null;
+    list.replaceChildren(...roster.map((agent) => {
+      const row = el('button', 'od-roster-row');
+      row.type = 'button';
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', String(agent.id === selected));
+      row.dataset.agentId = agent.id;
+      const who = el('span', 'od-roster-who');
+      const name = el('span', 'od-roster-name', agent.name);
+      if (agent.role === 'pilot') name.append(el('span', 'od-role', 'Pilot'));
+      who.append(name, el('span', 'od-roster-sub', agent.tagline || firstLine(agent.persona) || 'No job yet'));
+      row.append(avatar(agent.name, 'agent', true), who);
+      if (statusOf(agent)) row.append(el('span', 'od-roster-here', 'In this doc'));
+      return row;
+    }));
+
+    const agent = current();
+    form.hidden = !agent;
+    if (!agent) return;
+    form.dataset.kind = agent.runtime;
+    const mark = (attr, value) => {
+      for (const button of form.querySelectorAll(`[data-${attr}]`)) {
+        button.setAttribute('aria-checked', String(button.getAttribute(`data-${attr}`) === value));
+      }
+    };
+    mark('agent-runtime', agent.runtime);
+    mark('agent-edit-mode', agent.editMode);
+    const pilot = agent.role === 'pilot';
+    roleHint.textContent = pilot
+      ? 'Pilot: in every doc, answers every comment that does not @mention someone else.'
+      : 'Co-pilot: answers when @mentioned (which also brings it into the doc), and follow-ups in its own threads.';
+    makePilot.hidden = pilot;
+    remove.disabled = pilot;
+    remove.title = pilot ? 'Make another agent the pilot to delete this one' : '';
+    for (const box of form.querySelectorAll('input[type="checkbox"][data-agent]')) box.checked = Boolean(agent[box.dataset.agent]);
+    for (const input of form.querySelectorAll('input[data-agent]:not([type="checkbox"]), textarea[data-agent], input[data-agent-program]')) {
       if (document.activeElement === input) continue;
       const key = input.dataset.agent ?? input.dataset.agentProgram;
-      input.value = current[key] ?? '';
+      input.value = agent[key] ?? '';
       input.removeAttribute('aria-invalid');
+    }
+    for (const bin of section.querySelectorAll('[data-program]')) {
+      if (document.activeElement !== bin) bin.value = store.get()[bin.dataset.program] ?? '';
     }
     paintStatus();
   }
 
   function paintStatus() {
-    const current = agent();
+    const agent = current();
+    if (!agent) return;
+    const status = statusOf(agent);
     let text;
     let state = status?.state ?? 'off';
-    if (!status && (source === 'flags' || !current.enabled)) {
-      text = 'Off. Turn it on to have the agent answer comments.';
-    } else if (!status) {
-      state = 'starting';
-      text = AGENT_STATES.starting;
+    if (!status) {
+      text = agent.role === 'pilot' ? 'Starting…' : `Not in this doc. @${agent.name} in a comment brings it in.`;
     } else {
       text = AGENT_STATES[status.state] ?? status.state;
-      if (status.presence === 'dnd' && ['ready', 'running'].includes(status.state)) text = text.replace('Online', 'Do not disturb');
       if (status.error) text += `: ${status.error.replace(/\u001b\[[0-9;]*m/g, '')}`;
       else if (status.program && ['ready', 'running'].includes(status.state)) text += ` · ${status.program}`;
     }
-    section.dataset.agentState = state;
+    form.dataset.agentState = state;
     stateText.textContent = text;
     check.hidden = !status || !['unavailable', 'error'].includes(status.state);
-    warning.textContent = status?.warning ? `Note: ${status.warning}.` : '';
-    warning.hidden = !status?.warning;
+    hooks.textContent = status?.warning ? `Note: ${status.warning}.` : '';
+    hooks.hidden = !status?.warning;
   }
 
   section.addEventListener('click', async (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    if (button.dataset.agentKind) set({ kind: button.dataset.agentKind });
-    else if (button.dataset.agentEditMode) set({ editMode: button.dataset.agentEditMode });
-    else if (button.dataset.action === 'choose-claude') desktop?.chooseClaude().catch(() => {});
-    else if (button.dataset.action === 'agent-check') {
+    if (button.dataset.agentId) {
+      selected = button.dataset.agentId;
+      nameError.hidden = true;
+      paint();
+    } else if (button.dataset.agentRuntime) save({ runtime: button.dataset.agentRuntime });
+    else if (button.dataset.agentEditMode) save({ editMode: button.dataset.agentEditMode });
+    else if (button.dataset.action === 'make-pilot') save({ role: 'pilot' });
+    else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
+    else if (button.dataset.action === 'new-agent') {
+      try {
+        const result = await api.createAgent({ name: 'agent' });
+        selected = result.agent.id;
+        onResult(result);
+        form.querySelector('[data-agent="name"]').focus();
+        form.querySelector('[data-agent="name"]').select();
+      } catch {
+        // at most MAX_AGENTS; the list shows what there is
+      }
+    } else if (button.dataset.action === 'delete-agent') {
+      const agent = current();
+      if (!agent || agent.role === 'pilot' || !window.confirm(`Delete ${agent.name}?\n\nIt leaves this doc and stops answering in every doc. Its comments stay.`)) return;
+      try {
+        onResult(await api.deleteAgent(agent.id));
+      } catch {
+        // already gone
+      }
+    } else if (button.dataset.action === 'agent-check') {
+      const status = current() && statusOf(current());
+      if (!status) return;
       check.disabled = true;
       try {
-        showStatus(await api.agentAction('retry'));
+        const next = await api.agentAction(status.name, 'retry');
+        showStatus(statuses.map((s) => (s === status ? next : s)));
       } catch {
-        // no agent running here (yet)
+        // it left the doc meanwhile
       } finally {
         check.disabled = false;
       }
     }
   });
 
-  section.addEventListener('change', (event) => {
+  form.addEventListener('change', (event) => {
     const input = event.target;
     if (input.type === 'checkbox' && input.dataset.agent) {
       const risk = ACCESS_RISKS[input.dataset.agent];
-      if (risk && input.checked && !window.confirm(agent()[risk.other] ? `${risk.ask}\n\n${BOTH_RISK}` : risk.ask)) {
+      if (risk && input.checked && !window.confirm(current()?.[risk.other] ? `${risk.ask}\n\n${BOTH_RISK}` : risk.ask)) {
         input.checked = false;
         return;
       }
-      return set({ [input.dataset.agent]: input.checked });
+      return save({ [input.dataset.agent]: input.checked });
     }
-    if (input.dataset.agentProgram) return setProgram(input);
+    if (input.dataset.agentProgram) return setProgram(input, 'command', current()?.id);
     const key = input.dataset.agent;
     if (!key) return;
-    const raw = input.value.trim();
+    const raw = key === 'persona' ? input.value : input.value.trim();
+    if (key === 'name' && raw === '') return paint();
     let value = raw;
     if (input.type === 'number') value = raw === '' ? null : Number(raw);
     else if (key === 'model') value = raw || null;
@@ -503,36 +581,53 @@ function setupAgentSettings({ store, source }) {
       return;
     }
     input.removeAttribute('aria-invalid');
-    set({ [key]: value });
+    nameError.hidden = true;
+    save({ [key]: value });
   });
-  section.addEventListener('focusout', (event) => {
-    if (event.target.matches?.('input[aria-invalid="true"]')) paint(); // an invalid value is not kept
+  form.addEventListener('focusout', (event) => {
+    if (event.target.matches?.('[aria-invalid="true"]')) paint(); // an invalid value is not kept
   });
+  for (const bin of section.querySelectorAll('[data-program]')) bin.addEventListener('change', (event) => setProgram(event.target, bin.dataset.program));
 
-  async function setProgram(input) {
+  async function setProgram(input, key, id = null) {
+    const before = () => (key === 'command' ? current()?.command : store.get()[key]) ?? '';
     if (!desktop) return;
     try {
-      const done = await desktop.setAgentProgram(input.dataset.agentProgram, input.value.trim() || null);
-      if (!done) input.value = agent()[input.dataset.agentProgram] ?? '';
+      const done = await desktop.setAgentProgram(key, input.value.trim() || null, id);
+      if (!done) input.value = before();
     } catch {
-      input.value = agent()[input.dataset.agentProgram] ?? '';
+      input.value = before();
     }
   }
 
   function showStatus(next) {
-    status = next;
-    paintStatus();
-  }
-
-  function setSource(next) {
-    source = next;
-    flagsNote.hidden = source !== 'flags';
-    paintStatus();
+    statuses = next ?? [];
+    paint();
   }
 
   store.subscribe(paint);
   paint();
-  return { showStatus, setSource };
+  return {
+    showStatus,
+    /** Show agent `id`'s profile (the dialog opens on the section separately). */
+    select(id) {
+      if (id) selected = id;
+      nameError.hidden = true;
+      paint();
+    },
+  };
+}
+
+const firstLine = (text) => {
+  const line = (text ?? '').trim().split('\n')[0] ?? '';
+  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+};
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
 function fillShortcuts(body) {

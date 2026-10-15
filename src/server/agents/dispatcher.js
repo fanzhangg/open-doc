@@ -2,14 +2,16 @@
 // is from a human and mentions @agent or no one), claim the thread (the page shows the
 // agent working on it) and start one headless agent run for the batch. The
 // edit mode decides whether the run edits the doc or only proposes changes.
-// At most one run per agent at a time; a failed run never loops.
+// At most one run per agent at a time; a failed run never loops. The agents
+// of one doc take turns (a Floor): only one runs at a time, so each run's
+// edits are its own and two agents never edit the doc at once.
 
 import { spawn } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyOp, diffEdits, findEdit, inbox, locate, newId, project, proposeChanges, sourceRange } from '../../core/index.js';
+import { activeWorking, applyOp, diffEdits, findEdit, inbox, locate, newId, project, proposeChanges, sourceRange } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
@@ -25,21 +27,71 @@ const LOG_LINES = 40;
 export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
 
 /**
- * States: starting, ready, running, error (last run failed), limited (runs
- * per hour reached), unavailable (preflight failed), stopped.
- * Presence, set by the human: 'online' answers every comment not addressed
- * to someone else, 'dnd' (do not disturb) only comments that @mention it.
+ * The turn to run, shared by the agents of one doc. An agent that finds
+ * comments waiting while another runs waits for its turn ('queued'); when
+ * the turn is released, every waiting agent looks again.
+ */
+export class Floor {
+  holder = null;
+  #waiting = new Set();
+
+  take(dispatcher) {
+    if (this.holder && this.holder !== dispatcher) {
+      this.#waiting.add(dispatcher);
+      return false;
+    }
+    this.holder = dispatcher;
+    this.#waiting.delete(dispatcher);
+    return true;
+  }
+
+  release(dispatcher) {
+    this.#waiting.delete(dispatcher);
+    if (this.holder !== dispatcher) return;
+    this.holder = null;
+    const next = [...this.#waiting];
+    this.#waiting.clear();
+    for (const waiting of next) waiting.notify();
+  }
+}
+
+/**
+ * States: starting, ready, queued (comments wait while another agent of the
+ * doc runs), running, error (last run failed), limited (runs per hour
+ * reached), unavailable (preflight failed), stopped.
+ * Presence follows the agent's role: 'online' (the pilot) answers every
+ * comment not addressed to someone else, 'dnd' (a co-pilot) only comments
+ * that @mention it.
  */
 export class Dispatcher {
   /**
    * `guard` ({ url, token }) is where a run asks before each edit whether the
    * human is typing there (`opendoc guard`); `typingIn()` resolves to the
    * start of the paragraph the human is typing in, or null.
+   * `persona` is the agent's role in the human's words; `others()` names the
+   * other agents of the doc; `floor` is the turn they share. `join` adds
+   * the agent to the doc's participants when it starts (an agent from flags;
+   * one from the roster is there because it was invited). `role` is 'pilot'
+   * or 'copilot'; `profile` ({ tagline, webAccess, fileAccess }) is shown with
+   * the status. `asks` are the permissions ('web', 'files') its runs ask the
+   * human for at first use (src/server/agents/permissions.js).
    */
-  constructor({ docPath, name, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null, onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null }) {
+  constructor({
+    docPath, name, id = null, persona = '', role = 'copilot', profile = {}, asks = [], adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
+    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, floor = new Floor(), others = () => [], join = true, source = 'flags',
+  }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
     this.name = name;
+    this.id = id;
+    this.persona = persona;
+    this.floor = floor;
+    this.others = others;
+    this.role = role;
+    this.profile = profile;
+    this.asks = asks;
+    this.join = join;
+    this.source = source;
     this.adapter = adapter;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
     this.editMode = editMode;
@@ -61,6 +113,13 @@ export class Dispatcher {
   status() {
     return {
       name: this.name,
+      id: this.id,
+      source: this.source,
+      role: this.role,
+      tagline: this.profile.tagline ?? '',
+      webAccess: Boolean(this.profile.webAccess),
+      fileAccess: Boolean(this.profile.fileAccess),
+      persona: this.persona,
       state: this.state,
       editMode: this.editMode,
       presence: this.presence,
@@ -80,7 +139,7 @@ export class Dispatcher {
   }
 
   async start() {
-    await update(this.docPath, (s) => applyOp(s, { type: 'join', participant: { name: this.name, kind: 'agent' } }));
+    if (this.join) await update(this.docPath, (s) => applyOp(s, { type: 'join', participant: { name: this.name, kind: 'agent' } }));
     this.shimDir = await makeShim();
     await this.#preflight();
   }
@@ -123,6 +182,7 @@ export class Dispatcher {
       killTree(this.run.child);
       await done;
     }
+    this.floor.release(this);
     if (this.shimDir) await rm(this.shimDir, { recursive: true, force: true });
   }
 
@@ -143,13 +203,18 @@ export class Dispatcher {
     }
     this.checking = true;
     try {
-      if (this.run || this.draining || !['ready', 'error', 'limited'].includes(this.state)) return;
+      if (this.run || this.draining || !['ready', 'error', 'limited', 'queued'].includes(this.state)) return;
       const { sidecar } = await load(this.docPath);
       if (this.#waiting(sidecar).length === 0) {
-        if (this.state === 'limited') this.#setState('ready');
+        this.floor.release(this);
+        if (this.state === 'limited' || this.state === 'queued') this.#setState('ready');
         return;
       }
       if (this.#rateLimited()) return;
+      if (!this.floor.take(this)) {
+        if (this.state !== 'queued') this.#setState('queued');
+        return;
+      }
 
       // Claim under the lock, re-reading the inbox so a chat session's `wait`
       // and this dispatcher never answer the same thread.
@@ -162,8 +227,9 @@ export class Dispatcher {
         return claimed.reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since }), s);
       });
       if (claimed.length > 0) await this.#launch(claimed, markdown);
+      else this.#yield('ready');
     } catch (error) {
-      this.#setState('error', `could not start a run: ${error.message}`);
+      this.#yield('error', `could not start a run: ${error.message}`);
     } finally {
       this.checking = false;
       if (this.recheck) {
@@ -173,9 +239,18 @@ export class Dispatcher {
     }
   }
 
+  // Threads for this agent, except ones another participant is answering
+  // right now: they come back if that one ends without a reply.
   #waiting(sidecar) {
-    return inbox(sidecar, this.name, Date.now(), { mentionsOnly: this.presence === 'dnd' })
-      .filter((t) => !this.failed.has(failureKey(t)));
+    const now = Date.now();
+    return inbox(sidecar, this.name, now, { mentionsOnly: this.presence === 'dnd' })
+      .filter((t) => !this.failed.has(failureKey(t)) && !activeWorking(t, now));
+  }
+
+  // Give the turn back without running.
+  #yield(state, error = null) {
+    this.floor.release(this);
+    this.#setState(state, error);
   }
 
   #rateLimited() {
@@ -199,10 +274,14 @@ export class Dispatcher {
     // doc by absolute path.
     const workdir = this.adapter.workdir?.(this.docPath) ?? dirname(this.docPath);
     if (workdir !== dirname(this.docPath)) await mkdir(workdir, { recursive: true });
+    await this.adapter.prepare?.({ workdir, docPath: this.docPath, editMode: this.editMode });
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
     const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
     const typing = this.editMode === 'auto' ? await this.typingIn().catch(() => null) : null;
-    const prompt = buildPrompt({ name: this.name, docFile: docRef, editMode: this.editMode, typing });
+    const prompt = buildPrompt({
+      name: this.name, docFile: docRef, editMode: this.editMode, typing, persona: this.persona, role: this.role, others: this.others(),
+      asks: this.asks, docFolder: dirname(this.docPath),
+    });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');
     await writeFile(threadsFile, JSON.stringify(payload, null, 2));
@@ -247,7 +326,8 @@ export class Dispatcher {
     // from, plus every change the human saved meanwhile (humanEdited).
     // `overwritten` holds changes to offer back once the run has replied.
     // `avoided` counts the edits the guard refused because the human was typing there.
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0 };
+    // `permits` are the human's Allow once and Deny answers, which last for this run.
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0, permits: [] };
     this.run = run;
     this.#setState('running');
 
@@ -376,7 +456,7 @@ export class Dispatcher {
     };
     this.run = null;
     await rm(runDir, { recursive: true, force: true });
-    if (this.state === 'stopped') return;
+    if (this.state === 'stopped') return this.floor.release(this);
 
     if (result.ok) {
       this.sessionId = result.sessionId ?? this.sessionId;
@@ -387,6 +467,7 @@ export class Dispatcher {
       for (const t of threads) this.failed.add(failureKey(t));
     }
     this.#setState(result.ok ? 'ready' : 'error', result.ok ? null : result.error);
+    this.floor.release(this); // after the state, so the next agent's run starts after this one is seen to end
     this.notify();
   }
 

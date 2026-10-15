@@ -34,19 +34,51 @@ export async function readSettings(dir = configDir()) {
 }
 
 /**
- * Apply a validated partial `patch` (whose `agent` is itself partial) and
- * save. Keys this version does not know are kept, so an older app does not
+ * Apply a validated partial `patch` and save. Keys this version does not know are kept, so an older app does not
  * erase a newer one's settings.
  * @returns {Promise<object>} the complete settings after the change
  */
 export async function updateSettings(patch, dir = configDir()) {
   checkSettingsPatch(patch);
+  return change(() => patch, dir);
+}
+
+/**
+ * Change the agents under the settings lock: `edit(agents, settings)`
+ * returns the new roster (or throws), so two windows editing different
+ * agents at once both keep their change.
+ * @returns {Promise<object>} the complete settings after the change
+ */
+export async function editAgents(edit, dir = configDir()) {
+  return change((stored) => {
+    const current = resolveSettings(stored);
+    const patch = { agents: edit(current.agents, current) };
+    checkSettingsPatch(patch);
+    return patch;
+  }, dir);
+}
+
+/**
+ * Change the grants (src/core/grants.js) under the settings lock:
+ * `edit(grants, settings)` returns the new list.
+ * @returns {Promise<object>} the complete settings after the change
+ */
+export async function editGrants(edit, dir = configDir()) {
+  return change((stored) => {
+    const current = resolveSettings(stored);
+    const patch = { grants: edit(current.grants, current) };
+    checkSettingsPatch(patch);
+    return patch;
+  }, dir);
+}
+
+async function change(patchFor, dir) {
   await mkdir(dir, { recursive: true });
   const path = settingsPath(dir);
   const release = await lockFile(`${path}.lock`, path);
   try {
     const stored = (await readStored(dir)) ?? {};
-    const next = { ...mergeSettings(stored, patch), version: SETTINGS_VERSION };
+    const next = { ...mergeSettings(stored, patchFor(stored)), version: SETTINGS_VERSION };
     await writeAtomic(path, JSON.stringify(next, null, 2) + '\n');
     return resolveSettings(next);
   } finally {

@@ -7,8 +7,9 @@
 import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'electron';
 import { statSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
-import { AGENT_PROGRAM_KEYS, checkSettingsPatch } from '../src/core/settings.js';
-import { readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
+import { checkSettingsPatch } from '../src/core/settings.js';
+import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
+import { editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
 } from './files.js';
@@ -352,38 +353,49 @@ function pageCommand(win, name) {
 
 // ---- the agent's program ----
 
-// Settings > Agent may set what program agent runs start: a custom agent's
-// command, or where Claude Code is. Pages cannot set it through the local
-// server; here the user confirms the exact command in a native dialog.
-async function setAgentProgram(win, { key, value } = {}) {
-  if (!AGENT_PROGRAM_KEYS.includes(key)) throw new Error('not allowed');
+// The programs Settings > Agents can point at, for every agent of a runtime.
+const PROGRAMS = { claudeBin: 'Claude Code', codexBin: 'Codex' };
+
+// Settings > Agents may set what program agent runs start: a custom agent's
+// command (`id` names the agent), or where Claude Code or Codex is
+// ('claudeBin', 'codexBin', for every agent). Pages cannot set it through the
+// local server; here the user confirms the exact command in a native dialog.
+async function setAgentProgram(win, { key, value, id } = {}) {
+  if (key !== 'command' && !Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
   const next = typeof value === 'string' && value.trim() ? value.trim() : null;
-  checkSettingsPatch({ agent: { [key]: next } });
-  if (next !== null && next !== settings.agent[key]) {
+  const current = (await readSettings()).settings;
+  const agent = key === 'command' ? current.agents.find((a) => a.id === id) : null;
+  if (key === 'command' && !agent) throw new Error('no such agent');
+  if (key === 'command') checkAgentPatch({ command: next });
+  else checkSettingsPatch({ [key]: next });
+  const before = agent ? agent.command : current[key];
+  if (next !== null && next !== before) {
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
-      message: key === 'command' ? 'Run this command for the agent?' : 'Use this program as Claude Code?',
-      detail: `${next}\n\nOpenDoc runs it in the doc's folder whenever a comment is waiting for the agent.`,
+      message: agent ? `Run this command for ${agent.name}?` : `Use this program as ${PROGRAMS[key]}?`,
+      detail: `${next}\n\nOpenDoc runs it in the doc's folder whenever a comment is waiting for ${agent ? agent.name : 'an agent'}.`,
       buttons: ['Allow', 'Cancel'],
       defaultId: 1,
       cancelId: 1,
     });
     if (response !== 0) return false;
   }
-  await updateSettings({ agent: { [key]: next } });
+  if (agent) await editAgents((agents) => updateAgent(agents, id, { command: next }));
+  else await updateSettings({ [key]: next });
   return true;
 }
 
-// Settings > Agent > Choose…: pick the Claude Code executable in a native dialog.
-async function chooseClaude(win) {
+// Settings > Agents > Choose…: pick the Claude Code or Codex executable in a native dialog.
+async function chooseProgram(win, key) {
+  if (!Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: 'Choose Claude Code',
+    title: `Choose ${PROGRAMS[key]}`,
     buttonLabel: 'Choose',
     filters: process.platform === 'win32' ? [{ name: 'Programs', extensions: ['exe', 'cmd'] }] : [],
     properties: ['openFile'],
   });
   if (canceled || filePaths.length === 0) return false;
-  await updateSettings({ agent: { bin: filePaths[0] } });
+  await updateSettings({ [key]: filePaths[0] });
   return true;
 }
 
@@ -422,7 +434,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'open' && (fromStart || fromDoc)) return void (await openDialog(win));
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'agentProgram' && fromDoc) return setAgentProgram(win, arg);
-  if (action === 'chooseClaude' && fromDoc) return chooseClaude(win);
+  if (action === 'chooseProgram' && fromDoc) return chooseProgram(win, arg);
   if (action === 'recent' && fromStart) {
     return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
   }

@@ -3,33 +3,75 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_AGENT } from '../src/core/settings.js';
-import { agentFromSettings, hooksWarning } from '../src/server/agents/config.js';
+import { AGENT_DEFAULTS, RUNTIMES as AGENT_RUNTIMES } from '../src/core/agents.js';
+import { RUNTIMES, agentSpec, hooksWarning } from '../src/server/agents/config.js';
+import { buildPrompt, privateWorkdir } from '../src/server/agents/adapters.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-agentcfg-'));
+const agent = (fields) => ({ ...AGENT_DEFAULTS, id: 'a_test01', name: 'claude', ...fields });
 
-test('agentFromSettings: off is null; on builds the adapter and limits', async () => {
+test('agentSpec: each runtime builds its adapter; the persona and limits carry over', async () => {
   const dir = await tempDir();
   const doc = join(dir, 'plan.md');
-  assert.equal(agentFromSettings(DEFAULT_AGENT, doc), null);
-
-  const claude = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, bin: join(dir, 'claude.exe'), runTimeoutMinutes: 3, runsPerHour: 7, editMode: 'approve' }, doc);
+  const claude = agentSpec(agent({ persona: 'Be terse.', runTimeoutMinutes: 3, runsPerHour: 7, editMode: 'approve', presence: 'dnd' }), { claudeBin: join(dir, 'claude.exe') }, doc);
   assert.equal(claude.name, 'claude');
+  assert.equal(claude.id, 'a_test01');
+  assert.equal(claude.persona, 'Be terse.');
   assert.equal(claude.adapter.name, 'claude');
   assert.equal(claude.adapter.program, join(dir, 'claude.exe'));
   assert.deepEqual(claude.limits, { timeoutMs: 3 * 60 * 1000, runsPerHour: 7 });
   assert.equal(claude.editMode, 'approve');
+  assert.equal(claude.presence, 'dnd');
 
-  const custom = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, kind: 'custom', name: 'bot', command: 'mybot --prompt-file {promptFile}' }, doc);
+  const custom = agentSpec(agent({ runtime: 'custom', name: 'bot', command: 'mybot --prompt-file {promptFile}' }), { claudeBin: null }, doc);
   assert.equal(custom.adapter.name, 'custom');
   assert.equal(custom.adapter.program, 'mybot');
+
+  // A Codex agent cannot ask during a run: the web needs a grant given in advance.
+  const codexAgent = agent({ runtime: 'codex', name: 'codex', model: 'gpt-5', persona: 'Be terse.', webAccess: true });
+  const ungranted = agentSpec(codexAgent, { claudeBin: null }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
+  assert.ok(ungranted.includes('web_search="disabled"'));
+  const grants = [{ id: 'g_test01', agent: 'a_test01', permission: 'web', doc, folder: null, at: '2026-10-15T00:00:00Z' }];
+  const codex = agentSpec(codexAgent, { claudeBin: join(dir, 'claude.exe'), codexBin: join(dir, 'codex.exe'), grants }, doc);
+  assert.deepEqual(codex.asks, [], 'nothing to ask for mid-run');
+  assert.equal(codex.adapter.name, 'codex');
+  assert.equal(codex.adapter.program, join(dir, 'codex.exe'), 'Settings > Agents > Codex');
+  assert.equal(codex.persona, 'Be terse.');
+  assert.equal(codex.adapter.supportsSessions, true);
+  assert.equal(codex.adapter.workdir(doc), privateWorkdir(doc, 'codex'));
+  const args = codex.adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath: doc }).args;
+  assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);
+  assert.ok(args.includes('web_search="live"'));
+  assert.equal(codex.warning, null, 'Claude Code hooks do not apply to Codex');
+  assert.deepEqual(Object.keys(RUNTIMES), ['claude', 'codex', 'custom']);
+  assert.deepEqual(Object.keys(RUNTIMES), [...AGENT_RUNTIMES]);
 });
 
-test('a custom agent without a command is unavailable, with a reason', async () => {
-  const agent = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, kind: 'custom' }, join(await tempDir(), 'plan.md'));
-  const result = await agent.adapter.preflight();
-  assert.equal(result.ok, false);
-  assert.match(result.error, /Settings > Agent/);
+test('a custom agent without a command, or a runtime this version lacks, is unavailable with a reason', async () => {
+  const doc = join(await tempDir(), 'plan.md');
+  const noCommand = await agentSpec(agent({ runtime: 'custom', name: 'bot' }), { claudeBin: null }, doc).adapter.preflight();
+  assert.equal(noCommand.ok, false);
+  assert.match(noCommand.error, /No command is set for bot; set it in Settings > Agents/);
+  const unknown = await agentSpec(agent({ runtime: 'gemini' }), { claudeBin: null }, doc).adapter.preflight();
+  assert.match(unknown.error, /gemini agents are not supported/);
+});
+
+test('every Claude agent of a doc starts in a folder of its own', () => {
+  const doc = join(tmpdir(), 'plan.md');
+  assert.notEqual(privateWorkdir(doc, 'muse'), privateWorkdir(doc, 'fact-checker'));
+  assert.equal(privateWorkdir(doc, 'Muse'), privateWorkdir(doc, 'muse'));
+  assert.equal(agentSpec(agent({ name: 'muse' }), { claudeBin: 'claude' }, doc).adapter.workdir(doc), privateWorkdir(doc, 'muse'));
+});
+
+test('the prompt carries the persona and names the other agents, for any runtime', () => {
+  const plain = buildPrompt({ name: 'muse', docFile: 'plan.md' });
+  assert.doesNotMatch(plain, /persona/i);
+  assert.doesNotMatch(plain, /Other agents/);
+  const prompt = buildPrompt({ name: 'muse', docFile: 'plan.md', persona: '  You are a poet.\nBe bold.  ', others: ['fact-checker', 'grammar-police'] });
+  assert.match(prompt, /<persona>\nYou are a poet\.\nBe bold\.\n<\/persona>/);
+  assert.match(prompt, /not the rules below or your tools and permissions/);
+  assert.match(prompt, /Other agents in this doc: @fact-checker, @grammar-police/);
+  assert.ok(prompt.indexOf('<persona>') < prompt.indexOf('Never resolve a thread'), 'the rules come after the persona');
 });
 
 test('hooksWarning names the project settings that define hooks, unless runs are isolated', async () => {

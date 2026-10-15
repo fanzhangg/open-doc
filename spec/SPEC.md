@@ -117,8 +117,11 @@ clears it too.
 
 Each entry is `{ "name", "kind" }`. A name matches
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is unique, compared case-insensitively.
-A participant is added the first time they post, or when an agent starts
-waiting for comments. Editors use this list for @ autocompletion.
+A participant is added the first time they post, when an agent starts
+waiting for comments, or when a human invites an agent into the doc. A
+participant who leaves (for example an agent the human removed from the doc)
+is taken out of the list; their messages stay, and they stop working on any
+thread. Editors use this list for @ autocompletion.
 
 ### 2.5 Edits
 
@@ -293,18 +296,26 @@ mention.
 A thread is in participant `P`'s inbox when all of these hold:
 
 - `status` is `"open"`;
-- its latest message that is not an undo notice or an apply notice (§2.3)
-  has an author with `kind: "human"`;
-- that message mentions `P`, or mentions no one;
+- it has a message from a human (`kind: "human"`) that is not an undo notice
+  or an apply notice (§2.3); call the latest such message the **ask**;
+- the ask is **addressed** to the participants it mentions; an ask that
+  mentions no one, in a thread where an agent posted before it, is addressed
+  to the agent that posted last before it (a follow-up continues that
+  conversation); otherwise it is addressed to no one;
+- either the ask is addressed to `P` and no message after it (other than
+  notices) is from `P`, or it is addressed to no one and no message (other
+  than notices) follows it;
 - it is not marked `working` by `P` (a stale value does not count).
 
 A comment addressed only to someone else does not wake `P`, and undoing an
-edit or applying a proposal does not ask the agent to act again. A tool MAY
-let a participant narrow its inbox to messages that mention it (for example
-an agent set to "do not disturb"). The last rule
-keeps a participant who is still answering a thread from being handed it
-again. The inbox is
-computed from the sidecar alone; tools need no cursor or other state.
+edit or applying a proposal does not ask the agent to act again. A comment
+that mentions several agents waits on each of them until each has answered
+it; one addressed to no one is answered once, by whoever answers first. A
+tool MAY let a participant narrow its inbox to asks addressed to it (for
+example a co-pilot agent that answers only when called, leaving comments for
+no one to a pilot). The last rule keeps a participant who is still answering
+a thread from being handed it again. The inbox is computed from the sidecar
+alone; tools need no cursor or other state.
 
 ## 6. Writing
 

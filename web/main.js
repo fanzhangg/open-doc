@@ -1,14 +1,14 @@
-// The opendoc page: wires the editor, the comment margin, the agent's presence
-// and the server together. Saves are debounced and conditional on the hash
+// The opendoc page: wires the editor, the comment margin, the people (the
+// doc's agents and you) and the server together. Saves are debounced and conditional on the hash
 // they were based on. Changes made on disk (usually by the agent) arrive as
-// SSE events and are merged into the page like a collaborator's edits, the
+// SSE events and are merged into the page like a collaborator's edits, an
 // agent's typed in by its caret: only a change that overlaps what the human
 // changed in the same paragraph asks them to choose.
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
 import { avatar, createCommentMargin } from './threads.js';
-import { createAgentPresence } from './agent.js';
+import { createPeople } from './agent.js';
 import { createChrome } from './ui.js';
 import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
@@ -35,7 +35,7 @@ const commentsToggle = document.querySelector('.od-tool-comment');
 let editor;
 let chrome;
 let margin;
-let presence;
+let people;
 let history;
 let settings;
 let defaultName;
@@ -52,11 +52,12 @@ let version = 0;
 let saveTimer;
 let pendingExternal = null;
 let pendingSelection = null;
-// The agent's text the last merge left out for the human's, offered back on
-// its comment once the human's is saved: { text: the merged markdown,
-// items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
+// An agent's text the last merge left out for the human's, offered back on
+// its comment once the human's is saved: { by: the agent, text: the merged
+// markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
+let asking = []; // runs' requests for a permission, waiting on the human
 
 async function start() {
   let initial;
@@ -104,7 +105,7 @@ async function start() {
   });
   synced = editor.getMarkdown();
   chrome = createChrome({
-    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, agentSource: initial.agentSource,
+    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
 
@@ -124,19 +125,28 @@ async function start() {
     reviewing: () => reviewing,
     onSelect: select,
     anchorTops: (items) => editor.anchorTops(items),
+    mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
+    replyHint: (body, thread) => people?.replyHint(body, thread) ?? '',
+    permissionsFor: (threadId) => asking.filter((r) => r.threadIds[0] === threadId),
+    onPermission: answerPermission,
   });
   editor.onLayout(() => margin.layout());
 
-  presence = createAgentPresence({
-    root: document.querySelector('.od-agent'),
+  people = createPeople({
+    root: document.querySelector('.od-agents'),
+    invite: document.querySelector('.od-invite'),
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
-    setPresence: (value) => settings.set({ agent: { presence: value } }),
-    openSettings: (section) => chrome.command(section === 'agent' ? 'agent-settings' : 'settings'),
+    openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
+    onSidecar: applySidecar,
+    onSettings: (next) => settings.receive(next),
+    onError: (message) => setStatus(message, 'error'),
   });
-  presence.render(initial.agent);
-  chrome.agentStatus(initial.agent);
+  asking = initial.permissions ?? [];
+  people.render({ agents: initial.agents, roster: settings.get().agents, grants: initial.grants ?? [], permissions: asking });
+  settings.subscribe((next) => people.render({ roster: next.agents }));
+  chrome.agentStatus(initial.agents);
   applySidecar(initial.sidecar);
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
@@ -179,20 +189,16 @@ async function start() {
   events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
   events.addEventListener('sidecar', refreshThreads);
   events.addEventListener('history', () => history.changed());
-  // The agent is about to edit there: its caret goes there first.
+  // The running agent is about to edit there: its caret goes there first.
   events.addEventListener('agentTarget', (event) => {
     const { quote } = JSON.parse(event.data);
-    const agent = presence.status();
+    const agent = people.running();
     if (agent && quote) editor.agentLooking(agent.name, [{ exact: quote, prefix: '', suffix: '', start: 0 }]);
   });
-  events.addEventListener('agent', (event) => {
-    const next = JSON.parse(event.data);
-    showAgentCaret(presence.status(), next);
-    presence.render(next);
-    chrome.agentStatus(next);
-  });
+  events.addEventListener('agents', (event) => showAgents(JSON.parse(event.data)));
+  events.addEventListener('permissions', (event) => showAsking(JSON.parse(event.data)));
+  events.addEventListener('grants', (event) => people.render({ grants: JSON.parse(event.data) }));
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
-  events.addEventListener('agentSource', (event) => chrome.agentSource(JSON.parse(event.data).agentSource));
   events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
@@ -304,18 +310,17 @@ async function doSync() {
   editor.finishReplay();
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   const mine = editor.getMarkdown();
-  // Where the agent changed text the human is still typing in, the human's
+  // Where an agent changed text the human is still typing in, the human's
   // stays and the agent's goes back to its comment as a proposal. Other
   // changes (another program, a collaborator the page does not know) still
   // ask the human to choose.
-  const agent = presence.status();
-  const fromAgent = Boolean(agent) && by === agent.name;
+  const fromAgent = people.statuses().some((a) => a.name === by);
   const merged = merge3(synced, mine, theirs, fromAgent ? { prefer: 'ours' } : {});
   if (merged.conflict) {
     showConflict(by);
     return;
   }
-  keepOverwritten(merged);
+  keepOverwritten(merged, by);
   // The agent's changes are typed in; anything else just appears.
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
@@ -333,12 +338,12 @@ async function doSync() {
 }
 
 // Tell the server which paragraph the human is typing in, at most once a
-// second, so the agent's runs keep out of it (the server forgets it 15
-// seconds after the last report).
+// second, so agents' runs keep out of it (the server forgets it 15 seconds
+// after the last report).
 let typingTimer = null;
 let typingSentAt = 0;
 function reportTyping() {
-  if (typingTimer || !presence?.status()) return;
+  if (typingTimer || !people?.statuses().length) return;
   typingTimer = setTimeout(() => {
     typingTimer = null;
     typingSentAt = Date.now();
@@ -347,25 +352,25 @@ function reportTyping() {
   }, Math.max(0, TYPING_REPORT_MS - (Date.now() - typingSentAt)));
 }
 
-// Remember what a merge left out of the agent's change, following anything
-// remembered from an earlier merge into this one's text.
-function keepOverwritten(merged) {
+// Remember what a merge left out of agent `by`'s change, following anything
+// remembered from an earlier merge (of the same agent) into this one's text.
+function keepOverwritten(merged, by) {
   const items = [];
-  if (overwritten) {
+  if (overwritten && overwritten.by === by) {
     for (const item of overwritten.items) {
       const range = followLines(overwritten.text, merged.text, item.at, item.count);
       if (range) items.push({ ...item, at: range.start, count: range.end - range.start });
     }
   }
   for (const d of merged.dropped ?? []) items.push({ at: d.at, count: d.count, theirs: d.theirs });
-  overwritten = items.length > 0 ? { text: merged.text, items } : null;
+  overwritten = items.length > 0 ? { by, text: merged.text, items } : null;
 }
 
 // The human's text is saved: offer the agent's version of each region it was
 // kept over, as it reads now (`saved`, the markdown just saved).
 function offerOverwritten(saved) {
   if (!overwritten) return;
-  const { text, items } = overwritten;
+  const { by, text, items } = overwritten;
   overwritten = null;
   const lines = saved.split('\n');
   const trim = (s) => s.replace(/^\n+|\n+$/g, '');
@@ -377,30 +382,62 @@ function offerOverwritten(saved) {
     const after = trim(item.theirs);
     if (before && before !== after) changes.push({ before, after });
   }
-  if (changes.length > 0) api.agentOverwritten(changes).catch(() => {});
+  if (changes.length > 0) api.agentOverwritten(by, changes).catch(() => {});
 }
 
-// A run starting puts the agent's caret on the comment it is reading, as a
-// collaborator would scroll there; when it stops, the caret stays and fades.
-function showAgentCaret(before, after) {
-  if (!after) {
-    editor.agentLooking(null);
-    return;
+// The doc's agents changed (a status, or who is here).
+function showAgents(next) {
+  showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
+  people.render({ agents: next });
+  chrome.agentStatus(next);
+}
+
+// Runs' requests for a permission, waiting on the human: each shows in the
+// thread its run is working on. A new one brings the comments into view.
+function showAsking(next) {
+  const fresh = next.some((r) => !asking.some((a) => a.id === r.id));
+  asking = next;
+  people.render({ permissions: next });
+  if (fresh && !commentsShown()) showComments(true);
+  margin.rerender();
+}
+
+async function answerPermission(id, answer, { folderOnly }) {
+  try {
+    const result = await api.answerPermission(id, answer, { folderOnly });
+    people.render({ grants: result.grants });
+    showAsking(result.permissions);
+  } catch (error) {
+    setStatus(`Could not answer: ${error.message}`, 'error');
+    if (error.status === 404) showAsking(asking.filter((r) => r.id !== id)); // it timed out meanwhile
   }
-  const running = after.state === 'running';
-  if (running && before?.state !== 'running') {
+}
+
+// What an agent request (invite, remove, change an agent) answers with.
+function takeAgentResult(result) {
+  if (result.settings) settings.receive(result.settings);
+  if (result.sidecar) applySidecar(result.sidecar);
+  if (result.agents) showAgents(result.agents);
+}
+
+// A run starting puts its agent's caret on the comment it is reading, as a
+// collaborator would scroll there; when it stops, the caret stays and fades.
+// Agents run one at a time.
+function showAgentCaret(before, after) {
+  if (after && after.name !== before?.name) {
     const ids = after.threadIds ?? [];
     const anchors = ids.map((id) => sidecar?.threads.find((t) => t.id === id)?.anchor).filter(Boolean);
     editor.agentLooking(after.name, anchors);
-  } else if (!running && before?.state === 'running') {
+  } else if (!after && before) {
     editor.agentResting();
   }
 }
 
-// Who most likely changed the file: the collaborator working on a comment.
+// Who most likely changed the file: the agent running, or the collaborator
+// working on a comment.
 function editorName(nextSidecar) {
-  const agent = presence.status();
-  if (agent?.state === 'running') return agent.name;
+  const agent = people.running();
+  if (agent) return agent.name;
   const working = nextSidecar.threads.map((t) => activeWorking(t)).find(Boolean);
   return working?.by ?? ON_DISK;
 }
@@ -498,6 +535,7 @@ function applySidecar(next) {
   sidecar = next;
   editor.setThreads(sidecar.threads);
   margin.update(sidecar, me);
+  people?.render({ participants: sidecar.participants });
   refreshPreview();
   const open = sidecar.threads.filter((t) => t.status === 'open').length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
@@ -599,7 +637,7 @@ async function createThread(body) {
 
 async function sendOp(op) {
   try {
-    applySidecar((await api.op(op)).sidecar);
+    takeAgentResult(await api.op(op)); // an @mention may have brought an agent in
   } catch (error) {
     setStatus(`Could not save comment: ${error.message}`, 'error');
     throw error;
@@ -723,7 +761,7 @@ function renameMe(next) {
   me = next;
   paintNameChip();
   margin?.update(sidecar, me);
-  presence?.renameMe();
+  people?.renameMe();
 }
 
 // Saving is automatic and local, so the header says nothing while it works;

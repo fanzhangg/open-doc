@@ -16,17 +16,41 @@ async function request(method, path, body) {
   return { status: response.status, data };
 }
 
+// A 409 is an answer for saves; elsewhere it is an error.
+function okData({ status, data }) {
+  if (status === 409) throw Object.assign(new Error(data.error ?? 'conflict'), { code: data.code, status });
+  return data;
+}
+
 export const api = {
   state: async () => (await request('GET', '/api/state')).data,
   saveDoc: (markdown, baseHash, { recreate = false } = {}) => request('PUT', '/api/doc', { markdown, baseHash, ...(recreate ? { recreate } : {}) }),
   op: async (op) => (await request('POST', '/api/ops', { op })).data,
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
-  agentAction: async (action) => (await request('POST', '/api/agent', { action })).data.status,
-  agentDetails: async () => (await request('GET', '/api/agent')).data,
+  /** 'retry' agent `name`, or set its 'presence' ({ presence: 'online' | 'dnd' }); resolves to its status. */
+  agentAction: async (name, action, extra = {}) => (await request('POST', '/api/agent', { name, action, ...extra })).data.status,
+  /** Agent `name`'s status and last run log. */
+  agentDetails: async (name) => (await request('GET', `/api/agent?name=${encodeURIComponent(name)}`)).data,
+  /** Invite agent `id` (from the user's agents) into the doc: { sidecar, agents }. */
+  invite: async (id) => okData(await request('POST', '/api/agents/invite', { id })),
+  /** Remove agent `name` from the doc: { sidecar, agents }. */
+  removeAgent: async (name) => okData(await request('POST', '/api/agents/remove', { name })),
+  /** A new agent for the user, invited into this doc with `invite`: { agent, settings, sidecar?, agents? }. */
+  createAgent: async (agent, { invite = false } = {}) => okData(await request('POST', '/api/roster', { agent, invite })),
+  /** Change the user's agent `id`: { settings, agents }. */
+  updateAgent: async (id, patch) => okData(await request('PUT', '/api/roster', { id, patch })),
+  /** Delete the user's agent `id` (it leaves this doc too): { settings, agents }. */
+  deleteAgent: async (id) => okData(await request('POST', '/api/roster/delete', { id })),
+  /** Answer a run's request for a permission ('once' | 'doc' | 'always' | 'deny'): { permissions, grants }. */
+  answerPermission: async (id, answer, { folderOnly = false } = {}) => okData(await request('POST', '/api/permissions/answer', { id, answer, folderOnly })),
+  /** Allow agent `agentId` a permission before it asks, scope 'doc' | 'always': { settings, grants }. */
+  grantAhead: async (agentId, permission, scope) => okData(await request('POST', '/api/grants', { agentId, permission, scope })),
+  /** Take back a grant: { settings, grants }. */
+  revokeGrant: async (id) => okData(await request('POST', '/api/grants/revoke', { id })),
   /** The human is typing in the block `anchor` points at (an anchor on the rendered text). */
   typing: (anchor) => request('POST', '/api/editing', { anchor }),
-  /** Offer back agent changes the human's text was kept over: [{ before, after }]. */
-  agentOverwritten: async (changes) => (await request('POST', '/api/agent/overwritten', { changes })).data.offered,
+  /** Offer back changes of agent `name` the human's text was kept over: [{ before, after }]. */
+  agentOverwritten: async (name, changes) => (await request('POST', '/api/agent/overwritten', { name, changes })).data.offered,
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await request('GET', '/api/history')).data.versions,
   /** One version: { version, markdown, before }. */

@@ -34,6 +34,7 @@ export function newId(prefix) {
  * Apply one operation.
  *
  *   { type: 'join', participant: { name, kind } }
+ *   { type: 'leave', name }                        // out of the @mention directory
  *   { type: 'addThread', id, anchor | null, message: { id, author, body, createdAt } }
  *   { type: 'addMessage', threadId, message }
  *   { type: 'resolve', threadId, by, kind?, at }   // humans only
@@ -53,6 +54,8 @@ export function applyOp(sidecar, op) {
   switch (op.type) {
     case 'join':
       return join(sidecar, op.participant);
+    case 'leave':
+      return leave(sidecar, op.name);
     case 'addThread':
       return addThread(sidecar, op);
     case 'addMessage':
@@ -81,6 +84,19 @@ function join(sidecar, participant) {
   validateParticipant(participant);
   if (sidecar.participants.some((p) => sameName(p.name, participant.name))) return sidecar;
   return { ...sidecar, participants: [...sidecar.participants, { name: participant.name, kind: participant.kind }] };
+}
+
+// A participant leaves the doc (an agent removed from it): they are no
+// longer offered for @mentions and stop working on any thread. Their messages
+// stay, under their name.
+function leave(sidecar, name) {
+  if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new OpError('bad_input', `invalid participant name: ${name}`);
+  if (!sidecar.participants.some((p) => sameName(p.name, name))) return sidecar;
+  return {
+    ...sidecar,
+    participants: sidecar.participants.filter((p) => !sameName(p.name, name)),
+    threads: sidecar.threads.map((t) => (t.working && sameName(t.working.by, name) ? { ...t, working: null } : t)),
+  };
 }
 
 function addThread(sidecar, { id, anchor, message }) {

@@ -15,7 +15,8 @@ import { startServer } from '../server/server.js';
 import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
-import { EDIT_MODES } from '../core/settings.js';
+import { EDIT_MODES, MAX_PERSONA } from '../core/agents.js';
+import { ASK_TIMEOUT_MS } from '../core/grants.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -35,10 +36,12 @@ Usage:
   opendoc mv       <old.md> <new.md>
   opendoc guard    (a Claude Code hook the server sets up for its runs; reads the hook input on stdin)
 
-Agent options for serve (the server starts a headless run for each new comment, except one
-addressed only to someone else):
+serve also runs your agents invited into the doc (Settings > Agents in the editor).
+Agent options for serve add one more agent for this run (it answers comments that mention
+it or no one):
   --agent claude                 Claude Code preset; --agent-bin <path> if claude is not found
   --agent <name> --agent-cmd "<command with {promptFile} {threadsFile} {doc}>"   any other agent
+  --persona "<text>"             the agent's role, e.g. "a strict copy editor; fix only grammar"
   --edit-mode auto|approve       auto (default): the agent edits the doc and replies;
                                  approve: it only replies with proposals for you to apply
   --model <name>  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
@@ -48,7 +51,8 @@ addressed only to someone else):
                                  A web page or file could trick it into leaking what it read.
 
 Identity: --as <name> (or OPENDOC_AS), --kind agent|human (or OPENDOC_KIND; default agent).
-A thread waits on <name> when its latest message is from a human and mentions @<name> or no one.
+A thread waits on <name> when its latest message from a human mentions @<name> and <name> has
+not answered it yet, or mentions no one and no one has answered it yet.
 wait blocks until a thread is waiting on <name>, marks it as being answered,
 prints it and exits 0; it exits 3 on timeout (default ${DEFAULT_WAIT_SECONDS}s, 0 = none).
 propose replies with changes instead of making them; each "before" must appear exactly
@@ -79,6 +83,7 @@ const OPTIONS = {
   'runs-per-hour': { type: 'string' },
   'max-budget-usd': { type: 'string' },
   'edit-mode': { type: 'string' },
+  persona: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -106,17 +111,16 @@ const COMMANDS = {
     const docPath = requireDoc(docArg);
     const port = values.port === undefined ? 0 : Number(values.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError('--port must be a port number');
-    // --agent flags pick the agent for this run; without them the agent is
-    // the one in the user's settings (Settings > Agent), which may be off.
+    // --agent flags add an agent for this run, next to the user's agents
+    // invited into the doc (Settings > Agents).
     const agent = agentOptions(values, docPath);
-    const server = await startServer(docPath, { port, agent, agentFromSettings: !agent });
+    const server = await startServer(docPath, { port, agent, agentFromSettings: true });
     out(`opendoc: editing ${basename(docPath)} at ${server.url}`);
-    if (server.dispatcher) {
-      const status = server.dispatcher.status();
+    for (const status of server.team.statuses()) {
       if (status.warning) out(`opendoc: warning: ${status.warning}`);
       out(status.state === 'unavailable'
         ? `opendoc: agent ${status.name} is unavailable: ${status.error}`
-        : `opendoc: ${status.name} is ${status.presence === 'dnd' ? `on do not disturb: it answers comments that mention @${status.name}` : 'online: it answers every comment (except ones addressed to someone else)'}, ${status.editMode === 'approve' ? 'proposing edits for you to apply' : 'editing the doc directly'}`);
+        : `opendoc: ${status.name} ${status.presence === 'dnd' ? `answers comments that mention @${status.name}` : 'answers comments that mention it or no one'}${status.role === 'pilot' ? ' (the pilot)' : ''}, ${status.editMode === 'approve' ? 'proposing edits for you to apply' : 'editing the doc directly'}`);
     }
     out('Press Ctrl+C to stop.');
     if (!values['no-open']) openBrowser(server.url);
@@ -187,10 +191,14 @@ const COMMANDS = {
       applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
   },
 
-  // A Claude Code PreToolUse hook for Edit, which the server sets up for its
-  // runs (OPENDOC_GUARD_URL and _TOKEN): asks the server whether the edit
-  // lands where the human is typing, and refuses it if so. Anything
-  // unexpected lets the edit through; the editor still merges it safely.
+  // A Claude Code PreToolUse hook the server sets up for its runs
+  // (OPENDOC_GUARD_URL and _TOKEN). On Edit: asks the server whether the edit
+  // lands where the human is typing, and refuses it if so; anything
+  // unexpected lets the edit through, since the editor still merges it
+  // safely. On a tool that needs the human's permission (the web, files
+  // beyond the doc): asks the server, which may wait for the human, and lets
+  // the call through only on an explicit allow; anything else leaves it to
+  // the run's rules, which deny it.
   async guard(_args, _values, { out, env, stdin }) {
     const url = env.OPENDOC_GUARD_URL;
     const token = env.OPENDOC_GUARD_TOKEN;
@@ -203,18 +211,33 @@ const COMMANDS = {
     } catch {
       return;
     }
-    if (input?.tool_name !== 'Edit') return;
+    const decide = (decision, reason) => out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }));
+    if (input?.tool_name !== 'Edit') {
+      if (typeof input?.tool_name !== 'string') return;
+      try {
+        const response = await fetch(`${url}/api/guard`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-opendoc-guard': token },
+          body: JSON.stringify({ tool: input.tool_name, input: input.tool_input ?? {} }),
+          signal: AbortSignal.timeout(ASK_TIMEOUT_MS + 30_000),
+        });
+        const verdict = await response.json();
+        if (verdict.decision === 'allow') decide('allow', 'The human allowed it.');
+        else if (verdict.decision === 'deny') decide('deny', verdict.reason);
+      } catch {
+        decide('deny', 'Could not ask the human for permission (OpenDoc did not answer). Do without it.');
+      }
+      return;
+    }
     try {
       const response = await fetch(`${url}/api/guard`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-opendoc-guard': token },
-        body: JSON.stringify({ oldString: input.tool_input?.old_string ?? '' }),
+        body: JSON.stringify({ tool: 'Edit', oldString: input.tool_input?.old_string ?? '' }),
         signal: AbortSignal.timeout(5000),
       });
       const verdict = await response.json();
-      if (verdict.allow === false) {
-        out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: verdict.reason } }));
-      }
+      if (verdict.allow === false) decide('deny', verdict.reason);
     } catch {
       // the server is gone or slow: let the edit through
     }
@@ -316,6 +339,7 @@ function agentOptions(values, docPath) {
   if (!values.agent) {
     if (values['agent-cmd']) throw new UsageError('--agent-cmd needs --agent <name>');
     if (values['edit-mode']) throw new UsageError('--edit-mode needs --agent <name>');
+    if (values.persona) throw new UsageError('--persona needs --agent <name>');
     return undefined;
   }
   const editMode = values['edit-mode'] ?? 'auto';
@@ -348,7 +372,9 @@ function agentOptions(values, docPath) {
     throw new UsageError(`no preset for agent "${values.agent}"; pass --agent-cmd "<command>"`);
   }
   const warning = hooksWarning(adapter, values['agent-isolated'] === true, docPath);
-  return { name: values.agent, adapter, limits, editMode, warning };
+  const persona = values.persona ?? '';
+  if (persona.length > MAX_PERSONA) throw new UsageError(`--persona must be at most ${MAX_PERSONA} characters`);
+  return { name: values.agent, persona, adapter, limits, editMode, warning };
 }
 
 function openBrowser(url) {

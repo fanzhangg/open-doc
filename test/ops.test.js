@@ -124,7 +124,51 @@ test('inbox: addressed to me or to no one, from a human, open, not already mine'
   s = applyOp(s, { type: 'addMessage', threadId: 't_noone1', message: msg(human, 'Better, but shorter?') });
   assert.ok(inbox(s, 'claude', now).some((t) => t.id === 't_noone1'), 'a follow-up wakes it without @');
   const dnd = (sc) => inbox(sc, 'claude', now, { mentionsOnly: true }).map((t) => t.id);
-  assert.deepEqual(dnd(s), ['t_both01'], 'on do not disturb, only a mention wakes it');
+  assert.deepEqual(dnd(s), ['t_noone1', 't_both01'], 'a co-pilot answers its mentions and follow-ups in its own threads');
+  s = applyOp(s, { type: 'addThread', id: 't_noone2', anchor: null, message: msg(human, 'Another open comment') });
+  assert.ok(!dnd(s).includes('t_noone2'), 'but not a comment for no one');
+});
+
+test('inbox with several agents: each one mentioned answers once; a comment for no one, only the first', () => {
+  const muse = { name: 'muse', kind: 'agent' };
+  let s = withAgents(claude, muse);
+  s = applyOp(s, { type: 'addThread', id: 't_both01', anchor: null, message: msg(human, '@claude @muse what do you think?') });
+  s = applyOp(s, { type: 'addThread', id: 't_noone1', anchor: null, message: msg(human, 'This is weak') });
+  const waiting = (name) => inbox(s, name).map((t) => t.id);
+  assert.deepEqual(waiting('claude'), ['t_both01', 't_noone1']);
+  assert.deepEqual(waiting('muse'), ['t_both01', 't_noone1']);
+
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(claude, 'Fine by me.') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_noone1', message: msg(claude, 'Rewrote it.') });
+  assert.deepEqual(waiting('claude'), [], 'claude answered both');
+  assert.deepEqual(waiting('muse'), ['t_both01'], 'muse still owes its answer to the comment that named it, not to the one claude took');
+
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(muse, 'Make it sing.') });
+  assert.deepEqual(waiting('muse'), []);
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(human, '@muse more?') });
+  assert.deepEqual(waiting('muse'), ['t_both01']);
+  assert.deepEqual(waiting('claude'), [], 'a follow-up for muse is not for claude');
+
+  // A reply that mentions no one continues with the agent that answered last.
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(muse, 'More it is.') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(human, 'Even more.') });
+  assert.deepEqual(waiting('muse'), ['t_both01']);
+  assert.deepEqual(waiting('claude'), []);
+  assert.deepEqual(inbox(s, 'muse', Date.now(), { mentionsOnly: true }).map((t) => t.id), ['t_both01'], 'also for a co-pilot');
+});
+
+test('leave: an agent removed from the doc is no longer a participant or working; its messages stay', () => {
+  let s = withAgents(claude);
+  s = applyOp(s, { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude look') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(claude, 'Looked.') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_aaaaaa', by: 'claude', since: new Date().toISOString() });
+  const left = applyOp(s, { type: 'leave', name: 'CLAUDE' });
+  assert.deepEqual(left.participants.map((p) => p.name), ['fzhan']);
+  assert.equal(left.threads[0].working, null);
+  assert.equal(left.threads[0].messages[1].author.name, 'claude');
+  assert.equal(applyOp(left, { type: 'leave', name: 'claude' }), left, 'leaving twice changes nothing');
+  assert.deepEqual(parseMentions('@claude again', left.participants), [], 'no longer offered for mentions');
+  assert.throws(() => applyOp(s, { type: 'leave', name: '@bad' }), (e) => e.code === 'bad_input');
 });
 
 test('edits: recorded on an agent reply, validated, idempotent; an undo notice wakes no one', () => {

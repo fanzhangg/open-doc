@@ -1,5 +1,5 @@
 // Local editor server for one doc: static editor assets, a small JSON API,
-// and a Server-Sent Events stream of changes (doc, sidecar, agent, settings).
+// and a Server-Sent Events stream of changes (doc, sidecar, agents, settings).
 // Single user, bound to 127.0.0.1, every API call carries a per-run token.
 
 import { createServer } from 'node:http';
@@ -9,16 +9,19 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, locate, project, sourceRange } from '../core/index.js';
-import { NAME_PATTERN } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, SettingsError } from '../core/settings.js';
-import { StoreError, hashBytes, load, moveDoc, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
+import { OpError, applyOp, locate, newId, project, sourceRange } from '../core/index.js';
+import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
+import { AGENT_PROGRAM_KEYS, AgentError, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
+import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
+import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, readSettings, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, editAgents, editGrants, readSettings, updateSettings, watchSettings } from '../store/settings.js';
+import { ASK_TIMEOUT_MS, MAX_GRANTS, PERMISSIONS } from '../core/grants.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
-import { Dispatcher } from './agents/dispatcher.js';
-import { agentFromSettings } from './agents/config.js';
+import { Team } from './agents/team.js';
+import { agentSpec } from './agents/config.js';
+import { Permissions, grantsHere, holds, samePath } from './agents/permissions.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -42,38 +45,70 @@ class HttpError extends Error {
 }
 
 /**
- * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
- * a headless agent run whenever a comment waits on that agent, until the
- * human changes the agent's settings in this editor; then they apply as if
- * `agentFromSettings` had been given. Without it,
- * `agentFromSettings: true` takes the agent from the user's settings
- * (Settings > Agent) and restarts it whenever they change.
+ * The doc's agents run as a Team (src/server/agents/team.js): a headless
+ * agent run starts whenever a comment waits on one of them, one run at a time.
+ * `agent`, when given, is `{ name, adapter, limits, editMode, persona }`, an
+ * agent from `serve` flags that joins the doc and works on it while this
+ * server runs. `agentFromSettings: true` also runs the user's agents
+ * (Settings > Agents) that are invited into the doc, following every change
+ * to them or to who is invited.
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder). `typingMs` is how long the human counts as typing
  * in a paragraph after their last keystroke there (default 15 s).
+ * `askTimeoutMs` is how long a run's request for a permission waits for the
+ * human (default 5 min).
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
- * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
+ * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS,
+  settingsDir = configDir(), typingMs = TYPING_MS, askTimeoutMs = ASK_TIMEOUT_MS,
 } = {}) {
-  let agent = fixedAgent;
-  let agentSource = fixedAgent ? 'flags' : useSettings ? 'settings' : 'none';
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
-  let dispatcher = null;
+  // The doc's agents; they start once the server listens (syncAgents).
+  const broadcastAgents = () => broadcast('agents', team.statuses());
+  const team = new Team({
+    docPath,
+    onChange: broadcastAgents,
+    options: (spec) => ({
+      onStatus: broadcastAgents,
+      guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken(spec.name) },
+      typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
+    }),
+  });
   let actualPort = port;
   let lastDocHash = null;
   let lastSidecarHash = null;
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
-  // Where the human last typed ({ anchor, at }, from the page), and the key
-  // the agent's runs use to ask the guard before each edit: not the page's
-  // token, which would let a run act as the human.
+  // Where the human last typed ({ anchor, at }, from the page), and the keys
+  // the agents' runs use to ask the guard before an edit or a risky tool
+  // call: one per agent, so a request names the agent that made it, and not
+  // the page's token, which would let a run act as the human.
   let editing = null;
-  const guardToken = randomBytes(16).toString('hex');
+  const guardTokens = new Map(); // agent name, lower case → token
+  const guardToken = (name) => {
+    const key = name.toLowerCase();
+    if (!guardTokens.has(key)) guardTokens.set(key, randomBytes(16).toString('hex'));
+    return guardTokens.get(key);
+  };
+  const guardedAgent = (given) => {
+    for (const [key, value] of guardTokens) if (tokenMatches(given, value)) return team.get(key);
+    return null;
+  };
+  // A run's requests for the web or the human's files, waiting on the human.
+  const permissions = new Permissions({
+    docPath: () => docPath,
+    timeoutMs: askTimeoutMs,
+    grants: async () => (await currentSettings()).grants,
+    addGrant: (grant) => editGrants((grants) => [
+      ...grants.filter((g) => !(g.agent === grant.agent && g.permission === grant.permission && g.doc === grant.doc && g.folder === grant.folder)),
+      grant,
+    ].slice(-MAX_GRANTS), settingsDir),
+    onChange: () => broadcast('permissions', permissions.list()),
+  });
   // Writes to the doc and its sidecar run one at a time, so a rename never
   // lands in the middle of a save.
   let writes = Promise.resolve();
@@ -133,8 +168,17 @@ export async function startServer(docPath, {
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'not_found', 'not found');
     if (req.method === 'POST' && url.pathname === '/api/guard') {
       checkWriteRequest(req, actualPort);
-      if (!tokenMatches(req.headers['x-opendoc-guard'], guardToken)) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
-      return sendJson(res, 200, await guard(await readJson(req)));
+      const member = guardedAgent(req.headers['x-opendoc-guard']);
+      if (!member) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
+      const body = await readJson(req);
+      if (typeof body?.tool === 'string' && body.tool !== 'Edit') {
+        // The hook waits while the human decides; it going away ends the wait.
+        const gone = new AbortController();
+        res.on('close', () => gone.abort());
+        const input = body.input && typeof body.input === 'object' && !Array.isArray(body.input) ? body.input : {};
+        return sendJson(res, 200, await permissions.decide(member, body.tool, input, gone.signal));
+      }
+      return sendJson(res, 200, await guard(body));
     }
     if (!tokenMatches(req.headers['x-opendoc-token'] ?? url.searchParams.get('t'), token)) {
       throw new HttpError(403, 'forbidden', 'missing or wrong token');
@@ -159,26 +203,69 @@ export async function startServer(docPath, {
         return sendJson(res, 200, await readSettings(settingsDir));
       case 'PUT /api/settings': {
         const patch = await readJson(req);
-        await checkAgentProgram(patch);
-        const settings = await updateSettings(patch, settingsDir);
-        setPresence(settings.agent.presence); // at once, without waiting for the file watcher
-        if (agentSource === 'flags' && Object.keys(patch.agent ?? {}).some((key) => key !== 'presence')) useSettingsFromNow(settings.agent);
-        return sendJson(res, 200, { settings });
+        if (patch && Object.hasOwn(patch, 'agents')) throw new HttpError(400, 'bad_input', 'agents are changed through /api/roster');
+        if (patch && Object.hasOwn(patch, 'grants')) throw new HttpError(400, 'bad_input', 'grants are given when an agent asks, and revoked through /api/grants/revoke');
+        await checkProgram(PROGRAM_KEYS, patch, (await readSettings(settingsDir)).settings);
+        return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
       }
-      case 'GET /api/agent':
-        if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
-        return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
+      case 'GET /api/agent': {
+        const member = team.get(url.searchParams.get('name') ?? '');
+        if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
+        return sendJson(res, 200, { status: member.status(), log: member.log() });
+      }
       case 'POST /api/agent':
         return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
+      case 'POST /api/agents/invite': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await serial(() => invite(body?.id)));
+      }
+      case 'POST /api/agents/remove': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await serial(() => removeAgent(body?.name)));
+      }
+      case 'POST /api/roster': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await rosterCreate(body));
+      }
+      case 'PUT /api/roster': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await rosterUpdate(body));
+      }
+      case 'POST /api/roster/delete': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await rosterDelete(body));
+      }
+      case 'POST /api/permissions/answer': {
+        const body = await readJson(req);
+        if (typeof body?.id !== 'string') throw new HttpError(400, 'bad_input', 'expected { id, answer }');
+        try {
+          await permissions.answer(body.id, body.answer, { folderOnly: body.folderOnly === true });
+        } catch (error) {
+          if (error.code === 'not_found') throw new HttpError(404, 'not_found', error.message);
+          if (error.code === 'bad_input') throw new HttpError(400, 'bad_input', error.message);
+          throw error;
+        }
+        return sendJson(res, 200, { permissions: permissions.list(), grants: await grantsNow() });
+      }
+      case 'POST /api/grants':
+        return sendJson(res, 200, await grantAhead(await readJson(req)));
+      case 'POST /api/grants/revoke': {
+        const id = (await readJson(req))?.id;
+        if (typeof id !== 'string') throw new HttpError(400, 'bad_input', 'expected { id }');
+        const settings = await editGrants((grants) => grants.filter((g) => g.id !== id), settingsDir);
+        return sendJson(res, 200, { settings, grants: grantsHere(settings.grants, docPath) });
+      }
       case 'POST /api/editing': {
         const anchor = (await readJson(req))?.anchor;
         editing = anchor ? { anchor: validAnchor(anchor), at: Date.now() } : null;
         return sendJson(res, 200, {});
       }
       case 'POST /api/agent/overwritten': {
-        const changes = validChanges((await readJson(req))?.changes);
-        if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
-        const offered = await serial(() => dispatcher.overwritten(changes));
+        const body = await readJson(req);
+        const changes = validChanges(body?.changes);
+        const member = typeof body.name === 'string' ? team.get(body.name) : team.running() ?? team.lastToRun();
+        if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
+        const offered = await serial(() => member.overwritten(changes));
         return sendJson(res, 200, { offered });
       }
       case 'GET /api/history':
@@ -224,7 +311,7 @@ export async function startServer(docPath, {
         await noteDisk(current); // whatever reached the disk since, before the human's change
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
-        dispatcher?.humanEdited(current.markdown, next); // not the agent's edit
+        team.humanEdited(current.markdown, next); // not the agent's edit
         await update(docPath, (s) => s); // refresh anchors against the saved doc
         await noteVersion(next, { kind: 'edit', author: await human() });
       }
@@ -248,7 +335,7 @@ export async function startServer(docPath, {
         await noteDisk(current);
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
-        dispatcher?.humanEdited(current.markdown, next);
+        team.humanEdited(current.markdown, next);
         await update(docPath, (s) => s);
         await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
       }
@@ -256,15 +343,14 @@ export async function startServer(docPath, {
     }
   }
 
-  // The agent's program (a custom command, or where Claude Code is) decides
+  // An agent's program (a custom command, or where Claude Code is) decides
   // what runs on this machine, so a page can only clear it. Setting one takes
   // the desktop app, which asks the user first, or editing settings.json.
-  async function checkAgentProgram(patch) {
-    if (!patch?.agent || typeof patch.agent !== 'object') return;
-    const current = (await readSettings(settingsDir)).settings.agent;
-    for (const key of AGENT_PROGRAM_KEYS) {
-      if (Object.hasOwn(patch.agent, key) && patch.agent[key] !== null && patch.agent[key] !== current[key]) {
-        throw new HttpError(403, 'forbidden', "the agent's program can be set in the desktop app or in settings.json, not from the page");
+  async function checkProgram(keys, patch, current) {
+    if (!patch || typeof patch !== 'object') return;
+    for (const key of keys) {
+      if (Object.hasOwn(patch, key) && patch[key] !== null && patch[key] !== (current?.[key] ?? null)) {
+        throw new HttpError(403, 'forbidden', "an agent's program can be set in the desktop app or in settings.json, not from the page");
       }
     }
   }
@@ -280,9 +366,167 @@ export async function startServer(docPath, {
       settings,
       settingsSaved: saved,
       defaultName: defaultName(),
-      agent: dispatcher?.status() ?? null,
-      agentSource,
+      agents: team.statuses(),
+      permissions: permissions.list(),
+      grants: grantsHere(settings.grants, docPath),
     };
+  }
+
+  // ---- what the human allowed the agents ----
+
+  async function grantsNow() {
+    return grantsHere((await currentSettings()).grants, docPath);
+  }
+
+  // Allow agent `agentId` a permission before it asks, in this doc or always:
+  // how a Codex agent, which cannot ask during a run, gets the web. Only for
+  // a permission its profile lets it ask for.
+  async function grantAhead(body) {
+    const { agentId, permission, scope } = body ?? {};
+    if (!PERMISSIONS.includes(permission) || !['doc', 'always'].includes(scope)) {
+      throw new HttpError(400, 'bad_input', 'expected { agentId, permission: web | files, scope: doc | always }');
+    }
+    const agent = (await currentSettings()).agents.find((a) => a.id === agentId);
+    if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
+    if (!(permission === 'web' ? agent.webAccess : agent.fileAccess)) {
+      throw new HttpError(409, 'not_asked', `${agent.name} may not ask for that; turn it on in Settings > Agents first`);
+    }
+    const doc = scope === 'doc' ? docPath : null;
+    const settings = await editGrants((grants) => [
+      ...grants.filter((g) => !(g.agent === agent.id && g.permission === permission && g.doc === doc && g.folder === null)),
+      { id: newId('g'), agent: agent.id, permission, doc, folder: null, at: new Date().toISOString() },
+    ].slice(-MAX_GRANTS), settingsDir);
+    return { settings, grants: grantsHere(settings.grants, docPath) };
+  }
+
+  // ---- the doc's agents ----
+
+  // Who should work on the doc now: the agent from flags, the user's pilot
+  // (in every doc; it joins the participants), and the user's co-pilots that
+  // are participants of the doc (brought in by an @mention or added), except
+  // one being removed. A restart is due whenever an agent's `key` changes;
+  // a new role only changes whom it answers.
+  const leaving = new Set();
+  async function wantedAgents() {
+    const specs = [];
+    if (fixedAgent) specs.push({ presence: 'online', ...fixedAgent, key: 'flags', source: 'flags', join: true });
+    if (!useSettings) return specs;
+    const { settings } = await readSettings(settingsDir);
+    let participants = [];
+    try {
+      participants = (await readSidecar(docPath)).participants;
+    } catch {
+      return specs; // a sidecar that cannot be read invites no one
+    }
+    for (const agent of settings.agents) {
+      const pilot = agent.role === 'pilot';
+      const here = participants.some((p) => p.kind === 'agent' && sameName(p.name, agent.name));
+      if (!(pilot || here) || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
+      // A person of the same name keeps the name; the agent stays out.
+      if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
+      // A Codex agent searches the web only with a grant given in advance, so one restarts it.
+      const codexWeb = agent.runtime === 'codex' ? holds(settings.grants, { agentId: agent.id, permission: 'web', docPath }) : undefined;
+      const key = JSON.stringify({ ...agent, role: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, codexWeb });
+      specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: pilot && !here });
+    }
+    return specs;
+  }
+
+  // Bring the team in line with the settings and the sidecar, one change at a time.
+  let agentChanges = Promise.resolve();
+  let closed = false;
+  let listening = false; // runs need the server's port, for the guard
+  function syncAgents() {
+    const run = agentChanges.then(async () => {
+      if (!closed && listening) await team.sync(await wantedAgents());
+    });
+    agentChanges = run.catch((error) => console.error('Could not start the agents:', error));
+    return agentChanges;
+  }
+
+  async function currentSettings() {
+    return (await readSettings(settingsDir)).settings;
+  }
+
+  // Invite agent `id` from the user's roster: it joins the doc's participants
+  // like a person added to it, and starts answering.
+  async function invite(id) {
+    const agent = (await currentSettings()).agents.find((a) => a.id === id);
+    if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
+    const sidecar = await update(docPath, (s) => {
+      const taken = s.participants.find((p) => sameName(p.name, agent.name));
+      if (taken && taken.kind !== 'agent') throw new HttpError(409, 'name_taken', `${taken.name} is a person in this doc; rename the agent first`);
+      return applyOp(s, { type: 'join', participant: { name: agent.name, kind: 'agent' } });
+    });
+    await syncAgents();
+    return { sidecar, agents: team.statuses() };
+  }
+
+  // Remove an agent from the doc: its run in progress ends, and it leaves the
+  // participants, so it is no longer offered for @mentions. Its comments stay.
+  async function removeAgent(name) {
+    if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new HttpError(400, 'bad_input', 'invalid name');
+    if (fixedAgent && sameName(fixedAgent.name, name)) throw new HttpError(409, 'flags', `${name} was started with --agent; stop opendoc serve to remove it`);
+    if (team.get(name)?.role === 'pilot') throw new HttpError(409, 'pilot', `${name} is the pilot, which works in every doc; make another agent the pilot to remove it`);
+    const { participants } = await readSidecar(docPath);
+    if (!participants.some((p) => p.kind === 'agent' && sameName(p.name, name))) throw new HttpError(404, 'not_found', `no agent ${name} in this doc`);
+    leaving.add(name.toLowerCase());
+    try {
+      await syncAgents();
+      const sidecar = await update(docPath, (s) => applyOp(s, { type: 'leave', name }));
+      return { sidecar, agents: team.statuses() };
+    } finally {
+      leaving.delete(name.toLowerCase());
+    }
+  }
+
+  // New agent for the user's roster, from the page: any fields but its
+  // program. With `invite`, it joins this doc at once.
+  async function rosterCreate(body) {
+    const { id: _id, ...fields } = body?.agent ?? {};
+    await checkProgram(AGENT_PROGRAM_KEYS, fields, {});
+    const me = (await human()).name;
+    let created;
+    const settings = await editAgents((agents) => {
+      created = createAgent(agents, fields, [me]);
+      return [...agents, created];
+    }, settingsDir).catch(agentError);
+    const joined = body?.invite === true ? await serial(() => invite(created.id)) : {};
+    return { agent: created, settings, ...joined };
+  }
+
+  // Change one of the user's agents. Renaming one that is in this doc keeps
+  // it here under the new name; other docs keep the old one until it is
+  // invited again.
+  async function rosterUpdate(body) {
+    const id = body?.id;
+    const patch = body?.patch ?? {};
+    const before = (await currentSettings()).agents.find((a) => a.id === id);
+    if (!before) throw new HttpError(404, 'not_found', 'no such agent');
+    await checkProgram(AGENT_PROGRAM_KEYS, patch, before);
+    const me = (await human()).name;
+    const settings = await editAgents((agents) => updateAgent(agents, id, patch, [me]), settingsDir).catch(agentError);
+    const after = settings.agents.find((a) => a.id === id);
+    if (after && !sameName(after.name, before.name)) {
+      await serial(() => update(docPath, (s) => {
+        if (!s.participants.some((p) => p.kind === 'agent' && sameName(p.name, before.name))) return s;
+        return applyOp(applyOp(s, { type: 'leave', name: before.name }), { type: 'join', participant: { name: after.name, kind: 'agent' } });
+      }));
+    }
+    await syncAgents();
+    return { settings, agents: team.statuses() };
+  }
+
+  // Delete one of the user's agents; it leaves this doc too. Other docs keep
+  // its name among their participants, as someone not available here.
+  async function rosterDelete(body) {
+    const agent = (await currentSettings()).agents.find((a) => a.id === body?.id);
+    if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
+    await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
+    const settings = await editGrants((grants) => grants.filter((g) => g.agent !== agent.id), settingsDir);
+    await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name: agent.name })));
+    await syncAgents();
+    return { settings, agents: team.statuses() };
   }
 
   // Add the doc as it now reads to its history (one version at a time, in
@@ -296,12 +540,12 @@ export async function startServer(docPath, {
     return chronicle;
   }
 
-  // The doc on disk changed and not by this server's hand: the agent's edit
-  // while it runs, otherwise a change made outside OpenDoc.
+  // The doc on disk changed and not by this server's hand: the running
+  // agent's edit (only one runs at a time), otherwise a change made outside OpenDoc.
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
-    const agentNow = dispatcher?.status();
-    return noteVersion(doc.markdown, agentNow?.state === 'running'
+    const agentNow = team.running()?.status();
+    return noteVersion(doc.markdown, agentNow
       ? { kind: 'edit', author: { name: agentNow.name, kind: 'agent' }, threadIds: agentNow.threadIds }
       : { kind: 'external', author: null });
   }
@@ -310,18 +554,34 @@ export async function startServer(docPath, {
     return { name: (await readSettings(settingsDir)).settings.name ?? defaultName(), kind: 'human' };
   }
 
+  // 'retry' an agent that is offline.
   async function agentAction(body) {
-    if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
-    const action = body?.action;
-    if (action === 'retry') await dispatcher.retry();
-    else throw new HttpError(400, 'bad_input', 'action must be retry');
-    return dispatcher.status();
+    const member = team.get(typeof body?.name === 'string' ? body.name : '');
+    if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
+    if (body.action !== 'retry') throw new HttpError(400, 'bad_input', 'action must be retry');
+    await member.retry();
+    return member.status();
   }
 
+  // A comment that @mentions one of the user's agents not in the doc yet
+  // brings it in first, as mentioning a person in Docs shares the doc with
+  // them; then the mention counts, and that agent answers.
   async function applyBrowserOp(body) {
     const op = validateOp(body?.op);
-    const sidecar = await update(docPath, (s) => applyOp(s, op));
-    return { sidecar };
+    const message = op.message;
+    const roster = message && useSettings ? (await currentSettings()).agents : [];
+    let joined = false;
+    const sidecar = await update(docPath, (s) => {
+      let next = s;
+      for (const name of parseMentions(message?.body ?? '', roster)) {
+        if (next.participants.some((p) => sameName(p.name, name))) continue;
+        next = applyOp(next, { type: 'join', participant: { name, kind: 'agent' } });
+        joined = true;
+      }
+      return applyOp(next, op);
+    });
+    if (joined) await syncAgents();
+    return { sidecar, ...(joined ? { agents: team.statuses() } : {}) };
   }
 
   function openEvents(req, res) {
@@ -346,7 +606,7 @@ export async function startServer(docPath, {
     if (at === -1) return { allow: true }; // the edit fails on its own
     const human = typingIn(markdown);
     if (human && at < human.end && human.start < at + old.length) {
-      dispatcher?.avoided();
+      team.running()?.avoided();
       return {
         allow: false,
         reason: `The human is typing in the paragraph that starts "${human.quote}" right now. Edit other parts first. If you still need to change this paragraph, try once more after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
@@ -405,7 +665,8 @@ export async function startServer(docPath, {
       if (sidecarHash !== lastSidecarHash) {
         lastSidecarHash = sidecarHash;
         broadcast('sidecar', { hash: sidecarHash });
-        dispatcher?.notify();
+        team.notify();
+        syncAgents(); // someone may have been invited or removed
       }
     } catch (error) {
       if (!(error instanceof StoreError)) console.error(error);
@@ -420,78 +681,29 @@ export async function startServer(docPath, {
       if (json === lastSettings) return;
       lastSettings = json;
       broadcast('settings', settings);
-      setPresence(settings.agent.presence);
-      if (useSettings) configureAgent(settings.agent);
+      broadcast('grants', grantsHere(settings.grants, docPath));
+      syncAgents();
     } catch (error) {
       console.error(error);
     }
-  }
-
-  async function startDispatcher() {
-    dispatcher = new Dispatcher({
-      docPath, ...agent, presence, onStatus: (status) => broadcast('agent', status),
-      guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken },
-      typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
-    });
-    await dispatcher.start();
-  }
-
-  // Presence (online / do not disturb) is the user's, from settings, for the
-  // agent of every doc (one started with flags too); it applies at once.
-  let presence = 'online';
-  function setPresence(next) {
-    presence = next;
-    dispatcher?.setPresence(next);
-  }
-
-  // Agent settings changed (or the server starts): let a run in progress
-  // finish, then stop the old agent and start the new one, if any. Changes
-  // apply one at a time, and settings that do not touch the agent (or only
-  // its presence) do nothing.
-  let agentSettings = null;
-  let agentChanges = Promise.resolve();
-  let closed = false;
-  function configureAgent(next) {
-    const json = JSON.stringify({ ...next, presence: undefined });
-    if (json === agentSettings) return agentChanges;
-    agentSettings = json;
-    agentChanges = agentChanges.then(async () => {
-      if (dispatcher) {
-        const old = dispatcher;
-        await old.drain();
-        await old.stop();
-        if (dispatcher === old) dispatcher = null;
-      }
-      if (closed) return;
-      agent = agentFromSettings(next, docPath);
-      if (agent) await startDispatcher();
-      else broadcast('agent', null);
-    }).catch((error) => console.error('Could not start the agent:', error));
-    return agentChanges;
-  }
-
-  // The human changed the agent's settings in an editor started with --agent
-  // options: from now on the settings decide here, as if it had been started
-  // without them. Changes made in other windows do not count.
-  function useSettingsFromNow(next) {
-    agentSource = 'settings';
-    useSettings = true;
-    broadcast('agentSource', { agentSource });
-    return configureAgent(next);
   }
 
   async function moveTo(newPath, move = moveDoc) {
     return serial(async () => {
       const target = (await move(docPath, newPath)) ?? newPath;
       stopWatching();
-      await dispatcher?.stop();
+      await team.stop();
       await chronicle;
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
+      const from = docPath;
       docPath = target;
+      team.docPath = target;
+      // What was allowed in this doc stays allowed under its new name.
+      await editGrants((grants) => grants.map((g) => (g.doc !== null && samePath(g.doc, from) ? { ...g, doc: target } : g)), settingsDir)
+        .catch((error) => console.error('Could not move the grants:', error));
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
-      if (useSettings && agentSettings) agent = agentFromSettings(JSON.parse(agentSettings), docPath); // hooks depend on the folder
-      if (agent) await startDispatcher();
+      await syncAgents(); // hooks, and so warnings, depend on the folder
       broadcast('renamed', { doc: basename(docPath) });
       return docPath;
     });
@@ -502,7 +714,6 @@ export async function startServer(docPath, {
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
-  presence = JSON.parse(lastSettings).agent.presence;
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   const heartbeat = setInterval(() => {
@@ -514,17 +725,15 @@ export async function startServer(docPath, {
     server.listen(port, '127.0.0.1', resolve);
   });
   actualPort = server.address().port;
+  listening = true;
 
-  if (fixedAgent) await startDispatcher();
-  else if (useSettings) await configureAgent((await readSettings(settingsDir)).settings.agent);
+  await syncAgents();
 
   return {
     url: `http://127.0.0.1:${actualPort}/?t=${token}`,
     port: actualPort,
     token,
-    get dispatcher() {
-      return dispatcher;
-    },
+    team,
     docPath: () => docPath,
     moveTo,
     async close() {
@@ -532,9 +741,10 @@ export async function startServer(docPath, {
       stopWatching();
       stopWatchingSettings();
       closed = true;
-      await dispatcher?.stop(); // ends a run in progress, which a pending agent change may be waiting on
+      permissions.clear();
+      await team.stop(); // ends runs in progress, which a pending agent change may be waiting on
       await agentChanges;
-      await dispatcher?.stop();
+      await team.stop();
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
     },
@@ -617,6 +827,12 @@ function validChanges(changes) {
     && changes.every((c) => c && text(c.before) && c.before.length > 0 && text(c.after) && c.before !== c.after);
   if (!ok) throw new HttpError(400, 'bad_input', 'expected { changes: [{ before, after }] }');
   return changes.map(({ before, after }) => ({ before, after }));
+}
+
+function agentError(error) {
+  if (error instanceof AgentError) throw new HttpError(error.code === 'not_found' ? 404 : 400, error.code, error.message);
+  if (error instanceof SettingsError) throw new HttpError(400, 'bad_input', error.message);
+  throw error;
 }
 
 function versionId(id) {

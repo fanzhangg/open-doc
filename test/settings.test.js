@@ -4,8 +4,9 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
-import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
+import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
+import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
+import { AGENT_DEFAULTS, AgentError, BUILTIN_AGENTS, checkAgentPatch, createAgent, deleteAgent, permissionLabels, pilotOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -108,40 +109,96 @@ test('watchSettings sees the file appear and change', async () => {
   }
 });
 
-test('agent settings: defaults, key-by-key patches and merges', async () => {
-  assert.equal(DEFAULT_SETTINGS.agent.enabled, false);
-  assert.doesNotThrow(() => checkSettingsPatch({ agent: { enabled: true, maxTurns: 12, model: 'sonnet', maxBudgetUsd: null } }));
-  assert.throws(() => checkSettingsPatch({ agent: { maxTurns: 0 } }), /agent.maxTurns/);
-  assert.throws(() => checkSettingsPatch({ agent: { kind: 'robot' } }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agent: { name: 'two words' } }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agent: { command: 'a\nb' } }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agent: { secret: 1 } }), /unknown setting: agent.secret/);
-  assert.throws(() => checkSettingsPatch({ agent: 'on' }), SettingsError);
+test('agents: the app comes with Clippy as pilot and four co-pilots, each with only what its job needs', () => {
+  const builtins = resolveSettings(null).agents;
+  assert.deepEqual(builtins.map((a) => [a.name, a.role]), [['Clippy', 'pilot'], ['Rocky', 'copilot'], ['Will', 'copilot'], ['Genius', 'copilot'], ['Merlin', 'copilot']]);
+  for (const agent of builtins) {
+    assert.ok(agent.tagline && agent.tagline.length <= 60 && agent.tagline.split(' ').length <= 5, `${agent.name} has a slogan of a few words`);
+    assert.ok(agent.persona.includes(agent.name), `${agent.name} has a persona`);
+    assert.ok(!(agent.webAccess && agent.fileAccess), `${agent.name} never has both web and your files`);
+  }
+  const perms = Object.fromEntries(builtins.map((a) => [a.name, permissionLabels(a)]));
+  assert.deepEqual(perms, {
+    Clippy: ['Can edit', 'Web'],
+    Rocky: ['Can edit'],
+    Will: ['Can suggest'],
+    Genius: ['Can suggest', 'Web'],
+    Merlin: ['Can suggest', 'Your files'],
+  });
+  assert.equal(pilotOf(builtins).name, 'Clippy');
+});
 
+test('agents: each field checked; a roster always has exactly one pilot', () => {
+  const muse = { ...AGENT_DEFAULTS, id: 'a_muse01', name: 'muse', persona: 'You are a poet.\nBe bold.' };
+  const pilot = { ...BUILTIN_AGENTS[0] };
+  assert.doesNotThrow(() => checkSettingsPatch({ agents: [pilot, muse] }));
+  assert.throws(() => checkSettingsPatch({ agents: [muse] }), SettingsError, 'no pilot');
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, { ...muse, role: 'pilot' }] }), SettingsError, 'two pilots');
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, { ...muse, maxTurns: 0 }] }), /invalid value for agents/);
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, { ...muse, runtime: 'robot' }] }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, { ...muse, name: 'two words' }] }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, { ...muse, presence: 'online' }] }), SettingsError, 'presence is gone');
+  assert.throws(() => checkSettingsPatch({ agents: [pilot, muse, { ...muse, id: 'a_muse02', name: 'MUSE' }] }), SettingsError, 'names are unique, case-insensitively');
+  assert.throws(() => checkAgentPatch({ tagline: 'x'.repeat(61) }), AgentError);
+  assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(4001) }), AgentError);
+  assert.throws(() => checkAgentPatch({ role: 'boss' }), /role/);
+
+  // Stored rosters are repaired: broken entries dropped, one pilot kept, Clippy brought back when none.
+  assert.deepEqual(resolveRoster([{ ...muse, maxTurns: -1 }, { name: 'no-id' }]).map((a) => [a.name, a.role, a.maxTurns]), [['Clippy', 'pilot', 30], ['muse', 'copilot', 30]]);
+  assert.deepEqual(resolveRoster([{ ...muse, role: 'pilot' }, { ...muse, id: 'a_muse02', name: 'muse2', role: 'pilot' }]).map((a) => a.role), ['pilot', 'copilot']);
+  assert.deepEqual(resolveSettings({ agents: [] }).agents.map((a) => a.name), ['Clippy']);
+  // Settings from the single-agent version: the built-ins, and where Claude Code is.
+  const legacy = resolveSettings({ agent: { enabled: true, name: 'helper', bin: '/opt/claude' } });
+  assert.deepEqual(legacy.agents.map((a) => a.name), BUILTIN_AGENTS.map((a) => a.name));
+  assert.equal(legacy.claudeBin, '/opt/claude');
+});
+
+test('agents: new ones are co-pilots with a free name; the pilot can be replaced but not removed', () => {
+  const roster = resolveSettings(null).agents;
+  const one = createAgent(roster, { name: 'Rocky', role: 'pilot' });
+  assert.match(one.id, /^a_/);
+  assert.equal(one.name, 'Rocky-2');
+  assert.equal(one.role, 'copilot', 'a new agent is a co-pilot');
+  assert.equal(createAgent([], { name: 'fzhan' }, ['fzhan']).name, 'fzhan-2', "not the human's name");
+  assert.throws(() => createAgent([], { maxTurns: 0 }), AgentError);
+
+  const will = roster.find((a) => a.name === 'Will');
+  const clippy = roster.find((a) => a.name === 'Clippy');
+  assert.equal(updateAgent(roster, will.id, { persona: 'Sonnets only.' }).find((a) => a.id === will.id).persona, 'Sonnets only.');
+  assert.throws(() => updateAgent(roster, will.id, { name: 'ROCKY' }), /taken/);
+  assert.throws(() => updateAgent(roster, will.id, { id: 'a_other1' }), AgentError);
+  assert.throws(() => updateAgent(roster, 'a_nobody', { persona: '' }), /no such agent/);
+  assert.throws(() => updateAgent(roster, clippy.id, { role: 'copilot' }), /always a pilot/);
+  const swapped = updateAgent(roster, will.id, { role: 'pilot' });
+  assert.equal(pilotOf(swapped).name, 'Will');
+  assert.equal(swapped.find((a) => a.id === clippy.id).role, 'copilot', 'the old pilot steps down');
+  assert.throws(() => deleteAgent(roster, clippy.id), /pilot cannot be deleted/);
+  assert.deepEqual(deleteAgent(roster, will.id).map((a) => a.name), ['Clippy', 'Rocky', 'Genius', 'Merlin']);
+});
+
+test('agents: editAgents changes the roster under the lock and keeps other settings', async () => {
   const dir = await tempDir();
-  await updateSettings({ agent: { enabled: true, model: 'opus' } }, dir);
-  const after = await updateSettings({ agent: { maxTurns: 5 } }, dir);
-  assert.equal(after.agent.enabled, true);
-  assert.equal(after.agent.model, 'opus');
-  assert.equal(after.agent.maxTurns, 5);
-  assert.equal(after.agent.runsPerHour, 20);
-  assert.deepEqual(resolveSettings({ agent: { maxTurns: -1, name: 'bot' } }).agent, { ...DEFAULT_SETTINGS.agent, name: 'bot' });
+  await updateSettings({ font: 'serif' }, dir);
+  let created;
+  const after = await editAgents((agents) => {
+    created = createAgent(agents, { name: 'muse' });
+    return [...agents, created];
+  }, dir);
+  assert.deepEqual(after.agents.map((a) => a.name), ['Clippy', 'Rocky', 'Will', 'Genius', 'Merlin', 'muse']);
+  assert.equal(after.font, 'serif');
+  await assert.rejects(editAgents((agents) => [...agents, { ...created }], dir), SettingsError, 'the same agent twice');
+  assert.equal((await readSettings(dir)).settings.agents.length, 6);
 });
 
-test('agent edit mode: auto by default, approve allowed; the old mentionsOnly is gone', () => {
-  assert.equal(DEFAULT_SETTINGS.agent.editMode, 'auto');
-  assert.ok(!('mentionsOnly' in DEFAULT_SETTINGS.agent));
-  assert.doesNotThrow(() => checkSettingsPatch({ agent: { editMode: 'approve' } }));
-  assert.throws(() => checkSettingsPatch({ agent: { editMode: 'sometimes' } }), /agent\.editMode/);
-  assert.throws(() => checkSettingsPatch({ agent: { mentionsOnly: true } }), /unknown setting: agent\.mentionsOnly/);
-  // A settings file from an older version: mentionsOnly is ignored, editMode defaults.
-  assert.deepEqual(resolveSettings({ agent: { mentionsOnly: true, editMode: 'approve' } }).agent, { ...DEFAULT_SETTINGS.agent, editMode: 'approve' });
-  assert.equal(resolveSettings({ agent: { mentionsOnly: false } }).agent.editMode, 'auto');
-});
-
-test('agent presence: online by default, do not disturb allowed', () => {
-  assert.equal(DEFAULT_SETTINGS.agent.presence, 'online');
-  assert.doesNotThrow(() => checkSettingsPatch({ agent: { presence: 'dnd' } }));
-  assert.throws(() => checkSettingsPatch({ agent: { presence: 'away' } }), /agent\.presence/);
-  assert.equal(resolveSettings({ agent: { presence: 'away' } }).agent.presence, 'online');
+test('claudeBin and codexBin: where Claude Code and Codex are, for every agent', () => {
+  assert.equal(DEFAULT_SETTINGS.claudeBin, null);
+  assert.equal(DEFAULT_SETTINGS.codexBin, null);
+  assert.deepEqual(PROGRAM_KEYS, ['claudeBin', 'codexBin'], 'set only in the desktop app or settings.json');
+  assert.doesNotThrow(() => checkSettingsPatch({ codexBin: 'C:\\tools\\codex.exe' }));
+  assert.throws(() => checkSettingsPatch({ codexBin: '' }), SettingsError);
+  assert.equal(resolveSettings({ codexBin: '/opt/codex' }).codexBin, '/opt/codex');
+  assert.equal(resolveSettings({ codexBin: 42 }).codexBin, null);
+  assert.doesNotThrow(() => checkSettingsPatch({ claudeBin: 'C:\\tools\\claude.exe' }));
+  assert.throws(() => checkSettingsPatch({ claudeBin: '' }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agent: { enabled: true } }), /unknown setting: agent/);
 });

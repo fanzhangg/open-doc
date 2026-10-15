@@ -109,6 +109,9 @@ saved. Quitting and relaunching keeps it. Settings sections:
 - Agent (new): see below
 - Shortcuts: the existing list
 
+> Since replaced by Settings > Agents, a roster of agents with personas that
+> are invited into each doc: see [multi-agent.md](multi-agent.md).
+
 **Settings > Agent** sets up the co-author agent. It replaces the
 `serve --agent` flags:
 
