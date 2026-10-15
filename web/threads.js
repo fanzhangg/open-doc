@@ -28,7 +28,7 @@ export function createCommentMargin(margin, handlers) {
   let sidecar = { participants: [], threads: [] };
   let me = '';
   let activeId = null;
-  let draft = null; // { hint } while composing; hint null for a comment on the whole doc
+  let draft = null; // { hint } while composing a comment on the selected text
   let showResolved = false;
   const replyDrafts = new Map();
   const busy = new Set(); // ids of messages being undone or applied
@@ -275,7 +275,6 @@ export function createCommentMargin(margin, handlers) {
     const head = el('div', 'od-msg-head');
     const who = el('div', 'od-who');
     who.append(el('span', 'od-name', me));
-    if (!draft.hint) who.append(el('span', 'od-time', 'On the whole document'));
     head.append(avatar(me, 'human'), who);
     card.append(head);
     card.append(composer('draft', 'Comment', 'Comment', async (body) => {
@@ -365,7 +364,7 @@ export function createCommentMargin(margin, handlers) {
     const byId = new Map(sidecar.threads.map((t) => [t.id, t]));
     const items = cards.map((card) => {
       const id = card.dataset.thread;
-      return { card, id, anchor: id === 'draft' ? draft?.hint && hintAnchor(draft.hint) : byId.get(id)?.anchor };
+      return { card, id, anchor: id === 'draft' ? hintAnchor(draft.hint) : byId.get(id)?.anchor };
     });
     const tops = handlers.anchorTops(items.filter((i) => i.anchor));
     const origin = margin.getBoundingClientRect().top;

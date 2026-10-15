@@ -19,10 +19,9 @@ const SLASH_ITEMS = [
   { command: 'codeBlock', icon: 'codeBlock', label: 'Code block', words: 'code block fence pre' },
   { command: 'table', icon: 'table', label: 'Table', words: 'table grid' },
   { command: 'divider', icon: 'divider', label: 'Divider', words: 'divider hr rule line separator' },
-  { command: 'comment', icon: 'comment', label: 'Comment', words: 'comment ask ai agent' },
 ];
 const SHORTCUTS = [
-  ['Comments', [['Add comment', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
+  ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
   ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E'], ['Link', 'Mod+K']]],
   ['Blocks', [['Insert block', '/'], ['Normal text', 'Mod+Alt+0'], ['Heading 1–3', 'Mod+Alt+1…3'], ['Bulleted list', 'Mod+Alt+8'], ['Numbered list', 'Mod+Alt+7'], ['Quote', 'Mod+Shift+B'], ['Code block', 'Mod+Alt+C']]],
   ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],

@@ -23,11 +23,13 @@ import { NAME_PATTERN } from '../src/core/mentions.js';
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
 const TYPING_REPORT_MS = 1000;
+const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
 
 const status = document.querySelector('.od-status');
 const banner = document.querySelector('.od-banner');
 const missingBanner = document.querySelector('.od-missing');
 const resolvedToggle = document.querySelector('.od-show-resolved');
+const commentsToggle = document.querySelector('.od-tool-comment');
 
 let editor;
 let chrome;
@@ -87,9 +89,12 @@ async function start() {
       reportTyping();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
-    onSelectThread: (id) => select(id, { focus: false }),
+    onSelectThread: (id) => {
+      if (commentsShown()) select(id, { focus: false });
+    },
     onCommentRequest: (hint) => {
       chrome?.hideBubble();
+      if (!commentsShown()) showComments(true);
       pendingSelection = hint;
       editor.setDraft(hint);
       margin.startDraft(hint);
@@ -134,9 +139,18 @@ async function start() {
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
 
+  let hidden = false;
+  try {
+    hidden = localStorage.getItem(COMMENTS_KEY) === 'hidden';
+  } catch {
+    // no storage: comments start shown
+  }
+  if (hidden) showComments(false);
+  commentsToggle.addEventListener('click', () => showComments(!commentsShown()));
   resolvedToggle.addEventListener('click', () => {
     const on = resolvedToggle.getAttribute('aria-pressed') !== 'true';
     resolvedToggle.setAttribute('aria-pressed', String(on));
+    if (on && !commentsShown()) showComments(true);
     margin.setShowResolved(on);
   });
   document.addEventListener('keydown', (event) => {
@@ -473,6 +487,27 @@ function applySidecar(next) {
   editor.setThreads(sidecar.threads);
   margin.update(sidecar, me);
   refreshPreview();
+  const open = sidecar.threads.filter((t) => t.status === 'open').length;
+  commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
+}
+
+// The Comments button shows or hides the margin and the highlights in the
+// text; with them hidden the page sits in the middle of the window.
+function commentsShown() {
+  return !document.documentElement.hasAttribute('data-hide-comments');
+}
+
+function showComments(on) {
+  if (!on) select(null);
+  document.documentElement.toggleAttribute('data-hide-comments', !on);
+  commentsToggle.setAttribute('aria-pressed', String(on));
+  commentsToggle.dataset.tip = on ? 'Hide comments' : 'Show comments';
+  try {
+    localStorage.setItem(COMMENTS_KEY, on ? 'shown' : 'hidden');
+  } catch {
+    // not remembered: fine
+  }
+  if (on) margin.rerender();
 }
 
 // Whether a proposal can still be applied depends on the text on disk.
@@ -537,15 +572,12 @@ async function applyProposalEdit(threadId, message) {
 
 async function createThread(body) {
   await flushSave();
-  let anchor = null;
-  if (pendingSelection) {
-    // Canonical anchor: re-find the selection in the core projection of the
-    // markdown that is now on disk.
-    const { text } = project(editor.getMarkdown());
-    const hint = { exact: pendingSelection.quote, prefix: pendingSelection.prefix, suffix: pendingSelection.suffix, start: pendingSelection.start };
-    const found = locate(text, hint);
-    anchor = found ? createAnchor(text, found.start, found.end) : hint;
-  }
+  // Canonical anchor: re-find the selection in the core projection of the
+  // markdown that is now on disk.
+  const { text } = project(editor.getMarkdown());
+  const hint = { exact: pendingSelection.quote, prefix: pendingSelection.prefix, suffix: pendingSelection.suffix, start: pendingSelection.start };
+  const found = locate(text, hint);
+  const anchor = found ? createAnchor(text, found.start, found.end) : hint;
   const id = newId('t');
   await sendOp({ type: 'addThread', id, anchor, message: newMessage(body) });
   pendingSelection = null;

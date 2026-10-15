@@ -227,9 +227,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     };
   }
 
+  // Comments are on selected text only.
   function requestComment() {
     const hint = view().state.selection.empty ? null : selectionHint();
-    onCommentRequest(hint);
+    if (hint) onCommentRequest(hint);
   }
 
   // ---- formatting commands, shared by the toolbar, the selection bubble and "/" ----
@@ -358,8 +359,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   function runSlash(range, name) {
     const v = view();
     v.dispatch(v.state.tr.delete(range.from, range.to));
-    if (name === 'comment') requestComment();
-    else run(name);
+    run(name);
   }
 
   // ---- outline and counts ----

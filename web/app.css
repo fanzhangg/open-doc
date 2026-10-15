@@ -49,6 +49,8 @@
   --measure: 680px;
   --page-pad: 72px;
   --margin-w: 360px;
+  --stage-gap: 28px;
+  --page-w: calc(var(--measure) + 2 * var(--page-pad));
   color-scheme: light;
 }
 :root[data-font="serif"] { --doc-font: var(--serif); --doc-size: 17px; --doc-leading: 1.65; --doc-tracking: 0; }
@@ -178,8 +180,10 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-toolbar button:hover, .od-bubble button:hover { background: var(--hover); }
 .od-toolbar button[aria-pressed="true"], .od-bubble button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .od-toolbar .od-pill { border-radius: 15px; padding: 0 12px 0 10px; font-weight: 500; }
-.od-toolbar .od-tool-comment { color: var(--accent); }
-.od-toolbar .od-tool-comment:hover { background: var(--accent-soft); }
+.od-toolbar .od-tool-comment { color: var(--text-soft); }
+.od-comment-count { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--hover); font-size: 11.5px; line-height: 18px; font-variant-numeric: tabular-nums; }
+.od-comment-count:empty { display: none; }
+.od-toolbar .od-tool-comment[aria-pressed="true"] .od-comment-count { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .od-toolbar .od-show-resolved { color: var(--text-soft); }
 .od-toolbar .od-show-resolved[aria-pressed="true"] { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); }
 
@@ -211,9 +215,15 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 /* ---- canvas, page and margin ---- */
 
 .od-canvas { flex: 1; overflow-y: auto; min-height: 0; scroll-padding-top: 24px; }
-.od-stage { position: relative; display: grid; grid-template-columns: minmax(0, calc(var(--measure) + 2 * var(--page-pad))) var(--margin-w); gap: 28px; justify-content: center; padding: 16px 16px 160px; }
+/* The page sits in the middle of the window: the left padding matches the
+   margin's width when there is room, and gives way before the page narrows. */
+.od-stage { position: relative; display: grid; grid-template-columns: minmax(0, var(--page-w)) var(--margin-w); gap: var(--stage-gap); justify-content: center; padding: 16px 16px 160px clamp(16px, 100% - var(--page-w) - var(--stage-gap) - var(--margin-w) - 16px, var(--stage-gap) + var(--margin-w) + 16px); }
 .od-page { position: relative; min-height: calc(100vh - 160px); padding: 40px var(--page-pad) 120px; }
 .od-margin { position: relative; transition: opacity 0.2s; }
+/* comments hidden (the toolbar's Comments button): no margin, no highlights */
+[data-hide-comments] .od-stage { --margin-w: 0px; --stage-gap: 0px; }
+[data-hide-comments] .od-margin { display: none; }
+[data-hide-comments] .od-hl { background: none; animation: none; transition: none; }
 
 /* ---- document typography ---- */
 
@@ -503,8 +513,7 @@ label.od-setting { cursor: pointer; }
   .od-outline { display: none; }
 }
 @media (max-width: 1180px) {
-  :root { --page-pad: 48px; --margin-w: 320px; }
-  .od-stage { gap: 24px; }
+  :root { --page-pad: 48px; --margin-w: 320px; --stage-gap: 24px; }
 }
 @media (max-width: 900px) {
   :root { --page-pad: 20px; }
