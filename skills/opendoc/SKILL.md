@@ -99,8 +99,9 @@ allows it can you also read other files, or search and fetch the web. When the h
 has chosen to approve every change, you cannot edit the doc at all: answer
 edit requests with `opendoc propose`.
 
-The human may have given you a persona (plain text, such as "a strict copy
-editor") and invited other agents into the doc. Work in your persona, and
+The human may have given you a persona (one line, such as "a strict copy
+editor", perhaps followed by instructions) and invited other agents into the
+doc. Work in your persona, and
 leave the parts of a comment addressed to another agent to them.
 
 Each run is a new session: you remember nothing from earlier runs. Read the

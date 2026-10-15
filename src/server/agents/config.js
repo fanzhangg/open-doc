@@ -62,8 +62,9 @@ export function agentSpec(agent, settings, docPath) {
   return {
     id: agent.id,
     name: agent.name,
-    persona: agent.persona,
-    profile: { tagline: agent.tagline, webAccess: agent.webAccess, fileAccess: agent.fileAccess },
+    // One block for the prompt: the persona line, then the instructions.
+    persona: [agent.persona, agent.instructions].map((t) => t.trim()).filter(Boolean).join('\n\n'),
+    profile: { webAccess: agent.webAccess, fileAccess: agent.fileAccess },
     adapter,
     limits: { timeoutMs: agent.runTimeoutMinutes * 60 * 1000, runsPerHour: agent.runsPerHour },
     editMode: agent.editMode,

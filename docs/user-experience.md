@@ -21,9 +21,12 @@ How a person writes with agents in OpenDoc today. For why, see the
 ## Agents are collaborators
 
 Each agent is set up like a person in a shared doc: a name you @mention, a
-short introduction, a persona, and only the permissions you give it. The
-persona is plain text in your own words ("a strict copy editor who never
-changes meaning"), and anyone can rewrite it. OpenDoc comes with one agent,
+persona, and only the permissions you give it. The **persona** is one line in
+your own words that defines it ("a strict copy editor who never changes
+meaning"), shown on its card and in the People panel; it stays blank until
+you write one. **Instructions** (Agents panel) hold the details and rules
+behind it. Both go into the agent's prompt as one block, and anyone can
+rewrite them. OpenDoc comes with one agent,
 **Clippy**, starred, with no persona and no job, and Editor, Auto Editor and
 Auto Commenter switched on. There are no built-in roles: a grammar checker, a
 fact checker or a tough reader is an agent whose persona you wrote.
@@ -31,8 +34,9 @@ fact checker or a tough reader is an agent whose persona you wrote.
 Agents are light and disposable:
 
 - **New agent** (People panel) pops a new agent into the doc and opens its
-  card, ready to name. Name, introduction and persona are edited right on the
-  card; each saves when you leave it. More settings opens the Agents panel.
+  card, ready to name: type a name, Enter, then its persona. On any card,
+  click the name or the persona to edit it in place; Enter or leaving the
+  field saves, Escape cancels. The settings button opens the Agents panel.
 - A new agent lasts as long as the doc window (or `opendoc serve` run) it was
   made in. Closing it deletes the agent; its comments stay under its name.
 - **Star** an agent on its card to keep it for every doc. Agents made before
@@ -88,10 +92,10 @@ Agents are light and disposable:
 
 - **People** button (round, after the avatars): who is in this doc. New
   agent, add (+) or remove (×) agents.
-- **Agent card** (click an avatar): introduction, permission switches, a star
-  to keep it, and a pencil to edit name, introduction and persona in place.
-- **Agents** panel: every agent, with the finer settings. Name, introduction,
-  starred, permissions, persona, and under Advanced the runtime (Claude Code,
+- **Agent card** (click an avatar): name and persona (click either to edit),
+  permission switches, a star to keep it, and a button for more settings.
+- **Agents** panel: every agent, with the finer settings. Name, persona,
+  starred, permissions, instructions, and under Advanced the runtime (Claude Code,
   Codex, or a custom command), model and limits.
 
 ## Around the doc

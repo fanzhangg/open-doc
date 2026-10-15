@@ -113,8 +113,25 @@ test('agents: the app comes with Clippy, starred, generic, and no built-in roles
   const roster = resolveSettings(null).agents;
   assert.deepEqual(roster.map((a) => [a.name, a.persona, a.starred, a.session]), [['Clippy', '', true, null]], 'no persona, no job, kept');
   assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
-  assert.equal(introOf({ persona: 'You are a poet.\nBe bold.' }), 'A poet', 'without an introduction, the persona says it');
-  assert.equal(introOf({ tagline: '', persona: '' }), '');
+  assert.equal(introOf({ persona: 'A poet' }), 'A poet', 'the persona is the line on its card');
+  assert.equal(introOf({ persona: '', instructions: 'You are a poet.' }), '', 'empty until the user writes one');
+});
+
+test('agents: a persona is one line; instructions hold the rest; old agents are split', () => {
+  assert.doesNotThrow(() => checkAgentPatch({ persona: 'A strict copy editor', instructions: 'Fix grammar only.\nReply with a list.' }));
+  assert.throws(() => checkAgentPatch({ persona: 'two\nlines' }), /persona/);
+  assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(121) }), /persona/);
+  assert.throws(() => checkAgentPatch({ instructions: 'x'.repeat(4001) }), /instructions/);
+  assert.throws(() => checkAgentPatch({ tagline: 'gone' }), /unknown agent setting: tagline/);
+  const [short, introduced, long] = resolveRoster([
+    { id: 'a_old001', name: 'translator', tagline: '', persona: 'Translate English to Chinese when I @you' },
+    { id: 'a_old002', name: 'will', tagline: 'Polishes style', persona: 'You are Will.\nKeep the voice.' },
+    { id: 'a_old003', name: 'sam', persona: 'You are Sam, the proofreader. Your job is spelling.\nNothing else.' },
+  ]);
+  assert.deepEqual([short.persona, short.instructions], ['Translate English to Chinese when I @you', '']);
+  assert.deepEqual([introduced.persona, introduced.instructions], ['Polishes style', 'You are Will.\nKeep the voice.']);
+  assert.deepEqual([long.persona, long.instructions], ['Sam, the proofreader', 'You are Sam, the proofreader. Your job is spelling.\nNothing else.']);
+  assert.equal(Object.hasOwn(short, 'tagline'), false);
 });
 
 test('agents: each permission is a switch, and Auto Editor needs Editor', () => {
@@ -134,7 +151,7 @@ test('agents: each permission is a switch, and Auto Editor needs Editor', () => 
 });
 
 test('agents: each field checked; any number of agents with Auto Commenter', () => {
-  const muse = { ...AGENT_DEFAULTS, id: 'a_muse01', name: 'muse', persona: 'You are a poet.\nBe bold.' };
+  const muse = { ...AGENT_DEFAULTS, id: 'a_muse01', name: 'muse', persona: 'A poet', instructions: 'Be bold.' };
   const plainAgent = { ...DEFAULT_AGENTS[0] };
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [plainAgent, muse] }));
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [muse] }), 'none with Auto Commenter');
@@ -145,8 +162,8 @@ test('agents: each field checked; any number of agents with Auto Commenter', () 
   assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, name: 'two words' }] }), SettingsError);
   assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, role: 'pilot' }] }), SettingsError, 'roles are gone');
   assert.throws(() => checkSettingsPatch({ agents: [plainAgent, muse, { ...muse, id: 'a_muse02', name: 'MUSE' }] }), SettingsError, 'names are unique, case-insensitively');
-  assert.throws(() => checkAgentPatch({ tagline: 'x'.repeat(61) }), AgentError);
-  assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(4001) }), AgentError);
+  assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(121) }), AgentError);
+  assert.throws(() => checkAgentPatch({ instructions: 'x'.repeat(4001) }), AgentError);
   assert.throws(() => checkAgentPatch({ editMode: 'sometimes' }), /editMode/);
   assert.throws(() => checkAgentPatch({ autoComment: 'yes' }), /autoComment/);
   assert.doesNotThrow(() => checkAgentPatch({ editMode: 'none' }));

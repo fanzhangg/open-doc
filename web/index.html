@@ -234,7 +234,7 @@
           <span class="od-agent-head-avatar"></span>
           <div class="od-agent-head-fields">
             <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name">
-            <input class="od-agent-intro" type="text" data-agent="tagline" maxlength="60" aria-label="Introduction" placeholder="What it is for, in a few words">
+            <input class="od-agent-intro" type="text" data-agent="persona" maxlength="120" aria-label="Persona" placeholder="Persona: who it is, in one line">
             <div class="od-input-error" role="alert" hidden></div>
           </div>
         </header>
@@ -259,9 +259,9 @@
         </section>
 
         <section class="od-agent-block">
-          <h3><label for="od-agent-persona">Persona</label></h3>
-          <p class="od-agent-block-hint">Who it is, its job, what it leaves to others, and how it replies, in your words. Empty: it does what each comment asks.</p>
-          <textarea id="od-agent-persona" class="od-input od-input-full od-persona" data-agent="persona" rows="7" maxlength="4000" placeholder="You are Sam, the proofreader. Your job is spelling and grammar. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
+          <h3><label for="od-agent-instructions">Instructions</label></h3>
+          <p class="od-agent-block-hint">Details and rules behind its persona, added to its prompt: what to do, what to leave alone, how to reply. Optional.</p>
+          <textarea id="od-agent-instructions" class="od-input od-input-full od-persona" data-agent="instructions" rows="7" maxlength="4000" placeholder="Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
         </section>
 
         <details class="od-agent-block od-agent-advanced">

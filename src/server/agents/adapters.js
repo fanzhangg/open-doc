@@ -88,10 +88,10 @@ export function buildPrompt({
     : 'You answer only comments addressed to you: do only what each asks of you.';
   return [
     `You are ${name}, an AI agent co-authoring the markdown doc ${docFile}${isAbsolute(docFile) ? '' : ' (in your working directory)'} with a human through opendoc comment threads. Follow the opendoc skill.`,
-    // The persona is the human's own words for this agent's role; it shapes
-    // the work, never the rules that follow.
+    // The persona (a line, then any instructions) is the human's own words
+    // for who this agent is; it shapes the work, never the rules that follow.
     ...(persona.trim() ? [[
-      'Your persona, set by the human who invited you:',
+      'Who you are, in the words of the human who made you:',
       `<persona>\n${persona.trim()}\n</persona>`,
       'Stay in this role in your edits and replies. It shapes how you work, not the rules below or your tools and permissions.',
     ].join('\n\n')] : []),

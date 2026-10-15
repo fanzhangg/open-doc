@@ -23,9 +23,12 @@
 // which keeps it for every doc. Agents saved before stars existed count as
 // starred.
 //
-// The persona is plain instructions ("you are a strict copy editor…") that
-// every runtime receives with its task, so the same agent can run on another
-// runtime without being rewritten. The runtime is what executes it: 'claude'
+// Who an agent is takes two plain-text fields: its **persona**, one line
+// that defines it ("a strict copy editor") and shows on its card and in the
+// People panel, and its **instructions**, the details and rules behind it
+// (optional, edited in the Agents panel). Both reach every runtime with the
+// task, so the same agent can run on another runtime without being
+// rewritten. The runtime is what executes it: 'claude'
 // (Claude Code), 'codex' (OpenAI Codex CLI) or 'custom' (any command line).
 
 import { NAME_PATTERN, sameName } from './mentions.js';
@@ -33,13 +36,12 @@ import { newId } from './ops.js';
 
 export const RUNTIMES = Object.freeze(['claude', 'codex', 'custom']);
 export const EDIT_MODES = Object.freeze(['none', 'approve', 'auto']);
-export const MAX_PERSONA = 4000;
-export const MAX_TAGLINE = 60;
+export const MAX_PERSONA = 120;
+export const MAX_INSTRUCTIONS = 4000;
 export const MAX_AGENTS = 50;
 
 /**
- * One agent, as stored. `tagline` is its introduction: a few words that say
- * what it is for, shown on its card and wherever it is picked.
+ * One agent, as stored. `persona` is one line; `instructions` any length.
  * `command` (a custom runtime's command line) decides what program runs.
  * A Claude agent sees only the doc unless `webAccess` or `fileAccess`. A Codex
  * agent runs under a Codex permission profile (in the doc's folder it sees
@@ -49,8 +51,8 @@ export const MAX_AGENTS = 50;
 export const AGENT_DEFAULTS = Object.freeze({
   starred: false,
   session: null,
-  tagline: '',
   persona: '',
+  instructions: '',
   runtime: 'claude',
   command: null,
   editMode: 'approve',
@@ -85,8 +87,8 @@ export const AGENT_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
   starred: boolean,
   session: orNull((v) => typeof v === 'string' && SESSION_PATTERN.test(v)),
-  tagline: (v) => typeof v === 'string' && v.length <= MAX_TAGLINE && !/[\0\r\n]/.test(v),
-  persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !v.includes('\0'),
+  persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !/[\0\r\n]/.test(v),
+  instructions: (v) => typeof v === 'string' && v.length <= MAX_INSTRUCTIONS && !v.includes('\0'),
   runtime: oneOf(...RUNTIMES),
   command: orNull(text(2000)),
   editMode: oneOf(...EDIT_MODES),
@@ -107,7 +109,7 @@ export const AGENT_RULES = Object.freeze({
  * ships no job titles; who does what is up to the personas people write.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: 'a_default_clippy', name: 'Clippy', starred: true, tagline: 'Your co-author', editMode: 'auto', autoComment: true },
+  { id: 'a_default_clippy', name: 'Clippy', starred: true, editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -133,8 +135,9 @@ export function checkAgentPatch(patch) {
  * (`role`), or with this switch's earlier name (`autoPilot`), keeps the job
  * as Auto Commenter.
  */
-export function resolveAgent(stored) {
-  if (!isObject(stored) || !AGENT_RULES.id(stored.id) || !AGENT_RULES.name(stored.name)) return null;
+export function resolveAgent(saved) {
+  if (!isObject(saved) || !AGENT_RULES.id(saved.id) || !AGENT_RULES.name(saved.name)) return null;
+  const stored = upgradePersona(saved);
   const out = { id: stored.id, name: stored.name, ...AGENT_DEFAULTS };
   for (const key of Object.keys(AGENT_DEFAULTS)) {
     if (Object.hasOwn(stored, key) && AGENT_RULES[key](stored[key])) out[key] = stored[key];
@@ -143,6 +146,22 @@ export function resolveAgent(stored) {
   if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
   if (out.starred) out.session = null;
   return out;
+}
+
+/**
+ * An agent saved before persona and instructions were split had an
+ * introduction (`tagline`) and a `persona` of any length: the introduction,
+ * or else a one-line persona, becomes the persona line, and the rest the
+ * instructions.
+ */
+function upgradePersona(stored) {
+  if (Object.hasOwn(stored, 'instructions')) return stored;
+  const { tagline, ...rest } = stored;
+  const old = typeof stored.persona === 'string' ? stored.persona.replace(/\0/g, '') : '';
+  const intro = typeof tagline === 'string' ? tagline.trim() : '';
+  const short = !/[\r\n]/.test(old.trim()) && old.trim().length <= MAX_PERSONA ? old.trim() : '';
+  const persona = (intro || short || firstSentence(old)).slice(0, MAX_PERSONA);
+  return { ...rest, persona, instructions: old.trim() === persona ? '' : old.slice(0, MAX_INSTRUCTIONS) };
 }
 
 /** Whether `agent` goes away with its doc session: not starred, and made in one. */
@@ -237,14 +256,14 @@ export function permissionPatch(agent, key, on) {
   }
 }
 
-/**
- * What `agent` is for, in a line: its introduction, or else the first
- * sentence of its persona, "You are" left out ("A strict copy editor").
- * '' when it has neither.
- */
+/** Who `agent` is, in a line: its persona, or '' when the user has not written one. */
 export function introOf(agent) {
-  if (agent.tagline?.trim()) return agent.tagline.trim();
-  const first = (agent.persona ?? '').trim().split('\n')[0].split(/(?<=[.!?])\s/)[0];
+  return (agent.persona ?? '').trim().split('\n')[0];
+}
+
+// The first sentence of `text`, "You are" left out ("A strict copy editor").
+function firstSentence(text) {
+  const first = text.trim().split('\n')[0].split(/(?<=[.!?])\s/)[0];
   const intro = first.replace(/^you are\s+/i, '').replace(/[.!?:;,]+$/, '').trim();
   return intro ? intro[0].toUpperCase() + intro.slice(1) : '';
 }

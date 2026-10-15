@@ -1,8 +1,8 @@
 // The Agents panel: the user's agents, for every doc, in a dialog of their
 // own. On the left, the list (those with Auto Commenter first, a green dot
 // on each); on the right, the one picked, top to bottom in the order people
-// change things: who it is (name, introduction), what it can do (the
-// permission switches, the same as on its card), its persona, and, folded
+// change things: who it is (name, persona), what it can do (the
+// permission switches, the same as on its card), its instructions, and, folded
 // away, how it runs. A problem shows above the rest only when there is one.
 // "Programs" at the foot of the list holds where Claude Code and Codex are.
 //
@@ -117,7 +117,6 @@ export function createAgentsPanel({ store, onResult }) {
     }
     form.querySelector('[data-agent="isolated"]').checked = agent.isolated;
     form.querySelector('[data-agent="starred"]').checked = agent.starred;
-    form.querySelector('.od-agent-intro').placeholder = introOf({ persona: agent.persona }) || 'What it is for, in a few words';
     paintStatus();
   }
 
@@ -132,7 +131,7 @@ export function createAgentsPanel({ store, onResult }) {
     face.append(avatar(agent.name, 'agent', true));
     if (agent.autoComment) face.title = 'Auto Commenter';
     const who = el('span', 'od-agents-who');
-    who.append(el('span', 'od-agents-name', agent.name), el('span', 'od-agents-sub', introOf(agent) || 'No introduction yet'));
+    who.append(el('span', 'od-agents-name', agent.name), el('span', 'od-agents-sub', introOf(agent)));
     row.append(face, who);
     if (PROBLEMS[statusOf(agent)?.state]) row.append(el('span', 'od-agents-flag', '!'));
     return row;
@@ -232,7 +231,7 @@ export function createAgentsPanel({ store, onResult }) {
     const key = input.dataset.agent;
     if (!key) return;
     if (input.type === 'checkbox') return save({ [key]: input.checked });
-    const raw = key === 'persona' ? input.value : input.value.trim();
+    const raw = key === 'instructions' ? input.value : input.value.trim();
     if (key === 'name' && raw === '') return paint();
     let value = raw;
     if (input.type === 'number') value = raw === '' ? null : Number(raw);

@@ -229,9 +229,17 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-star[aria-pressed="true"] { color: #e8a400; }
 .od-star[aria-pressed="true"] .od-icon { fill: currentColor; }
 .od-disposable { margin: 10px 0 0; font-size: 12px; color: var(--text-faint); }
-.od-quick { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.od-quick .od-persona { min-height: 84px; }
-.od-quick-end { justify-content: flex-end; }
+/* name and persona on an agent card: text you click to edit, then a field in its place */
+.od-editable { margin-left: -4px; padding: 1px 4px; border-radius: 4px; cursor: text; }
+.od-editable:hover, .od-editable:focus-visible { background: var(--hover); outline: none; }
+.od-profile-slogan.od-editable { min-height: 1.4em; }
+.od-inline-input { display: block; width: 100%; margin: 0 0 0 -4px; padding: 1px 4px; border: 0; border-radius: 4px; background: var(--hover); color: inherit; font: inherit; outline: 1px solid var(--accent); }
+.od-inline-input.od-profile-name { font-size: 15px; font-weight: 600; }
+.od-inline-input.od-profile-slogan { margin-top: 2px; font-size: 13px; color: var(--text); }
+.od-inline-input::placeholder { color: var(--text-faint); font-weight: 400; }
+.od-inline-input[aria-invalid="true"] { outline-color: var(--danger); }
+.od-profile-who { flex: 1; }
+.od-profile + .od-input-error { margin-top: 6px; }
 .od-new-agent { display: inline-flex; align-items: center; gap: 4px; }
 .od-new-agent .od-icon { width: 15px; height: 15px; }
 .od-agent-keep { margin: 0 0 8px; }

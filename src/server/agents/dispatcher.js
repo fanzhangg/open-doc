@@ -73,7 +73,7 @@ export class Dispatcher {
    * other agents of the doc; `floor` is the turn they share. `join` adds
    * the agent to the doc's participants when it starts (an agent from flags;
    * one from the roster is there because it was invited). `profile`
-   * ({ tagline, webAccess, fileAccess }) is shown with the status and told to
+   * ({ webAccess, fileAccess }) is shown with the status and told to
    * its runs.
    */
   constructor({
@@ -113,7 +113,6 @@ export class Dispatcher {
       id: this.id,
       source: this.source,
       autoComment: this.presence === 'online',
-      tagline: this.profile.tagline ?? '',
       webAccess: Boolean(this.profile.webAccess),
       fileAccess: Boolean(this.profile.fileAccess),
       persona: this.persona,

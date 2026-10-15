@@ -15,7 +15,7 @@ import { startServer } from '../server/server.js';
 import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
-import { EDIT_MODES, MAX_PERSONA } from '../core/agents.js';
+import { EDIT_MODES, MAX_INSTRUCTIONS } from '../core/agents.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -360,7 +360,7 @@ function agentOptions(values, docPath) {
   }
   const warning = hooksWarning(adapter, values['agent-isolated'] === true, docPath);
   const persona = values.persona ?? '';
-  if (persona.length > MAX_PERSONA) throw new UsageError(`--persona must be at most ${MAX_PERSONA} characters`);
+  if (persona.length > MAX_INSTRUCTIONS) throw new UsageError(`--persona must be at most ${MAX_INSTRUCTIONS} characters`);
   return { name: values.agent, persona, adapter, limits, editMode, warning };
 }
 

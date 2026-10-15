@@ -10,18 +10,19 @@ the CLI, the local editor and the agent skill.
 ## Agents that answer on their own
 
 Agents are collaborators, like people in a shared doc. Each has a name you
-@mention, an introduction that says what it is for, a **persona**
-(plain text, in your own words, for who it is and how it works) and only the
-permissions you give it. OpenDoc comes with one agent, **Clippy**, starred,
-with no persona and no job: it answers your comments like a plain co-author.
-The product has no built-in roles; make a grammar checker, a fact checker or
-a tough reader by writing its persona, and rewrite or delete any agent. An
-agent without an introduction shows the first sentence of its persona
-instead.
+@mention, a **persona** (one line in your own words that defines it, such as
+"a strict copy editor", shown on its card and in the People panel), optional
+**instructions** (the details and rules behind the persona) and only the
+permissions you give it. Both go into the agent's prompt as one block.
+OpenDoc comes with one agent, **Clippy**, starred, with no persona and no job:
+it answers your comments like a plain co-author. The product has no built-in
+roles; make a grammar checker, a fact checker or a tough reader by writing
+its persona, and rewrite or delete any agent.
 
 Agents are light and disposable. **New agent** in the People panel pops one
-into the doc and opens its card, where you name it and write its persona in
-place; the Agents panel holds the finer settings. A new agent lasts as long
+into the doc and opens its card, ready to name: type a name, Enter, then its
+persona. Click the name or the persona on any card to edit it in place; the
+Agents panel holds the finer settings, such as instructions. A new agent lasts as long
 as the doc window (or `opendoc serve` run) it was made in: close it and the
 agent is deleted, its comments staying under its name. **Star** it on its card
 to keep it for every doc.
@@ -50,7 +51,7 @@ Who answers what:
   reply ("Clippy will reply if it fits").
 - An agent without Auto Commenter answers only when you @mention it. Type
   `@` in a comment: the menu lists the agents in the doc and the ones you can
-  bring in, each with its introduction. Mentioning one that is not in the doc
+  bring in, each with its persona. Mentioning one that is not in the doc
   yet brings it in, as mentioning a person in a shared doc shares it with
   them ("helper will reply · helper joins this doc").
 - `@name` typed in the doc itself works too. Once you pause, it becomes your
@@ -69,8 +70,9 @@ The header shows you and the doc's agents side by side (people are circles,
 agents are flowers; those with Auto Commenter first), then a round **People**
 button that opens a panel like a shared doc's, one line per person or agent:
 you, the agents here (× to remove one, except those with Auto Commenter), and
-the ones you can add (+). Click an agent for its card: name, introduction,
-permission switches, a star, and a pencil to edit it in place.
+the ones you can add (+). Click an agent for its card: name, persona,
+permission switches, a star, and a button for more settings; click the
+name or the persona to edit it in place.
 A **grey** agent cannot answer here: it is not running, still starting, or
 something needs fixing, such as a failed run, Claude Code not signed in, or
 the hourly run limit; the card then says what is wrong and offers Try again.
@@ -93,15 +95,16 @@ profile: in the doc's folder it reads only the doc and its comments and
 cannot edit the doc without Auto Editor, secrets are denied, and its commands
 have no network; it can still read other files on the disk, so it has no File
 Searcher; Web Searcher turns on Codex's web search; see
-[docs/architecture.md](docs/architecture.md#agents)), or a **Custom command** that receives the task (persona
-included) in `{promptFile}`. Supporting another agent program (a local open
+[docs/architecture.md](docs/architecture.md#agents)), or a **Custom command** that receives the task (persona and
+instructions included) in `{promptFile}`. Supporting another agent program (a local open
 model) is one more runtime in `src/server/agents/config.js`. A failed run takes the agent offline (its card
 has the log) and is not retried until you reply or click Try again.
 
-The **Agents** panel (People > Manage agents, or the pencil on an agent's
-card) lists your agents on the left and edits the one you pick on the right,
-in the order you are likely to change things: name and introduction, what it
-can do (the same switches as its card), its persona, and under **Advanced**
+The **Agents** panel (People > Manage agents, or the settings button on an
+agent's card) lists your agents on the left and edits the one you pick on the
+right, in the order you are likely to change things: name and persona,
+whether it is starred, what it can do (the same switches as its card), its
+instructions, and under **Advanced**
 how it runs: runtime, model, limits (turns and minutes per run, runs per hour,
 budget) and isolated runs (Codex agents have model, minutes and runs per
 hour). A problem (it cannot start, its last run failed) shows at the top only

@@ -2,8 +2,8 @@
 // doc's agents, a People button, then yours.
 //
 // Agents are light and disposable: New agent pops one into the doc and opens
-// its card, where its name, introduction and persona are edited in place (the
-// Agents panel holds the finer settings). An agent goes away when this doc
+// its card, where a click on its name or its persona (one line) edits it in
+// place; the Agents panel holds the finer settings, such as instructions. An agent goes away when this doc
 // closes unless it is starred on its card.
 //
 // Agents with **Auto Commenter** are in every doc and answer the new comments that
@@ -19,7 +19,7 @@ import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';
 import { parseMentions } from '../src/core/mentions.js';
-import { PERMISSIONS, disposable, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { MAX_PERSONA, PERMISSIONS, disposable, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
@@ -40,7 +40,8 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
   let showing = null; // 'me' | 'people' | 'agent:<name>' | null
   let log = null; // the shown agent's last run log, fetched when its card opens
   let busy = false;
-  let editing = null; // id of the agent whose card is open for editing in place
+  let editing = null; // the field of the shown agent being edited in place: 'name' | 'persona'
+  let naming = null; // id of the agent just made: after its name, its persona
   const fresh = new Set(); // names of agents just made, whose avatars pop in
 
   invite.addEventListener('click', () => toggle('people'));
@@ -82,6 +83,7 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
   function close() {
     showing = null;
     editing = null;
+    naming = null;
     panel.hidden = true;
   }
 
@@ -200,7 +202,7 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     const face = el('span', 'od-profile-face');
     face.dataset.presence = modeOf(status);
     face.append(avatar(name, 'agent', true));
-    const intro = profileOf(name) || status ? introOf(info) || 'No introduction yet' : 'Not one of your agents';
+    const intro = profileOf(name) || status ? introOf(info) : 'Not one of your agents';
     row.append(face, el('span', 'od-people-name', name), el('span', 'od-people-sub', intro));
     if (action) row.append(action);
     return row;
@@ -216,10 +218,8 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
 
     parts.push(cardHead(name));
     if (profile && disposable(profile)) parts.push(el('p', 'od-card-hint od-disposable', 'Goes away when you close this doc. Star it to keep it.'));
-    if (profile && editing === profile.id) parts.push(quickEdit(profile));
 
     if (info.editMode) parts.push(permissionSwitches(info, profile));
-    if (profile && editing === profile.id) parts.push(quickEditEnd(profile));
 
     if (!status && !profile) {
       // In the doc, but not run here: someone else's agent, or one you deleted.
@@ -257,19 +257,108 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     const pic = el('span', 'od-profile-face');
     pic.append(avatar(name, 'agent'));
     const who = el('div', 'od-profile-who');
-    who.append(el('div', 'od-profile-name', name));
-    if (introOf(info)) who.append(el('div', 'od-profile-slogan', introOf(info)));
+    if (profile) {
+      // Click the name or the persona line to edit it right there.
+      who.append(inPlace(profile, 'name', 'od-profile-name', 'Name, as you @mention it'));
+      who.append(inPlace(profile, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
+    } else {
+      who.append(el('div', 'od-profile-name', name));
+      if (introOf(info)) who.append(el('div', 'od-profile-slogan', introOf(info)));
+    }
     head.append(pic, who);
     if (profile) {
       const tools = el('div', 'od-profile-tools');
       const star = iconButton('star', profile.starred ? `Unstar ${name}: it goes away when this doc closes` : `Star ${name} to keep it for every doc`, () => toggleStar(profile));
       star.classList.add('od-star');
       star.setAttribute('aria-pressed', String(profile.starred));
-      tools.append(star);
-      if (editing !== profile.id) tools.append(iconButton('pencil', 'Edit here', () => startEditing(profile.id)));
+      tools.append(star, iconButton('settings', 'More settings, such as instructions', () => editProfile(profile.id)));
       head.append(tools);
     }
     return head;
+  }
+
+  // `key` of `agent` as text that turns into a field when clicked. Enter or
+  // leaving the field saves it, Escape puts it back. An empty persona shows
+  // as an empty line, still there to click.
+  function inPlace(agent, key, className, placeholder) {
+    if (editing !== key) {
+      const text = el('div', `${className} od-editable`, key === 'name' ? agent.name : introOf(agent));
+      text.tabIndex = 0;
+      text.setAttribute('role', 'button');
+      text.title = key === 'name' ? 'Click to rename' : 'Click to write its persona';
+      text.setAttribute('aria-label', key === 'name' ? `Rename ${agent.name}` : `Persona of ${agent.name}`);
+      const start = () => {
+        editing = key;
+        paintCard();
+        const field = panel.querySelector('.od-inline-input');
+        field?.focus();
+        field?.select();
+      };
+      text.addEventListener('click', start);
+      text.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); } });
+      return text;
+    }
+    const field = el('input', `${className} od-inline-input`);
+    field.type = 'text';
+    field.value = key === 'name' ? agent.name : agent.persona;
+    field.placeholder = placeholder;
+    field.maxLength = key === 'name' ? 64 : MAX_PERSONA;
+    field.spellcheck = key !== 'name';
+    field.setAttribute('aria-label', key === 'name' ? 'Name' : 'Persona');
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      if (save) commit(agent, key, field);
+      else {
+        editing = null;
+        paintCard();
+      }
+    };
+    field.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    field.addEventListener('blur', () => finish(true));
+    return field;
+  }
+
+  async function commit(agent, key, field) {
+    const value = field.value.trim();
+    const next = key === 'name' && naming === agent.id ? 'persona' : null; // a new agent: name, then persona
+    if (value === (key === 'name' ? agent.name : agent.persona)) return settle(next);
+    if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, 'Letters, digits, dot, dash or underscore, starting with a letter or digit', key);
+    try {
+      const result = await api.updateAgent(agent.id, { [key]: value });
+      if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
+      take(result);
+      settle(next);
+    } catch (failure) {
+      fail(field, failure.message, key);
+    }
+  }
+
+  // The field is done: back to text, or on to the next one.
+  function settle(next) {
+    if (!next) naming = null;
+    editing = next;
+    paintCard();
+    if (!next) return;
+    const field = panel.querySelector('.od-inline-input');
+    field?.focus();
+  }
+
+  // Keep the field open, with what went wrong under the card's top.
+  function fail(field, message, key) {
+    editing = key;
+    paintCard();
+    const again = panel.querySelector('.od-inline-input');
+    if (!again) return;
+    again.value = field.value;
+    again.setAttribute('aria-invalid', 'true');
+    const error = el('div', 'od-input-error', message);
+    panel.querySelector('.od-profile')?.after(error);
+    again.focus();
   }
 
   // The permissions as switches. One of your agents' switches change it at
@@ -344,11 +433,12 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
     fresh.add(name.toLowerCase());
     setTimeout(() => fresh.delete(name.toLowerCase()), 800);
     take(result);
-    editing = result.agent.id;
+    editing = 'name';
+    naming = result.agent.id;
     showing = `agent:${name}`;
     panel.hidden = false;
     paintCard();
-    const field = panel.querySelector('.od-quick-name');
+    const field = panel.querySelector('.od-inline-input');
     field?.focus();
     field?.select();
   }, 'Could not create the agent');
@@ -356,74 +446,6 @@ export function createPeople({ root, invite, panel, me, getName, openSettings, o
   const toggleStar = (agent) => act(async () => {
     take(await api.updateAgent(agent.id, { starred: !agent.starred }));
   }, 'Could not change the agent');
-
-  function startEditing(id) {
-    editing = id;
-    paintCard();
-    panel.querySelector('.od-quick-persona')?.focus();
-  }
-
-  // Name, introduction and persona, edited on the card; each saves when you
-  // leave it. The rest is in the Agents panel.
-  function quickEdit(agent) {
-    const box = el('div', 'od-quick');
-    const error = el('div', 'od-input-error');
-    error.hidden = true;
-    const field = (tag, key, className, label, placeholder) => {
-      const node = el(tag, `od-input od-input-full ${className}`);
-      if (tag === 'input') node.type = 'text';
-      node.value = agent[key] ?? '';
-      node.placeholder = placeholder;
-      node.setAttribute('aria-label', label);
-      node.dataset.key = key;
-      node.addEventListener('change', () => saveField(agent, key, node, error));
-      if (tag === 'input') node.addEventListener('keydown', (e) => { if (e.key === 'Enter') node.blur(); });
-      return node;
-    };
-    const name = field('input', 'name', 'od-quick-name', 'Name', 'Name, as you @mention it');
-    name.maxLength = 64;
-    name.spellcheck = false;
-    const intro = field('input', 'tagline', 'od-quick-intro', 'Introduction', 'What it is for, in a few words');
-    intro.maxLength = 60;
-    const persona = field('textarea', 'persona', 'od-quick-persona od-persona', 'Persona', 'Who it is and how it works, in your own words. Blank: a plain co-author.');
-    persona.rows = 4;
-    persona.maxLength = 4000;
-    box.append(name, error, intro, persona);
-    return box;
-  }
-
-  function quickEditEnd(agent) {
-    const actions = el('div', 'od-profile-actions od-quick-end');
-    actions.append(button('More settings', 'od-link-button', () => editProfile(agent.id)), button('Done', 'od-primary', () => {
-      editing = null;
-      paintCard();
-    }));
-    return actions;
-  }
-
-  async function saveField(agent, key, node, error) {
-    const value = key === 'persona' ? node.value : node.value.trim();
-    error.hidden = true;
-    node.removeAttribute('aria-invalid');
-    if (key === 'name' && !NAME_PATTERN.test(value)) {
-      error.textContent = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
-      error.hidden = false;
-      node.setAttribute('aria-invalid', 'true');
-      return;
-    }
-    try {
-      const result = await api.updateAgent(agent.id, { [key]: value });
-      if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
-      take(result);
-      // The fields stay as typed; the top of the card catches up at once.
-      const name = agentShown();
-      if (name) panel.querySelector('.od-profile')?.replaceWith(cardHead(name));
-    } catch (failure) {
-      error.textContent = failure.message;
-      error.hidden = false;
-      node.setAttribute('aria-invalid', 'true');
-    }
-  }
 
   const setUp = (name) => act(async () => {
     take(await api.createAgent({ name }, { invite: false }));

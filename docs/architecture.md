@@ -75,7 +75,7 @@ same core library, so any of them can work without the others.
 ## Agents
 
 - **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
-  name, introduction, persona (plain text), runtime, permissions, limits,
+  name, persona (one line), instructions (any length), runtime, permissions, limits,
   and whether it is starred. A new user has one plain agent, Clippy, starred;
   there are no built-in roles. An unstarred agent records the doc session
   that made it (`session`: process id and a random part, set only by the
@@ -87,7 +87,7 @@ same core library, so any of them can work without the others.
   share a `Floor`, so only one runs at a time. This keeps each run's file
   changes attributable to it (recorded edits, undo, version history).
 - **Dispatcher** (`agents/dispatcher.js`): watches the inbox, claims threads
-  (`working`), runs the agent with the threads and a prompt (task, persona,
+  (`working`), runs the agent with the threads and a prompt (task, persona and instructions as one block,
   other agents, rules), records the run's edits on its reply, and handles
   failures, limits and restarts when settings change.
 - **Runtimes** (`agents/config.js`, `adapters.js`): an adapter per program

@@ -465,7 +465,7 @@ const comment = (server, id, body) => call(server, 'POST', '/api/ops', { body: {
 const authorsOf = (thread) => thread.messages.slice(1).map((m) => m.author.name);
 
 test('an agent with Auto Commenter is in every doc and answers what mentions no one; any other answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
-  await withRoster([{ name: 'helper', persona: 'You are terse.', tagline: 'Says it short' }], async ({ server, state, runs }) => {
+  await withRoster([{ name: 'helper', persona: 'Says it short', instructions: 'You are terse.' }], async ({ server, state, runs }) => {
     // The agent with Auto Commenter joins at once; the other is not in the doc yet.
     let now = await state();
     assert.deepEqual(now.agents.map((a) => [a.name, a.autoComment]), [['Pilot', true]]);
@@ -481,11 +481,11 @@ test('an agent with Auto Commenter is in every doc and answers what mentions no 
     assert.equal(posted.status, 200);
     assert.ok(posted.body.sidecar.participants.some((p) => p.name === 'helper' && p.kind === 'agent'), 'it joined');
     assert.deepEqual(posted.body.sidecar.threads[1].messages[0].mentions, ['helper'], 'the mention counts');
-    assert.ok(posted.body.agents.some((a) => a.name === 'helper' && a.autoComment === false && a.tagline === 'Says it short'));
+    assert.ok(posted.body.agents.some((a) => a.name === 'helper' && a.autoComment === false && a.persona.startsWith('Says it short')));
     assert.ok(await waitUntil(async () => (await state()).sidecar.threads[1].messages.length === 2), 'helper answered');
     await new Promise((resolve) => setTimeout(resolve, 800));
     assert.deepEqual(authorsOf((await state()).sidecar.threads[1]), ['helper'], 'Pilot left it to helper');
-    assert.equal((await runs()).find((r) => r.as === 'helper').persona, 'You are terse.', 'the persona reaches the run');
+    assert.equal((await runs()).find((r) => r.as === 'helper').persona, 'Says it short\n\nYou are terse.', 'persona and instructions reach the run, as one block');
 
     // A comment for no one still goes only to the agent with Auto Commenter.
     await comment(server, 't_noone002', 'And this?');
@@ -604,7 +604,7 @@ test('several agents with Auto Commenter each answer the open comments that fit 
 test('agents are created from the page, added at once, and deleted', { timeout: 30_000 }, async () => {
   await withRoster([], async ({ server, state }) => {
     assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'boss', role: 'pilot' } } })).status, 400, 'roles are gone');
-    const created = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar', persona: 'Fix grammar only.', tagline: 'Fixes grammar' }, invite: true } });
+    const created = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar', persona: 'Fixes grammar', instructions: 'Fix grammar only.' }, invite: true } });
     assert.equal(created.status, 200);
     const { agent } = created.body;
     assert.match(agent.id, /^a_/);
