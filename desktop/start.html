@@ -9,11 +9,13 @@
       color-scheme: light dark;
       --bg: #ffffff; --soft: #f6f6f4; --hover: #eeeeec; --border: #e4e4e0;
       --text: #1f1f1d; --text-soft: #5f5f5a; --text-faint: #8d8d87; --accent: #2f6fde; --accent-text: #ffffff;
+      --brand: #1d9e75;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #1c1c1b; --soft: #252524; --hover: #2f2f2d; --border: #353533;
         --text: #ededea; --text-soft: #b4b4ae; --text-faint: #85857f; --accent: #5b8ff0; --accent-text: #0e1420;
+        --brand: #2bc08f;
       }
     }
     * { box-sizing: border-box; }
@@ -24,7 +26,12 @@
       display: flex; flex-direction: column; padding: 36px 32px 24px; gap: 28px;
       user-select: none;
     }
-    h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+    h1 { font-size: 26px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 12px; }
+    .mark { width: 30px; height: 40px; flex: none; }
+    .mark .shackle, .word .o path { fill: none; stroke: var(--brand); stroke-linecap: round; }
+    .mark .body { fill: var(--text); }
+    .mark .lines { stroke: var(--bg); stroke-width: 3; stroke-linecap: round; }
+    .word .o { width: 0.9em; height: 0.9em; margin-right: 0.03em; vertical-align: -0.05em; }
     .lead { margin: 0; color: var(--text-soft); }
     .actions { display: flex; gap: 10px; }
     button {
@@ -52,7 +59,15 @@
 </head>
 <body>
   <header>
-    <h1>OpenDoc</h1>
+    <h1 aria-label="OpenDoc">
+      <!-- The logo: a page shaped like a padlock left open (build/icon.svg), and an O that never closes. -->
+      <svg class="mark" viewBox="10 8 52 70" aria-hidden="true">
+        <path class="shackle" d="M22 40V26a14 14 0 0 1 28 0v6" stroke-width="5"/>
+        <rect class="body" x="14" y="40" width="44" height="34" rx="5"/>
+        <path class="lines" d="M22 50h28M22 58h28M22 66h18"/>
+      </svg>
+      <span class="word" aria-hidden="true"><svg class="o" viewBox="0 0 32 32"><path d="M28 16a12 12 0 1 1-6-10.39" stroke-width="4.5"/></svg>penDoc</span>
+    </h1>
     <p class="lead">Write markdown with an AI co-author, in comments next to the text.</p>
   </header>
   <div class="actions">

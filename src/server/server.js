@@ -29,6 +29,7 @@ const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/assets/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/assets/app.css': ['app.css', 'text/css; charset=utf-8'],
+  '/assets/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
 const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);

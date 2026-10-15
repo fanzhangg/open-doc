@@ -80,6 +80,20 @@ test('bundled fonts are served from the assets fonts folder only', async () => {
   }
 });
 
+test('the app icon is served as the editor favicon', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  await writeFile(join(assetsDir, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const server = await startServer(docPath, { assetsDir });
+  try {
+    const res = await new Promise((resolve) => request({ port: server.port, path: '/assets/icon.svg', headers: { host: `127.0.0.1:${server.port}` } }, resolve).end());
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers['content-type'], 'image/svg+xml');
+  } finally {
+    await server.close();
+  }
+});
+
 test('state returns the doc, its hash and the sidecar', async () => {
   await withServer(async ({ server }) => {
     const { status, body } = await call(server, 'GET', '/api/state');

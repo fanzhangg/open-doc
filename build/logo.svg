@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 4 252 80" width="252" height="80">
+  <!-- OpenDoc lockup: the icon mark (build/icon.svg) and an O that never closes. -->
+  <style>
+    .ink { fill: #16161a; } .teal { stroke: #1d9e75; } .cut { stroke: #ffffff; }
+    @media (prefers-color-scheme: dark) { .ink { fill: #f4f2ec; } .teal { stroke: #2bc08f; } .cut { stroke: #1c1c1b; } }
+    text { font: 600 40px Inter, "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing: -0.01em; }
+  </style>
+  <path class="teal" d="M22 40V26a14 14 0 0 1 28 0v6" fill="none" stroke-width="5" stroke-linecap="round"/>
+  <rect class="ink" x="14" y="40" width="44" height="34" rx="5"/>
+  <path class="cut" d="M22 50h28M22 58h28M22 66h18" stroke-width="3" stroke-linecap="round"/>
+  <path class="teal" d="M105 42.5a14.5 14.5 0 1 1-7.25-12.56" fill="none" stroke-width="5" stroke-linecap="round"/>
+  <text class="ink" x="109" y="57">penDoc</text>
+</svg>
