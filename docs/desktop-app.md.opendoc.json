@@ -1,0 +1,320 @@
+{
+  "opendoc": 1,
+  "doc": "desktop-app.md",
+  "docHash": "sha256:64f5a55bf28d692264ee8f928159c60beda30f4d3e8321f311c6f3b5d005eafc",
+  "participants": [
+    {
+      "name": "claude",
+      "kind": "agent"
+    },
+    {
+      "name": "fanzhangg",
+      "kind": "human"
+    }
+  ],
+  "threads": [
+    {
+      "id": "t_xekfe1y8pt",
+      "anchor": {
+        "exact": "\nPlatforms: Windows first, and macOS is a target too. Is Linux in scope for the first release, or later?",
+        "prefix": " it is not found.\nOpen questions",
+        "suffix": "\nIs code signing (Windows certif",
+        "start": 19425
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_dcd2da2ryw",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Windows first, but macos is the target too",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:08:51.972Z"
+        },
+        {
+          "id": "m_tbz0gm4ak6",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:08:55.546Z"
+        },
+        {
+          "id": "m_qrxwphn3z8",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Since you answered it, I suggest turning this open question into a stated decision: Windows ships first and macOS is a target too. I left Linux as an open question because you did not mention it. Note that macOS as a target makes the code-signing question below matter more, since Gatekeeper blocks unsigned apps.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:09:14.896Z",
+          "proposal": [
+            {
+              "before": "- Which platforms must the first release support? (Windows first is assumed.)",
+              "after": "- Platforms: Windows first, and macOS is a target too. Is Linux in scope for\n  the first release, or later?",
+              "prefix": "not found.\n\n### Open questions\n\n",
+              "suffix": "\n- Is code signing (Windows cert",
+              "start": 21134
+            }
+          ]
+        },
+        {
+          "id": "m_h1h446f6yh",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:10:42.093Z",
+          "edits": [
+            {
+              "before": "Which platforms must the first release support? (Windows first is assumed.)",
+              "after": "Platforms: Windows first, and macOS is a target too. Is Linux in scope for\n  the first release, or later?",
+              "prefix": "t found.\n\n### Open questions\n\n- ",
+              "suffix": "\n- Is code signing (Windows cert",
+              "start": 21136
+            }
+          ],
+          "applies": "m_qrxwphn3z8"
+        }
+      ]
+    },
+    {
+      "id": "t_j5kzizgw39",
+      "anchor": {
+        "exact": "\nIs code signing (Windows certificate, Apple Developer ID) in scope for the first release?",
+        "prefix": "for the first release, or later?",
+        "suffix": "\nShould the app reopen the docs ",
+        "start": 19529
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_o17oyi1njk",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "No code signing @claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:11:20.656Z"
+        },
+        {
+          "id": "m_f5gry5axhl",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "I suggest stating the decision instead of the question: the first release ships unsigned. I named the consequence so it stays visible next to the decision; it matches the SmartScreen and Gatekeeper risk listed above.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:11:36.045Z",
+          "proposal": [
+            {
+              "before": "- Is code signing (Windows certificate, Apple Developer ID) in scope for the\n  first release?",
+              "after": "- Code signing: not in the first release. Installers ship unsigned, so users\n  see the SmartScreen and Gatekeeper warnings described under Risks.",
+              "prefix": "\n  the first release, or later?\n",
+              "suffix": "\n- Should the app reopen the doc",
+              "start": 21242
+            }
+          ]
+        },
+        {
+          "id": "m_hm5lgdbpm9",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "did i give you edit directly permission? Why did not you edit dirrectly?",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:12:04.626Z"
+        },
+        {
+          "id": "m_di7y5q0zfs",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:12:35.282Z"
+        },
+        {
+          "id": "m_m8bd0i6hdm",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "No. This session is set to approve every change: the instructions I was started with say not to edit the doc and to send proposals instead, and in that mode the editor does not give me file edit access. That is why I proposed. To let me edit directly, turn off approve-every-change for the agent in Settings. Until then, Apply on the proposal above makes the edit.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:12:46.650Z"
+        }
+      ]
+    },
+    {
+      "id": "t_7f1uajkj9m",
+      "anchor": {
+        "exact": "\nSummary",
+        "prefix": "Desktop App Design",
+        "suffix": "\nTurn the browser editor into a ",
+        "start": 18
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_67bw4klrw7",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude Hello?",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:14:31.219Z"
+        },
+        {
+          "id": "m_z5f9ebqdyu",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Hi! I'm here. What would you like me to do with the Summary? I can tighten it, expand it, or answer questions about it.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:14:41.587Z"
+        },
+        {
+          "id": "m_5hvvfcschz",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Make it more concise",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:19:04.647Z"
+        },
+        {
+          "id": "m_hkmspvxwyn",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:19:08.347Z"
+        },
+        {
+          "id": "m_k3abr5fytg",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Cut the Summary from five lines to three. I dropped the list of OS open methods (double-click, Open with, drag, command line) and the font example. Both are still covered in detail later in the doc. The scope and the 'CLI, sidecar format and agent loop do not change' point are kept.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:19:22.823Z",
+          "edits": [
+            {
+              "before": ". The app opens a markdown file\nfrom its own Open dialog, from the OS (double-click, \"Open with\", drag onto\nthe window or dock icon, or a command-line path), and keeps every setting in\none user-level file, so a font picked once applies to every doc and every\nlaunch. The CLI, the sidecar format and the",
+              "after": " that opens markdown files from\nits own dialog or the OS, and keeps settings in one user-level file that\napplies to every doc. The CLI, sidecar format and",
+              "prefix": "rowser editor into a desktop app",
+              "suffix": " agent loop do not change.\n\nRela",
+              "start": 78
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_5nfy85h67u",
+      "anchor": {
+        "exact": "\nRelated docs:\nProduct design: what OpenDoc is and why\nFormat spec: sidecar format and write protocol (unchanged)\nREADME: current usage (to be updated when this ships)",
+        "prefix": "at and agent loop do not change.",
+        "suffix": "\nProblem\nThe editor runs as open",
+        "start": 249
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T07:17:10.528Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_1o3mshzoq1",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Delete this section",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:14:45.344Z"
+        },
+        {
+          "id": "m_1h0igdlvkq",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T07:14:53.441Z"
+        },
+        {
+          "id": "m_uox9mcwf3p",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Deleted the Related docs section (the heading line and its three links to Product design, Format spec and README). The Summary now leads straight into Problem.",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:15:10.885Z",
+          "edits": [
+            {
+              "before": "Related docs:\n\n- [Product design](product-design.md): what OpenDoc is and why\n- [Format spec](../spec/SPEC.md): sidecar format and write protocol (unchanged)\n- [README](../README.md): current usage (to be updated when this ships)\n\n",
+              "after": "",
+              "prefix": " the agent loop do not change.\n\n",
+              "suffix": "### Problem\n\n- The editor runs a",
+              "start": 408
+            }
+          ]
+        },
+        {
+          "id": "m_wwg5fpl4d7",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Undid claude's edit",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:15:17.399Z",
+          "undoes": "m_uox9mcwf3p"
+        }
+      ]
+    }
+  ]
+}

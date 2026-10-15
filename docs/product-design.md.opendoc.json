@@ -1,7 +1,7 @@
 {
   "opendoc": 1,
   "doc": "product-design.md",
-  "docHash": "sha256:2c5c452e0c0b9b4a6e2b640489bcc5c3e82e3507298f7273c10d24273ea6a19a",
+  "docHash": "sha256:fa87ddade5eb3a20984e4a16e64c37797f1a7a70f9f601065ae87c63cda1a1fc",
   "participants": [
     {
       "name": "claude",
@@ -101,9 +101,9 @@
       "id": "t_86x7ma8s8s",
       "anchor": null,
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T06:40:33.012Z",
       "working": null,
       "messages": [
         {
@@ -125,6 +125,178 @@
           "body": "Translated the whole doc to Chinese. I kept code, commands, file names and links unchanged, and left the UI strings that appear in English in the app (\"claude is working on it\", \"Resolved by claude\") in English. Key terms keep the English in parentheses the first time (e.g. 评论串 (Thread), 锚点 (Anchor)). Leaving this open so you can check the terminology.",
           "mentions": [],
           "createdAt": "2026-10-14T23:15:05.822Z"
+        }
+      ]
+    },
+    {
+      "id": "t_ajwg1oou5q",
+      "anchor": {
+        "exact": "产品设计",
+        "prefix": "",
+        "suffix": "\n概述\nOpenDoc 让人和 AI 智能体通过锚定在文本上的评",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T06:40:35.914Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_95g1qvcgzr",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "这个设计和现在的产品实现一致吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T00:08:28.754Z"
+        },
+        {
+          "id": "m_dx3torix01",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T06:19:30.650Z"
+        },
+        {
+          "id": "m_2wqntn4zp6",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "你人呢？",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:19:43.786Z"
+        },
+        {
+          "id": "m_n0cdcn6dvs",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "抱歉久等了。我把本文和 README、desktop-app.md、SPEC.md 对照了一遍（只看了文档，没读源码）：大部分一致，包括锚定与重新锚定、收件箱、working 5 分钟过期、edits/撤销、设置存储、Settings > Agent、serve --agent、CLI 命令和退出码。有几处不一致：\n1) 第 86-87 行和组件表里的“操作系统文件关联”（双击 .md、“打开方式”）还没实现。打包是 desktop-app.md 的第 5 阶段，尚未完成，目前只能从源码用 npm run desktop 运行。\n2) 第 148-150 行“智能体运行受到限制”没提到最近加的限制：运行不能读取 .env*、*.pem、*.key、~/.ssh、~/.aws；也没提到服务器运行期间会续用同一个 Claude 会话。\n3) 组件表的 CLI 一行漏了 serve。\n需要的话我可以改：把文件关联标成“计划中（打包阶段）”，补上第 2 点，并在 CLI 一行加上 serve。要我改吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:20:37.089Z"
+        }
+      ]
+    },
+    {
+      "id": "t_us8ufhpnlp",
+      "anchor": {
+        "exact": "\n首批目标用户是谁？要优先优化的主要使用场景是什么（设计文档、规范、写作、 项目计划）？",
+        "prefix": "运行会显示提示，在人回复或点击“重试”之前不会重试。\n待解决问题",
+        "suffix": "\n如何衡量成功？\n通过网络的多人编辑或托管是否应列入 v1 之后",
+        "start": 3593
+      },
+      "detached": true,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T06:40:37.451Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_atyndz1gn1",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude 目标用户就是我自己。比如我一个vibe coding项目需要写一个markdown file，我就可以在编辑器里面写。\n\n场景就是写markdown文件编辑。内容不重要。",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T06:23:01.658Z"
+        },
+        {
+          "id": "m_7iwvccc67y",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把你的回答写进文档：在“用户”一节开头加了一段，说明首批目标用户是你自己（例如在 vibe coding 项目里写 markdown），优化的场景是编辑 markdown 本身、不针对特定内容类型；并从“待解决问题”中删掉了这一条。措辞和放在哪里请你看一下，合适就解决这个评论串。",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:23:17.800Z",
+          "edits": [
+            {
+              "before": "",
+              "after": "首批目标用户是作者本人：在自己的项目（例如 vibe coding 项目）里需要写\nmarkdown 文件时，直接在编辑器里写。要优化的场景是编辑 markdown 文件本身，\n不针对特定的内容类型。\n\n",
+              "prefix": "式，或专有文档格式。\n- 托管、账户或分享。\n\n### 用户\n\n",
+              "suffix": "- **作者：** 撰写计划、规范或设计文档的人，希望智能体帮助",
+              "start": 1391
+            },
+            {
+              "before": "- 首批目标用户是谁？要优先优化的主要使用场景是什么（设计文档、规范、写作、\n  项目计划）？\n",
+              "after": "",
+              "prefix": "，在人回复或点击“重试”之前不会重试。\n\n### 待解决问题\n\n",
+              "suffix": "- 如何衡量成功？\n- 通过网络的多人编辑或托管是否应列入 v1",
+              "start": 4390
+            }
+          ]
+        },
+        {
+          "id": "m_3erjuv3r7q",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "我不@你你可以看到我的评论吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:23:49.301Z"
+        },
+        {
+          "id": "m_hg1dtfgusy",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "能看到。最新一条消息来自人、而且没有 @ 任何人时，这个评论串会进我的收件箱，我会被唤醒（你这条就是这样到我这里的）。只有当你只 @ 了别人（比如 @alex）时，我才不会被唤醒。另外，如果开启了“只回复 @ 我的评论”（--mentions-only），那就必须 @claude。",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T06:23:58.286Z"
+        }
+      ]
+    },
+    {
+      "id": "t_dqin782o64",
+      "anchor": {
+        "exact": "Docs",
+        "prefix": "无论哪一方编辑文档，评论都会附着在 对应的文本上。人在一个类似 ",
+        "suffix": " 的桌面应用中工作，它像普通编辑器一样打开 markdown 文",
+        "start": 164
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T06:40:36.791Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_1vbm7nr6vg",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "@claude Docs是什么？你说的是word吗？",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T06:38:55.536Z"
+        },
+        {
+          "id": "m_y0oidc9s6t",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "这里的 Docs 指的是 Google Docs，不是 Word：在线文档、选中文字后在页边加评论、多人同时编辑。最近的提交“让协作编辑像 Google Docs 一样”也是这个意思。只写 Docs 确实容易误解，要我把文中的“类似 Docs”都改成“类似 Google Docs”吗？（第 8 行这里，以及使用体验和组件表里的“类似 Docs 的编辑器”）",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:39:05.442Z"
         }
       ]
     }

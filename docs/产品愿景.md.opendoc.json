@@ -1,0 +1,1211 @@
+{
+  "opendoc": 1,
+  "doc": "产品愿景.md",
+  "docHash": "sha256:16fe95149117f499bb16b95127cd0fb467dbd5f44a014d0c2a15b49cd6b61896",
+  "participants": [
+    {
+      "name": "claude",
+      "kind": "agent"
+    },
+    {
+      "name": "fanzhangg",
+      "kind": "human"
+    }
+  ],
+  "threads": [
+    {
+      "id": "t_7z1x94l12h",
+      "anchor": {
+        "exact": "\n文档编辑是计算机最基础最持久的需求。人类的文档协作经历了两个阶段：\n用户串行协作 （Word为代表）：用户A编辑完word文档，邮件发给用户B，用户B用修订和批注标出改动，再发回用户A审阅\n文档并行编辑（Google Docs为代表）：用户A和用户B在一个文档里同时编辑内容\n现在AI和人类协同写作已经是不可避免的趋势，然而AI和人类的协作还停留在串行阶段：人类在文档或者聊天框评论，AI审阅评论修改文档，再返回给人类。",
+        "prefix": "I agent像同事一样，和你在同一份文档里同时写作\n背景与问题",
+        "suffix": "\n我们的方案\n我的产品把AI和人的协作推进到并行阶段：AI不再是",
+        "start": 45
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T06:55:24.520Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_j7nj9keibn",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "我对文档发展历史的总结对吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:53:18.510Z"
+        },
+        {
+          "id": "m_0dsfqqqrwf",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "大方向是对的：从“串行传文件”到“多人实时同编”，是业界讲协作演进的常见说法，用来引出“AI 协作还停留在串行”很有说服力。有几处可以更严谨，供参考（我没改文档）：\n1. 串行阶段 Word 并非只靠邮件往返，它的“修订/批注”(Track Changes) 才是这一阶段的标志，可以点出来，正好和后文“人类评论、AI 改文档”呼应。\n2. 两个阶段之间其实还有过渡：共享盘/SharePoint 的签出-签入、版本控制（如 Git）。不必展开，但“只有 2 个阶段”可以写成“大致经历了两个阶段”。\n3. Google Docs (2006) 前身是 Writely，并行编辑并非它首创（如 SubEthaEdit、EtherPad），说“以 Google Docs 为代表”是准确的。\n4. 首句“自电脑发明以来亘古不变”略夸张，可改为“文档编辑是计算机最基础、最持久的需求之一”。\n5. 小错字：第 5 行“用户B编辑在发回用户AI审阅”应为“编辑后再发回用户A审阅”；第 8 行“在返回给人类”应为“再返回给人类”；“Google Doc”通常写作“Google Docs”。\n需要的话 @claude 我直接改。",
+          "mentions": [
+            "claude"
+          ],
+          "createdAt": "2026-10-15T06:53:34.220Z"
+        },
+        {
+          "id": "m_oj9wg1mz5v",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "好的，改一下",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:54:22.947Z"
+        },
+        {
+          "id": "m_nx236dreci",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已改：首句改为“计算机最基础、最持久的需求之一”，“2个阶段”改为“大致经历了两个阶段”；Word 那条加上了“用修订和批注标出改动”，并修正为“再发回用户A审阅”；“Google Doc”改为“Google Docs”；末句“在返回”改为“再返回”。另外更正我上条回复：EtherPad (2008) 晚于 Google Docs (2006)，早于它的例子应是 SubEthaEdit (2003)，这点没写进文档。",
+          "mentions": [],
+          "createdAt": "2026-10-15T06:54:38.714Z",
+          "edits": [
+            {
+              "before": "文档编辑是自电脑发明以来亘古不变的需求。人类编辑协作经历了2个阶段",
+              "after": "文档编辑是计算机最基础、最持久的需求之一。人类的文档协作大致经历了两个阶段",
+              "prefix": "# 产品愿景\n\n",
+              "suffix": "：\n\n- 用户串行协作 （Word为代表）：用户A编辑完word",
+              "start": 8
+            },
+            {
+              "before": "用户B编辑在发回用户AI审阅\n- 文档并行编辑（Google Doc为代表",
+              "after": "用户B用修订和批注标出改动，再发回用户A审阅\n- 文档并行编辑（Google Docs为代表",
+              "prefix": " （Word为代表）：用户A编辑完word文档，邮件发给用户B，",
+              "suffix": "）：用户A和用户B在一个文档里同时编辑内容\n\n现在AI和人类协同",
+              "start": 88
+            },
+            {
+              "before": "在返回给人类",
+              "after": "再返回给人类",
+              "prefix": "停留在串行阶段：人类在文档或者聊天框评论，AI审阅评论修改文档，",
+              "suffix": "。\n",
+              "start": 222
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_x9jup1ts1i",
+      "anchor": {
+        "exact": "框里的工具，而是文档里的一位协作者。人和AI同时在同一份文档上工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。\n设计原则\n熟悉：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复\n实时：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不",
+        "prefix": "们的方案\n我的产品把AI和人的协作推进到并行阶段：AI不再是聊天",
+        "suffix": "用停下来等它，可以同时编辑文档的其他部分\n可控：评论锚定在你选中",
+        "start": 290
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T07:28:52.012Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_ik0jmqsywi",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "这个产品特色总结对吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:26:57.691Z"
+        },
+        {
+          "id": "m_vgg3sv32jp",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "大体对，但有两处可以更准：(1) “实时”一条自相矛盾：标题说实时，正文又说agent“异步审阅”。实际体验是agent在后台一直等着，你一评论它就开始处理，期间你可以继续编辑别处，双方同时在改同一个文档，这才是“并行”。(2) “可控”说agent知道“行数”不太准确：评论锚定的是你选中的那段文字（行号只是提示），文字移动了锚点也会跟着走；而且“只改评论范围”是agent遵守的约定，不是系统强制的。更硬的可控性在于：每次改动都在评论里回复说明，你可以撤销，或选择让agent只提建议、由你点Apply；只有你能关闭评论。另外“没有任何上手门槛”略绝对，改成“几乎没有”。下面是建议的改法。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:27:18.292Z",
+          "proposal": [
+            {
+              "before": "- **熟悉：**直接继承了熟悉的文档编辑体验，没有任何上手门槛",
+              "after": "- **熟悉：**直接继承了熟悉的文档编辑和评论体验，几乎没有上手门槛",
+              "prefix": "le Doc一起合作编辑审阅的方案。这个协作方式有几个特点：\n\n",
+              "suffix": "\n- **实时：**agent会异步审阅回复你的消息，没有异步编",
+              "start": 306
+            },
+            {
+              "before": "- **实时：**agent会异步审阅回复你的消息，没有异步编辑的摩擦",
+              "after": "- **实时：**agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分",
+              "prefix": " **熟悉：**直接继承了熟悉的文档编辑体验，没有任何上手门槛\n",
+              "suffix": "\n- **可控：**agent会知道评论具体的行数，只会在评论的",
+              "start": 339
+            },
+            {
+              "before": "- **可控：**agent会知道评论具体的行数，只会在评论的scope修改。不会修改无关的章节。",
+              "after": "- **可控：**评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定",
+              "prefix": "实时：**agent会异步审阅回复你的消息，没有异步编辑的摩擦\n",
+              "suffix": "\n",
+              "start": 375
+            }
+          ]
+        },
+        {
+          "id": "m_2a7lqxs55t",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:27:50.479Z",
+          "edits": [
+            {
+              "before": "**熟悉：**直接继承了熟悉的文档编辑体验，没有任何上手门槛\n- **实时：**agent会异步审阅回复你的消息，没有异步编辑的摩擦\n- **可控：**agent会知道评论具体的行数，只会在评论的scope修改。不会修改无关的章节。",
+              "after": "\\*\\*熟悉：\\*\\*直接继承了熟悉的文档编辑和评论体验，几乎没有上手门槛\n- \\*\\*实时：\\*\\*agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- \\*\\*可控：\\*\\*评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定",
+              "prefix": " Doc一起合作编辑审阅的方案。这个协作方式有几个特点：\n\n- ",
+              "suffix": "\n",
+              "start": 308
+            }
+          ],
+          "applies": "m_vgg3sv32jp"
+        }
+      ]
+    },
+    {
+      "id": "t_a6vpajml1v",
+      "anchor": {
+        "exact": "取评论、直接修改文件并回复\n实时：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n可控：评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定",
+        "prefix": "档是本地的纯Markdown文件，评论单独存放，AI通过命令行读",
+        "suffix": "\n开放：开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里",
+        "start": 434
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:04:23.032Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_h8j0vi4kcb",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "文字格式有点bug，修一下",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:29:26.775Z"
+        },
+        {
+          "id": "m_sqvrkbhkxe",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "修好了：三条特点里的加粗符号被转义成了 \\*\\*，所以显示成了字面星号。我把它们改回正常的加粗，并把冒号移到加粗外面（**熟悉**：…）。原来的写法 **熟悉：** 后面紧跟中文时，按 Markdown 规则闭合的 ** 不会被识别，加粗会失效，这可能就是最初出错的原因。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:29:45.183Z",
+          "edits": [
+            {
+              "before": "\\*\\*熟悉：\\*\\*直接继承了熟悉的文档编辑和评论体验，几乎没有上手门槛\n- \\*\\*实时：\\*\\*agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- \\*\\*可控：\\*\\*",
+              "after": "**熟悉**：直接继承了熟悉的文档编辑和评论体验，几乎没有上手门槛\n- **实时**：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- **可控**：",
+              "prefix": " Doc一起合作编辑审阅的方案。这个协作方式有几个特点：\n\n- ",
+              "suffix": "评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无",
+              "start": 308
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_ffbt2rfwk1",
+      "anchor": {
+        "exact": "\n我的产品把AI和人的协作推进到并行阶段：AI不再是聊天框里的工具，而是文档里的一位协作者。人和AI同时在同一份文档上工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。\n设计原则\n熟悉：界面沿用大家熟悉的“编辑+评论”交互，",
+        "prefix": "或者聊天框评论，AI审阅评论修改文档，再返回给人类。\n我们的方案",
+        "suffix": "几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markd",
+        "start": 262
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:04:21.082Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_7ptbz83vwt",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "稍微修改一下措辞，让人觉得我的项目不是一个Google doc山寨品。（虽然MVP UI设计很像，但是底层完全不一样, 笑）",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:31:07.599Z"
+        },
+        {
+          "id": "m_v3wtlbfnne",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "改了两处：(1) 第10行去掉了 在会议室里看Google Doc的类比，改为强调AI从聊天框里的工具变成文档里的协作者，和人通过评论讨论、各自动手修改；(2) 熟悉一条补充了底层差异：界面沿用熟悉的编辑+评论交互，但文档是本地纯Markdown、评论单独存放、AI通过命令行读评论和改文件。开头讲历史的Google Docs为代表我保留了，那里是在讲阶段，不是在类比产品。如果底层差异你想强调别的点（比如本地优先、可接任意agent），告诉我再调。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:31:28.876Z",
+          "edits": [
+            {
+              "before": "我的产品提出了一种AI和人并行编辑的体验, 让AI和人的协作仿佛人和AI在一个会议室里看Google Doc一起合作编辑审阅的方案",
+              "after": "我的产品把AI和人的协作推进到并行阶段：AI不再是聊天框里的工具，而是文档里的一位协作者。人和AI同时在同一份文档上工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案",
+              "prefix": "类在文档或者聊天框评论，AI审阅评论修改文档，再返回给人类。\n\n",
+              "suffix": "。这个协作方式有几个特点：\n\n- **熟悉**：界面沿用大家熟悉",
+              "start": 226
+            },
+            {
+              "before": "直接继承了熟悉的文档编辑和评论体验，几乎没有上手门槛",
+              "after": "界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复",
+              "prefix": "一起审阅一份方案。这个协作方式有几个特点：\n\n- **熟悉**：",
+              "suffix": "\n- **实时**：agent在后台随时待命，你一评论它就开始处",
+              "start": 339
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_xtlwuq0zbe",
+      "anchor": null,
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:04:19.214Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_afvcx9yq0y",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "产品愿景一般有哪些章节？能不能帮我写一个大纲，我来填内容。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:35:08.546Z"
+        },
+        {
+          "id": "m_q0psjanjxe",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已在文档里加好大纲。常见章节：一句话愿景、背景与问题、我们的方案、目标用户、核心使用场景、竞品与差异化、设计原则、不做什么、成功指标、路线图、风险与待定问题。你已写的内容我没改，只在前面加了 背景与问题和我们的方案两个标题来归位；其余新章节下留了（待填写：…）提示，填完删掉即可。不需要的章节可以直接删。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:35:38.372Z",
+          "edits": [
+            {
+              "before": "",
+              "after": "## 一句话愿景\n\n（待填写：用一句话说明产品要让谁、在什么事情上、变成什么样）\n\n## 背景与问题\n\n",
+              "prefix": "# 产品愿景\n\n",
+              "suffix": "文档编辑是计算机最基础最持久的需求。人类的文档协作经历了两个阶段",
+              "start": 8
+            },
+            {
+              "before": "",
+              "after": "## 我们的方案\n\n",
+              "prefix": "类在文档或者聊天框评论，AI审阅评论修改文档，再返回给人类。\n\n",
+              "suffix": "我的产品把AI和人的协作推进到并行阶段：AI不再是聊天框里的工具",
+              "start": 278
+            },
+            {
+              "before": "",
+              "after": "\n## 目标用户\n\n（待填写：最先服务哪类人，他们现在怎么写文档、痛点是什么）\n\n## 核心使用场景\n\n（待填写：2-3个典型场景，例如一个人和AI一起写方案、审阅AI起草的文档）\n\n## 竞品与差异化\n\n（待填写：现有方案有哪些，例如Google Docs/Notion的AI功能、Cursor等编辑器、聊天式AI，我们和它们的区别）\n\n## 设计原则\n\n（待填写：做取舍时坚持的几条原则）\n\n## 不做什么\n\n（待填写：明确不在范围内的方向）\n\n## 成功指标\n\n（待填写：怎么判断产品成功了，可衡量的指标）\n\n## 路线图\n\n（待填写：分阶段的里程碑）\n\n## 风险与待定问题\n\n（待填写：主要风险、尚未想清楚的问题）\n",
+              "prefix": "agent只提建议、由你决定是否采纳；评论是否解决始终由你决定\n",
+              "suffix": "",
+              "start": 651
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_8zpsxu4njt",
+      "anchor": {
+        "exact": "\n让AI agent像同事一样，和你在同一份文档里同时写作",
+        "prefix": "产品愿景\n一句话愿景",
+        "suffix": "\n背景与问题\n文档编辑是计算机最基础最持久的需求。人类的文档协作",
+        "start": 10
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:04:20.189Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_o2q2fxsoge",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "这个愿景准确吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:56:07.982Z"
+        },
+        {
+          "id": "m_jhpq5jw0kg",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "方向对，但表述不够准确：1）「同步简化开放」三个词堆在一起，读起来不通，也看不出产品具体做什么；2）正文的核心主张是把AI和人的协作从串行推进到并行、让AI成为文档里的一位协作者，这句愿景没有体现出来；四个特点里也只隐约对应了「熟悉」（简化）、「实时」（同步）和「开放」，「可控」没提到。可以考虑改成：A）「让AI像同事一样，和人在同一份文档里同时写作」；B）「让人和AI在同一份开放的文档里并行协作，像和同事一起写一样自然、可控」。需要我改的话告诉我选哪个或怎么调整。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:56:26.091Z"
+        },
+        {
+          "id": "m_8yd1bxzc3m",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "A",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:57:13.356Z"
+        },
+        {
+          "id": "m_m71kcz66lw",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已按方案A把一句话愿景改为：「让AI像同事一样，和人在同一份文档里同时写作」。",
+          "mentions": [],
+          "createdAt": "2026-10-15T07:57:26.790Z",
+          "edits": [
+            {
+              "before": "同步简化开放AI和人类共同编辑文档的体验",
+              "after": "让AI像同事一样，和人在同一份文档里同时写作",
+              "prefix": "# 产品愿景\n\n## 一句话愿景\n\n",
+              "suffix": "\n\n## 背景与问题\n\n文档编辑是计算机最基础最持久的需求。人类",
+              "start": 18
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_efzs8xm6oj",
+      "anchor": {
+        "exact": "\n最先服务的是已经在和AI一起写文档的人，他们：\n希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和文档之间来回复制粘贴\n主要在本地写作，文档和代码放在一起（比如在GitHub仓库里写README、设计文档）\n看重开放的标准和软件，不想被锁在某个订阅服务里",
+        "prefix": "，不做笔记管理\n聊天界面：交流都在评论里，不做聊天窗口\n目标用户",
+        "suffix": "\n核心使用场景\nAI写，人改：AI起草了一份设计文档，我边读边审",
+        "start": 773
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:09:55.543Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_v1uqpq4qe6",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "这个怎么改一下？",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:04:30.054Z"
+        },
+        {
+          "id": "m_lxamvapux5",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "理顺了引导句（原句「需求的人准备」不通），并把三条改成同一种句式，各自说清楚是什么需求：第一条把「和真人合作版」说成「像和真人同事合作一样」，并补了一个对比：不用在聊天框和文档之间来回复制粘贴（这是我根据「背景与问题」一节推的，不对可以删掉）；第二条点明文档和代码放在一起；第三条和「开放」特点呼应。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:04:48.007Z",
+          "proposal": [
+            {
+              "before": "有和AI协作写文档需求的人准备：\n\n- 需要没有摩擦的和真人合作版的AI Agent协作体验\n- 本地写作为主（比如在Github Repo写README）\n- 支持开放的标准和软件",
+              "after": "最先服务的是已经在和AI一起写文档的人，他们：\n\n- 希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和文档之间来回复制粘贴\n- 主要在本地写作，文档和代码放在一起（比如在GitHub仓库里写README、设计文档）\n- 看重开放的标准和软件，不想被锁在某个订阅服务里",
+              "prefix": "文档编辑器，永远不用担心被锁在订阅服务里。\n\n## 目标用户\n\n",
+              "suffix": "\n\n## 核心使用场景\n\n（待填写：2-3个典型场景，例如一个人",
+              "start": 698
+            }
+          ]
+        },
+        {
+          "id": "m_6k013qmzuk",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:05:25.315Z",
+          "edits": [
+            {
+              "before": "有和AI协作写文档需求的人准备",
+              "after": "最先服务的是已经在和AI一起写文档的人，他们",
+              "prefix": "文档编辑器，永远不用担心被锁在订阅服务里。\n\n## 目标用户\n\n",
+              "suffix": "：\n\n- 希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和",
+              "start": 698
+            },
+            {
+              "before": "需要没有摩擦的和真人合作版的AI Agent协作体验\n- 本地写作为主（比如在Github Repo写README）\n- 支持开放的标准和软件",
+              "after": "希望和AI协作像和真人同事合作一样顺畅，不用在聊天框和文档之间来回复制粘贴\n- 主要在本地写作，文档和代码放在一起（比如在GitHub仓库里写README、设计文档）\n- 看重开放的标准和软件，不想被锁在某个订阅服务里",
+              "prefix": "标用户\n\n最先服务的是已经在和AI一起写文档的人，他们：\n\n- ",
+              "suffix": "\n\n## 核心使用场景\n\n（待填写：2-3个典型场景，例如一个人",
+              "start": 725
+            }
+          ],
+          "applies": "m_lxamvapux5"
+        }
+      ]
+    },
+    {
+      "id": "t_3q0i0epevr",
+      "anchor": {
+        "exact": "\nAI写，人改：AI起草了一份设计文档，我边读边审阅，在评论里让AI微调具体的段落\n人写，AI改：我写了一篇1万字的小说，不想让AI大范围改动把整篇改乱，只让它微调某几个段落\n和聊天式Agent配合使用：大改动交给Chat Agent的CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器",
+        "prefix": "）\n看重开放的标准和软件，不想被锁在某个订阅服务里\n核心使用场景",
+        "suffix": "\n竞品与差异化\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点",
+        "start": 910
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:10:30.141Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_d8mvzf03ys",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "改通顺一点",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:09:53.344Z"
+        },
+        {
+          "id": "m_whknvo7a4r",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把三个场景改通顺，并给场景名加粗。有几处是按我的理解改的，请确认：第二条标题「人改，AI写」我改成了「人写，AI改」，和内容一致；「氛围修改把整个小说概览了」我理解为输入法打错，改成「大范围改动把整篇改乱」；第一条补了「在评论里让AI微调」，说明人是通过评论来改的。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:10:10.968Z",
+          "edits": [
+            {
+              "before": "AI写，人改：AI生成了一个设计文档。我审阅AI的文档微调AI写的内容\n- 人改，AI写：我写了1万字的小说，不想让AI氛围修改把整个小说概览了，只让AI微调某几个段落\n- 和Chat Agent CLI/Desktop App混合使用：大修改靠chat应用，小修改直接评论。这个页面作为阅读器。",
+              "after": "**AI写，人改**：AI起草了一份设计文档，我边读边审阅，在评论里让AI微调具体的段落\n- **人写，AI改**：我写了一篇1万字的小说，不想让AI大范围改动把整篇改乱，只让它微调某几个段落\n- **和聊天式Agent配合使用**：大改动交给Chat Agent的CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器",
+              "prefix": "准和软件，不想被锁在某个订阅服务里\n\n## 核心使用场景\n\n- ",
+              "suffix": "\n\n## 竞品与差异化\n\n（待填写：现有方案有哪些，例如Goog",
+              "start": 849
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_jeqwd6gcqr",
+      "anchor": {
+        "exact": "\n竞品与差异化",
+        "prefix": "CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器",
+        "suffix": "\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点\n在线文档内置",
+        "start": 1060
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:22:08.269Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_gkroafk0dz",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "能不能在线搜索一下竞品，写一下竞品分析",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:11:13.724Z"
+        },
+        {
+          "id": "m_5bogtlagrl",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "我这边没有联网搜索的权限（被拒绝了），所以没能在线查。下面是根据我已有的知识（截至2026年年中）写的草稿，按竞品类别写，没列具体价格和最新功能，因为这些可能已经变了，采纳前建议核实。如果你想要真正联网查的版本，可以给我开WebSearch权限，或者在聊天应用里查好后我再整理进来。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:11:43.777Z",
+          "proposal": [
+            {
+              "before": "（待填写：现有方案有哪些，例如Google Docs/Notion的AI功能、Cursor等编辑器、聊天式AI，我们和它们的区别）",
+              "after": "现有方案大致分四类：\n\n- **在线文档内置AI**（Google Docs + Gemini、Notion AI、Word + Copilot）：AI是侧边栏或按钮，选中文字让它改写或续写。人和人之间已经是并行协作，但AI仍是一次性调用的工具，不会像同事一样在评论里接活、回复；文档在云端，格式私有\n- **聊天式AI的画布**（ChatGPT Canvas、Claude Artifacts等）：在对话里生成文档，也能选中段落让AI改。以聊天为中心，文档只是对话的附属品，不在本地，也没有面向多人的评论讨论\n- **AI代码编辑器和命令行Agent**（Cursor、VS Code + Copilot、Claude Code等）：直接改本地文件，Agent能力强。但为代码设计，改动以diff呈现，写长文字、逐段讨论的体验不好\n- **本地Markdown编辑器**（Obsidian、Typora等，加AI插件）：本地、开放格式。AI多是插件里的一次性生成，没有评论线程，也不能和外部Agent协作\n\n我们的区别：\n\n- **评论就是协作接口**：人在文档里评论，AI在评论里接活、改文档、回复，人决定是否解决，而不是在聊天框和文档之间来回切换\n- **本地纯Markdown + 开放**：文档就是仓库里的普通文件，评论单独存放，不被任何订阅服务锁住\n- **不绑定某个AI**：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合",
+              "prefix": "接在文档里评论；这个页面同时也是阅读器\n\n## 竞品与差异化\n\n",
+              "suffix": "\n\n## 设计原则\n\n（待填写：做取舍时坚持的几条原则）\n\n##",
+              "start": 1027
+            }
+          ]
+        },
+        {
+          "id": "m_zxyo3j74pg",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:12:19.048Z",
+          "edits": [
+            {
+              "before": "（待填写：现有方案有哪些，例如Google Docs/Notion的AI功能、Cursor等编辑器、聊天式AI，我们和它们的区别）",
+              "after": "现有方案大致分四类：\n\n- **在线文档内置AI**（Google Docs + Gemini、Notion AI、Word + Copilot）：AI是侧边栏或按钮，选中文字让它改写或续写。人和人之间已经是并行协作，但AI仍是一次性调用的工具，不会像同事一样在评论里接活、回复；文档在云端，格式私有\n- **聊天式AI的画布**（ChatGPT Canvas、Claude Artifacts等）：在对话里生成文档，也能选中段落让AI改。以聊天为中心，文档只是对话的附属品，不在本地，也没有面向多人的评论讨论\n- **AI代码编辑器和命令行Agent**（Cursor、VS Code + Copilot、Claude Code等）：直接改本地文件，Agent能力强。但为代码设计，改动以diff呈现，写长文字、逐段讨论的体验不好\n- **本地Markdown编辑器**（Obsidian、Typora等，加AI插件）：本地、开放格式。AI多是插件里的一次性生成，没有评论线程，也不能和外部Agent协作\n\n我们的区别：\n\n- **评论就是协作接口**：人在文档里评论，AI在评论里接活、改文档、回复，人决定是否解决，而不是在聊天框和文档之间来回切换\n- **本地纯Markdown + 开放**：文档就是仓库里的普通文件，评论单独存放，不被任何订阅服务锁住\n- **不绑定某个AI**：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合",
+              "prefix": "接在文档里评论；这个页面同时也是阅读器\n\n## 竞品与差异化\n\n",
+              "suffix": "\n\n## 设计原则\n\n（待填写：做取舍时坚持的几条原则）\n\n##",
+              "start": 1027
+            }
+          ],
+          "applies": "m_5bogtlagrl"
+        }
+      ]
+    },
+    {
+      "id": "t_qyrhqr5u80",
+      "anchor": {
+        "exact": "\n类别\n代表产品\n优点\n缺点\n在线文档内置AI\nGoogle Docs + Gemini、Notion AI、Word + Copilot\n人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents）\n绑定自家AI；云端、格式私有\n聊天式AI的画布\nChatGPT Canvas、Claude Artifacts等\n对话里直接生成和修改文档\n以聊天为中心；不在本地，没有多人评论\nAI代码编辑器和命令行Agent\nCursor、VS Code + Copilot、Claude Code等\n改本地文件，Agent能力强\n为代码设计，不适合长文写作和逐段讨论\n本地Markdown编辑器\nObsidian、Typora等，加AI插件\n本地、开放格式\nAI只是插件，没有评论，接不了外部Agent",
+        "prefix": "评论；这个页面同时也是阅读器\n竞品与差异化\n现有方案大致分四类：",
+        "suffix": "\n我们的区别：\n同步协作，而不是异步交接：现有方案里，人和AI轮",
+        "start": 1078
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:47:40.656Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_gfd62rdcip",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "是不是可以做一个表比较每个方案的pro and con，以及我的方案为什么更好。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:21:09.455Z"
+        },
+        {
+          "id": "m_61w35akk31",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把四类方案改成一张表，列为：类别、代表产品、优点、缺点、我们为什么更好。内容沿用原来的描述，只拆成优缺点，并给每一类补了一句我们的对应优势。下面的“我们的区别”三条保留作总结；如果觉得和表的最后一列重复，可以删掉或精简。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:21:36.138Z",
+          "edits": [
+            {
+              "before": "- **在线文档内置AI**（Google Docs + Gemini、Notion AI、Word + Copilot）：AI是侧边栏或按钮，选中文字让它改写或续写。人和人之间已经是并行协作，但AI仍是一次性调用的工具，不会像同事一样在评论里接活、回复；文档在云端，格式私有\n- **聊天式AI的画布**（ChatGPT Canvas、Claude Artifacts等）：在对话里生成文档，也能选中段落让AI改。以聊天为中心，文档只是对话的附属品，不在本地，也没有面向多人的评论讨论\n- **AI代码编辑器和命令行Agent**（Cursor、VS Code + Copilot、Claude Code等）：直接改本地文件，Agent能力强。但为代码设计，改动以diff呈现，写长文字、逐段讨论的体验不好\n- **本地Markdown编辑器**（Obsidian、Typora等，加AI插件）：本地、开放格式。AI多是插件里的一次性生成，没有评论线程，也不能和外部Agent协作",
+              "after": "| 类别 | 代表产品 | 优点 | 缺点 | 我们为什么更好 |\n| --- | --- | --- | --- | --- |\n| **在线文档内置AI** | Google Docs + Gemini、Notion AI、Word + Copilot | 人和人之间已经是并行协作；AI就在文档里，选中文字就能改写或续写 | AI是侧边栏或按钮，仍是一次性调用的工具，不会像同事一样在评论里接活、回复；文档在云端，格式私有 | AI在评论线程里接活、修改、回复，像同事一样参与；文档是本地纯Markdown |\n| **聊天式AI的画布** | ChatGPT Canvas、Claude Artifacts等 | 在对话里直接生成文档，也能选中段落让AI改 | 以聊天为中心，文档只是对话的附属品；不在本地，也没有面向多人的评论讨论 | 以文档为中心，讨论锚定在具体段落的评论上，人和AI共用同一套评论 |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等 | 直接改本地文件，Agent能力强 | 为代码设计，改动以diff呈现，写长文字、逐段讨论的体验不好 | 保留本地文件和命令行Agent的能力，界面却是为阅读和写作设计的“编辑+评论” |\n| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式 | AI多是插件里的一次性生成，没有评论线程，也不能和外部Agent协作 | 同样本地、开放，但有评论线程，任何能跑命令行的Agent都能接入 |",
+              "prefix": "同时也是阅读器\n\n## 竞品与差异化\n\n现有方案大致分四类：\n\n",
+              "suffix": "\n\n我们的区别：\n\n- **评论就是协作接口**：人在文档里评论",
+              "start": 1039
+            }
+          ]
+        },
+        {
+          "id": "m_d4fpdd1bly",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "概括简短一点",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:21:57.893Z"
+        },
+        {
+          "id": "m_43w2jsavc4",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把优点、缺点、我们为什么更好三列都压成短语，每格一两句，意思不变。类别和代表产品两列没动。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:22:17.879Z",
+          "edits": [
+            {
+              "before": "人和人之间已经是并行协作；AI就在文档里，选中文字就能改写或续写 | AI是侧边栏或按钮，仍是一次性调用的工具，不会像同事一样在评论里接活、回复；文档在云端，格式私有 | AI在评论线程里接活、修改、回复，像同事一样参与；文档是本地纯Markdown |\n| **聊天式AI的画布** | ChatGPT Canvas、Claude Artifacts等 | 在对话里直接生成文档，也能选中段落让AI改 | 以聊天为中心，文档只是对话的附属品；不在本地，也没有面向多人的评论讨论 | 以文档为中心，讨论锚定在具体段落的评论上，人和AI共用同一套评论 |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等 | 直接改本地文件，Agent能力强 | 为代码设计，改动以diff呈现，写长文字、逐段讨论的体验不好 | 保留本地文件和命令行Agent的能力，界面却是为阅读和写作设计的“编辑+评论” |\n| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式 | AI多是插件里的一次性生成，没有评论线程，也不能和外部Agent协作 | 同样本地、开放，但有评论线程，任何能跑命令行的Agent都能接入",
+              "after": "人人并行协作，AI随手改写 | AI只是一次性工具；云端、格式私有 | AI在评论里像同事一样接活；本地Markdown |\n| **聊天式AI的画布** | ChatGPT Canvas、Claude Artifacts等 | 对话里直接生成和修改文档 | 以聊天为中心；不在本地，没有多人评论 | 以文档为中心，评论锚定段落 |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等 | 改本地文件，Agent能力强 | 为代码设计，不适合长文写作和逐段讨论 | 同样的Agent能力，界面为写作设计 |\n| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式 | AI只是插件，没有评论，接不了外部Agent | 有评论线程，任何命令行Agent都能接入",
+              "prefix": "mini、Notion AI、Word + Copilot | ",
+              "suffix": " |\n\n我们的区别：\n\n- **评论就是协作接口**：人在文档里",
+              "start": 1170
+            }
+          ]
+        },
+        {
+          "id": "m_1ozxyhn4gr",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "去掉为什么更好这一列",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:24:45.891Z"
+        },
+        {
+          "id": "m_9cw5kjf8zv",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已删掉“我们为什么更好”这一列，表里只剩类别、代表产品、优点、缺点。我们的优势由下面“我们的区别”三条来讲。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:25:03.854Z"
+        },
+        {
+          "id": "m_z39miyrp6v",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "你怎么把缺点也删了？",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:29:54.481Z"
+        },
+        {
+          "id": "m_oq8la03cew",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "缺点的内容其实还在，只是表头错位了：我删掉那一列之后，表格在编辑器里被重新排版，表头最前面多出一个空列，“类别”到“缺点”整体右移一格，看起来像是缺点那一列空了。现在已把多余的空列去掉，表头又和内容对齐了：类别、代表产品、优点、缺点。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:30:15.593Z"
+        },
+        {
+          "id": "m_czn9rroj2j",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "没有修好",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:30:41.185Z"
+        },
+        {
+          "id": "m_5t658qls1j",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "抱歉，上次我直接改了文件，但编辑器随后又把旧的表格存了回去，所以没修好。这次改成建议：点“应用”后由编辑器自己改，就不会再被覆盖。改动是去掉表头最前面的空列，并删掉每行最后多出的空格子，让“类别、代表产品、优点、缺点”和内容对齐。缺点的内容一直都在，之前显示在“优点”那一列下面。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:30:59.724Z",
+          "proposal": [
+            {
+              "before": "|                      | 类别                                            | 代表产品           | 优点                     | 缺点 |\n| :------------------- | --------------------------------------------- | -------------- | ---------------------- | -- |",
+              "after": "| 类别 | 代表产品 | 优点 | 缺点 |\n| --- | --- | --- | --- |",
+              "prefix": "同时也是阅读器\n\n## 竞品与差异化\n\n现有方案大致分四类：\n\n",
+              "suffix": "\n| **在线文档内置AI**         | Google",
+              "start": 728
+            },
+            {
+              "before": "AI只是一次性工具；云端、格式私有      |    |",
+              "after": "AI只是一次性工具；云端、格式私有 |",
+              "prefix": "rd + Copilot | 人人并行协作，AI随手改写  | ",
+              "suffix": "\n| **聊天式AI的画布**         | ChatGP",
+              "start": 1058
+            },
+            {
+              "before": "以聊天为中心；不在本地，没有多人评论     |    |",
+              "after": "以聊天为中心；不在本地，没有多人评论 |",
+              "prefix": "             | 对话里直接生成和修改文档   | ",
+              "suffix": "\n| **AI代码编辑器和命令行Agent** | Cursor",
+              "start": 1178
+            },
+            {
+              "before": "为代码设计，不适合长文写作和逐段讨论     |    |",
+              "after": "为代码设计，不适合长文写作和逐段讨论 |",
+              "prefix": "ode等         | 改本地文件，Agent能力强 | ",
+              "suffix": "\n| **本地Markdown编辑器**    | Obsidi",
+              "start": 1298
+            },
+            {
+              "before": "AI只是插件，没有评论，接不了外部Agent |    |",
+              "after": "AI只是插件，没有评论，接不了外部Agent |",
+              "prefix": "             | 本地、开放格式        | ",
+              "suffix": "\n\n我们的区别：\n\n- **同步协作，而不是异步交接**：现有方",
+              "start": 1418
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_7mrr491qyb",
+      "anchor": {
+        "exact": "\n不绑定某个AI",
+        "prefix": "放：文档就是仓库里的普通文件，评论单独存放，不被任何订阅服务锁住",
+        "suffix": "，支持多智能体：任何能跑命令行的Agent都能接入，可以和用户已",
+        "start": 1667
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:31:18.376Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_xk4ba5uval",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "不仅不绑定，还可以多智能体",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:25:04.935Z"
+        },
+        {
+          "id": "m_uyjn2966p7",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Edited the doc.",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:25:31.427Z",
+          "edits": [
+            {
+              "before": "**：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合",
+              "after": "，支持多智能体**：任何能跑命令行的Agent都能接入，可以和用户已经在用的Chat Agent配合；多个Agent还能同时在一份文档里工作，各自用名字出现在评论里，人用@指定由谁来处理",
+              "prefix": "文件，评论单独存放，不被任何订阅服务锁住\n- **不绑定某个AI",
+              "suffix": "\n\n## 设计原则\n\n（待填写：做取舍时坚持的几条原则）\n\n##",
+              "start": 1928
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_gwzpl92ls6",
+      "anchor": {
+        "exact": "\n我们的区别：",
+        "prefix": "件\n本地、开放格式\nAI只是插件，没有评论，接不了外部Agent",
+        "suffix": "\n同步协作，而不是异步交接：现有方案里，人和AI轮流操作：人提要",
+        "start": 1446
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:29:39.897Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_dbcygoftoq",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "最大的区别是别人异步，我们同步协作",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:25:24.961Z"
+        },
+        {
+          "id": "m_mjkmp881x8",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "Edited the doc.",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:25:52.939Z",
+          "edits": [
+            {
+              "before": "",
+              "after": "- **同步协作，而不是异步交接**：现有方案里，人和AI轮流操作：人提要求，等AI改完，再审阅。我们让人和AI同时在同一份文档上工作，AI处理评论时，人可以继续写其他部分\n",
+              "prefix": "没有评论，接不了外部Agent |    |\n\n我们的区别：\n\n",
+              "suffix": "- **评论就是协作接口**：人在文档里评论，AI在评论里接活、",
+              "start": 1799
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_z6pins3y9s",
+      "anchor": {
+        "exact": "\n设计原则",
+        "prefix": "工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。",
+        "suffix": "\n熟悉：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；",
+        "start": 353
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:29:34.661Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_hyotf880gb",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "能不能把我们的方案的哪些原则挪下来",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:27:45.304Z"
+        },
+        {
+          "id": "m_z9px0xm90x",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把“我们的方案”里的五条特点（熟悉、实时、可控、开放、多智能体）原样挪到“设计原则”，替换了待填写的占位。“我们的方案”只留下开头那段话，结尾的“这个协作方式有几个特点：”改成了句号。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:28:05.639Z",
+          "edits": [
+            {
+              "before": "这个协作方式有几个特点：\n\n- **熟悉**：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复\n- **实时**：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- **可控**：评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定\n- **开放：**开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里。\n- **多智能体：**多个智能体可以在一个文档同时编辑合作。",
+              "after": "",
+              "prefix": "工作，通过评论讨论、各自动手修改，就像两位同事一起审阅一份方案。",
+              "suffix": "\n\n## 目标用户\n\n最先服务的是已经在和AI一起写文档的人，他",
+              "start": 376
+            },
+            {
+              "before": "（待填写：做取舍时坚持的几条原则）",
+              "after": "- **熟悉**：界面沿用大家熟悉的“编辑+评论”交互，几乎没有上手门槛；但底层是为AI设计的：文档是本地的纯Markdown文件，评论单独存放，AI通过命令行读取评论、直接修改文件并回复\n- **实时**：agent在后台随时待命，你一评论它就开始处理并在评论里回复；你不用停下来等它，可以同时编辑文档的其他部分\n- **可控**：评论锚定在你选中的文字上，agent只修改评论涉及的内容，不动无关的章节；每次改动都会在评论里说明，你可以撤销，也可以让agent只提建议、由你决定是否采纳；评论是否解决始终由你决定\n- **开放：**开源的文档格式和文档编辑器，永远不用担心被锁在订阅服务里。\n- **多智能体：**多个智能体可以在一个文档同时编辑合作。",
+              "prefix": "一份文档里工作，如同很多同事和你一起协作。\n\n## 设计原则\n\n",
+              "suffix": "\n\n## 不做什么\n\n（待填写：明确不在范围内的方向）\n\n## ",
+              "start": 1795
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_1b5hrwtc88",
+      "anchor": {
+        "exact": "\n不做什么\n在线文档\n多人实时合作\n私有的文档格式\n知识库\n聊天界面",
+        "prefix": "在订阅服务里。\n多智能体：多个智能体可以在一个文档同时编辑合作。",
+        "suffix": "\n成功指标\n（待填写：怎么判断产品成功了，可衡量的指标）\n路线图",
+        "start": 1610
+      },
+      "detached": true,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:36:25.881Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_elgt0a2pbx",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "稍微扩写完善一下",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:29:31.438Z"
+        },
+        {
+          "id": "m_ldhp9g7g19",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已给五条各补了一句说明：不做什么、为什么，以及用户需要时用什么替代。有两处是我的理解，请确认：“多人实时合作”我理解为人和人之间像Google Docs那样的实时协同编辑，而不是人和AI；“知识库”我写的是不做双向链接、数据库、全局搜索。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:29:50.848Z",
+          "edits": [
+            {
+              "before": "在线文档\n- 多人实时合作\n- 私有的文档格式\n- 知识库\n- 聊天界面",
+              "after": "**在线文档**：不做云端托管的文档服务，不提供账号和云存储。文档始终是用户本地的文件，同步和分享交给Git、网盘等用户已有的工具\n- **多人实时合作**：不做Google Docs那样人和人之间的实时协同编辑。我们解决的是人和AI的协作，人和人之间的协作继续用Git等现有流程\n- **私有的文档格式**：不发明自己的格式，也不往Markdown里塞私有标记。文档永远是纯Markdown，离开我们的编辑器也能用任何工具打开和修改\n- **知识库**：不做Notion、Obsidian那样的笔记和知识管理，不做双向链接、数据库、全局搜索。我们只专注于一份文档的写作和审阅\n- **聊天界面**：不做聊天窗口，人和AI的交流都在文档的评论里，锚定在具体的文字上。需要长对话、大改动时，用户可以继续用自己的Chat Agent",
+              "prefix": "多个智能体可以在一个文档同时编辑合作。\n\n## 不做什么\n\n- ",
+              "suffix": "\n\n## 成功指标\n\n（待填写：怎么判断产品成功了，可衡量的指标",
+              "start": 2136
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_qeptez091x",
+      "anchor": {
+        "exact": "\n不做什么\n在线文档：不做云端托管的文档服务，不提供账号和云存储。文档始终是用户本地的文件，同步和分享交给Git、网盘等用户已有的工具\n多人实时合作：不做Google Docs那样人和人之间的实时协同编辑。我们解决的是人和AI的协作，人和人之间的协作继续用Git等现有流程\n私有的文档格式：不发明自己的格式，也不往Markdown里塞私有标记。文档永远是纯Markdown，离开我们的编辑器也能用任何工具打开和修改\n知识库：不做Notion、Obsidian那样的笔记和知识管理，不做双向链接、数据库、全局搜索。我们只专注于一份文档的写作和审阅\n聊天界面：不做聊天窗口，人和AI的交流都在文档的评论里，锚定在具体的文字上。需要长对话、大改动时，用户可以继续用自己的Chat Agent",
+        "prefix": "在订阅服务里。\n多智能体：多个智能体可以在一个文档同时编辑合作。",
+        "suffix": "\n目标用户\n最先服务的是已经在和AI一起写文档的人，他们：\n希望",
+        "start": 657
+      },
+      "detached": true,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T08:36:16.338Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_s1koii34n7",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "改的简短一点。不用详述",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:34:32.715Z"
+        },
+        {
+          "id": "m_qx922tklax",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "已把五条都压成一句短语，去掉了理由和替代方案的详述。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:34:51.160Z",
+          "edits": [
+            {
+              "before": "不做云端托管的文档服务，不提供账号和云存储。文档始终是用户本地的文件，同步和分享交给Git、网盘等用户已有的工具\n- **多人实时合作**：不做Google Docs那样人和人之间的实时协同编辑。我们解决的是人和AI的协作，人和人之间的协作继续用Git等现有流程\n- **私有的文档格式**：不发明自己的格式，也不往Markdown里塞私有标记。文档永远是纯Markdown，离开我们的编辑器也能用任何工具打开和修改\n- **知识库**：不做Notion、Obsidian那样的笔记和知识管理，不做双向链接、数据库、全局搜索。我们只专注于一份文档的写作和审阅\n- **聊天界面**：不做聊天窗口，人和AI的交流都在文档的评论里，锚定在具体的文字上。需要长对话、大改动时，用户可以继续用自己的Chat Agent",
+              "after": "文档只存在本地，不做云存储\n- **多人实时合作**：只做人和AI的协作，不做人和人的实时协同\n- **私有的文档格式**：只用纯Markdown\n- **知识库**：只专注单篇文档，不做笔记管理\n- **聊天界面**：交流都在评论里，不做聊天窗口",
+              "prefix": "个文档同时编辑合作。\n\n## 不做什么\n\n- **在线文档**：",
+              "suffix": "\n\n## 目标用户\n\n最先服务的是已经在和AI一起写文档的人，他",
+              "start": 737
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_o2sy2dr2th",
+      "anchor": {
+        "exact": "\n竞品与差异化",
+        "prefix": "CLI或桌面应用，小改动直接在文档里评论；这个页面同时也是阅读器",
+        "suffix": "\n现有方案大致分四类：\n类别\n代表产品\n优点\n缺点\n在线文档内置",
+        "start": 1060
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhangg",
+      "resolvedAt": "2026-10-15T09:52:36.017Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_yp970yj7gj",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "可以搜索一下这个分析实时吗？",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:48:42.939Z"
+        },
+        {
+          "id": "m_l6yyzuht3i",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "这次我没有联网搜索的权限（WebSearch 被禁用），所以没法核实这张表是不是最新的，也没改文档。下面是凭我的知识（截至2026年年中）觉得可能已经过时、需要核实的地方：\n1. 在线文档内置AI那一行写的“AI只是一次性工具”可能太绝对：Word + Copilot 推出过 Agent Mode，可以在文档里多步骤编辑；Notion 3.0 推出了能连续执行多步任务的 Notion Agents；Google Docs 里的 Gemini 也在往 agent 方向走。不过它们仍然是云端、私有格式、绑定自家AI，这一点差异应该还成立。\n2. 聊天式AI的画布：ChatGPT Canvas、Claude Artifacts 都在持续更新（比如分享、协作相关功能），“没有多人评论”这一条需要核实。\n3. 可能漏掉了新的一类：专门做人和AI协同写作的工具，以及在评论里@AI的编辑器。值得补查一下有没有和我们定位直接重叠的产品。\n如果你在 serve 时允许我联网搜索，再@我一次，我可以逐项查证并提出修改建议。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:49:08.333Z"
+        },
+        {
+          "id": "m_e07nbj8si1",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "我已经开了为什么还是被禁用？",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:50:38.594Z"
+        },
+        {
+          "id": "m_z72yz1syur",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "我刚又试了一次，WebSearch 和 WebFetch 都还是被拒绝，报错是“running in don't ask mode”，也就是说启动我的这个进程没有拿到联网权限。可能的原因：1）这个权限是在启动 agent 进程时才传进去的，如果你是在 serve 已经运行之后才打开的开关，可能需要重启 opendoc serve 才会生效；2）开关没有真正传到 agent 的权限设置里，这可能是 opendoc 的 bug。我不会用 curl 之类的方式绕过这个限制。建议重启 serve 后再@我一次；如果还是不行，那就是 opendoc 这边需要修。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:50:55.659Z"
+        },
+        {
+          "id": "m_ajx8vea9op",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "现在修好了",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:57:39.591Z"
+        },
+        {
+          "id": "m_e7pmzh2vei",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "联网查过了，有一个重要发现和一处过时：\n1. 最大的变化：出现了和我们定位直接重叠的一类产品，表里漏了。Ritemark（MIT开源、本地Markdown、在页边评论里@Agent处理某一段，内置Claude Code/Codex/OpenCode）、OpenMarkdown（本地优先，有CLI和MCP，用@agent唤醒，自带Agent接入）、md-review（评论存在旁边的JSON里，Agent用CLI读取和回复，和我们的做法很像）、Proof（在线编辑器，Agent可以评论和提修改建议，有在线状态和逐字来源记录）。建议加一行，并把“四类”改成“五类”。这类产品具体能不能做到人和Agent同时编辑、多个Agent协作，我没有查到明确说明，所以缺点那一栏写的是待核实；“我们的区别”那一节可能也需要你重新想想怎么和它们区分。\n2. 在线文档内置AI：Word的Copilot Agent Mode在2026年4月正式上线，能直接在文件里多步编辑（据报道需要文件存在云端）；Notion 3.0（2025年9月）的Agents可以执行多步任务。所以“AI只是一次性工具”已经不准确了，我改成了“绑定自家AI”。\n3. 聊天式AI的画布：没查到ChatGPT Canvas在2025到2026年加了多人评论或共享编辑的可靠信息，这一行先不改。\n来源：ritemark.app、producthunt.com/products/openmarkdown、github.com/mustafaakben/md-review、proofeditor.ai、notion.com/releases/2025-09-18、Copilot Agent Mode的二手报道（如aldridge.com）。",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:58:28.014Z",
+          "proposal": [
+            {
+              "before": "现有方案大致分四类：",
+              "after": "现有方案大致分五类：",
+              "prefix": "接在文档里评论；这个页面同时也是阅读器\n\n## 竞品与差异化\n\n",
+              "suffix": "\n\n| 类别 | 代表产品 | 优点 | 缺点 |\n| --- ",
+              "start": 1201
+            },
+            {
+              "before": "| 人人并行协作，AI随手改写 | AI只是一次性工具；云端、格式私有 |",
+              "after": "| 人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents） | 绑定自家AI；云端、格式私有 |",
+              "prefix": "Gemini、Notion AI、Word + Copilot ",
+              "suffix": "\n| **聊天式AI的画布** | ChatGPT Canvas",
+              "start": 1326
+            },
+            {
+              "before": "| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式 | AI只是插件，没有评论，接不了外部Agent |",
+              "after": "| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式 | AI只是插件，没有评论，接不了外部Agent |\n| **面向Agent的Markdown编辑器** | Ritemark、OpenMarkdown、md-review、Proof等 | 在评论里@Agent处理具体段落，接入Claude Code、Codex等外部Agent；多数本地、开源 | 和我们定位直接重叠；是否支持人和Agent同时编辑、多Agent协作还待核实 |",
+              "prefix": "Agent能力强 | 为代码设计，不适合长文写作和逐段讨论 |\n",
+              "suffix": "\n\n我们的区别：\n\n- **同步协作，而不是异步交接**：现有方",
+              "start": 1555
+            }
+          ]
+        },
+        {
+          "id": "m_ii8or2cxpo",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "有没有直接和我产品定位一样的产品？",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:59:08.701Z"
+        },
+        {
+          "id": "m_buqr0npf41",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "我又查了一轮。结论：没找到每一条都和我们一样的产品，但有两个已经非常接近，其余是部分重叠。（都只看了它们的官网和GitHub说明，没有实际试用。）\n1. md-review（MIT开源，VS Code插件，也能在浏览器里打开）：最接近。评论存在文档旁边的JSON里，Claude Code/Codex用CLI读评论、改文件、回复；你可以在Agent改文件时继续写；Agent可以只提建议、由你Apply；能同时接多个Agent会话。区别：主要依附VS Code；Agent要在已经开着的会话里接收评论，没看到常驻待命、一评论就自动唤醒的机制。\n2. couplet（GPL-3.0开源，仅macOS）：评论单独存放，选中文字评论，Agent在评论里回答，改动可以撤销；用couplet watch让Claude Code在有新评论时被唤醒，任何能跑CLI或MCP的Agent都能接入。区别：只支持Mac；评论停顿20秒才发给Agent；没写人和Agent同时打字时怎么处理，也没提多Agent。\n3. Ritemark（MIT开源，Mac/Windows）：本地Markdown，在页边评论里@Agent处理某一段。但它是带聊天侧栏的完整应用（Agent的回答出现在文档旁边的对话里），更像Cursor式的写作工具；没写能否边改边写、多Agent或建议模式。\n4. OpenMarkdown（仅macOS，没说是否开源）：人和Agent同时编辑做得很细（按段落写入，你改过的段落会拒绝覆盖再重试），但用的是@agent任务项，不是评论线程。\n5. Proof：有评论、建议、多Agent在线状态，但是在线服务，不是本地文件。\n所以我们的定位本身已经不独特了，“评论就是协作接口”“本地纯Markdown”“不绑定AI”这几条md-review和couplet都有。能拉开差距的更可能是：真正的同时编辑（Agent改的时候不打断你、不覆盖你正在写的内容）、常驻待命实时响应、多Agent在一份文档里协作、跨平台的浏览器编辑器。要的话我可以按这个思路改“我们的区别”那一节，先提建议给你看。\n来源：github.com/mustafaakben/md-review、github.com/malinborn/couplet、ritemark.app、producthunt.com/products/openmarkdown、proofeditor.ai",
+          "mentions": [],
+          "createdAt": "2026-10-15T08:59:45.095Z"
+        },
+        {
+          "id": "m_6vhi8rf86y",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "我看了一下这些开源产品体验基本是崩坏的。不用管。",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:05:02.949Z"
+        },
+        {
+          "id": "m_ybn9ymfhsq",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "好的，这些开源产品就不放进竞品表了，上次建议里新增“面向Agent的Markdown编辑器”那一行和“四类改五类”都撤回。只保留一处事实更正：Word的Copilot Agent Mode（2026年4月正式上线）和Notion Agents都已经能在文档里多步编辑，“AI只是一次性工具”不准确，建议改成“绑定自家AI”。不需要的话忽略这条建议即可。",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:05:24.954Z",
+          "proposal": [
+            {
+              "before": "| 人人并行协作，AI随手改写 | AI只是一次性工具；云端、格式私有 |",
+              "after": "| 人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents） | 绑定自家AI；云端、格式私有 |",
+              "prefix": "Gemini、Notion AI、Word + Copilot ",
+              "suffix": "\n| **聊天式AI的画布** | ChatGPT Canvas",
+              "start": 1326
+            }
+          ]
+        },
+        {
+          "id": "m_kxzmo1ao06",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:07:04.775Z",
+          "edits": [
+            {
+              "before": "| 代表产品 | 优点 | 缺点 |\n| --- | --- | --- | --- |\n| **在线文档内置AI** | Google Docs + Gemini、Notion AI、Word + Copilot | 人人并行协作，AI随手改写 | AI只是一次性工具；云端、格式私有 |\n| **聊天式AI的画布** | ChatGPT Canvas、Claude Artifacts等 | 对话里直接生成和修改文档 | 以聊天为中心；不在本地，没有多人评论 |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等 | 改本地文件，Agent能力强 | 为代码设计，不适合长文写作和逐段讨论 |\n| **本地Markdown编辑器** | Obsidian、Typora等，加AI插件 | 本地、开放格式",
+              "after": "                  | 代表产品                                          | 优点                                                   | 缺点                     |\n| -------------------- | --------------------------------------------- | ---------------------------------------------------- | ---------------------- |\n| **在线文档内置AI**         | Google Docs + Gemini、Notion AI、Word + Copilot | 人人并行协作，AI能在文档里多步编辑（Copilot Agent Mode、Notion Agents） | 绑定自家AI；云端、格式私有         |\n| **聊天式AI的画布**         | ChatGPT Canvas、Claude Artifacts等              | 对话里直接生成和修改文档                                         | 以聊天为中心；不在本地，没有多人评论     |\n| **AI代码编辑器和命令行Agent** | Cursor、VS Code + Copilot、Claude Code等         | 改本地文件，Agent能力强                                       | 为代码设计，不适合长文写作和逐段讨论     |\n| **本地Markdown编辑器**    | Obsidian、Typora等，加AI插件                        | 本地、开放格式                                             ",
+              "prefix": "读器\n\n## 竞品与差异化\n\n现有方案大致分四类：\n\n| 类别 ",
+              "suffix": " | AI只是插件，没有评论，接不了外部Agent |\n\n我们的",
+              "start": 1218
+            }
+          ],
+          "applies": "m_ybn9ymfhsq"
+        }
+      ]
+    },
+    {
+      "id": "t_mvw1eem139",
+      "anchor": {
+        "exact": "成功指标\n用户在驾驶位：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n减少等待：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n多agent协作：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n写作体验更好：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n开放：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+        "prefix": "Agent还能同时在一份文档里工作，如同很多同事和你一起协作。\n",
+        "suffix": "\n路线图\n单agent和人通过评论的协作体验\n精细的历史修改视图",
+        "start": 1758
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_sk1j37u74r",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "审核一下我的成功指标",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:57:22.315Z"
+        },
+        {
+          "id": "m_eacaixrak2",
+          "author": {
+            "name": "claude",
+            "kind": "agent"
+          },
+          "body": "审核意见：1）现在这几条更像目标或原则，没法衡量，建议每条配一个可以量的指标；具体目标数值我没有填，留给你定。2）第1条和设计原则里的“可控”重复，可以量成“agent改动被撤销的比例”。3）第2条是最核心的差异化，值得量化：评论到回复的时间、人等agent和agent等人的时长。4）第3、4条太笼统，“像真人”和“更好”需要可比的基准。5）“开发的标准”应为“开放的标准”。6）缺少使用量指标（活跃文档数、留存）。下面是按这些意见改写的版本，供你参考。",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:57:48.406Z",
+          "proposal": [
+            {
+              "before": "- 用户永远在驾驶位。整个文章不会被AI牵着鼻子走。\n- 降低串行AI和人handover的频次，人/agent等对方交接的时间\n- 多agent像真人和用户协作写作\n- 比markdown/coding编辑器+ai agent plugin更好的用户写作体验\n- 比闭源项目更加开发的标准",
+              "after": "- **用户在驾驶位**：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n- **减少等待**：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n- **多agent协作**：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n- **开放**：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+              "prefix": "一份文档里工作，如同很多同事和你一起协作。\n\n## 成功指标\n\n",
+              "suffix": "\n\n## 路线图\n\n- 单a'g\n\n## 风险与待定问题\n\n（待",
+              "start": 2478
+            }
+          ]
+        },
+        {
+          "id": "m_73k5g89kes",
+          "author": {
+            "name": "fanzhangg",
+            "kind": "human"
+          },
+          "body": "Applied claude's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T09:58:30.889Z",
+          "edits": [
+            {
+              "before": "用户永远在驾驶位。整个文章不会被AI牵着鼻子走。\n- 降低串行AI和人handover的频次，人/agent等对方交接的时间\n- 多agent像真人和用户协作写作\n- 比markdown/coding编辑器+ai agent plugin更好的用户写作体验\n- 比闭源项目更加开发的标准",
+              "after": "**用户在驾驶位**：整篇文章不被AI牵着鼻子走。衡量agent改动超出评论范围的次数、被用户撤销的比例\n- **减少等待**：降低人和AI串行交接的频次。衡量从评论到agent回复的时间，以及人等agent、agent等人的总时长\n- **多agent协作**：多个agent像真人同事一样和用户一起写作。衡量有2个及以上agent参与的文档比例、改动冲突的次数\n- **写作体验更好**：比Markdown/代码编辑器+AI插件更好。同一写作任务对比完成时间和满意度；看周活跃文档数和留存\n- **开放**：比闭源产品更开放的标准。文档在任何Markdown编辑器里都能正常打开；能接入的第三方agent数量",
+              "prefix": "文档里工作，如同很多同事和你一起协作。\n\n## 成功指标\n\n- ",
+              "suffix": "\n\n## 路线图\n\n- 单agent和AI\n\n## 风险与待定问",
+              "start": 2480
+            }
+          ],
+          "applies": "m_eacaixrak2"
+        }
+      ]
+    }
+  ]
+}
