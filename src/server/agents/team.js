@@ -24,10 +24,10 @@ export class Team {
 
   /**
    * Make the team the agents in `specs` (dispatcher options, each with a
-   * `key` that changes whenever a restart is needed; a change of role or
-   * presence applies without one). An agent no longer wanted is stopped at once, ending a run
-   * in progress; one whose settings changed finishes its run first. Calls
-   * apply one at a time, in order.
+   * `key` that changes whenever a restart is needed; a change of presence
+   * (Auto Commenter) applies without one). An agent no longer wanted is
+   * stopped at once, ending a run in progress; one whose settings changed
+   * finishes its run first. Calls apply one at a time, in order.
    */
   sync(specs) {
     const run = this.changes.then(() => this.#sync(specs));
@@ -44,7 +44,6 @@ export class Team {
         const presence = spec.presence ?? 'online';
         if (presence !== member.presence) member.dispatcher.setPresence(presence);
         member.presence = presence;
-        if (spec.role) member.dispatcher.role = spec.role;
         keep.push(member);
         continue;
       }

@@ -11,7 +11,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { activeWorking, applyOp, diffEdits, findEdit, inbox, locate, newId, project, proposeChanges, sourceRange } from '../../core/index.js';
+import { activeWorking, applyOp, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
@@ -59,9 +59,10 @@ export class Floor {
  * States: starting, ready, queued (comments wait while another agent of the
  * doc runs), running, error (last run failed), limited (runs per hour
  * reached), unavailable (preflight failed), stopped.
- * Presence follows the agent's role: 'online' (the pilot) answers every
- * comment not addressed to someone else, 'dnd' (a co-pilot) only comments
- * that @mention it.
+ * Presence follows Auto Commenter: 'online' also looks at every comment that
+ * mentions no one and answers the ones that fit its persona (leaving the
+ * rest without a reply passes them on); 'dnd' answers only comments
+ * addressed to it.
  */
 export class Dispatcher {
   /**
@@ -71,13 +72,12 @@ export class Dispatcher {
    * `persona` is the agent's role in the human's words; `others()` names the
    * other agents of the doc; `floor` is the turn they share. `join` adds
    * the agent to the doc's participants when it starts (an agent from flags;
-   * one from the roster is there because it was invited). `role` is 'pilot'
-   * or 'copilot'; `profile` ({ tagline, webAccess, fileAccess }) is shown with
-   * the status. `asks` are the permissions ('web', 'files') its runs ask the
-   * human for at first use (src/server/agents/permissions.js).
+   * one from the roster is there because it was invited). `profile`
+   * ({ tagline, webAccess, fileAccess }) is shown with the status and told to
+   * its runs.
    */
   constructor({
-    docPath, name, id = null, persona = '', role = 'copilot', profile = {}, asks = [], adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
+    docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
     onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, floor = new Floor(), others = () => [], join = true, source = 'flags',
   }) {
     this.docPath = docPath;
@@ -87,9 +87,7 @@ export class Dispatcher {
     this.persona = persona;
     this.floor = floor;
     this.others = others;
-    this.role = role;
     this.profile = profile;
-    this.asks = asks;
     this.join = join;
     this.source = source;
     this.adapter = adapter;
@@ -115,7 +113,7 @@ export class Dispatcher {
       name: this.name,
       id: this.id,
       source: this.source,
-      role: this.role,
+      autoComment: this.presence === 'online',
       tagline: this.profile.tagline ?? '',
       webAccess: Boolean(this.profile.webAccess),
       fileAccess: Boolean(this.profile.fileAccess),
@@ -276,11 +274,13 @@ export class Dispatcher {
     if (workdir !== dirname(this.docPath)) await mkdir(workdir, { recursive: true });
     await this.adapter.prepare?.({ workdir, docPath: this.docPath, editMode: this.editMode });
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
-    const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
+    // With Auto Commenter, an open ask is the agent's to take or leave (`open`).
+    const open = new Set(this.presence === 'online' ? threads.filter(openAsk).map((t) => t.id) : []);
+    const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i], ...(open.has(t.id) ? { open: true } : {}) })) };
     const typing = this.editMode === 'auto' ? await this.typingIn().catch(() => null) : null;
     const prompt = buildPrompt({
-      name: this.name, docFile: docRef, editMode: this.editMode, typing, persona: this.persona, role: this.role, others: this.others(),
-      asks: this.asks, docFolder: dirname(this.docPath),
+      name: this.name, docFile: docRef, editMode: this.editMode, typing, persona: this.persona, autoComment: this.presence === 'online', others: this.others(),
+      webAccess: Boolean(this.profile.webAccess), fileAccess: Boolean(this.profile.fileAccess), docFolder: dirname(this.docPath),
     });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');
@@ -326,8 +326,8 @@ export class Dispatcher {
     // from, plus every change the human saved meanwhile (humanEdited).
     // `overwritten` holds changes to offer back once the run has replied.
     // `avoided` counts the edits the guard refused because the human was typing there.
-    // `permits` are the human's Allow once and Deny answers, which last for this run.
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0, permits: [] };
+    // `open` holds the open asks it may leave to others.
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0, open };
     this.run = run;
     this.#setState('running');
 
@@ -431,11 +431,17 @@ export class Dispatcher {
     } catch {
       // the doc may be gone; nothing to record or clear
     }
-    // A run must end every thread with a reply. One that did not would be
-    // handed the same threads again at once, so it counts as failed instead.
+    // A run must end every thread addressed to it with a reply. One that did
+    // not would be handed the same threads again at once, so it counts as
+    // failed instead. An open ask it left without a reply is passed on.
     if (result.ok) {
       const silent = await this.#unanswered(threads);
-      if (silent > 0) result = { ...result, ok: false, error: `finished without replying to ${silent === 1 ? 'a comment' : `${silent} comments`}` };
+      const passing = silent.filter((t) => run.open.has(t.id));
+      if (passing.length > 0) {
+        await update(this.docPath, (s) => passing.reduce((acc, t) => applyOp(acc, { type: 'pass', threadId: t.id, by: this.name }), s)).catch(() => {});
+      }
+      const missed = silent.length - passing.length;
+      if (missed > 0) result = { ...result, ok: false, error: `finished without replying to ${missed === 1 ? 'a comment' : `${missed} comments`}` };
     }
     this.lastThreads = threads;
     if (run.overwritten.length > 0) await this.#offer(threads, run.overwritten).catch(() => {});
@@ -494,7 +500,7 @@ export class Dispatcher {
     return next;
   }
 
-  // How many of the run's threads are still open with no new message from the agent.
+  // The run's threads still open with no new message from the agent.
   async #unanswered(threads) {
     try {
       const { sidecar } = await load(this.docPath);
@@ -503,9 +509,9 @@ export class Dispatcher {
         if (!thread || thread.status !== 'open') return false;
         const known = new Set(claimed.messages.map((m) => m.id));
         return !thread.messages.some((m) => !known.has(m.id) && sameName(m.author.name, this.name));
-      }).length;
+      });
     } catch {
-      return 0; // the doc may be gone
+      return []; // the doc may be gone
     }
   }
 

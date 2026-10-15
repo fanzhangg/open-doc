@@ -4,7 +4,6 @@
 
 import { NAME_PATTERN } from './mentions.js';
 import { AgentError, BUILTIN_AGENTS, checkAgentPatch, MAX_AGENTS, resolveAgent, resolveRoster } from './agents.js';
-import { resolveGrants, validGrants } from './grants.js';
 
 export { EDIT_MODES } from './agents.js';
 
@@ -13,11 +12,10 @@ export const SETTINGS_VERSION = 1;
 /**
  * `name: null` means "not chosen yet": the server suggests one. `agents` is
  * the user's roster of agents (src/core/agents.js), the built-in ones until
- * the user changes it: the pilot works in every doc, a co-pilot in the docs
- * where it was @mentioned. `claudeBin` and `codexBin` are where Claude Code and
- * Codex are, for every agent that runs on them (null: found automatically).
- * `grants` are the permissions the human gave agents at first use
- * (src/core/grants.js), changed only through the server's grant requests.
+ * the user changes it: an agent with Auto Commenter works in every doc, any other
+ * in the docs where it was @mentioned. `claudeBin` and `codexBin` are where
+ * Claude Code and Codex are, for every agent that runs on them (null: found
+ * automatically).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   name: null,
@@ -30,7 +28,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   agents: BUILTIN_AGENTS,
   claudeBin: null,
   codexBin: null,
-  grants: [],
 });
 
 /** Settings that choose the program to run: set only in the desktop app or settings.json. */
@@ -51,7 +48,6 @@ const RULES = {
   agents: validRoster,
   claudeBin: (v) => v === null || text(2000)(v),
   codexBin: (v) => v === null || text(2000)(v),
-  grants: validGrants,
 };
 
 export class SettingsError extends Error {
@@ -90,11 +86,10 @@ export function resolveSettings(stored) {
   const out = { ...DEFAULT_SETTINGS, agents: BUILTIN_AGENTS.map((a) => ({ ...a })) };
   if (!isObject(stored)) return out;
   for (const key of Object.keys(RULES)) {
-    if (key === 'agents' || key === 'grants' || !Object.hasOwn(stored, key) || !RULES[key](stored[key])) continue;
+    if (key === 'agents' || !Object.hasOwn(stored, key) || !RULES[key](stored[key])) continue;
     out[key] = stored[key];
   }
   if (Object.hasOwn(stored, 'agents')) out.agents = resolveRoster(stored.agents);
-  out.grants = resolveGrants(stored.grants);
   if (!Object.hasOwn(stored, 'claudeBin') && isObject(stored.agent) && RULES.claudeBin(stored.agent.bin ?? null)) {
     out.claudeBin = stored.agent.bin ?? null;
   }
@@ -112,8 +107,8 @@ function validRoster(value) {
     if (error instanceof AgentError) return false;
     throw error;
   }
-  // No repeated id or name, and exactly one pilot.
-  return resolveRoster(value).length === value.length && value.filter((a) => a.role === 'pilot').length === 1;
+  // No repeated id or name.
+  return resolveRoster(value).length === value.length;
 }
 
 function isObject(value) {

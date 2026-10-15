@@ -40,6 +40,7 @@ export function newId(prefix) {
  *   { type: 'resolve', threadId, by, kind?, at }   // humans only
  *   { type: 'reopen', threadId, by, kind? }        // humans only
  *   { type: 'setWorking', threadId, by, since }   // since: null clears
+ *   { type: 'pass', threadId, by }                 // `by` leaves an open ask to others
  *   { type: 'attachEdits', threadId, messageId, edits }
  *
  * A message may carry `edits` (what its author changed in the doc, §2.5),
@@ -73,11 +74,26 @@ export function applyOp(sidecar, op) {
         ...t,
         working: op.since ? { by: op.by, since: op.since } : null,
       }));
+    case 'pass':
+      return pass(sidecar, op);
     case 'attachEdits':
       return attachEdits(sidecar, op);
     default:
       throw new OpError('bad_input', `unknown operation: ${op.type}`);
   }
+}
+
+// An agent looked at the thread's open ask (one addressed to no one, SPEC
+// §5) and left it to others: it is out of that agent's inbox until a human
+// asks again. `passed` is optional; a thread without it has no passes.
+function pass(sidecar, { threadId, by }) {
+  if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
+  return updateThread(sidecar, threadId, (t) => {
+    const passed = t.passed ?? [];
+    const working = t.working && sameName(t.working.by, by) ? null : t.working;
+    if (passed.some((n) => sameName(n, by))) return working === t.working ? t : { ...t, working };
+    return { ...t, working, passed: [...passed, canonicalName(sidecar, by)] };
+  });
 }
 
 function join(sidecar, participant) {
@@ -127,6 +143,8 @@ function addMessage(sidecar, { threadId, message }) {
     resolvedAt: null,
     // The agent's reply ends its "responding…" state.
     working: t.working && sameName(t.working.by, message.author.name) ? null : t.working,
+    // A new ask from a human is open to every agent again.
+    ...(t.passed?.length && message.author.kind === 'human' && !message.undoes && !message.applies ? { passed: [] } : {}),
     messages: [...t.messages, buildMessage(joined, message)],
   }));
 }

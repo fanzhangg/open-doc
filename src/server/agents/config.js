@@ -9,16 +9,12 @@
 // another agent (a local open model, …) is adding a runtime here and an
 // adapter, plus its name to RUNTIMES in src/core/agents.js.
 //
-// Web and Your files are asked for at first use (permissions.js): a Claude
-// Code run asks the human through a hook and waits; a custom command may ask
-// the same way, by running `opendoc guard`. Codex cannot ask during a run,
-// so a Codex agent searches the web only once the human allowed it in
-// advance (in this doc or always), from its profile card.
+// Web Searcher and File Searcher are granted as they are switched on: the
+// run gets the tools, or never sees them.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { claudeAdapter, codexAdapter, customAdapter } from './adapters.js';
-import { holds } from './permissions.js';
 
 export const RUNTIMES = {
   claude: {
@@ -30,33 +26,33 @@ export const RUNTIMES = {
       maxTurns: agent.maxTurns,
       maxBudgetUsd: agent.maxBudgetUsd ?? undefined,
       isolated: agent.isolated,
-      asks: asksOf(agent),
+      webAccess: agent.webAccess,
+      fileAccess: agent.fileAccess,
     }),
   },
   codex: {
     label: 'Codex',
-    adapter: (agent, { codexBin, grants = [] }, docPath) => codexAdapter({
+    adapter: (agent, { codexBin }) => codexAdapter({
       bin: codexBin ?? undefined,
       agentName: agent.name,
       model: agent.model ?? undefined,
-      webAccess: agent.webAccess && holds(grants, { agentId: agent.id, permission: 'web', docPath }),
+      webAccess: agent.webAccess,
     }),
   },
   custom: {
     label: 'Custom command',
     adapter: (agent) => (agent.command
       ? customOrUnavailable(agent.command)
-      : unavailableAdapter('custom', `No command is set for ${agent.name}; set it in Settings > Agents.`)),
+      : unavailableAdapter('custom', `No command is set for ${agent.name}; set it in Agents > Advanced.`)),
   },
 };
 
 /**
  * The dispatcher options for roster agent `agent` working on `docPath`.
  * `settings` gives what all agents share (where Claude Code and Codex are).
- * The pilot answers every comment not addressed to someone else (presence
- * 'online'); a co-pilot only comments that @mention it ('dnd').
- * `asks` are the permissions its runs ask the human for at first use.
- * @returns {{ id: string, name: string, persona: string, role: string, profile: object, asks: string[], adapter: object, limits: object, editMode: 'auto' | 'approve', presence: 'online' | 'dnd', warning: string | null }}
+ * An agent with Auto Commenter also looks at comments that mention no one
+ * (presence 'online'); any other only at comments addressed to it ('dnd').
+ * @returns {{ id: string, name: string, persona: string, profile: object, adapter: object, limits: object, editMode: 'auto' | 'approve' | 'none', presence: 'online' | 'dnd', warning: string | null }}
  */
 export function agentSpec(agent, settings, docPath) {
   const runtime = RUNTIMES[agent.runtime];
@@ -67,20 +63,13 @@ export function agentSpec(agent, settings, docPath) {
     id: agent.id,
     name: agent.name,
     persona: agent.persona,
-    role: agent.role,
     profile: { tagline: agent.tagline, webAccess: agent.webAccess, fileAccess: agent.fileAccess },
-    asks: agent.runtime === 'codex' ? [] : asksOf(agent),
     adapter,
     limits: { timeoutMs: agent.runTimeoutMinutes * 60 * 1000, runsPerHour: agent.runsPerHour },
     editMode: agent.editMode,
-    presence: agent.role === 'pilot' ? 'online' : 'dnd',
+    presence: agent.autoComment ? 'online' : 'dnd',
     warning: hooksWarning(adapter, agent.isolated, docPath),
   };
-}
-
-/** The permissions agent `agent` may ask for: 'web', 'files'. */
-export function asksOf(agent) {
-  return [...(agent.webAccess ? ['web'] : []), ...(agent.fileAccess ? ['files'] : [])];
 }
 
 /** The hooks warning for a Claude Code agent working on `docPath`, or null. */

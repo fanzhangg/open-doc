@@ -41,12 +41,6 @@ export const api = {
   updateAgent: async (id, patch) => okData(await request('PUT', '/api/roster', { id, patch })),
   /** Delete the user's agent `id` (it leaves this doc too): { settings, agents }. */
   deleteAgent: async (id) => okData(await request('POST', '/api/roster/delete', { id })),
-  /** Answer a run's request for a permission ('once' | 'doc' | 'always' | 'deny'): { permissions, grants }. */
-  answerPermission: async (id, answer, { folderOnly = false } = {}) => okData(await request('POST', '/api/permissions/answer', { id, answer, folderOnly })),
-  /** Allow agent `agentId` a permission before it asks, scope 'doc' | 'always': { settings, grants }. */
-  grantAhead: async (agentId, permission, scope) => okData(await request('POST', '/api/grants', { agentId, permission, scope })),
-  /** Take back a grant: { settings, grants }. */
-  revokeGrant: async (id) => okData(await request('POST', '/api/grants/revoke', { id })),
   /** The human is typing in the block `anchor` points at (an anchor on the rendered text). */
   typing: (anchor) => request('POST', '/api/editing', { anchor }),
   /** Offer back changes of agent `name` the human's text was kept over: [{ before, after }]. */

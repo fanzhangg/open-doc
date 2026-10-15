@@ -133,12 +133,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-agent { display: flex; align-items: center; gap: 8px; }
 .od-agent-face, .od-profile-face { position: relative; display: flex; }
 
-/* presence: online (green), do not disturb (red with a bar), offline (grey ring, greyed avatar), connecting (grey) */
+/* presence: with Auto Commenter (green), answers when @mentioned (no dot), offline (grey ring, greyed avatar), connecting (grey) */
 .od-presence-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-faint); }
 .od-agent-face .od-presence-dot, .od-profile-face .od-presence-dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border: 2px solid var(--canvas); }
 .od-profile-face .od-presence-dot { border-color: var(--bg); width: 14px; height: 14px; }
-[data-presence="online"] .od-presence-dot, .od-presence-choice[data-presence="online"] .od-presence-dot { background: var(--success); }
-[data-presence="dnd"] .od-presence-dot, .od-presence-choice[data-presence="dnd"] .od-presence-dot { background: linear-gradient(#fff, #fff) center / 55% 2px no-repeat, var(--danger); }
+[data-presence="autocomment"] .od-presence-dot { background: var(--success); }
+[data-presence="idle"] .od-presence-dot { display: none; }
 [data-presence="offline"] .od-presence-dot { background: var(--canvas); box-shadow: inset 0 0 0 2px var(--text-soft); }
 .od-profile[data-presence="offline"] .od-presence-dot { background: var(--bg); }
 [data-presence="offline"] .od-agent-face .od-avatar, .od-profile[data-presence="offline"] .od-avatar { filter: grayscale(1); opacity: 0.55; }
@@ -155,19 +155,9 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile-who { min-width: 0; }
 .od-profile-name { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .od-profile-sub { margin-top: 2px; color: var(--text-soft); }
-.od-profile-state { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--text-soft); }
 .od-profile-problem { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 9%, var(--bg-soft)); color: var(--text); overflow-wrap: anywhere; }
 .od-profile-actions { display: flex; gap: 8px; margin-top: 12px; }
 .od-profile-problem .od-profile-actions { margin-top: 10px; }
-.od-presence-choices { display: flex; flex-direction: column; gap: 2px; margin: 14px -8px 0; padding-top: 10px; border-top: 1px solid var(--border); }
-.od-presence-choice { display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; }
-.od-presence-choice .od-presence-dot { margin-top: 4px; }
-.od-presence-choice:hover { background: var(--hover); }
-.od-presence-choice[aria-checked="true"] { background: var(--accent-soft); }
-.od-presence-choice-text { display: flex; flex-direction: column; }
-.od-presence-choice-title { font-weight: 500; }
-.od-presence-choice-hint { color: var(--text-soft); font-size: 12px; }
-.od-profile-facts { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 12px; }
 .od-profile-log { margin-top: 8px; color: var(--text-faint); font-size: 12px; }
 .od-profile-log summary { cursor: pointer; }
 .od-profile-log pre { margin: 6px 0 0; max-height: 30vh; overflow: auto; padding: 8px; border-radius: 6px; background: var(--bg-soft); color: var(--text-soft); font: 11px/1.5 var(--mono); white-space: pre-wrap; }
@@ -183,11 +173,17 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 /* agent profile and invite cards */
 .od-panel[aria-busy="true"] { cursor: progress; }
 .od-panel[aria-busy="true"] button { pointer-events: none; opacity: 0.7; }
-.od-profile-persona { margin-top: 10px; color: var(--text-soft); font-size: 12.5px; }
-.od-profile-persona summary { cursor: pointer; }
-.od-profile-persona-text { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--agent-soft); color: var(--text); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
-.od-profile-slogan { margin-top: 1px; color: var(--text); font-size: 13px; font-style: italic; }
-.od-profile-answers { margin: 12px 0 6px; color: var(--text-soft); font-size: 12.5px; }
+.od-profile-slogan { margin-top: 2px; color: var(--text-soft); font-size: 13px; }
+.od-profile-edit { margin-left: auto; align-self: flex-start; width: 28px; height: 28px; }
+.od-profile-edit .od-icon { width: 15px; height: 15px; }
+/* The agent's permissions, each a switch: filled when on, outlined when off. */
+.od-perms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.od-perm { padding: 3px 10px; border: 0; border-radius: 999px; background: none; color: var(--text-faint); box-shadow: inset 0 0 0 1px var(--border); font-size: 12px; font-weight: 600; line-height: 1.5; cursor: pointer; }
+.od-perm:hover:not(:disabled) { color: var(--text-soft); box-shadow: inset 0 0 0 1px var(--text-faint); }
+.od-perm[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.od-perm[aria-pressed="true"]:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.od-perm:disabled { cursor: default; opacity: 1; }
+.od-perm:disabled:not([aria-pressed="true"]) { opacity: 0.6; }
 .od-role { padding: 0 6px; border-radius: 999px; background: var(--bg-soft); color: var(--text-soft); font-size: 10.5px; font-weight: 600; line-height: 1.7; }
 .od-profile-footer { justify-content: flex-end; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border); }
 .od-danger, .od-secondary.od-danger { color: var(--danger); }
@@ -196,34 +192,24 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-card-hint { margin: 4px 0 6px; color: var(--text-soft); line-height: 1.45; }
 .od-card-subtitle { margin: 14px 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
 
-/* permissions, as chips: granted ones solid, the rest greyed */
-.od-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.od-chip { padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 600; line-height: 1.7; white-space: nowrap; }
-.od-chip-off { background: none; color: var(--text-faint); box-shadow: inset 0 0 0 1px var(--border); text-decoration: line-through; }
-.od-chip-ask { background: none; color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
-.od-access { margin-top: 2px; }
-.od-access .od-card-subtitle { margin-top: 12px; }
-.od-grant { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 12.5px; color: var(--text-soft, var(--text)); }
-.od-grant-text { min-width: 0; overflow-wrap: anywhere; }
-.od-grant-actions { display: inline-flex; gap: 8px; flex: none; }
-.od-grant .od-link-button { flex: none; }
 
 /* the People panel: who is in the doc, like a shared doc's people list */
 .od-panel[data-card="people"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
 .od-people-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
-.od-people-row { display: flex; align-items: center; gap: 10px; margin: 0 -8px; padding: 6px 8px; border-radius: 8px; }
+.od-people-row { display: flex; align-items: center; gap: 10px; min-height: 34px; margin: 0 -8px; padding: 4px 8px; border-radius: 8px; }
 .od-people-agent { cursor: pointer; }
 .od-people-agent:hover { background: var(--hover); }
-.od-people-who { flex: 1; min-width: 0; }
-.od-people-name { display: flex; align-items: center; gap: 6px; font-weight: 500; }
-.od-people-sub { overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.od-people-role { flex: none; color: var(--text-soft); font-size: 12px; }
-.od-people-row .od-secondary { flex: none; padding: 3px 12px; }
-.od-people-row .od-profile-face .od-presence-dot { width: 11px; height: 11px; border-width: 2px; border-color: var(--bg); }
+.od-people-name { flex: none; max-width: 45%; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.od-people-sub { flex: 1; min-width: 0; overflow: hidden; color: var(--text-soft); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.od-people-role { margin-left: auto; flex: none; color: var(--text-soft); font-size: 12px; }
+.od-people-row .od-icon-button { width: 26px; height: 26px; }
+.od-people-row .od-icon-button .od-icon { width: 15px; height: 15px; }
+.od-people-row .od-on-hover { opacity: 0; }
+.od-people-row:hover .od-on-hover, .od-people-row .od-on-hover:focus-visible { opacity: 1; }
+.od-people-row .od-profile-face .od-presence-dot { width: 9px; height: 9px; border-width: 2px; border-color: var(--bg); }
 .od-pill.od-invite { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 15px; background: var(--bg); color: var(--text); font-size: 13px; font-weight: 500; }
 .od-pill.od-invite:hover { background: var(--hover); }
 .od-pill.od-invite .od-icon { width: 16px; height: 16px; }
-.od-agent[data-pilot] .od-agent-face .od-avatar { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--agent); }
 [data-presence="working"] .od-presence-dot, [data-presence="queued"] .od-presence-dot { background: var(--success); }
 
 /* the @ menu and who-will-reply line under a comment box */
@@ -234,26 +220,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-mention-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .od-mention-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; }
 .od-mention-sub { overflow: hidden; color: var(--text-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.od-mention .od-chips { flex: none; margin-top: 0; }
 .od-composer-hint { margin: 4px 2px 0; color: var(--text-faint); font-size: 11.5px; }
 
 /* Settings > Agents */
-.od-roster { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.od-roster-list { display: flex; flex-direction: column; gap: 2px; }
-.od-roster-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; }
-.od-roster-row:hover { background: var(--hover); }
-.od-roster-row[aria-selected="true"] { background: var(--accent-soft); }
-.od-roster-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.od-roster-name { font-weight: 500; }
-.od-roster-sub { overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.od-roster-here { flex: none; color: var(--success); font-size: 11.5px; font-weight: 500; }
-.od-roster-new { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; }
-.od-roster-new .od-icon { width: 14px; height: 14px; }
-.od-agent-editor { padding-top: 12px; border-top: 1px solid var(--border); }
 .od-persona { min-height: 110px; resize: vertical; font: 13px/1.5 var(--ui-font); }
-.od-agent-actions { display: flex; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--border); }
 .od-settings-subhead { margin: 22px 0 4px; color: var(--text-soft); font-size: 13px; font-weight: 600; }
-[data-agent-state="queued"] .od-agent-dot { background: var(--success); }
 
 /* ---- toolbar ---- */
 
@@ -492,17 +463,6 @@ del.od-mark-del { margin-right: 0.15em; }
 @media (hover: none) { .od-resolve { opacity: 1; } }
 .od-check { width: 18px; height: 18px; fill: currentColor; flex: none; }
 
-.od-card-asking { border-color: color-mix(in srgb, var(--warning) 70%, transparent); box-shadow: inset 3px 0 0 var(--warning); }
-.od-card-active.od-card-asking { box-shadow: var(--shadow-raised), inset 3px 0 0 var(--warning); }
-.od-ask { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 12%, var(--bg-soft)); cursor: default; }
-.od-ask-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
-.od-ask-target { margin-top: 6px; font: 12px/1.4 var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; color: var(--text); }
-.od-ask-scope { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12.5px; cursor: pointer; }
-.od-ask-warning { margin-top: 8px; font-size: 12.5px; color: var(--danger); }
-.od-ask-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.od-ask-actions button { padding: 4px 12px; font-size: 12.5px; }
-.od-ask-note { margin-top: 8px; font-size: 11.5px; color: var(--text-faint); }
-.od-agent[data-asking] .od-presence-dot { background: var(--warning); }
 .od-typing { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--agent); }
 .od-dots { display: inline-flex; gap: 3px; }
 .od-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--agent); animation: od-bounce 1.2s infinite; }
@@ -584,12 +544,6 @@ label.od-setting { cursor: pointer; }
 .od-setting-hint { margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--text-soft); }
 .od-setting-hint code, .od-agent-note code { font-family: var(--mono); font-size: 0.92em; }
 .od-setting-row { display: flex; align-items: center; gap: 8px; }
-.od-agent-state { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; padding: 8px 12px; border-radius: 8px; background: var(--bg-soft); font-size: 13px; }
-.od-agent-state-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.od-agent-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: none; }
-[data-agent-state="ready"] .od-agent-dot, [data-agent-state="running"] .od-agent-dot { background: var(--success); }
-[data-agent-state="unavailable"] .od-agent-dot, [data-agent-state="error"] .od-agent-dot { background: var(--danger); }
-[data-agent-state="paused"] .od-agent-dot, [data-agent-state="limited"] .od-agent-dot { background: var(--warning); }
 .od-agent-note { margin: 0 0 10px; font-size: 12.5px; color: var(--text-soft); }
 .od-agent-warning { color: var(--warning); }
 [data-kind="claude"] [data-for]:not([data-for~="claude"]),
@@ -686,3 +640,55 @@ label.od-setting { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* The Agents panel: the list on the left, the agent picked on the right. */
+.od-agents-dialog { width: min(860px, calc(100vw - 32px)); height: min(640px, calc(100vh - 64px)); padding: 0; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-raised); overflow: hidden; }
+.od-agents-dialog[open] { display: grid; grid-template-columns: 248px minmax(0, 1fr); animation: od-pop 0.15s ease-out; }
+.od-agents-dialog::backdrop { background: rgba(0, 0, 0, 0.32); }
+.od-agents-side { display: flex; flex-direction: column; min-height: 0; padding: 12px 8px; background: var(--bg-soft); }
+.od-agents-side-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 8px 10px; }
+.od-agents-title { font-size: 15px; font-weight: 600; }
+.od-agents-list { display: flex; flex: 1; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; }
+.od-agents-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; }
+.od-agents-row:hover { background: var(--hover); }
+.od-agents-row[aria-selected="true"] { background: var(--accent-soft); }
+.od-agents-row .od-profile-face .od-presence-dot { width: 9px; height: 9px; border-width: 2px; border-color: var(--bg-soft); }
+.od-agents-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.od-agents-name { font-weight: 500; }
+.od-agents-sub { overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.od-agents-flag { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
+.od-agents-empty { margin: 8px 10px; color: var(--text-soft); font-size: 12.5px; }
+.od-agents-programs { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; color: var(--text-soft); font-size: 13px; text-align: left; }
+.od-agents-programs .od-icon { width: 16px; height: 16px; }
+.od-agents-programs:hover, .od-agents-programs[aria-pressed="true"] { color: var(--text); }
+.od-agents-main { position: relative; overflow-y: auto; padding: 24px 32px 28px; }
+.od-agents-close { position: absolute; top: 12px; right: 12px; }
+.od-agents-programs-page h2 { margin: 2px 0 6px; font-size: 16px; font-weight: 600; }
+.od-agent-head { display: flex; align-items: flex-start; gap: 14px; padding-right: 32px; }
+.od-agent-head .od-avatar { --size: 48px; }
+.od-agent-head-fields { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.od-agent-name, .od-agent-intro { width: 100%; margin-left: -6px; padding: 2px 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text); font: inherit; }
+.od-agent-name { font-size: 20px; font-weight: 600; }
+.od-agent-intro { color: var(--text-soft); font-size: 14px; }
+.od-agent-name:hover, .od-agent-intro:hover { border-color: var(--border); }
+.od-agent-name:focus, .od-agent-intro:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--page); }
+.od-agent-name[aria-invalid="true"], .od-agent-intro[aria-invalid="true"] { border-color: var(--danger); }
+.od-agent-problem { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 10%, var(--bg-soft)); font-size: 13px; }
+.od-agent-problem-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.od-agent-where { margin: 10px 0 0; color: var(--text-faint); font-size: 12.5px; }
+.od-agent-block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.od-agent-block h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.od-agent-block-hint { margin: 2px 0 10px; color: var(--text-soft); font-size: 12.5px; }
+.od-agent-perms { display: flex; flex-direction: column; }
+.od-perm-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; cursor: pointer; }
+.od-perm-row + .od-perm-row { border-top: 1px solid var(--border); }
+.od-perm-text { display: flex; flex-direction: column; min-width: 0; }
+.od-perm-label { font-weight: 500; font-size: 13.5px; }
+.od-perm-hint { color: var(--text-soft); font-size: 12.5px; }
+.od-perm-row:has(input:disabled) { cursor: default; opacity: 0.55; }
+.od-agent-risk { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 12%, var(--bg-soft)); color: var(--text); font-size: 12.5px; }
+.od-agent-advanced > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; list-style: none; }
+.od-agent-advanced > summary::before { content: '▸'; display: inline-block; width: 16px; color: var(--text-soft); transition: transform 0.15s; }
+.od-agent-advanced[open] > summary::before { transform: rotate(90deg); }
+.od-agent-advanced[open] > summary { margin-bottom: 8px; }
+.od-agent-foot { display: flex; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }

@@ -230,6 +230,23 @@ test('a run that ends without replying counts as failed and is not repeated', { 
   });
 });
 
+test('with Auto Commenter, an open comment left without a reply is passed on, not failed', { timeout: 30_000 }, async () => {
+  await withAgent('silent', async ({ dispatcher, runs, sidecar, comment, reply, log }) => {
+    await comment('--quote', 'extra load', 'Not my kind of comment');
+    await until(async () => (await sidecar()).threads[0].passed?.length === 1, { what: 'a pass' });
+    assert.deepEqual((await sidecar()).threads[0].passed, ['claude']);
+    await until(() => dispatcher.status().state === 'ready', { what: 'ready' });
+    assert.equal(dispatcher.status().lastRun.ok, true);
+    assert.equal((await sidecar()).threads[0].working, null);
+    await sleep(1200);
+    assert.equal((await runs()).length, 1, 'not handed back');
+
+    // A new ask from the human is open again.
+    await reply((await sidecar()).threads[0].id, 'What about now?');
+    await until(async () => (await runs()).length === 2, { what: 'second run' });
+  });
+});
+
 test('a hanging run is killed at the timeout', { timeout: 30_000 }, async () => {
   await withAgent('hang', async ({ dispatcher, sidecar, comment }) => {
     await comment('--quote', 'extra load', '@claude quantify this');
@@ -516,25 +533,35 @@ test('the guard: a hook on Edit when the run may edit, and the prompt names the 
   assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md' }), /typing in the paragraph/);
 });
 
-test('permissions asked at first use: their tools stay out of the allowed ones and a guard hook asks; no guard, no access', () => {
+test('Web Searcher and File Searcher are granted as switched on; Editor and Auto Editor decide what the doc allows', () => {
   const docPath = join(tmpdir(), 'plan.md');
   const doc = rulePath(docPath);
   const run = (options, command = {}) => claudeAdapter({ bin: 'claude', ...options }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, guard: true, ...command }).args;
   const allowed = (a) => a.slice(a.indexOf('--allowedTools') + 1);
-  const hooks = (a) => (a.includes('--settings') ? JSON.parse(a[a.indexOf('--settings') + 1]).hooks.PreToolUse : []);
 
-  const both = run({ asks: ['web', 'files'] });
-  assert.deepEqual(allowed(both), [`Read(${doc})`, `Edit(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)'], 'only the doc is allowed outright');
-  assert.deepEqual(hooks(both).map((h) => h.matcher), ['Edit', 'WebSearch|WebFetch|Read|Glob|Grep']);
-  assert.ok(hooks(both)[1].hooks[0].timeout > 300, 'the hook outlasts the wait for the human');
-  assert.equal(claudeAdapter({ bin: 'claude', asks: ['files'] }).workdir(docPath), privateWorkdir(docPath), 'asking for files still starts in a private folder');
+  assert.deepEqual(allowed(run({})), [`Read(${doc})`, `Edit(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)'], 'only the doc');
+  assert.deepEqual(allowed(run({ webAccess: true })), [`Read(${doc})`, `Edit(${doc})`, 'WebSearch', 'WebFetch', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.deepEqual(allowed(run({ fileAccess: true })), ['Read', 'Edit(./plan.md)', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.equal(claudeAdapter({ bin: 'claude', fileAccess: true }).workdir(docPath), null, 'File Searcher starts in the doc folder');
+  assert.equal(claudeAdapter({ bin: 'claude' }).workdir(docPath), privateWorkdir(docPath));
+  for (const editMode of ['approve', 'none']) {
+    assert.deepEqual(allowed(run({}, { editMode })), [`Read(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)'], `${editMode}: the doc is not editable`);
+  }
 
-  assert.deepEqual(hooks(run({ asks: ['web'] }, { editMode: 'approve' })).map((h) => h.matcher), ['WebSearch|WebFetch']);
-  assert.deepEqual(hooks(run({ asks: ['web'] }, { guard: false })), [], 'without the guard nothing can say yes: the tools stay denied');
-  assert.deepEqual(hooks(run({ asks: ['web'], webAccess: true })).map((h) => h.matcher), ['Edit'], 'granted outright (serve flags): nothing to ask');
-
-  const prompt = buildPrompt({ name: 'Merlin', docFile: 'plan.md', asks: ['files'], docFolder: '/home/me/notes' });
+  const prompt = buildPrompt({ name: 'Merlin', docFile: 'plan.md', fileAccess: true, docFolder: '/home/me/notes' });
   assert.match(prompt, /read the human's other files \(the doc is in \/home\/me\/notes\)/);
-  assert.match(prompt, /approves this access the first time you use it/);
-  assert.doesNotMatch(buildPrompt({ name: 'Rocky', docFile: 'plan.md' }), /approves this access/);
+  assert.doesNotMatch(prompt, /search the web/);
+  assert.match(buildPrompt({ name: 'Genius', docFile: 'plan.md', webAccess: true }), /You may search the web/);
+  assert.doesNotMatch(buildPrompt({ name: 'Rocky', docFile: 'plan.md' }), /search the web|other files/);
+  assert.match(buildPrompt({ name: 'Rocky', docFile: 'plan.md', editMode: 'none' }), /do not edit it or propose changes; you may only reply/);
+});
+
+test('the prompt: with Auto Commenter, an open comment is the agent\'s to take or leave', () => {
+  const pilot = buildPrompt({ name: 'Clippy', docFile: 'plan.md', autoComment: true });
+  assert.match(pilot, /"open": true/);
+  assert.match(pilot, /only if it fits your persona/);
+  assert.match(pilot, /Stop when every thread you take on has a reply/);
+  const called = buildPrompt({ name: 'Rocky', docFile: 'plan.md' });
+  assert.doesNotMatch(called, /"open": true/);
+  assert.match(called, /answer only comments addressed to you/);
 });

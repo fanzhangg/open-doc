@@ -353,10 +353,10 @@ function pageCommand(win, name) {
 
 // ---- the agent's program ----
 
-// The programs Settings > Agents can point at, for every agent of a runtime.
+// The programs the Agents panel can point at, for every agent of a runtime.
 const PROGRAMS = { claudeBin: 'Claude Code', codexBin: 'Codex' };
 
-// Settings > Agents may set what program agent runs start: a custom agent's
+// The Agents panel may set what program agent runs start: a custom agent's
 // command (`id` names the agent), or where Claude Code or Codex is
 // ('claudeBin', 'codexBin', for every agent). Pages cannot set it through the
 // local server; here the user confirms the exact command in a native dialog.
@@ -385,7 +385,7 @@ async function setAgentProgram(win, { key, value, id } = {}) {
   return true;
 }
 
-// Settings > Agents > Choose…: pick the Claude Code or Codex executable in a native dialog.
+// Agents > Programs > Choose…: pick the Claude Code or Codex executable in a native dialog.
 async function chooseProgram(win, key) {
   if (!Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {

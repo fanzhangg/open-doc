@@ -8,41 +8,63 @@ described in `desktop-app.md`.
 An agent is a collaborator, set up and treated like a person in a shared doc:
 
 - It has an **identity**: a name you @mention, an avatar with its own colour,
-  a **slogan** of a few words that says what it is for, and a status (Ready,
-  Working…, Waiting for its turn, Offline).
+  and an **introduction** of a few words that says what it is for.
 - It has a **persona**: instructions in the human's words for who it is and how
   it works ("a strict copy editor; fix grammar only").
-- It has a **role**. The **pilot** is in every doc and answers every comment
-  not addressed to someone else, so a comment never goes unanswered.
-  **Co-pilots** are specialists that answer only when @mentioned; mentioning
-  one brings it into the doc, as mentioning a person in Google Docs shares the
-  doc with them.
-- It has **permissions**, as narrow as its job. Can edit or Can suggest is a
-  fixed role in the doc. Web and Your files are risky, so they are **asked
-  for at first use**: the profile says which of them the agent may ask for,
-  and the human answers when a run first needs one (see "Permissions at first
-  use"). Only humans resolve threads.
+- It has **permissions**, as narrow as its job, each a switch the human flips
+  right on the agent's card:
 
-The app comes with five agents, named in parody of the Office Assistants:
+| Permission | Field | The agent… |
+| --- | --- | --- |
+| Editor | `editMode` 'approve' or 'auto' | changes the doc; without Auto Editor, by proposing each change for the human to apply. Off ('none'), it only replies |
+| Auto Editor | `editMode` 'auto' | edits directly, without asking first. Needs Editor: switching it on turns Editor on, and switching Editor off turns it off |
+| Auto Commenter | `autoComment` | is in every doc and looks at every new comment that @mentions no one, answering the ones that fit its persona |
+| Web Searcher | `webAccess` | searches and fetches the web |
+| File Searcher | `fileAccess` | reads the user's other files, never secrets |
 
-| Agent | Slogan | Role | Can edit / suggest | Web (asks) | Your files (asks) |
-| --- | --- | --- | --- | --- | --- |
-| Clippy | Your all-round co-author | Pilot | Can edit | ✓ | |
-| Rocky | Sniffs out grammar slips | Co-pilot | Can edit | | |
-| Will | Makes your prose sing | Co-pilot | Can suggest | | |
-| Genius | Checks every fact | Co-pilot | Can suggest | ✓ | |
-| Merlin | Finds it in your files | Co-pilot | Can suggest | | ✓ |
+A switch that is on is granted: the next run gets the tools, with nothing
+asked mid-run. Only humans resolve threads.
 
-No built-in agent may ask for both Web and Your files: an agent that reads
-your files could be tricked by a web page into sending them out. Turning both
-on in Settings asks for confirmation, and a request for one while the agent
-holds the other carries a warning. Only the grammar fixer and the pilot edit
-directly; the others suggest.
+The app comes with six agents, named in parody of the Office Assistants.
+Each owns one part of the work, so no two do the same job, and has exactly
+the permissions that part needs:
+
+| Agent | Introduction | Owns | Editor | Auto Editor | Auto Commenter | Web Searcher | File Searcher |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Clippy | Drafts and reshapes your doc | Content and structure | ✓ | ✓ | ✓ | | |
+| Rocky | Fixes grammar and typos | Correctness | ✓ | ✓ | | | |
+| Will | Polishes style and flow | Style | ✓ | | | | |
+| Genius | Checks facts against sources | Facts | ✓ | | | ✓ | |
+| Merlin | Finds it in your files | The author's material | ✓ | | | | ✓ |
+| Links | Critiques like a tough reader | Feedback | | | | | |
+
+The permissions follow the job: mechanical, safe fixes (Rocky) and the
+co-author the human talks to most (Clippy) edit directly; judgement calls
+(style, facts, material from elsewhere) are proposed; a critique changes
+nothing. Only Clippy has Auto Commenter, so an open comment gets one answer
+by default. Every persona has the same four parts: who it is, its job, what
+it leaves alone and to whom (by @name, so the human knows whom to ask), and
+how it replies. An agent without an introduction is shown by the first
+sentence of its persona (`introOf`).
+
+No built-in agent has both Web Searcher and File Searcher: an agent that
+reads your files could be tricked by a web page into sending them out.
+Switching either on asks for confirmation, with a warning when the agent has
+the other.
 
 The persona and identity are decoupled from what executes the agent: the
 **runtime**. Today an agent runs on Claude Code (`claude -p`), on OpenAI
 Codex (`codex exec`) or on any command line; a local open model is one more
 runtime.
+
+### The card
+
+Clicking an agent's avatar opens its card, kept to what the human acts on:
+avatar, name, introduction, a pencil to edit the profile, and the five
+permissions as toggle chips (filled when on). A problem (the
+agent cannot start, its last run failed, it hit its hourly limit) adds a box
+with the reason, Try again and the run log; a healthy agent shows no status.
+The green dot on the avatar means Auto Commenter.
 
 ## What the UX borrows, and from where
 
@@ -53,34 +75,34 @@ chat, Google Docs and Figma sharing, Android permissions):
 
 | Pattern | From | Here |
 | --- | --- | --- |
-| `@` summons a bot mid-conversation, picker shows recent ones with a description | ChatGPT GPT mentions, Poe, Slack, Copilot in Word | `@` menu grouped *Co-pilots in this doc* / *Bring in (joins this doc)* / *People*, each with slogan and permission chips; matches names, and slogans from two letters ("@gram" finds Rocky) |
-| A default assistant that speaks without being called | ChatGPT in group chats | The pilot; it is left out of the `@` menu since it answers anyway |
-| Mentioning someone without access offers to share | Google Docs | Mentioning a co-pilot brings it in; the line under the comment box says so before you post |
-| A share panel listing people with roles | Google Docs, Figma, Notion | People panel: you (Owner), the pilot, co-pilots with Remove, co-pilots to add |
-| Roles in the doc's own words | Google Docs Editor / Suggesting | Can edit / Can suggest |
-| Agents get their own, narrow access | Notion custom agents, Android least privilege | Per-agent permissions; greyed chips show what an agent may not do, outlined ones what it asks for first |
-| Risky access is asked for when first needed, with a scope, and can be revoked | Android runtime permissions (Only this time / While using / Don't allow), VS Code tool approval (Allow once / in this session / in this workspace / always) | A card in the thread: Allow once (this reply), Allow in this doc, Always, Deny (this reply); grants listed with Revoke |
-| Agents are labelled as apps | Slack | `AI` badge, Pilot / Co-pilot pill |
-| Who will answer is visible before sending | (gap in most products) | "Clippy will reply", "Genius will reply · Genius (Can suggest · Web) joins this doc" |
+| `@` summons a bot mid-conversation, picker shows recent ones with a description | ChatGPT GPT mentions, Poe, Slack, Copilot in Word | `@` menu grouped *Agents in this doc* / *Bring in (joins this doc)* / *People*, each with its introduction; matches names, and introductions from two letters ("@gram" finds Rocky) |
+| Assistants that speak without being called | ChatGPT in group chats | Auto Commenter, for any number of agents, each answering what fits its persona |
+| Mentioning someone without access offers to share | Google Docs | Mentioning an agent brings it in; the line under the comment box says so before you post |
+| A share panel listing people with roles | Google Docs, Figma, Notion | People panel, one line each: you, the agents here (× to remove), agents to add (+); permissions are on each agent's card |
+| Agents get their own, narrow access | Notion custom agents, Android least privilege | Per-agent permissions, switched on and off in place on the agent's card |
+| Who will answer is visible before sending | (gap in most products) | "Clippy will reply if it fits", "Genius will reply · Genius joins this doc" |
 
 Where the research and this design differ: the research suggested plain job
-titles for names; the agents keep fun names, with the slogan carrying the job.
+titles for names; the agents keep fun names, with the introduction carrying
+the job. An earlier version asked for Web and Your files at first use (Allow
+once / in this doc / always / deny, as Android and VS Code do); it was
+dropped for plain switches, which are simpler to understand and to undo.
 
 ## Model
 
 | Concept | Where it lives | What it is |
 | --- | --- | --- |
-| Agent (profile) | User settings, `agents[]` (`src/core/agents.js`) | `id`, `name`, `role`, `tagline` (slogan), `persona`, `runtime`, `editMode`, `webAccess`, `fileAccess`, limits, `command` |
-| Membership | The doc's sidecar, `participants` | The pilot joins every doc it opens; a co-pilot joins when @mentioned or added; `leave` (SPEC §6) removes it |
+| Agent (profile) | User settings, `agents[]` (`src/core/agents.js`) | `id`, `name`, `tagline` (introduction), `persona`, `runtime`, `editMode`, `autoComment`, `webAccess`, `fileAccess`, limits, `command` |
+| Permissions | `PERMISSIONS`, `permissionsOf`, `permissionPatch` (`src/core/agents.js`) | The five switches, and the profile change each one makes |
+| Membership | The doc's sidecar, `participants` | An agent with Auto Commenter joins every doc it opens; another joins when @mentioned or added; `leave` (SPEC §6) removes it |
 | Runtime | `src/server/agents/config.js` `RUNTIMES` | Turns an agent profile into an adapter (`adapters.js`) |
 | Team | `src/server/agents/team.js` | One dispatcher per agent working on the open doc, sharing one turn |
-| Grant | User settings, `grants[]` (`src/core/grants.js`) | `id`, `agent` (the agent's id), `permission` (`web`, `files`), `doc` (absolute path, or null for every doc), `folder` (files only, or null), `at` |
-| Request | Server memory (`src/server/agents/permissions.js`) | A run's tool call waiting on the human; Allow once and Deny are kept on the run itself |
+| Pass | The thread's `passed` (SPEC §2.2) | Agents with Auto Commenter that left the thread's open ask to others; emptied by the human's next ask |
 
-A roster always has exactly one pilot; making another agent the pilot makes
-the old one a co-pilot, and the pilot cannot be deleted. Until the user
-changes it, the roster is the five built-ins; a roster with no pilot gets
-Clippy back.
+Any number of agents may have Auto Commenter, none included (then a comment
+needs an @mention to be answered), and any agent can be deleted. Until the
+user changes it, the roster is the five built-ins. An agent saved as the old
+single pilot (`role: "pilot"`) comes back with Auto Commenter on.
 
 Membership is in the sidecar so it travels with the doc: a collaborator who
 opens it sees the same agents in the header. An agent in the doc that none of
@@ -89,64 +111,46 @@ your agents matches (someone else's, or one driven by a chat session through
 
 ## Who answers what (SPEC §5)
 
-- A comment that mentions no one goes to the pilot (co-pilots leave it alone).
+- A comment that mentions no one (an **open ask**) goes to every agent with
+  Auto Commenter. Each run gets it marked `"open": true` and the instruction to
+  answer only if it fits its persona and no earlier reply already does what it
+  asks. An agent that leaves it without a reply has passed: the dispatcher
+  records it in the thread's `passed` (SPEC §2.2), where a failure to reply to
+  a comment addressed to it would take it offline. The open ask is then out
+  of that agent's inbox until the human asks again in the thread.
 - A comment that mentions agents waits on each of them until each replied.
 - A reply that mentions no one continues with the agent that answered last in
-  that thread, pilot or co-pilot.
+  that thread.
 - Agents do not wake each other: only human messages ask for work, so two
   agents cannot loop.
 
-## Permissions at first use
+Every agent with Auto Commenter looks at every open ask, so each one costs a run
+per agent; deciding that a comment does not fit is a short run, but not a
+free one. The runs take turns, so an agent that comes second sees the first
+one's reply and can leave the comment to it.
 
-Researched against Android runtime permissions and VS Code's tool approval:
-ask in context, when the access is first needed, with a choice of how long a
-yes lasts, and one place to take it back.
+## Permissions in a run
 
-The agent's profile (`webAccess`, `fileAccess` in `src/core/agents.js`) is
-its manifest: what it may ask for. Off, the run never gets the tools at all.
-On, a Claude Code run gets them only through the human:
+A permission that is on is in the run's command line; one that is off is
+not, so the tools are never there to misuse:
 
-1. The tools (`WebSearch`, `WebFetch`; `Read`, `Glob`, `Grep` beyond the doc)
-   stay out of `--allowedTools`. A PreToolUse hook on them runs
-   `opendoc guard`, which posts the tool call to the server's `/api/guard`
-   with the agent's own guard token (one per agent, so a request names its
-   agent and a run cannot act as another).
-2. The server (`Permissions.decide`) answers at once when it can: the doc
-   itself or the run's working folder (left to the run's rules); a permit
-   from earlier in this run (Allow once, Deny); a grant that covers it (this
-   agent, this permission, this doc or every doc, for files within its folder).
-3. Otherwise it adds a request (who, what, which file or query, the run's
-   threads, a warning when the agent holds the other risky permission) and
-   sends the list to the page (SSE `permissions`). The card appears in the
-   first thread of the run: Allow once, Allow in this doc, Always, Deny, and
-   for files "Only files in <folder>" (on by default). Parallel calls of the
-   same kind share one card.
-4. The hook waits. The answer becomes a permit on the run (once, deny) or a
-   grant in the settings (in this doc, always). No answer within
-   `ASK_TIMEOUT_MS` (5 min) is a Deny; a run that is stopped ends the wait.
-   The model reads why a call was denied, and the prompt asks it to say in its
-   reply what it needed.
+- Claude Code: `--allowedTools` holds `Read` of the doc (`Read` anywhere with
+  File Searcher, which also starts the run in the doc's folder instead of a
+  private one), `Edit` of the doc with Auto Editor, and `WebSearch` and
+  `WebFetch` with Web Searcher. `--permission-mode dontAsk` denies the rest,
+  and the deny rules for secrets (`.env*`, keys, `~/.ssh`) win over any
+  allow. With Auto Editor, a PreToolUse hook on `Edit` runs `opendoc guard`,
+  which refuses an edit where the human is typing.
+- Codex: the doc is writable in its permission profile only with Auto
+  Editor; Web Searcher sets `web_search="live"`. Codex reads the whole disk,
+  so it has no File Searcher.
+- Every runtime: the prompt says what the agent may do (edit, propose, or
+  only reply; the web; the human's files).
 
-It fails closed. Verified with Claude Code 2.1.300 in `--permission-mode
-dontAsk`: a hook's `allow` lets through a tool that is not in
-`--allowedTools`; a hook that crashes, cannot reach the server or times out
-leaves it denied; and the deny rules for secrets (`.env*`, keys, `~/.ssh`)
-win over the hook, which is not even asked about them. The hook's own timeout
-is longer than the server's wait, so the model learns the reason.
-
-Grants are listed with Revoke in the People panel (**Access you allowed**) and
-in the agent's card (**Beyond this doc**). Deleting an agent deletes its
-grants; renaming the doc moves its "in this doc" grants along. The page cannot
-write grants through settings, only answer requests, revoke, or allow in
-advance.
-
-A **Codex** run cannot ask mid-run (no hook), so a Codex agent that may ask
-for the web searches only with a grant given in advance: its card offers
-Allow in this doc / Always, and the grant restarts it with `web_search="live"`.
-A **custom command** may ask the same way a Claude run does, by running
-`opendoc guard` with a hook-style request on stdin (as `test/fixtures/fake-agent.js`
-does in mode `ask`). Agents from `serve` flags (`--agent-web`,
-`--agent-read-files`) have their access granted outright on the command line.
+A change to a permission other than Auto Commenter restarts the agent once its
+run in progress ends; switching Auto Commenter only changes which comments it
+answers. Agents from `serve` flags (`--edit-mode`, `--agent-web`,
+`--agent-read-files`) show their permissions read-only.
 
 ## Taking turns
 
@@ -178,7 +182,7 @@ runtime the same prompt (`buildPrompt`: the task, the persona, the other
 agents in the doc, the rules) and the same JSON threads, and the agent acts
 through the `opendoc` CLI, so a new runtime needs no changes to the
 dispatcher, the persona, or the page. Add its name to `RUNTIMES` in
-`src/core/agents.js` and a button under "Runs on" in Settings > Agents.
+`src/core/agents.js` and a button under "Runs on" in the Agents panel (Advanced).
 
 Each Claude Code or Codex agent gets its own private working folder per doc
 (`privateWorkdir(doc, name)`) and its own resumed session, so agents do not
@@ -191,8 +195,8 @@ share memory.
 | Found | `PATH`, `~/.local/bin`, the desktop app's copy, or Settings (`claudeBin`) | `PATH` (on Windows the native `codex.exe` inside the npm package, since `codex.cmd` cannot be spawned without a shell), or Settings (`codexBin`) |
 | Config | The user's, unless isolated (`--bare`) | `--ignore-user-config`: a `sandbox_mode` there would switch the profile off, and its MCP servers and plugins run outside the sandbox. Only its `model` and `[windows] sandbox` carry over |
 | Preflight | `claude auth status` → `loggedIn` | `codex login status` exits 0 (or `CODEX_API_KEY` is set) |
-| Access | Permission rules: `Read`/`Edit` of the doc only, `opendoc` commands, secrets denied; web and file tools through the `opendoc guard` hook, which asks the human | A permission profile (`default_permissions="opendoc"`) that `prepare` writes to the private folder's `.codex/config.toml`, a trusted project config: in the doc's folder every file but the doc (read-only in Ask first) and its sidecar is denied; `.env*`, `*.pem`, `*.key` in the folders above, `~/.ssh`, `~/.aws` and `~/.codex` are denied; no network; `approval_policy="never"` |
-| Web | `WebSearch`, `WebFetch`, asked for at first use | `-c web_search="live"` once allowed in advance (else `"disabled"`) |
+| Access | Permission rules: `Read` of the doc (anywhere with File Searcher), `Edit` of the doc with Auto Editor, `opendoc` commands, secrets denied | A permission profile (`default_permissions="opendoc"`) that `prepare` writes to the private folder's `.codex/config.toml`, a trusted project config: in the doc's folder every file but the doc (read-only without Auto Editor) and its sidecar is denied; `.env*`, `*.pem`, `*.key` in the folders above, `~/.ssh`, `~/.aws` and `~/.codex` are denied; no network; `approval_policy="never"` |
+| Web | `WebSearch`, `WebFetch` with Web Searcher | `-c web_search="live"` with Web Searcher (else `"disabled"`) |
 | Resume | `--resume <session_id>` | `codex exec … resume <thread_id> <prompt>` (from `thread.started`) |
 | Result | Last JSON line: `is_error`, cost, turns, denials | JSONL events: `turn.completed` is success; `turn.failed`/`error` give the reason |
 | Limits | Model, turns, minutes, runs per hour, budget, isolated | Model, minutes, runs per hour |
@@ -211,7 +215,7 @@ What a Codex run can touch (checked against Codex 0.162 on Windows):
   (Codex's elevated Windows sandbox refuses a profile that does not let it
   read the whole disk), read a file added next to the doc during the run,
   create files in the doc's folder, and replace (not read) a file there by
-  renaming another one over it. That also means Ask first stops edits but not
+  renaming another one over it. That also means turning Auto Editor off stops edits but not
   a deliberate rename over the doc.
 - On Windows the profile needs Codex's `elevated` sandbox (set up once by
   Codex) or `windows.sandbox = "mxc"`; `unelevated` refuses it. The elevated
@@ -223,20 +227,16 @@ What a Codex run can touch (checked against Codex 0.162 on Windows):
 
 | Request | Does |
 | --- | --- |
-| `POST /api/ops` (a comment) | Co-pilots it @mentions that are not in the doc join first; the answer includes `agents` then |
-| `POST /api/agents/invite { id }` | Add one of your co-pilots to the doc (People panel) |
-| `POST /api/agents/remove { name }` | Stop it here (ending its run) and `leave`; not the pilot |
-| `POST /api/roster { agent, invite? }` | New co-pilot (not its program); optionally add it here |
-| `PUT /api/roster { id, patch }` | Change an agent (`role: "pilot"` hands over the pilot); a rename moves its membership in this doc |
-| `POST /api/roster/delete { id }` | Delete an agent (not the pilot); it leaves this doc |
+| `POST /api/ops` (a comment) | Agents it @mentions that are not in the doc join first; the answer includes `agents` then |
+| `POST /api/agents/invite { id }` | Add one of your agents to the doc (People panel) |
+| `POST /api/agents/remove { name }` | Stop it here (ending its run) and `leave`; not one with Auto Commenter |
+| `POST /api/roster { agent, invite? }` | New agent (not its program); optionally add it here |
+| `PUT /api/roster { id, patch }` | Change an agent, a permission switch included (`permissionPatch`); a rename moves its membership in this doc |
+| `POST /api/roster/delete { id }` | Delete an agent; it leaves this doc |
 | `POST /api/agent { name, action: "retry" }` | Try an offline agent again |
-| `POST /api/guard { tool, input }` (guard token) | From `opendoc guard`: an edit (is the human typing there?) or a tool that needs a permission; may wait for the human. Answers `{ decision: allow \| deny \| null, reason }` |
-| `POST /api/permissions/answer { id, answer, folderOnly }` | The human's answer: `once`, `doc`, `always` or `deny` |
-| `POST /api/grants { agentId, permission, scope }` | Allow before it asks (`doc` or `always`), only what its profile may ask for |
-| `POST /api/grants/revoke { id }` | Take a grant back |
+| `POST /api/guard { tool, oldString }` (guard token) | From `opendoc guard` before an edit: is the human typing there? Answers `{ allow, reason? }` |
 | `GET /api/agent?name=` | Status and last run log |
 | SSE `agents` | Every agent's status, on any change |
-| SSE `permissions`, `grants` | The requests waiting on the human; the grants that hold in this doc (also in `GET /api/state`) |
 
 An agent's program (`command`, and `claudeBin` or `codexBin` for all Claude
 or Codex agents) is set
@@ -245,17 +245,17 @@ only in the desktop app, which asks the user to confirm it, or in
 
 ## Not yet
 
-- Picking folders for Your files up front; today a grant can be kept to the folder of the file the agent first asked for.
-- Codex agents asking mid-run (a Codex hook), and the page showing requests from agents run elsewhere (`opendoc wait`).
-- Roles per doc (an agent that may edit one doc and only suggest in another), as Docs roles are per file.
-- Muting the pilot in one thread.
+- File Searcher kept to chosen folders.
+- Permissions per doc (an agent that may edit one doc and only suggest in another), as Docs roles are per file.
+- Muting Auto Commenter in one thread.
+- A cheaper first look for Auto Commenter (one small model deciding who an open comment fits) instead of a run per agent.
 
 - Agents asking each other (an agent's @mention waking another agent), with a
   loop guard.
 - Parallel runs for agents that only propose.
 - Per-agent caret colours in the text (avatars already differ).
-- Codex agents: reads outside the doc are not confined (Codex reads the disk), so Your files is not offered for them.
+- Codex agents: reads outside the doc are not confined (Codex reads the disk), so File Searcher is not offered for them.
 - More runtimes: OpenAI-compatible local models.
 - Codex: replies posted by the dispatcher from the run's final message
-  (`--output-schema`), so the doc's folder need not be writable and Ask first
+  (`--output-schema`), so the doc's folder need not be writable and turning Auto Editor off
   holds against renames; the edit guard as a Codex hook.

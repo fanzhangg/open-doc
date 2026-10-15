@@ -89,6 +89,7 @@ The sidecar is a UTF-8 JSON object. The JSON Schema is
 | `resolvedBy` | string or null | Participant name that resolved the thread. |
 | `resolvedAt` | string or null | RFC 3339 UTC timestamp. |
 | `working` | object or null | `{ "by": <name>, "since": <timestamp> }` while an agent is responding. Tools MUST treat a value older than 5 minutes as `null`. |
+| `passed` | array of strings, optional | Participants who looked at the thread's open ask (§5) and left it to others. Absent means empty. |
 | `messages` | array | At least one message, oldest first. |
 
 Only a participant with `kind: "human"` may resolve or reopen a thread;
@@ -97,7 +98,8 @@ replying, and the human decides whether the thread is done. (Sidecars
 written before this rule may have threads resolved by an agent; they stay
 valid as they are.) Reopening sets `resolvedBy` and `resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
 message from the participant named in `working` clears `working`; resolving
-clears it too.
+clears it too. Passing clears `working` if the participant who passes holds it,
+and a new message from a human that is not a notice (§5) empties `passed`.
 
 ### 2.3 Message
 
@@ -302,18 +304,19 @@ A thread is in participant `P`'s inbox when all of these hold:
   mentions no one, in a thread where an agent posted before it, is addressed
   to the agent that posted last before it (a follow-up continues that
   conversation); otherwise it is addressed to no one;
-- either the ask is addressed to `P` and no message after it (other than
-  notices) is from `P`, or it is addressed to no one and no message (other
-  than notices) follows it;
+- the ask is addressed to `P`, or to no one (an **open ask**) and `P` is not
+  in `passed`;
+- no message after the ask (other than notices) is from `P`;
 - it is not marked `working` by `P` (a stale value does not count).
 
 A comment addressed only to someone else does not wake `P`, and undoing an
 edit or applying a proposal does not ask the agent to act again. A comment
 that mentions several agents waits on each of them until each has answered
-it; one addressed to no one is answered once, by whoever answers first. A
+it. An open ask waits on everyone who takes open asks until each has
+answered or passed: several agents may answer it, each one that it fits. A
 tool MAY let a participant narrow its inbox to asks addressed to it (for
-example a co-pilot agent that answers only when called, leaving comments for
-no one to a pilot). The last rule keeps a participant who is still answering
+example an agent that answers only when called, leaving open asks to agents
+that take them). The last rule keeps a participant who is still answering
 a thread from being handed it again. The inbox is computed from the sidecar
 alone; tools need no cursor or other state.
 
@@ -331,7 +334,7 @@ Writers MUST NOT lose each other's changes:
 4. Remove the lock.
 
 Changes are expressed as operations (add thread, add message, resolve, reopen,
-set working, join, attach edits) carrying client-generated ids, so a retried operation is
+set working, pass, join, attach edits) carrying client-generated ids, so a retried operation is
 applied at most once. A proposal or an apply notice is an add-message
 operation whose message carries `proposal` or `applies`.
 

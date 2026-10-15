@@ -2,10 +2,8 @@
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. The agent shows up like any other collaborator: an avatar, its
 // replies (with what it changed in the doc and Undo, or the changes it
-// proposes and Apply), and typing dots while it works. When its run needs a
-// permission it has not been given (the web, your other files), the request
-// waits in the thread it is working on: Allow once, Allow in this doc,
-// Always, or Deny. Only the human resolves threads.
+// proposes and Apply), and typing dots while it works. Only the human
+// resolves threads.
 
 import { activeWorking } from '../src/core/ops.js';
 import { appliedBy } from './review.js';
@@ -29,10 +27,8 @@ const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83
  *           onReview: (threadId: string, message: object) => void, reviewing: () => string | null,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
- *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline?, labels? }[],
- *           replyHint?: (body: string, thread: object | null) => string,
- *           permissionsFor?: (threadId: string) => object[],
- *           onPermission?: (id: string, answer: 'once' | 'doc' | 'always' | 'deny', options: { folderOnly: boolean }) => Promise<void> }} handlers
+ *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
+ *           replyHint?: (body: string, thread: object | null) => string }} handlers
  */
 export function createCommentMargin(margin, handlers) {
   let sidecar = { participants: [], threads: [] };
@@ -45,8 +41,6 @@ export function createCommentMargin(margin, handlers) {
   const errors = new Map(); // message id → why undo or apply failed
   const unfolded = new Set(); // ids of long messages shown in full
   const expanded = new Set(); // ids of long threads shown with every reply
-  const wholeDrive = new Set(); // ids of file requests the human widened to all files
-  const answering = new Set(); // ids of permission requests being answered
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
@@ -118,9 +112,6 @@ export function createCommentMargin(margin, handlers) {
       card.append(row);
     });
 
-    const asks = thread.status === 'open' ? handlers.permissionsFor?.(thread.id) ?? [] : [];
-    card.classList.toggle('od-card-asking', asks.length > 0);
-    for (const request of asks) card.append(permissionBlock(request));
     if (working) {
       const row = el('div', 'od-typing');
       row.title = `${working.by} is working on it`;
@@ -191,69 +182,6 @@ export function createCommentMargin(margin, handlers) {
       render();
     });
     return button;
-  }
-
-  // A run's request for a permission, like an app asking at first use: who,
-  // what for, and the four answers. A request for files may be limited to the
-  // folder it names (on unless the human widens it).
-  function permissionBlock(request) {
-    const block = el('div', 'od-ask');
-    block.dataset.request = request.id;
-    block.setAttribute('role', 'group');
-    const head = el('div', 'od-ask-head');
-    head.append(avatar(request.agent, 'agent', true), el('span', 'od-ask-title', `${request.agent} ${ASK_WHAT[request.tool] ?? 'wants more access'}`));
-    block.append(head);
-    if (request.target) {
-      const target = el('div', 'od-ask-target', truncate(request.target, 200));
-      target.title = request.target;
-      block.append(target);
-    }
-    const folderOnly = request.permission === 'files' && request.folder && !wholeDrive.has(request.id);
-    if (request.permission === 'files' && request.folder) {
-      const label = el('label', 'od-ask-scope');
-      const box = el('input');
-      box.type = 'checkbox';
-      box.checked = folderOnly;
-      box.addEventListener('change', () => {
-        if (box.checked) wholeDrive.delete(request.id);
-        else wholeDrive.add(request.id);
-      });
-      const folder = el('span', '', `Only files in ${shortPath(request.folder)}`);
-      folder.title = request.folder;
-      label.append(box, folder);
-      block.append(label);
-    }
-    if (request.warning) block.append(el('div', 'od-ask-warning', request.warning));
-    const actions = el('div', 'od-ask-actions');
-    const answer = (value) => async () => {
-      if (answering.has(request.id)) return;
-      answering.add(request.id);
-      for (const b of actions.querySelectorAll('button')) b.disabled = true;
-      try {
-        await handlers.onPermission(request.id, value, { folderOnly: request.permission === 'files' && !wholeDrive.has(request.id) });
-      } finally {
-        answering.delete(request.id);
-        wholeDrive.delete(request.id);
-      }
-    };
-    const scope = request.permission === 'files' ? 'files' : 'the web';
-    for (const [value, text, title, kind] of [
-      ['once', 'Allow once', `For the rest of this reply`, 'od-primary'],
-      ['doc', 'Allow in this doc', `Whenever ${request.agent} works on this doc; revoke it in the People panel`, 'od-secondary'],
-      ['always', 'Always', `${request.agent} may use ${scope} in every doc; revoke it in the People panel`, 'od-secondary'],
-      ['deny', 'Deny', `${request.agent} does without it for the rest of this reply`, 'od-secondary od-danger'],
-    ]) {
-      const button = el('button', kind, text);
-      button.type = 'button';
-      button.title = title;
-      button.disabled = answering.has(request.id);
-      button.addEventListener('click', answer(value));
-      actions.append(button);
-    }
-    block.append(actions);
-    const by = new Date(request.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    block.append(el('div', 'od-ask-note', `It waits for you. No answer by ${by} counts as Deny.`));
-    return block;
   }
 
   // What a reply changed in the doc: an inline diff with a little context,
@@ -454,7 +382,6 @@ export function createCommentMargin(margin, handlers) {
         who.append(name);
         if (choice.tagline) who.append(el('span', 'od-mention-sub', choice.tagline));
         item.append(avatar(choice.name, choice.kind, true), who);
-        if (choice.labels?.length) item.append(chips(choice.labels));
         item.addEventListener('mousedown', (event) => {
           event.preventDefault();
           pick(choice.name);
@@ -695,19 +622,6 @@ function el(tag, className, text) {
 
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
-const ASK_WHAT = {
-  WebSearch: 'wants to search the web',
-  WebFetch: 'wants to open a web page',
-  Read: 'wants to read a file outside this doc',
-  Glob: 'wants to look through a folder',
-  Grep: 'wants to search a folder',
-};
-
-/** A long path by its last two folders: …/work/notes. */
-export function shortPath(path) {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts.length <= 2 ? path : `…/${parts.slice(-2).join('/')}`;
-}
 const oneLine = (s) => s.replace(/\s+/g, ' ');
 
 // One change as it reads in the text: "…context <del>before</del><ins>after</ins> context…",
@@ -734,18 +648,4 @@ function relativeTime(iso) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
   return new Date(iso).toLocaleDateString();
-}
-
-/**
- * Permission chips: [{ label, on, ask?, title? }]: greyed when not allowed,
- * outlined when the agent asks first.
- */
-export function chips(labels) {
-  const row = el('span', 'od-chips');
-  for (const { label, on, ask = false, title } of labels) {
-    const chip = el('span', `od-chip${ask ? ' od-chip-ask' : on ? '' : ' od-chip-off'}`, label);
-    chip.title = title ?? (ask ? 'Asks you first' : on ? '' : 'Not allowed');
-    row.append(chip);
-  }
-  return row;
 }

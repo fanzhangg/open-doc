@@ -58,20 +58,6 @@ export async function editAgents(edit, dir = configDir()) {
   }, dir);
 }
 
-/**
- * Change the grants (src/core/grants.js) under the settings lock:
- * `edit(grants, settings)` returns the new list.
- * @returns {Promise<object>} the complete settings after the change
- */
-export async function editGrants(edit, dir = configDir()) {
-  return change((stored) => {
-    const current = resolveSettings(stored);
-    const patch = { grants: edit(current.grants, current) };
-    checkSettingsPatch(patch);
-    return patch;
-  }, dir);
-}
-
 async function change(patchFor, dir) {
   await mkdir(dir, { recursive: true });
   const path = settingsPath(dir);

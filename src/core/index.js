@@ -19,6 +19,6 @@ export {
   findThread,
   newId,
 } from './ops.js';
-export { inbox } from './inbox.js';
+export { inbox, openAsk } from './inbox.js';
 export { FormatError, parseSidecar, serializeSidecar } from './format.js';
-export { AgentError, BUILTIN_AGENTS, createAgent, deleteAgent, permissionLabels, pilotOf, resolveRoster, updateAgent } from './agents.js';
+export { AgentError, BUILTIN_AGENTS, PERMISSIONS, createAgent, deleteAgent, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from './agents.js';

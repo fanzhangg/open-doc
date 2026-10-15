@@ -4,9 +4,7 @@
 // the Settings dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
 
 import { hydrateIcons, icon } from './icons.js';
-import { api } from './api.js';
-import { checkAgentPatch } from '../src/core/agents.js';
-import { avatar } from './threads.js';
+import { createAgentsPanel } from './agents-panel.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
@@ -48,7 +46,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   setupTooltips();
 
   const settings = setupSettings({ store, getName, setName });
-  const agentSettings = setupAgentSettings({ store, onResult: onAgentResult });
+  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -157,17 +155,16 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     },
     /** The statuses of the doc's agents changed. */
     agentStatus(statuses) {
-      agentSettings.showStatus(statuses);
+      agentsPanel.showStatus(statuses);
     },
-    /** Open Settings > Agents on agent `id` (or the first one). */
+    /** Open the Agents panel on agent `id` (or the one shown last). */
     openAgent(id) {
-      agentSettings.select(id);
-      settings.open('agents');
+      agentsPanel.open(id);
     },
     /** A command from the desktop app's menu: 'settings', 'agent-settings' or 'shortcuts'. */
     command(name) {
       if (name === 'settings') settings.toggle('general');
-      else if (name === 'agent-settings') settings.toggle('agents');
+      else if (name === 'agent-settings') agentsPanel.toggle();
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },
   };
@@ -361,267 +358,6 @@ function setupSettings({ store, getName, setName }) {
     },
   };
 }
-
-// ---- Settings > Agents ----
-
-const AGENT_STATES = {
-  starting: 'Connecting…',
-  ready: 'Online in this doc',
-  queued: 'Online in this doc · waiting for its turn',
-  running: 'Online in this doc · working',
-  error: 'Offline: the last run failed',
-  limited: 'Offline: hourly run limit reached',
-  unavailable: 'Offline',
-  stopped: 'Offline',
-};
-
-// Asked before an agent may ask to reach beyond the doc. It still asks the
-// human at first use (src/core/grants.js), but a yes there is quick.
-const BOTH_RISK = 'With web search and other files both on, the agent could be tricked into sending your files to a website.';
-const ACCESS_RISKS = {
-  webAccess: {
-    ask: 'Let the agent ask to search the web and open web pages?\n\n'
-      + 'It asks you the first time. A web page can hide instructions that trick the agent into sending this doc to a website.',
-    other: 'fileAccess',
-  },
-  fileAccess: {
-    ask: 'Let the agent ask to read files other than this doc?\n\n'
-      + 'It asks you the first time. Allowed, it can read files on this computer except keys and .env files, and a file can hide instructions it follows.',
-    other: 'webAccess',
-  },
-};
-
-// The user's agents, for every doc: a list to pick one from (the pilot
-// first), and its profile (name, job, persona, role, permissions, what it runs
-// on, limits).
-// Changes save through the server as they are made. An agent's program (a
-// custom command, or where Claude Code is) is set through the desktop app,
-// which asks the user to confirm it; in a browser tab those fields are read-only.
-function setupAgentSettings({ store, onResult }) {
-  const section = document.querySelector('.od-settings-section[data-section="agents"]');
-  const desktop = window.opendocDesktop;
-  const list = section.querySelector('.od-roster-list');
-  const form = section.querySelector('.od-agent-editor');
-  const stateText = section.querySelector('.od-agent-state-text');
-  const check = section.querySelector('[data-action="agent-check"]');
-  const hooks = section.querySelector('.od-agent-hooks');
-  const nameError = form.querySelector('.od-input-error');
-  const roleHint = form.querySelector('.od-agent-role-hint');
-  const makePilot = form.querySelector('[data-action="make-pilot"]');
-  const remove = form.querySelector('[data-action="delete-agent"]');
-  let statuses = [];
-  let selected = null; // the id of the agent shown
-
-  section.querySelector('.od-program-note').hidden = Boolean(desktop);
-  for (const button of section.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
-  for (const input of section.querySelectorAll('[data-agent-program], [data-program]')) input.readOnly = !desktop;
-
-  const agents = () => store.get().agents;
-  const current = () => agents().find((a) => a.id === selected) ?? null;
-  const statusOf = (agent) => statuses.find((s) => (s.id ? s.id === agent.id : s.name.toLowerCase() === agent.name.toLowerCase())) ?? null;
-  const valid = (patch) => {
-    try {
-      checkAgentPatch(patch);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  async function save(patch) {
-    const agent = current();
-    if (!agent || !valid(patch)) return false;
-    try {
-      onResult(await api.updateAgent(agent.id, patch));
-      return true;
-    } catch (error) {
-      if (Object.hasOwn(patch, 'name')) {
-        nameError.textContent = error.message;
-        nameError.hidden = false;
-      }
-      paint();
-      return false;
-    }
-  }
-
-  function paint() {
-    const roster = [...agents()].sort((a, b) => Number(b.role === 'pilot') - Number(a.role === 'pilot'));
-    if (selected && !roster.some((a) => a.id === selected)) selected = null;
-    selected ??= roster[0]?.id ?? null;
-    list.replaceChildren(...roster.map((agent) => {
-      const row = el('button', 'od-roster-row');
-      row.type = 'button';
-      row.setAttribute('role', 'option');
-      row.setAttribute('aria-selected', String(agent.id === selected));
-      row.dataset.agentId = agent.id;
-      const who = el('span', 'od-roster-who');
-      const name = el('span', 'od-roster-name', agent.name);
-      if (agent.role === 'pilot') name.append(el('span', 'od-role', 'Pilot'));
-      who.append(name, el('span', 'od-roster-sub', agent.tagline || firstLine(agent.persona) || 'No job yet'));
-      row.append(avatar(agent.name, 'agent', true), who);
-      if (statusOf(agent)) row.append(el('span', 'od-roster-here', 'In this doc'));
-      return row;
-    }));
-
-    const agent = current();
-    form.hidden = !agent;
-    if (!agent) return;
-    form.dataset.kind = agent.runtime;
-    const mark = (attr, value) => {
-      for (const button of form.querySelectorAll(`[data-${attr}]`)) {
-        button.setAttribute('aria-checked', String(button.getAttribute(`data-${attr}`) === value));
-      }
-    };
-    mark('agent-runtime', agent.runtime);
-    mark('agent-edit-mode', agent.editMode);
-    const pilot = agent.role === 'pilot';
-    roleHint.textContent = pilot
-      ? 'Pilot: in every doc, answers every comment that does not @mention someone else.'
-      : 'Co-pilot: answers when @mentioned (which also brings it into the doc), and follow-ups in its own threads.';
-    makePilot.hidden = pilot;
-    remove.disabled = pilot;
-    remove.title = pilot ? 'Make another agent the pilot to delete this one' : '';
-    for (const box of form.querySelectorAll('input[type="checkbox"][data-agent]')) box.checked = Boolean(agent[box.dataset.agent]);
-    for (const input of form.querySelectorAll('input[data-agent]:not([type="checkbox"]), textarea[data-agent], input[data-agent-program]')) {
-      if (document.activeElement === input) continue;
-      const key = input.dataset.agent ?? input.dataset.agentProgram;
-      input.value = agent[key] ?? '';
-      input.removeAttribute('aria-invalid');
-    }
-    for (const bin of section.querySelectorAll('[data-program]')) {
-      if (document.activeElement !== bin) bin.value = store.get()[bin.dataset.program] ?? '';
-    }
-    paintStatus();
-  }
-
-  function paintStatus() {
-    const agent = current();
-    if (!agent) return;
-    const status = statusOf(agent);
-    let text;
-    let state = status?.state ?? 'off';
-    if (!status) {
-      text = agent.role === 'pilot' ? 'Starting…' : `Not in this doc. @${agent.name} in a comment brings it in.`;
-    } else {
-      text = AGENT_STATES[status.state] ?? status.state;
-      if (status.error) text += `: ${status.error.replace(/\u001b\[[0-9;]*m/g, '')}`;
-      else if (status.program && ['ready', 'running'].includes(status.state)) text += ` · ${status.program}`;
-    }
-    form.dataset.agentState = state;
-    stateText.textContent = text;
-    check.hidden = !status || !['unavailable', 'error'].includes(status.state);
-    hooks.textContent = status?.warning ? `Note: ${status.warning}.` : '';
-    hooks.hidden = !status?.warning;
-  }
-
-  section.addEventListener('click', async (event) => {
-    const button = event.target.closest('button');
-    if (!button) return;
-    if (button.dataset.agentId) {
-      selected = button.dataset.agentId;
-      nameError.hidden = true;
-      paint();
-    } else if (button.dataset.agentRuntime) save({ runtime: button.dataset.agentRuntime });
-    else if (button.dataset.agentEditMode) save({ editMode: button.dataset.agentEditMode });
-    else if (button.dataset.action === 'make-pilot') save({ role: 'pilot' });
-    else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
-    else if (button.dataset.action === 'new-agent') {
-      try {
-        const result = await api.createAgent({ name: 'agent' });
-        selected = result.agent.id;
-        onResult(result);
-        form.querySelector('[data-agent="name"]').focus();
-        form.querySelector('[data-agent="name"]').select();
-      } catch {
-        // at most MAX_AGENTS; the list shows what there is
-      }
-    } else if (button.dataset.action === 'delete-agent') {
-      const agent = current();
-      if (!agent || agent.role === 'pilot' || !window.confirm(`Delete ${agent.name}?\n\nIt leaves this doc and stops answering in every doc. Its comments stay.`)) return;
-      try {
-        onResult(await api.deleteAgent(agent.id));
-      } catch {
-        // already gone
-      }
-    } else if (button.dataset.action === 'agent-check') {
-      const status = current() && statusOf(current());
-      if (!status) return;
-      check.disabled = true;
-      try {
-        const next = await api.agentAction(status.name, 'retry');
-        showStatus(statuses.map((s) => (s === status ? next : s)));
-      } catch {
-        // it left the doc meanwhile
-      } finally {
-        check.disabled = false;
-      }
-    }
-  });
-
-  form.addEventListener('change', (event) => {
-    const input = event.target;
-    if (input.type === 'checkbox' && input.dataset.agent) {
-      const risk = ACCESS_RISKS[input.dataset.agent];
-      if (risk && input.checked && !window.confirm(current()?.[risk.other] ? `${risk.ask}\n\n${BOTH_RISK}` : risk.ask)) {
-        input.checked = false;
-        return;
-      }
-      return save({ [input.dataset.agent]: input.checked });
-    }
-    if (input.dataset.agentProgram) return setProgram(input, 'command', current()?.id);
-    const key = input.dataset.agent;
-    if (!key) return;
-    const raw = key === 'persona' ? input.value : input.value.trim();
-    if (key === 'name' && raw === '') return paint();
-    let value = raw;
-    if (input.type === 'number') value = raw === '' ? null : Number(raw);
-    else if (key === 'model') value = raw || null;
-    if (!valid({ [key]: value })) {
-      input.setAttribute('aria-invalid', 'true');
-      return;
-    }
-    input.removeAttribute('aria-invalid');
-    nameError.hidden = true;
-    save({ [key]: value });
-  });
-  form.addEventListener('focusout', (event) => {
-    if (event.target.matches?.('[aria-invalid="true"]')) paint(); // an invalid value is not kept
-  });
-  for (const bin of section.querySelectorAll('[data-program]')) bin.addEventListener('change', (event) => setProgram(event.target, bin.dataset.program));
-
-  async function setProgram(input, key, id = null) {
-    const before = () => (key === 'command' ? current()?.command : store.get()[key]) ?? '';
-    if (!desktop) return;
-    try {
-      const done = await desktop.setAgentProgram(key, input.value.trim() || null, id);
-      if (!done) input.value = before();
-    } catch {
-      input.value = before();
-    }
-  }
-
-  function showStatus(next) {
-    statuses = next ?? [];
-    paint();
-  }
-
-  store.subscribe(paint);
-  paint();
-  return {
-    showStatus,
-    /** Show agent `id`'s profile (the dialog opens on the section separately). */
-    select(id) {
-      if (id) selected = id;
-      nameError.hidden = true;
-      paint();
-    },
-  };
-}
-
-const firstLine = (text) => {
-  const line = (text ?? '').trim().split('\n')[0] ?? '';
-  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
-};
 
 function el(tag, className, text) {
   const node = document.createElement(tag);

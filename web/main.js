@@ -57,7 +57,6 @@ let pendingSelection = null;
 // markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
-let asking = []; // runs' requests for a permission, waiting on the human
 
 async function start() {
   let initial;
@@ -127,8 +126,6 @@ async function start() {
     anchorTops: (items) => editor.anchorTops(items),
     mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
     replyHint: (body, thread) => people?.replyHint(body, thread) ?? '',
-    permissionsFor: (threadId) => asking.filter((r) => r.threadIds[0] === threadId),
-    onPermission: answerPermission,
   });
   editor.onLayout(() => margin.layout());
 
@@ -143,8 +140,7 @@ async function start() {
     onSettings: (next) => settings.receive(next),
     onError: (message) => setStatus(message, 'error'),
   });
-  asking = initial.permissions ?? [];
-  people.render({ agents: initial.agents, roster: settings.get().agents, grants: initial.grants ?? [], permissions: asking });
+  people.render({ agents: initial.agents, roster: settings.get().agents });
   settings.subscribe((next) => people.render({ roster: next.agents }));
   chrome.agentStatus(initial.agents);
   applySidecar(initial.sidecar);
@@ -196,8 +192,6 @@ async function start() {
     if (agent && quote) editor.agentLooking(agent.name, [{ exact: quote, prefix: '', suffix: '', start: 0 }]);
   });
   events.addEventListener('agents', (event) => showAgents(JSON.parse(event.data)));
-  events.addEventListener('permissions', (event) => showAsking(JSON.parse(event.data)));
-  events.addEventListener('grants', (event) => people.render({ grants: JSON.parse(event.data) }));
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
   events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
@@ -390,27 +384,6 @@ function showAgents(next) {
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   people.render({ agents: next });
   chrome.agentStatus(next);
-}
-
-// Runs' requests for a permission, waiting on the human: each shows in the
-// thread its run is working on. A new one brings the comments into view.
-function showAsking(next) {
-  const fresh = next.some((r) => !asking.some((a) => a.id === r.id));
-  asking = next;
-  people.render({ permissions: next });
-  if (fresh && !commentsShown()) showComments(true);
-  margin.rerender();
-}
-
-async function answerPermission(id, answer, { folderOnly }) {
-  try {
-    const result = await api.answerPermission(id, answer, { folderOnly });
-    people.render({ grants: result.grants });
-    showAsking(result.permissions);
-  } catch (error) {
-    setStatus(`Could not answer: ${error.message}`, 'error');
-    if (error.status === 404) showAsking(asking.filter((r) => r.id !== id)); // it timed out meanwhile
-  }
 }
 
 // What an agent request (invite, remove, change an agent) answers with.

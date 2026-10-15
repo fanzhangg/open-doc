@@ -13,7 +13,7 @@ const agent = (fields) => ({ ...AGENT_DEFAULTS, id: 'a_test01', name: 'claude', 
 test('agentSpec: each runtime builds its adapter; the persona and limits carry over', async () => {
   const dir = await tempDir();
   const doc = join(dir, 'plan.md');
-  const claude = agentSpec(agent({ persona: 'Be terse.', runTimeoutMinutes: 3, runsPerHour: 7, editMode: 'approve', presence: 'dnd' }), { claudeBin: join(dir, 'claude.exe') }, doc);
+  const claude = agentSpec(agent({ persona: 'Be terse.', runTimeoutMinutes: 3, runsPerHour: 7, editMode: 'approve' }), { claudeBin: join(dir, 'claude.exe') }, doc);
   assert.equal(claude.name, 'claude');
   assert.equal(claude.id, 'a_test01');
   assert.equal(claude.persona, 'Be terse.');
@@ -21,21 +21,21 @@ test('agentSpec: each runtime builds its adapter; the persona and limits carry o
   assert.equal(claude.adapter.program, join(dir, 'claude.exe'));
   assert.deepEqual(claude.limits, { timeoutMs: 3 * 60 * 1000, runsPerHour: 7 });
   assert.equal(claude.editMode, 'approve');
-  assert.equal(claude.presence, 'dnd');
+  assert.equal(claude.presence, 'dnd', 'answers only when @mentioned');
+  assert.equal(agentSpec(agent({ autoComment: true }), { claudeBin: null }, doc).presence, 'online', 'with Auto Commenter, also open comments');
+  const searcher = agentSpec(agent({ webAccess: true }), { claudeBin: 'claude' }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
+  assert.ok(searcher.includes('WebSearch'), 'Web Searcher is granted as switched on');
 
   const custom = agentSpec(agent({ runtime: 'custom', name: 'bot', command: 'mybot --prompt-file {promptFile}' }), { claudeBin: null }, doc);
   assert.equal(custom.adapter.name, 'custom');
   assert.equal(custom.adapter.program, 'mybot');
 
-  // A Codex agent cannot ask during a run: the web needs a grant given in advance.
   const codexAgent = agent({ runtime: 'codex', name: 'codex', model: 'gpt-5', persona: 'Be terse.', webAccess: true });
-  const ungranted = agentSpec(codexAgent, { claudeBin: null }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
-  assert.ok(ungranted.includes('web_search="disabled"'));
-  const grants = [{ id: 'g_test01', agent: 'a_test01', permission: 'web', doc, folder: null, at: '2026-10-15T00:00:00Z' }];
-  const codex = agentSpec(codexAgent, { claudeBin: join(dir, 'claude.exe'), codexBin: join(dir, 'codex.exe'), grants }, doc);
-  assert.deepEqual(codex.asks, [], 'nothing to ask for mid-run');
+  const offline = agentSpec({ ...codexAgent, webAccess: false }, { claudeBin: null }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
+  assert.ok(offline.includes('web_search="disabled"'));
+  const codex = agentSpec(codexAgent, { claudeBin: join(dir, 'claude.exe'), codexBin: join(dir, 'codex.exe') }, doc);
   assert.equal(codex.adapter.name, 'codex');
-  assert.equal(codex.adapter.program, join(dir, 'codex.exe'), 'Settings > Agents > Codex');
+  assert.equal(codex.adapter.program, join(dir, 'codex.exe'), 'Agents > Programs > Codex');
   assert.equal(codex.persona, 'Be terse.');
   assert.equal(codex.adapter.supportsSessions, true);
   assert.equal(codex.adapter.workdir(doc), privateWorkdir(doc, 'codex'));
@@ -51,7 +51,7 @@ test('a custom agent without a command, or a runtime this version lacks, is unav
   const doc = join(await tempDir(), 'plan.md');
   const noCommand = await agentSpec(agent({ runtime: 'custom', name: 'bot' }), { claudeBin: null }, doc).adapter.preflight();
   assert.equal(noCommand.ok, false);
-  assert.match(noCommand.error, /No command is set for bot; set it in Settings > Agents/);
+  assert.match(noCommand.error, /No command is set for bot; set it in Agents > Advanced/);
   const unknown = await agentSpec(agent({ runtime: 'gemini' }), { claudeBin: null }, doc).adapter.preflight();
   assert.match(unknown.error, /gemini agents are not supported/);
 });

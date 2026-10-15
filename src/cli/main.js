@@ -16,7 +16,6 @@ import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
 import { EDIT_MODES, MAX_PERSONA } from '../core/agents.js';
-import { ASK_TIMEOUT_MS } from '../core/grants.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -36,14 +35,15 @@ Usage:
   opendoc mv       <old.md> <new.md>
   opendoc guard    (a Claude Code hook the server sets up for its runs; reads the hook input on stdin)
 
-serve also runs your agents invited into the doc (Settings > Agents in the editor).
+serve also runs your agents invited into the doc (the Agents panel in the editor).
 Agent options for serve add one more agent for this run (it answers comments that mention
 it or no one):
   --agent claude                 Claude Code preset; --agent-bin <path> if claude is not found
   --agent <name> --agent-cmd "<command with {promptFile} {threadsFile} {doc}>"   any other agent
   --persona "<text>"             the agent's role, e.g. "a strict copy editor; fix only grammar"
-  --edit-mode auto|approve       auto (default): the agent edits the doc and replies;
-                                 approve: it only replies with proposals for you to apply
+  --edit-mode auto|approve|none  auto (default): the agent edits the doc and replies;
+                                 approve: it replies with proposals for you to apply;
+                                 none: it only replies
   --model <name>  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
   --max-budget-usd <n>  --agent-isolated (Claude --bare; needs ANTHROPIC_API_KEY)
   --agent-web                    let Claude search and fetch the web (off by default)
@@ -112,7 +112,7 @@ const COMMANDS = {
     const port = values.port === undefined ? 0 : Number(values.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError('--port must be a port number');
     // --agent flags add an agent for this run, next to the user's agents
-    // invited into the doc (Settings > Agents).
+    // invited into the doc (the Agents panel).
     const agent = agentOptions(values, docPath);
     const server = await startServer(docPath, { port, agent, agentFromSettings: true });
     out(`opendoc: editing ${basename(docPath)} at ${server.url}`);
@@ -120,7 +120,7 @@ const COMMANDS = {
       if (status.warning) out(`opendoc: warning: ${status.warning}`);
       out(status.state === 'unavailable'
         ? `opendoc: agent ${status.name} is unavailable: ${status.error}`
-        : `opendoc: ${status.name} ${status.presence === 'dnd' ? `answers comments that mention @${status.name}` : 'answers comments that mention it or no one'}${status.role === 'pilot' ? ' (the pilot)' : ''}, ${status.editMode === 'approve' ? 'proposing edits for you to apply' : 'editing the doc directly'}`);
+        : `opendoc: ${status.name} ${status.presence === 'dnd' ? `answers comments that mention @${status.name}` : 'answers comments that mention it or no one'}, ${EDIT_MODE_TEXT[status.editMode]}`);
     }
     out('Press Ctrl+C to stop.');
     if (!values['no-open']) openBrowser(server.url);
@@ -195,10 +195,7 @@ const COMMANDS = {
   // (OPENDOC_GUARD_URL and _TOKEN). On Edit: asks the server whether the edit
   // lands where the human is typing, and refuses it if so; anything
   // unexpected lets the edit through, since the editor still merges it
-  // safely. On a tool that needs the human's permission (the web, files
-  // beyond the doc): asks the server, which may wait for the human, and lets
-  // the call through only on an explicit allow; anything else leaves it to
-  // the run's rules, which deny it.
+  // safely.
   async guard(_args, _values, { out, env, stdin }) {
     const url = env.OPENDOC_GUARD_URL;
     const token = env.OPENDOC_GUARD_TOKEN;
@@ -212,23 +209,7 @@ const COMMANDS = {
       return;
     }
     const decide = (decision, reason) => out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }));
-    if (input?.tool_name !== 'Edit') {
-      if (typeof input?.tool_name !== 'string') return;
-      try {
-        const response = await fetch(`${url}/api/guard`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-opendoc-guard': token },
-          body: JSON.stringify({ tool: input.tool_name, input: input.tool_input ?? {} }),
-          signal: AbortSignal.timeout(ASK_TIMEOUT_MS + 30_000),
-        });
-        const verdict = await response.json();
-        if (verdict.decision === 'allow') decide('allow', 'The human allowed it.');
-        else if (verdict.decision === 'deny') decide('deny', verdict.reason);
-      } catch {
-        decide('deny', 'Could not ask the human for permission (OpenDoc did not answer). Do without it.');
-      }
-      return;
-    }
+    if (input?.tool_name !== 'Edit') return;
     try {
       const response = await fetch(`${url}/api/guard`, {
         method: 'POST',
@@ -335,6 +316,12 @@ async function writeAndPrint(docPath, values, out, threadId, change) {
   print(out, values.json, markdown, sidecar, [findThread(sidecar, threadId)]);
 }
 
+const EDIT_MODE_TEXT = {
+  auto: 'editing the doc directly',
+  approve: 'proposing edits for you to apply',
+  none: 'replying without changing the doc',
+};
+
 function agentOptions(values, docPath) {
   if (!values.agent) {
     if (values['agent-cmd']) throw new UsageError('--agent-cmd needs --agent <name>');
@@ -343,7 +330,7 @@ function agentOptions(values, docPath) {
     return undefined;
   }
   const editMode = values['edit-mode'] ?? 'auto';
-  if (!EDIT_MODES.includes(editMode)) throw new UsageError('--edit-mode must be auto or approve');
+  if (!EDIT_MODES.includes(editMode)) throw new UsageError('--edit-mode must be auto, approve or none');
   if (!NAME_PATTERN.test(values.agent)) throw new UsageError('--agent must be a participant name (letters, digits, . _ -)');
   const number = (flag, fallback, { min = 1 } = {}) => {
     if (values[flag] === undefined) return fallback;

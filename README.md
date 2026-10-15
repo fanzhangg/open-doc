@@ -10,95 +10,100 @@ the CLI, the local editor and the agent skill.
 ## Agents that answer on their own
 
 Agents are collaborators, like people in a shared doc. Each has a name you
-@mention, a slogan that says what it is for, a **persona** (instructions in
-your own words for who it is and how it works) and only the permissions its
-job needs. OpenDoc comes with five, named after the Office Assistants of old:
+@mention, an introduction that says what it is for, a **persona**
+(instructions in your own words for who it is and how it works) and only the
+permissions its job needs. OpenDoc comes with six, named after the Office
+Assistants of old. Each owns one part of the work and leaves the rest to the
+others:
 
-| Agent | Slogan | Role | Permissions (Web and Your files: asks first) |
+| Agent | Introduction | Owns | Permissions |
 | --- | --- | --- | --- |
-| **Clippy** | Your all-round co-author | Pilot | Can edit · Web |
-| **Rocky** | Sniffs out grammar slips | Co-pilot | Can edit |
-| **Will** | Makes your prose sing | Co-pilot | Can suggest |
-| **Genius** | Checks every fact | Co-pilot | Can suggest · Web |
-| **Merlin** | Finds it in your files | Co-pilot | Can suggest · Your files |
+| **Clippy** | Drafts and reshapes your doc | Content and structure | Editor · Auto Editor · Auto Commenter |
+| **Rocky** | Fixes grammar and typos | Correctness | Editor · Auto Editor |
+| **Will** | Polishes style and flow | Style | Editor |
+| **Genius** | Checks facts against sources | Facts | Editor · Web Searcher |
+| **Merlin** | Finds it in your files | Your own material | Editor · File Searcher |
+| **Links** | Critiques like a tough reader | Feedback | (replies only) |
+
+Every persona has the same four parts: who it is, its job, what it leaves
+alone (and to whom), and how it replies. An agent without an introduction
+shows the first sentence of its persona instead.
+
+Every agent reads the doc it works on. Everything else is a switch on the
+agent's card (click its avatar) and in the **Agents** panel; flip one and
+it holds from the agent's next run:
+
+| Permission | The agent… |
+| --- | --- |
+| **Editor** | changes the doc. Without Auto Editor it proposes each change: shown struck through and inserted in the text while the thread is selected, applied when you click Apply. Off, it only replies. |
+| **Auto Editor** | edits the doc directly and replies with what it changed, which you can undo. Needs Editor. |
+| **Auto Commenter** | is in every doc and looks at every new comment that @mentions no one, answering the ones that fit its persona. |
+| **Web Searcher** | searches the web and opens web pages. |
+| **File Searcher** | reads your other files, never keys or `.env` files. |
+
+No built-in agent has both Web Searcher and File Searcher, since one that
+reads your files could be tricked by a web page into sending them out;
+switching on either asks you to confirm, with a warning when the agent has
+the other.
 
 Who answers what:
 
-- The **pilot** (Clippy, unless you pick another) is in every doc and answers
-  every comment that does not @mention someone else, so a comment never goes
-  unanswered.
-- **Co-pilots** answer only when you @mention them. Type `@` in a comment: the
-  menu lists the co-pilots in the doc and the ones you can bring in, each with
-  its slogan and permissions. Mentioning one that is not in the doc yet brings
-  it in, as mentioning a person in a shared doc shares it with them; the line
-  under the comment box says so before you post ("Genius will reply · Genius
-  (Can suggest · Web · asks) joins this doc").
+- A comment that mentions no one goes to every agent with **Auto Commenter**. Each
+  answers it only if it fits its persona, and leaves it otherwise. Out of
+  the box only Clippy has it; switch it on for Rocky, say, and a typo
+  comment gets Rocky too. The line
+  under the comment box says who may reply ("Clippy will reply if it fits").
+- An agent without Auto Commenter answers only when you @mention it. Type
+  `@` in a comment: the menu lists the agents in the doc and the ones you can
+  bring in, each with its introduction. Mentioning one that is not in the doc
+  yet brings it in, as mentioning a person in a shared doc shares it with
+  them ("Genius will reply · Genius joins this doc").
 - A reply that mentions no one continues with the agent that answered last in
   that thread. A comment that mentions several agents waits on each of them.
 - Agents take turns: only one runs at a time in a doc, so their edits never
   collide and each one's changes are recorded on its own reply.
 
-The header shows the doc's agents (the pilot first) and a **People** button
-that opens a panel like a shared doc's: you as Owner, the pilot, the
-co-pilots here (with Remove), the ones you can add, each with its
-permissions (the ones it lacks greyed out, the ones it asks for outlined), and
-**Access you allowed**: every grant, with Revoke. Click an avatar for that
-agent's card: slogan, role, permissions and grants, persona, what it is doing
-and its last run.
+The header shows the doc's agents (those with Auto Commenter first, with a
+green dot) and a **People** button that opens a panel like a shared doc's,
+one line per person or agent: you, the agents here (× to remove one, except
+those with Auto Commenter), and the ones you can add (+). Click an agent for
+its card: name, introduction, permission switches, and a pencil to edit its
+profile.
 **Offline** (grey) means it cannot answer until something is fixed, for
 example a failed run, Claude Code not signed in, or the hourly run limit; the
-card says what is wrong and offers Try again. Leave a comment and the agent's
-avatar and the comment card pulse while it works; its edits appear in the
-page highlighted with its name, merged with anything you are typing
-elsewhere. Agents always end with a reply in the thread. Only you resolve
-threads: resolve it, reply again, or Undo its edit.
-
-Permissions, as in a shared doc: **Can edit** (`auto`, or `--edit-mode`) lets
-an agent change the doc and reply with what it changed, which you can undo;
-**Can suggest** (`approve`) keeps it out of the doc: it replies with proposed
-changes, shown struck through and inserted in the text while the thread is
-selected, and nothing changes until you click Apply. That role is fixed per
-agent.
-
-**Web** (search and open web pages) and **Your files** (read files other than
-the doc, never keys or `.env` files) are asked for at first use, like an app's
-permissions on a phone or a tool in VS Code: an agent's profile says which of
-the two it may ask for, and the first time a run needs one, a card appears in
-the comment it is working on: "Merlin wants to read a file outside this doc
-…/notes/q3.md · Only files in …/notes · **Allow once** / **Allow in this
-doc** / **Always** / **Deny**". The run waits for your answer. Allow once and
-Deny last for the rest of that reply; Allow in this doc and Always are kept
-(in your settings, by agent) and listed with Revoke in the People panel and
-the agent's card. No answer within 5 minutes counts as Deny, and a denied
-agent says in its reply what it needed. No built-in agent may ask for both,
-since one that reads your files could be tricked by a web page into sending
-them out; turning both on asks you to confirm, and a request for one while
-the agent holds the other carries a warning.
+card then says what is wrong and offers Try again. Leave a comment and the
+agent's avatar and the comment card pulse while it works; its edits appear in
+the page highlighted with its name, merged with anything you are typing
+elsewhere. Agents end with a reply in every thread addressed to them. Only you
+resolve threads: resolve it, reply again, or Undo its edit.
 
 **Runs on** picks the program behind the agent; the persona works the same on
 any of them. Today: **Claude Code** (`claude -p`, one session per agent per
-doc, in a private folder of its own, with only `Read`, `Edit` on this doc (not
-in Ask first), and `opendoc` allowed; web and file tools go through an
-`opendoc guard` hook that asks you, and stay denied if it cannot; it cannot
-read `.env*`, `*.pem` or `*.key` files anywhere, or `~/.ssh` and
-`~/.aws`), **Codex** (OpenAI's
+doc, in a private folder of its own, with only `Read`, `Edit` on this doc
+(with Auto Editor), and `opendoc` allowed, plus the web tools with Web
+Searcher and `Read` anywhere with File Searcher; it cannot read `.env*`,
+`*.pem` or `*.key` files anywhere, or `~/.ssh` and `~/.aws`), **Codex** (OpenAI's
 `codex exec`, installed with `npm install -g @openai/codex` and signed in once
 with `codex login`; one resumed session per agent per doc, in a private folder
 of its own, without your Codex config or MCP servers, under a Codex permission
 profile: in the doc's folder it reads only the doc and its comments and
-cannot edit the doc in Ask first, secrets are denied, and its commands have
-no network; it can still read other files on the disk; Codex cannot ask
-during a run, so it searches the web only once you allow it in its card; see
+cannot edit the doc without Auto Editor, secrets are denied, and its commands
+have no network; it can still read other files on the disk, so it has no File
+Searcher; Web Searcher turns on Codex's web search; see
 [docs/multi-agent.md](docs/multi-agent.md#runtimes)), or a **Custom command** that receives the task (persona
 included) in `{promptFile}`. Supporting another agent program (a local open
 model) is one more runtime in `src/server/agents/config.js`. A failed run takes the agent offline (its card
 has the log) and is not retried until you reply or click Try again.
 
-Settings > Agents lists your agents and edits each one: name, slogan,
-persona, role (Make pilot), permissions, runtime, model, limits (turns and minutes per run, runs per
-hour, budget), isolated runs (Codex agents have
-model, minutes, runs per hour and web search); plus where Claude Code and Codex
-are, for all of them (empty: found on `PATH`). Changes restart the agent in every open doc once a
+The **Agents** panel (People > Manage agents, or the pencil on an agent's
+card) lists your agents on the left and edits the one you pick on the right,
+in the order you are likely to change things: name and introduction, what it
+can do (the same switches as its card), its persona, and under **Advanced**
+how it runs: runtime, model, limits (turns and minutes per run, runs per hour,
+budget) and isolated runs (Codex agents have model, minutes and runs per
+hour). A problem (it cannot start, its last run failed) shows at the top only
+when there is one. **Programs** at the foot of the list holds where Claude
+Code and Codex are, for all agents (empty: found on `PATH`). Changes restart the agent in every open doc once a
 run in progress finishes. An agent's program (a custom command, or the
 Claude Code or Codex path) can only be set in the desktop app, which asks you to
 confirm the exact command, or in `settings.json`; the browser editor can only
@@ -111,7 +116,7 @@ comments that mention it or no one:
 opendoc serve plan.md --agent claude --persona "A strict copy editor: fix grammar only"
 ```
 
-with `--edit-mode auto|approve`, `--max-turns 30`, `--run-timeout 10`
+with `--edit-mode auto|approve|none`, `--max-turns 30`, `--run-timeout 10`
 (minutes), `--runs-per-hour 20`, optional `--max-budget-usd`. `--model` picks
 the model; `--agent-bin` points at `claude` if it is not found;
 `--agent-isolated` adds `--bare` (needs `ANTHROPIC_API_KEY`). Other agents:

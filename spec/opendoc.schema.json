@@ -85,6 +85,10 @@
             { "type": "null" }
           ]
         },
+        "passed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/name" }
+        },
         "messages": {
           "type": "array",
           "minItems": 1,

@@ -9,19 +9,17 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, locate, newId, project, sourceRange } from '../core/index.js';
+import { OpError, applyOp, locate, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, AgentError, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, editAgents, editGrants, readSettings, updateSettings, watchSettings } from '../store/settings.js';
-import { ASK_TIMEOUT_MS, MAX_GRANTS, PERMISSIONS } from '../core/grants.js';
+import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Team } from './agents/team.js';
 import { agentSpec } from './agents/config.js';
-import { Permissions, grantsHere, holds, samePath } from './agents/permissions.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -50,20 +48,18 @@ class HttpError extends Error {
  * `agent`, when given, is `{ name, adapter, limits, editMode, persona }`, an
  * agent from `serve` flags that joins the doc and works on it while this
  * server runs. `agentFromSettings: true` also runs the user's agents
- * (Settings > Agents) that are invited into the doc, following every change
+ * (the Agents panel) that are invited into the doc, following every change
  * to them or to who is invited.
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder). `typingMs` is how long the human counts as typing
  * in a paragraph after their last keystroke there (default 15 s).
- * `askTimeoutMs` is how long a run's request for a permission waits for the
- * human (default 5 min).
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
  * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS, askTimeoutMs = ASK_TIMEOUT_MS,
+  settingsDir = configDir(), typingMs = TYPING_MS,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -84,9 +80,9 @@ export async function startServer(docPath, {
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
   // Where the human last typed ({ anchor, at }, from the page), and the keys
-  // the agents' runs use to ask the guard before an edit or a risky tool
-  // call: one per agent, so a request names the agent that made it, and not
-  // the page's token, which would let a run act as the human.
+  // the agents' runs use to ask the guard before an edit: one per agent, so
+  // a request names the agent that made it, and not the page's token, which
+  // would let a run act as the human.
   let editing = null;
   const guardTokens = new Map(); // agent name, lower case → token
   const guardToken = (name) => {
@@ -98,17 +94,6 @@ export async function startServer(docPath, {
     for (const [key, value] of guardTokens) if (tokenMatches(given, value)) return team.get(key);
     return null;
   };
-  // A run's requests for the web or the human's files, waiting on the human.
-  const permissions = new Permissions({
-    docPath: () => docPath,
-    timeoutMs: askTimeoutMs,
-    grants: async () => (await currentSettings()).grants,
-    addGrant: (grant) => editGrants((grants) => [
-      ...grants.filter((g) => !(g.agent === grant.agent && g.permission === grant.permission && g.doc === grant.doc && g.folder === grant.folder)),
-      grant,
-    ].slice(-MAX_GRANTS), settingsDir),
-    onChange: () => broadcast('permissions', permissions.list()),
-  });
   // Writes to the doc and its sidecar run one at a time, so a rename never
   // lands in the middle of a save.
   let writes = Promise.resolve();
@@ -168,17 +153,8 @@ export async function startServer(docPath, {
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'not_found', 'not found');
     if (req.method === 'POST' && url.pathname === '/api/guard') {
       checkWriteRequest(req, actualPort);
-      const member = guardedAgent(req.headers['x-opendoc-guard']);
-      if (!member) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
-      const body = await readJson(req);
-      if (typeof body?.tool === 'string' && body.tool !== 'Edit') {
-        // The hook waits while the human decides; it going away ends the wait.
-        const gone = new AbortController();
-        res.on('close', () => gone.abort());
-        const input = body.input && typeof body.input === 'object' && !Array.isArray(body.input) ? body.input : {};
-        return sendJson(res, 200, await permissions.decide(member, body.tool, input, gone.signal));
-      }
-      return sendJson(res, 200, await guard(body));
+      if (!guardedAgent(req.headers['x-opendoc-guard'])) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
+      return sendJson(res, 200, await guard(await readJson(req)));
     }
     if (!tokenMatches(req.headers['x-opendoc-token'] ?? url.searchParams.get('t'), token)) {
       throw new HttpError(403, 'forbidden', 'missing or wrong token');
@@ -204,7 +180,6 @@ export async function startServer(docPath, {
       case 'PUT /api/settings': {
         const patch = await readJson(req);
         if (patch && Object.hasOwn(patch, 'agents')) throw new HttpError(400, 'bad_input', 'agents are changed through /api/roster');
-        if (patch && Object.hasOwn(patch, 'grants')) throw new HttpError(400, 'bad_input', 'grants are given when an agent asks, and revoked through /api/grants/revoke');
         await checkProgram(PROGRAM_KEYS, patch, (await readSettings(settingsDir)).settings);
         return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
       }
@@ -234,26 +209,6 @@ export async function startServer(docPath, {
       case 'POST /api/roster/delete': {
         const body = await readJson(req);
         return sendJson(res, 200, await rosterDelete(body));
-      }
-      case 'POST /api/permissions/answer': {
-        const body = await readJson(req);
-        if (typeof body?.id !== 'string') throw new HttpError(400, 'bad_input', 'expected { id, answer }');
-        try {
-          await permissions.answer(body.id, body.answer, { folderOnly: body.folderOnly === true });
-        } catch (error) {
-          if (error.code === 'not_found') throw new HttpError(404, 'not_found', error.message);
-          if (error.code === 'bad_input') throw new HttpError(400, 'bad_input', error.message);
-          throw error;
-        }
-        return sendJson(res, 200, { permissions: permissions.list(), grants: await grantsNow() });
-      }
-      case 'POST /api/grants':
-        return sendJson(res, 200, await grantAhead(await readJson(req)));
-      case 'POST /api/grants/revoke': {
-        const id = (await readJson(req))?.id;
-        if (typeof id !== 'string') throw new HttpError(400, 'bad_input', 'expected { id }');
-        const settings = await editGrants((grants) => grants.filter((g) => g.id !== id), settingsDir);
-        return sendJson(res, 200, { settings, grants: grantsHere(settings.grants, docPath) });
       }
       case 'POST /api/editing': {
         const anchor = (await readJson(req))?.anchor;
@@ -367,45 +322,16 @@ export async function startServer(docPath, {
       settingsSaved: saved,
       defaultName: defaultName(),
       agents: team.statuses(),
-      permissions: permissions.list(),
-      grants: grantsHere(settings.grants, docPath),
     };
-  }
-
-  // ---- what the human allowed the agents ----
-
-  async function grantsNow() {
-    return grantsHere((await currentSettings()).grants, docPath);
-  }
-
-  // Allow agent `agentId` a permission before it asks, in this doc or always:
-  // how a Codex agent, which cannot ask during a run, gets the web. Only for
-  // a permission its profile lets it ask for.
-  async function grantAhead(body) {
-    const { agentId, permission, scope } = body ?? {};
-    if (!PERMISSIONS.includes(permission) || !['doc', 'always'].includes(scope)) {
-      throw new HttpError(400, 'bad_input', 'expected { agentId, permission: web | files, scope: doc | always }');
-    }
-    const agent = (await currentSettings()).agents.find((a) => a.id === agentId);
-    if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
-    if (!(permission === 'web' ? agent.webAccess : agent.fileAccess)) {
-      throw new HttpError(409, 'not_asked', `${agent.name} may not ask for that; turn it on in Settings > Agents first`);
-    }
-    const doc = scope === 'doc' ? docPath : null;
-    const settings = await editGrants((grants) => [
-      ...grants.filter((g) => !(g.agent === agent.id && g.permission === permission && g.doc === doc && g.folder === null)),
-      { id: newId('g'), agent: agent.id, permission, doc, folder: null, at: new Date().toISOString() },
-    ].slice(-MAX_GRANTS), settingsDir);
-    return { settings, grants: grantsHere(settings.grants, docPath) };
   }
 
   // ---- the doc's agents ----
 
-  // Who should work on the doc now: the agent from flags, the user's pilot
-  // (in every doc; it joins the participants), and the user's co-pilots that
-  // are participants of the doc (brought in by an @mention or added), except
-  // one being removed. A restart is due whenever an agent's `key` changes;
-  // a new role only changes whom it answers.
+  // Who should work on the doc now: the agent from flags, the user's agents
+  // with Auto Commenter (in every doc; they join the participants), and the user's
+  // other agents that are participants of the doc (brought in by an @mention
+  // or added), except one being removed. A restart is due whenever an
+  // agent's `key` changes; switching Auto Commenter only changes whom it answers.
   const leaving = new Set();
   async function wantedAgents() {
     const specs = [];
@@ -419,15 +345,12 @@ export async function startServer(docPath, {
       return specs; // a sidecar that cannot be read invites no one
     }
     for (const agent of settings.agents) {
-      const pilot = agent.role === 'pilot';
       const here = participants.some((p) => p.kind === 'agent' && sameName(p.name, agent.name));
-      if (!(pilot || here) || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
+      if (!(agent.autoComment || here) || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      // A Codex agent searches the web only with a grant given in advance, so one restarts it.
-      const codexWeb = agent.runtime === 'codex' ? holds(settings.grants, { agentId: agent.id, permission: 'web', docPath }) : undefined;
-      const key = JSON.stringify({ ...agent, role: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, codexWeb });
-      specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: pilot && !here });
+      const key = JSON.stringify({ ...agent, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
+      specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: agent.autoComment && !here });
     }
     return specs;
   }
@@ -467,7 +390,9 @@ export async function startServer(docPath, {
   async function removeAgent(name) {
     if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new HttpError(400, 'bad_input', 'invalid name');
     if (fixedAgent && sameName(fixedAgent.name, name)) throw new HttpError(409, 'flags', `${name} was started with --agent; stop opendoc serve to remove it`);
-    if (team.get(name)?.role === 'pilot') throw new HttpError(409, 'pilot', `${name} is the pilot, which works in every doc; make another agent the pilot to remove it`);
+    if (team.get(name)?.status().autoComment && team.get(name).source === 'roster') {
+      throw new HttpError(409, 'auto_comment', `${name} has Auto Commenter on, which works in every doc; switch Auto Commenter off to remove it`);
+    }
     const { participants } = await readSidecar(docPath);
     if (!participants.some((p) => p.kind === 'agent' && sameName(p.name, name))) throw new HttpError(404, 'not_found', `no agent ${name} in this doc`);
     leaving.add(name.toLowerCase());
@@ -497,7 +422,9 @@ export async function startServer(docPath, {
 
   // Change one of the user's agents. Renaming one that is in this doc keeps
   // it here under the new name; other docs keep the old one until it is
-  // invited again.
+  // invited again. The answer does not wait for the agent to restart (after
+  // a run in progress, then checking its program): a switch on its card
+  // flips at once, and the new status follows over SSE.
   async function rosterUpdate(body) {
     const id = body?.id;
     const patch = body?.patch ?? {};
@@ -513,7 +440,7 @@ export async function startServer(docPath, {
         return applyOp(applyOp(s, { type: 'leave', name: before.name }), { type: 'join', participant: { name: after.name, kind: 'agent' } });
       }));
     }
-    await syncAgents();
+    syncAgents();
     return { settings, agents: team.statuses() };
   }
 
@@ -522,8 +449,7 @@ export async function startServer(docPath, {
   async function rosterDelete(body) {
     const agent = (await currentSettings()).agents.find((a) => a.id === body?.id);
     if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
-    await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
-    const settings = await editGrants((grants) => grants.filter((g) => g.agent !== agent.id), settingsDir);
+    const settings = await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
     await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name: agent.name })));
     await syncAgents();
     return { settings, agents: team.statuses() };
@@ -681,7 +607,6 @@ export async function startServer(docPath, {
       if (json === lastSettings) return;
       lastSettings = json;
       broadcast('settings', settings);
-      broadcast('grants', grantsHere(settings.grants, docPath));
       syncAgents();
     } catch (error) {
       console.error(error);
@@ -695,12 +620,8 @@ export async function startServer(docPath, {
       await team.stop();
       await chronicle;
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
-      const from = docPath;
       docPath = target;
       team.docPath = target;
-      // What was allowed in this doc stays allowed under its new name.
-      await editGrants((grants) => grants.map((g) => (g.doc !== null && samePath(g.doc, from) ? { ...g, doc: target } : g)), settingsDir)
-        .catch((error) => console.error('Could not move the grants:', error));
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
       await syncAgents(); // hooks, and so warnings, depend on the folder
@@ -741,7 +662,6 @@ export async function startServer(docPath, {
       stopWatching();
       stopWatchingSettings();
       closed = true;
-      permissions.clear();
       await team.stop(); // ends runs in progress, which a pending agent change may be waiting on
       await agentChanges;
       await team.stop();

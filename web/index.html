@@ -135,7 +135,6 @@
       <button type="button" role="tab" data-section="general" data-icon="user">General</button>
       <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
       <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
-      <button type="button" role="tab" data-section="agents" data-icon="sparkle">Agents</button>
       <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     </nav>
     <div class="od-settings-main">
@@ -209,80 +208,57 @@
         </label>
       </section>
 
-      <section class="od-settings-section" role="tabpanel" data-section="agents" hidden>
-        <h2>Agents</h2>
-        <p class="od-agent-note">Your AI collaborators, for every doc. The <strong>pilot</strong> is in every doc and answers every comment. <strong>Co-pilots</strong> answer only when you @mention them in a comment, which also brings them into the doc. Each may do only what its job needs.</p>
-        <div class="od-roster">
-          <div class="od-roster-list" role="listbox" aria-label="Your agents"></div>
-          <button type="button" class="od-secondary od-roster-new" data-action="new-agent" data-icon="plus">New agent</button>
+      <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
+        <h2>Keyboard shortcuts</h2>
+        <div class="od-shortcuts-body"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog class="od-agents-dialog" aria-label="Agents">
+    <aside class="od-agents-side">
+      <div class="od-agents-side-head">
+        <span class="od-agents-title">Agents</span>
+        <button type="button" class="od-icon-btn" data-action="new-agent" data-icon="plus" data-tip="New agent" aria-label="New agent"></button>
+      </div>
+      <div class="od-agents-list" role="listbox" aria-label="Your agents"></div>
+      <button type="button" class="od-agents-programs" data-action="programs" data-icon="settings" aria-pressed="false">Programs</button>
+    </aside>
+
+    <div class="od-agents-main">
+      <button type="button" class="od-icon-btn od-agents-close" data-icon="close" data-action="close" aria-label="Close agents"></button>
+
+      <form class="od-agent-editor" autocomplete="off" hidden>
+        <header class="od-agent-head">
+          <span class="od-agent-head-avatar"></span>
+          <div class="od-agent-head-fields">
+            <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name">
+            <input class="od-agent-intro" type="text" data-agent="tagline" maxlength="60" aria-label="Introduction" placeholder="What it is for, in a few words">
+            <div class="od-input-error" role="alert" hidden></div>
+          </div>
+        </header>
+        <div class="od-agent-problem" role="status" hidden>
+          <span class="od-agent-problem-text"></span>
+          <button type="button" class="od-link-button" data-action="agent-check">Check again</button>
         </div>
-        <div class="od-agent-editor" hidden>
-          <div class="od-agent-state" role="status">
-            <span class="od-agent-dot" aria-hidden="true"></span>
-            <span class="od-agent-state-text"></span>
-            <button type="button" class="od-link-button" data-action="agent-check" hidden>Check again</button>
-          </div>
+        <p class="od-agent-where"></p>
+
+        <section class="od-agent-block">
+          <h3>What it can do</h3>
+          <p class="od-agent-block-hint">Every agent reads the doc it works on.</p>
+          <div class="od-agent-perms" role="group" aria-label="Permissions"></div>
+          <p class="od-agent-risk" hidden></p>
+        </section>
+
+        <section class="od-agent-block">
+          <h3><label for="od-agent-persona">Persona</label></h3>
+          <p class="od-agent-block-hint">Who it is, its job, what it leaves to others, and how it replies, in your words. Empty: it does what each comment asks.</p>
+          <textarea id="od-agent-persona" class="od-input od-input-full od-persona" data-agent="persona" rows="7" maxlength="4000" placeholder="You are Sam, the proofreader. Your job is spelling and grammar. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
+        </section>
+
+        <details class="od-agent-block od-agent-advanced">
+          <summary>Advanced</summary>
           <p class="od-agent-note od-agent-warning od-agent-hooks" hidden></p>
-          <div class="od-setting">
-            <span class="od-setting-text">
-              <label for="od-agent-name">Name</label>
-              <span class="od-setting-hint">Mention it as @name in comments.</span>
-            </span>
-            <div class="od-setting-control">
-              <input id="od-agent-name" class="od-input" type="text" data-agent="name" autocomplete="off" spellcheck="false" maxlength="64">
-              <div class="od-input-error" role="alert" hidden></div>
-            </div>
-          </div>
-          <div class="od-setting od-setting-stacked">
-            <span class="od-setting-text">
-              <label for="od-agent-tagline">Slogan</label>
-              <span class="od-setting-hint">A few words on what it is for, shown on its card and when you @mention it.</span>
-            </span>
-            <input id="od-agent-tagline" class="od-input od-input-full" type="text" data-agent="tagline" autocomplete="off" maxlength="60" placeholder="Sniffs out grammar slips">
-          </div>
-          <div class="od-setting od-setting-stacked">
-            <span class="od-setting-text">
-              <label for="od-agent-persona">Persona</label>
-              <span class="od-setting-hint">Who it is and how it works, in your words: its role, what it changes and what it leaves alone, how it replies. Empty: it does what each comment asks.</span>
-            </span>
-            <textarea id="od-agent-persona" class="od-input od-input-full od-persona" data-agent="persona" rows="6" maxlength="4000" placeholder="You are a strict copy editor. Fix grammar and spelling only; never change the meaning or the tone."></textarea>
-          </div>
-          <div class="od-setting">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Role</span>
-              <span class="od-setting-hint od-agent-role-hint"></span>
-            </span>
-            <button type="button" class="od-secondary" data-action="make-pilot">Make pilot</button>
-          </div>
-          <h3 class="od-settings-subhead">Permissions</h3>
-          <div class="od-setting">
-            <span class="od-setting-text">
-              <span class="od-setting-label">This doc</span>
-              <span class="od-setting-hint">Either way, it replies and you resolve the comment.</span>
-            </span>
-            <div class="od-segmented" role="radiogroup" aria-label="This doc">
-              <button type="button" role="radio" data-agent-edit-mode="auto" title="Edits the doc, then replies with what it changed; you can undo">Can edit</button>
-              <button type="button" role="radio" data-agent-edit-mode="approve" title="Replies with proposed changes; nothing changes until you apply them">Can suggest</button>
-            </div>
-          </div>
-          <label class="od-setting" data-for="claude codex">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Web search</span>
-              <span class="od-setting-hint" data-for="claude">Lets the agent ask to search the web and open web pages. It asks you the first time in a reply: Allow once, in this doc, or always. Off, it never can.</span>
-              <span class="od-setting-hint" data-for="codex">Lets the agent search the web once you allow it, in this doc or always, from its profile card: Codex cannot ask during a run.</span>
-              <span class="od-setting-hint od-agent-warning">Risk: a web page can hide instructions that trick the agent into sending this doc to a website.</span>
-            </span>
-            <input type="checkbox" class="od-switch" data-agent="webAccess">
-          </label>
-          <label class="od-setting" data-for="claude">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Your files</span>
-              <span class="od-setting-hint">Lets the agent ask to read your other files, except keys and .env files. It asks you the first time, and you can keep it to one folder. Off, it reads only this doc. Give it only to an assistant that needs your notes.</span>
-              <span class="od-setting-hint od-agent-warning">Risk: a file can hide instructions the agent then follows. With web search on too, it could be tricked into sending your files to a website.</span>
-            </span>
-            <input type="checkbox" class="od-switch" data-agent="fileAccess">
-          </label>
-          <h3 class="od-settings-subhead">How it runs</h3>
           <div class="od-setting">
             <span class="od-setting-text">
               <span class="od-setting-label">Runs on</span>
@@ -291,7 +267,7 @@
             <div class="od-segmented" role="radiogroup" aria-label="Runs on">
               <button type="button" role="radio" data-agent-runtime="claude">Claude Code</button>
               <button type="button" role="radio" data-agent-runtime="codex">Codex</button>
-              <button type="button" role="radio" data-agent-runtime="custom">Custom command</button>
+              <button type="button" role="radio" data-agent-runtime="custom">Command</button>
             </div>
           </div>
           <div class="od-setting" data-for="claude codex">
@@ -300,17 +276,17 @@
               <span class="od-setting-hint" data-for="claude">For example sonnet or opus. Empty uses Claude Code's default.</span>
               <span class="od-setting-hint" data-for="codex">A model name Codex accepts. Empty uses your Codex default.</span>
             </span>
-            <input id="od-agent-model" class="od-input" type="text" data-agent="model" placeholder="Default" autocomplete="off" spellcheck="false">
+            <input id="od-agent-model" class="od-input" type="text" data-agent="model" placeholder="Default" spellcheck="false">
           </div>
           <div class="od-setting od-setting-stacked" data-for="custom">
             <span class="od-setting-text">
               <label for="od-agent-command">Command</label>
               <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code> (the task, with the persona), <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
             </span>
-            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" autocomplete="off" spellcheck="false">
+            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" spellcheck="false">
+            <p class="od-agent-note od-program-note" hidden>A command can be set in the desktop app, or in settings.json.</p>
           </div>
-          <p class="od-agent-note" data-for="codex">Codex works in its own sandbox, without your Codex settings or MCP servers. In the doc's folder it can read only the doc and its comments; with "Ask first" it cannot edit the doc. Elsewhere it can read files on this computer, except keys and secrets, and its commands have no network. Sign in once with <code>codex login</code> in a terminal.</p>
-          <p class="od-agent-note od-program-note" data-for="custom" hidden>An agent's command can be set in the desktop app, or in settings.json.</p>
+          <p class="od-agent-note" data-for="codex">Codex works in its own sandbox, without your Codex settings or MCP servers. In the doc's folder it reads only the doc and its comments, and edits the doc only with Auto Editor. Elsewhere it can read files on this computer, except keys and secrets. Sign in once with <code>codex login</code> in a terminal.</p>
           <div class="od-setting od-setting-stacked">
             <span class="od-setting-text"><span class="od-setting-label">Limits</span></span>
             <div class="od-limits">
@@ -327,36 +303,30 @@
             </span>
             <input type="checkbox" class="od-switch" data-agent="isolated">
           </label>
-          <div class="od-agent-actions">
-            <button type="button" class="od-secondary od-danger" data-action="delete-agent">Delete agent</button>
-          </div>
-        </div>
-        <h3 class="od-settings-subhead">For every agent</h3>
+        </details>
+
+        <footer class="od-agent-foot">
+          <button type="button" class="od-link-button od-danger" data-action="delete-agent">Delete agent</button>
+        </footer>
+      </form>
+
+      <section class="od-agents-programs-page" hidden>
+        <h2>Programs</h2>
+        <p class="od-agent-block-hint">Where the programs that run your agents are, for every agent. Empty finds them automatically.</p>
         <div class="od-setting">
-          <span class="od-setting-text">
-            <label for="od-claude-bin">Claude Code</label>
-            <span class="od-setting-hint">Where Claude Code is. Empty finds it automatically.</span>
-          </span>
+          <span class="od-setting-text"><label for="od-claude-bin">Claude Code</label></span>
           <div class="od-setting-row">
             <input id="od-claude-bin" class="od-input" type="text" data-program="claudeBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
             <button type="button" class="od-secondary" data-action="choose-program" data-program-key="claudeBin">Choose…</button>
           </div>
         </div>
         <div class="od-setting">
-          <span class="od-setting-text">
-            <label for="od-codex-bin">Codex</label>
-            <span class="od-setting-hint">Where Codex is. Empty finds it automatically.</span>
-          </span>
+          <span class="od-setting-text"><label for="od-codex-bin">Codex</label></span>
           <div class="od-setting-row">
             <input id="od-codex-bin" class="od-input" type="text" data-program="codexBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
             <button type="button" class="od-secondary" data-action="choose-program" data-program-key="codexBin">Choose…</button>
           </div>
         </div>
-      </section>
-
-      <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
-        <h2>Keyboard shortcuts</h2>
-        <div class="od-shortcuts-body"></div>
       </section>
     </div>
   </dialog>
