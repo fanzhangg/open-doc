@@ -2,7 +2,7 @@
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. The agent shows up like any other collaborator: an avatar, its
 // replies (with what it changed in the doc and Undo, or the changes it
-// proposes and Apply), and "working on it" while it runs. Only the human
+// proposes and Apply), and typing dots while it works. Only the human
 // resolves threads.
 
 import { activeWorking } from '../src/core/ops.js';
@@ -107,7 +107,8 @@ export function createCommentMargin(margin, handlers) {
 
     if (working) {
       const row = el('div', 'od-typing');
-      row.append(avatar(working.by, 'agent', true), el('span', '', `${working.by} is working on it`), dots());
+      row.title = `${working.by} is working on it`;
+      row.append(avatar(working.by, 'agent', true), dots());
       card.append(row);
     }
     if (thread.status === 'resolved') {

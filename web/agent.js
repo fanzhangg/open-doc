@@ -18,7 +18,6 @@ const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
  */
 export function createAgentPresence({ root, panel, me, getName, setPresence, openSettings }) {
   const face = root.querySelector('.od-agent-face');
-  const line = root.querySelector('.od-agent-line');
   let status = null;
   let showing = null; // 'agent' | 'me' | null
   let log = null; // the last run's log, fetched when the card opens
@@ -67,9 +66,6 @@ export function createAgentPresence({ root, panel, me, getName, setPresence, ope
     root.dataset.state = status.state;
     face.replaceChildren(avatar(status.name, 'agent'), el('span', 'od-presence-dot'));
     face.title = `${status.name} · ${LABELS[mode]}`;
-    const working = status.state === 'running';
-    line.textContent = working ? `Working on ${status.threads === 1 ? 'a comment' : `${status.threads} comments`}…` : '';
-    line.hidden = !working;
     if (showing === 'agent') paintCard();
   }
 
@@ -123,8 +119,6 @@ export function createAgentPresence({ root, panel, me, getName, setPresence, ope
       }));
       problem.append(actions);
       parts.push(problem);
-    } else if (status.state === 'running') {
-      parts.push(el('div', 'od-profile-working', `Working on ${status.threads === 1 ? 'a comment' : `${status.threads} comments`}…`));
     }
 
     // The user's choice, also while offline (it applies once the agent is back).

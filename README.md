@@ -18,8 +18,8 @@ opendoc serve plan.md --agent claude
 
 The editor works like a shared doc with Claude as a co-author, and Claude
 follows the same rules as any other reviewer. Leave a comment and the server
-starts a headless Claude Code run for it: Claude's avatar shows
-it working, the card shows "claude is working on it", and its edits appear in
+starts a headless Claude Code run for it: Claude's avatar and the comment
+card pulse while it works, and its edits appear in
 the page highlighted with its name, merged with anything you are typing
 elsewhere in the doc. Claude always ends with a reply in the thread. Only you
 resolve threads: resolve it, reply again, or Undo its edit.

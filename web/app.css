@@ -129,7 +129,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-avatar-agent { background: linear-gradient(135deg, #9b7bff, #6d3fe0); }
 
 .od-agent { display: flex; align-items: center; gap: 8px; }
-.od-agent-line { font-size: 12.5px; color: var(--agent); white-space: nowrap; font-weight: 500; }
 .od-agent-face, .od-profile-face { position: relative; display: flex; }
 
 /* presence: online (green), do not disturb (red with a bar), offline (grey ring, greyed avatar), connecting (grey) */
@@ -155,7 +154,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile-name { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .od-profile-sub { margin-top: 2px; color: var(--text-soft); }
 .od-profile-state { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--text-soft); }
-.od-profile-working { margin-top: 12px; color: var(--agent); font-weight: 500; }
 .od-profile-problem { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 9%, var(--bg-soft)); color: var(--text); overflow-wrap: anywhere; }
 .od-profile-actions { display: flex; gap: 8px; margin-top: 12px; }
 .od-profile-problem .od-profile-actions { margin-top: 10px; }
@@ -488,7 +486,7 @@ label.od-setting { cursor: pointer; }
   .od-card { position: static; margin-bottom: 10px; transform: none; }
   .od-card-active { transform: none; }
   .od-toolbar { margin: 0 8px 8px; }
-  .od-agent-line, .od-count { display: none; }
+  .od-count { display: none; }
   .od-editor .ProseMirror > h1:first-child { font-size: 2em; }
   .od-header { padding: 0 8px 0 12px; }
 }

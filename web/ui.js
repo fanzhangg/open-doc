@@ -357,7 +357,7 @@ function setupSettings({ store, getName, setName }) {
 const AGENT_STATES = {
   starting: 'Connecting…',
   ready: 'Online',
-  running: 'Online, working on comments',
+  running: 'Online',
   error: 'Offline: the last run failed',
   limited: 'Offline: hourly run limit reached',
   unavailable: 'Offline',
