@@ -98,6 +98,13 @@ export async function renameOpenDoc(entry, toPath, move) {
   return docPath;
 }
 
+/** Show the app: the front doc window, else the start window. */
+export function bringToFront() {
+  const front = BrowserWindow.getFocusedWindow() ?? openDocs().at(-1)?.win ?? startWindow;
+  if (front && !front.isDestroyed()) reveal(front);
+  else showStartWindow();
+}
+
 export function showStartWindow() {
   if (startWindow) {
     reveal(startWindow);

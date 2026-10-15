@@ -2,7 +2,7 @@
 // so the tests run under `node --test`.
 
 import { mkdir, realpath, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { SIDECAR_SUFFIX, moveDoc, sidecarPath } from '../src/store/files.js';
 
 export const DOC_EXTENSIONS = ['.md', '.markdown'];
@@ -24,6 +24,26 @@ export const isDocName = (path) => DOC_EXTENSIONS.includes(extname(path).toLower
 export function docPathFor(path) {
   const doc = path.endsWith(SIDECAR_SUFFIX) ? path.slice(0, -SIDECAR_SUFFIX.length) : path;
   return isDocName(doc) ? doc : null;
+}
+
+/**
+ * Doc paths on a command line, made absolute against `cwd`. Flags are
+ * skipped; run from a checkout (`electron desktop/main.js ...`, not
+ * `packaged`), the first argument is the app's own script.
+ */
+export function pathsFromArgs(argv, { packaged, cwd }) {
+  const args = argv.slice(1).filter((arg) => !arg.startsWith('-'));
+  if (!packaged) args.shift();
+  return args.map((arg) => resolve(cwd, arg));
+}
+
+/**
+ * Paths handed over by another launch or a drop: absolute strings only, at
+ * most `max` of them; anything else is dropped.
+ */
+export function cleanPaths(value, max = 50) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((path) => typeof path === 'string' && path.length < 4096 && isAbsolute(path)).slice(0, max);
 }
 
 /** `path` with `.md` added unless it already ends in `.md` or `.markdown`. */

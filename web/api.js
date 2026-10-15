@@ -18,7 +18,7 @@ async function request(method, path, body) {
 
 export const api = {
   state: async () => (await request('GET', '/api/state')).data,
-  saveDoc: (markdown, baseHash) => request('PUT', '/api/doc', { markdown, baseHash }),
+  saveDoc: (markdown, baseHash, { recreate = false } = {}) => request('PUT', '/api/doc', { markdown, baseHash, ...(recreate ? { recreate } : {}) }),
   op: async (op) => (await request('POST', '/api/ops', { op })).data,
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
   agentAction: async (action) => (await request('POST', '/api/agent', { action })).data.status,

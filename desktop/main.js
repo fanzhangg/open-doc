@@ -1,23 +1,65 @@
-// The OpenDoc desktop app (Electron main process): app lifecycle, the File
-// menu, the Open / New Doc / Rename dialogs, and the app state (recent docs,
-// last folder, window bounds). Each doc window runs the same editor page and
-// local server as `opendoc serve`; settings are the user's settings.json,
-// shared by every window.
+// The OpenDoc desktop app (Electron main process): app lifecycle, one app
+// instance for every launch, the menus, the Open / New Doc / Rename dialogs,
+// and the app state (recent docs, last folder, window bounds). Each doc window
+// runs the same editor page and local server as `opendoc serve`; settings are
+// the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, app, dialog, ipcMain, session } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'electron';
 import { statSync } from 'node:fs';
-import { basename, dirname, resolve, sep } from 'node:path';
-import { createDoc, createUntitled, docPathFor, freeUntitledPath, renameDoc, withDocExtension } from './files.js';
+import { basename, dirname, sep } from 'node:path';
+import { readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
+import {
+  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
+} from './files.js';
 import { addRecent, readState, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
 
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
 const isMac = process.platform === 'darwin';
+const REVEAL_LABEL = isMac ? 'Reveal in Finder' : process.platform === 'win32' ? 'Show in File Explorer' : 'Show in Folder';
 
 app.setName('OpenDoc');
 app.enableSandbox();
 
+// One app for every launch: a second launch (double-clicking a doc while the
+// app runs, `OpenDoc x.md` in a shell) hands its docs to this one and quits.
+const launchPaths = pathsFromArgs(process.argv, launchContext());
+if (!app.requestSingleInstanceLock({ paths: launchPaths })) {
+  app.exit(0);
+  await new Promise(() => {}); // never go on to start a second app
+}
+
+// macOS sends docs opened from Finder, the dock or "Open With" as open-file,
+// possibly before the app is ready. Docs from launches that arrive before
+// start() has run wait for it.
+const earlyPaths = [];
+let started = false;
+app.on('open-file', (event, path) => {
+  event.preventDefault();
+  if (started) openLaunched([path]);
+  else earlyPaths.push(path);
+});
+
+app.on('second-instance', (_event, argv, workingDirectory, data) => {
+  const paths = Array.isArray(data?.paths)
+    ? cleanPaths(data.paths)
+    : pathsFromArgs(argv, { packaged: app.isPackaged, cwd: workingDirectory });
+  if (started) openLaunched(paths);
+  else earlyPaths.push(...paths);
+});
+
 const state = await readState();
+// The View menu shows the user's settings and changes them in settings.json;
+// every open page follows that file.
+let settings = (await readSettings()).settings;
+watchSettings(async () => {
+  try {
+    settings = (await readSettings()).settings;
+    buildMenu();
+  } catch (error) {
+    console.error('Could not read the settings:', error);
+  }
+});
 let stateWrites = Promise.resolve();
 let pendingStateWrites = 0;
 let quitting = false;
@@ -54,6 +96,18 @@ async function openPath(path, { create = false, parent = null } = {}) {
     }
   }
   return show(docPath, parent);
+}
+
+/**
+ * Docs from a launch: the command line, a second launch, or Finder. With
+ * nothing opened, bring the app forward instead.
+ */
+async function openLaunched(paths) {
+  let opened = false;
+  for (const path of paths) {
+    if (await openPath(path, { create: true })) opened = true;
+  }
+  if (!opened) windows.bringToFront();
 }
 
 async function show(docPath, parent) {
@@ -129,6 +183,7 @@ async function renameDialog(win) {
   try {
     const to = await windows.renameOpenDoc(entry, filePath, renameDoc);
     state.recent = renameRecent(state.recent, from, to);
+    app.addRecentDocument(to);
     state.lastFolder = dirname(to);
     saveState();
     recentChanged();
@@ -159,8 +214,11 @@ function recentDocs() {
   return present;
 }
 
+// Recent docs live in the app state and in the OS lists (the dock menu on
+// macOS, the taskbar jump list on Windows once the app is installed).
 function remember(docPath) {
   state.recent = addRecent(state.recent, docPath);
+  app.addRecentDocument(docPath);
   state.lastFolder = dirname(docPath);
   saveState();
   recentChanged();
@@ -188,10 +246,35 @@ function saveState() {
 
 // ---- menu ----
 
+// The page handles its own shortcuts (Ctrl+, settings, Ctrl+/ shortcuts,
+// Ctrl+Shift+F focus) on Windows and Linux, where a menu accelerator would
+// take the key away from it, so there the menu only shows them. On macOS a
+// menu key equivalent comes first, so the menu does the work.
+const PAGE_KEY = { registerAccelerator: isMac };
+
 function buildMenu() {
   const doc = windows.docFor(BrowserWindow.getFocusedWindow());
+  const settingsItem = {
+    label: 'Settings…', accelerator: 'CmdOrCtrl+,', ...PAGE_KEY, enabled: Boolean(doc),
+    click: (_item, win) => pageCommand(win, 'settings'),
+  };
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        settingsItem,
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    }] : []),
     {
       label: isMac ? 'File' : '&File',
       submenu: [
@@ -202,7 +285,9 @@ function buildMenu() {
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
         { label: 'Rename…', enabled: Boolean(doc), click: (_item, win) => renameDialog(win) },
+        { label: REVEAL_LABEL, enabled: Boolean(doc), click: (_item, win) => revealDoc(win) },
         { type: 'separator' },
+        ...(isMac ? [] : [settingsItem, { type: 'separator' }]),
         { role: 'close' },
         ...(isMac ? [] : [{ role: 'quit' }]),
       ],
@@ -210,10 +295,63 @@ function buildMenu() {
     // On Windows and Linux the page handles copy, paste and undo itself; a
     // menu accelerator would take Ctrl+Z away from the editor's own history.
     ...(isMac ? [{ role: 'editMenu' }] : []),
-    { role: 'viewMenu' },
+    {
+      label: isMac ? 'View' : '&View',
+      submenu: [
+        {
+          label: 'Focus Mode', type: 'checkbox', checked: settings.focus, accelerator: 'CmdOrCtrl+Shift+F', ...PAGE_KEY,
+          click: () => setSettings({ focus: !settings.focus }),
+        },
+        { label: 'Outline', type: 'checkbox', checked: settings.outline, click: () => setSettings({ outline: !settings.outline }) },
+        { label: 'Word Count', type: 'checkbox', checked: settings.wordCount, click: () => setSettings({ wordCount: !settings.wordCount }) },
+        { type: 'separator' },
+        { label: 'Theme', submenu: choices('theme', [['system', 'Match System'], ['light', 'Light'], ['dark', 'Dark']]) },
+        { label: 'Font', submenu: choices('font', [['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']]) },
+        { label: 'Page Width', submenu: choices('width', [['normal', 'Normal'], ['wide', 'Wide']]) },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }]),
+      ],
+    },
     { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', ...PAGE_KEY, enabled: Boolean(doc),
+          click: (_item, win) => pageCommand(win, 'shortcuts'),
+        },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// A radio group for one setting.
+function choices(key, options) {
+  return options.map(([value, label]) => ({
+    label, type: 'radio', checked: settings[key] === value, click: () => setSettings({ [key]: value }),
+  }));
+}
+
+function setSettings(patch) {
+  settings = { ...settings, ...patch };
+  buildMenu();
+  updateSettings(patch).catch((error) => console.error('Could not save the settings:', error));
+}
+
+// Ask the doc page in `win` to open part of its own UI.
+function pageCommand(win, name) {
+  windows.docFor(win)?.win.webContents.send('opendoc:command', name);
+}
+
+function revealDoc(win) {
+  const entry = windows.docFor(win);
+  if (entry) shell.showItemInFolder(entry.docPath);
 }
 
 function recentMenu() {
@@ -227,6 +365,7 @@ function recentMenu() {
       label: 'Clear Recent',
       click: () => {
         state.recent = [];
+        app.clearRecentDocuments();
         saveState();
         recentChanged();
       },
@@ -246,6 +385,10 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'recent' && fromStart) {
     return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
+  }
+  if (action === 'drop' && (fromStart || fromDoc)) {
+    for (const path of cleanPaths(arg, 20)) await openPath(path, { parent: win });
+    return undefined;
   }
   if (action === 'openRecent' && fromStart) {
     const path = recentDocs()[arg];
@@ -300,22 +443,17 @@ async function start() {
   buildMenu();
   app.on('browser-window-focus', buildMenu);
 
-  let opened = false;
-  for (const path of pathsFromArgs(process.argv)) {
-    if (await openPath(path, { create: true })) opened = true;
-  }
-  if (!opened) windows.showStartWindow();
+  const first = [...launchPaths, ...earlyPaths.splice(0)];
+  started = true;
+  await openLaunched(first);
 }
 
 // ---- helpers ----
 
-// Doc paths given on the command line. `npm run desktop -- x.md` runs in the
-// package folder, so relative paths resolve against the folder npm was run in.
-function pathsFromArgs(argv) {
-  const args = argv.slice(1).filter((arg) => !arg.startsWith('-'));
-  if (!app.isPackaged) args.shift(); // electron's own argument: this app's main.js
-  const cwd = (!app.isPackaged && process.env.INIT_CWD) || process.cwd();
-  return args.map((arg) => resolve(cwd, arg));
+// `npm run desktop -- x.md` runs in the package folder, so relative paths
+// on the command line resolve against the folder npm was run in.
+function launchContext() {
+  return { packaged: app.isPackaged, cwd: (!app.isPackaged && process.env.INIT_CWD) || process.cwd() };
 }
 
 // The doc's folder, with the home folder shown as ~.

@@ -147,6 +147,11 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     hideBubble() {
       bubble.hidden = true;
     },
+    /** A command from the desktop app's menu: 'settings' or 'shortcuts'. */
+    command(name) {
+      if (name === 'settings') settings.toggle('general');
+      else if (name === 'shortcuts') settings.toggle('shortcuts');
+    },
   };
 }
 

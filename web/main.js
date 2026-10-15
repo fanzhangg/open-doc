@@ -22,6 +22,7 @@ const SAVE_DELAY_MS = 800;
 
 const status = document.querySelector('.od-status');
 const banner = document.querySelector('.od-banner');
+const missingBanner = document.querySelector('.od-missing');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 
 let editor;
@@ -40,6 +41,7 @@ let version = 0;
 let saveTimer;
 let pendingExternal = null;
 let pendingSelection = null;
+let missing = false; // the doc was moved or deleted on disk: nothing is saved
 
 async function start() {
   let initial;
@@ -81,6 +83,7 @@ async function start() {
   });
   synced = editor.getMarkdown();
   chrome = createChrome({ editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName });
+  window.opendocDesktop?.onCommand((name) => chrome.command(name));
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
     onCreate: createThread,
@@ -129,7 +132,11 @@ async function start() {
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
   events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
-  events.addEventListener('hello', () => (dirty ? setStatus('Saving…', 'saving') : setStatus('Saved')));
+  events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
+  events.addEventListener('hello', (event) => {
+    if (Boolean(JSON.parse(event.data).missing) !== missing) setMissing(!missing);
+    else if (!missing) setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
+  });
 }
 
 // ---- saving ----
@@ -140,7 +147,7 @@ function scheduleSave() {
 }
 
 async function save() {
-  if (saving || !dirty || !banner.hidden) return;
+  if (saving || !dirty || !banner.hidden || missing) return;
   saving = true;
   const savedVersion = version;
   const markdown = editor.getMarkdown();
@@ -178,6 +185,7 @@ async function flushSave() {
   clearTimeout(saveTimer);
   while (dirty || saving) {
     if (!banner.hidden) throw new Error('resolve the conflict first');
+    if (missing) throw new Error('the doc is missing from disk');
     if (!saving) await save();
     else await new Promise((resolve) => setTimeout(resolve, 50));
   }
@@ -274,6 +282,45 @@ banner.querySelector('[data-action="keep"]').addEventListener('click', async () 
   banner.hidden = true;
   dirty = true;
   await save();
+});
+
+// ---- the doc moved or deleted outside the app ----
+
+// Saving stops (a save would recreate the file where the user removed it);
+// the page keeps its text and offers to write it back. If the doc comes back
+// on its own (an undo in Explorer, a git checkout), saving resumes and any
+// difference arrives as a normal change from disk.
+function setMissing(on) {
+  missing = on;
+  missingBanner.hidden = !on;
+  if (on) {
+    clearTimeout(saveTimer);
+    const name = document.querySelector('.od-doc-name').textContent;
+    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside OpenDoc. Changes here are not being saved.`;
+    setStatus('Not saved: the doc is missing', 'error');
+    return;
+  }
+  setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
+  if (dirty) scheduleSave();
+}
+
+missingBanner.querySelector('[data-action="recreate"]').addEventListener('click', async () => {
+  const savedVersion = version;
+  const markdown = editor.getMarkdown();
+  try {
+    const { status: code, data } = await api.saveDoc(markdown, baseHash, { recreate: true });
+    if (code === 409) {
+      setMissing(false); // it is back already: merge what is there
+      await syncFromDisk();
+      return;
+    }
+    baseHash = data.docHash;
+    synced = markdown;
+    if (version === savedVersion) dirty = false;
+    setMissing(false);
+  } catch (error) {
+    setStatus(`Save failed: ${error.message}`, 'error');
+  }
 });
 
 // ---- threads ----

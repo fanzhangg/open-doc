@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +55,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   let lastDocHash = null;
   let lastSidecarHash = null;
   let lastSettings = null;
+  let missing = false; // the doc was moved or deleted on disk while open
   // Writes to the doc and its sidecar run one at a time, so a rename never
   // lands in the middle of a save.
   let writes = Promise.resolve();
@@ -139,11 +140,22 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
         throw new HttpError(404, 'not_found', 'not found');
     }
 
+    // `recreate: true` writes the page's text back when the doc has gone
+    // missing from disk; otherwise a save needs the doc to be there.
     async function saveDoc(body) {
       if (typeof body.markdown !== 'string' || typeof body.baseHash !== 'string') {
         throw new HttpError(400, 'bad_input', 'expected { markdown, baseHash }');
       }
-      const current = await readDoc(docPath);
+      let current;
+      try {
+        current = await readDoc(docPath);
+      } catch (error) {
+        if (body.recreate !== true || error.code !== 'no_doc') throw error;
+        await mkdir(dirname(docPath), { recursive: true });
+        await writeAtomic(docPath, body.markdown);
+        await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
+        return [res, 200, { docHash: hashBytes(Buffer.from(body.markdown)) }];
+      }
       if (current.hash !== body.baseHash) {
         return [res, 409, { code: 'conflict', markdown: current.markdown, docHash: current.hash }];
       }
@@ -194,7 +206,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       'cache-control': 'no-store',
       connection: 'keep-alive',
     });
-    res.write(`event: hello\ndata: ${JSON.stringify({ docHash: lastDocHash, sidecarHash: lastSidecarHash })}\n\n`);
+    res.write(`event: hello\ndata: ${JSON.stringify({ docHash: lastDocHash, sidecarHash: lastSidecarHash, missing })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
   }
@@ -205,10 +217,25 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   }
 
   // Watch both files; refresh anchors when the doc changes (the agent may
-  // have edited it directly) and tell the page what changed.
+  // have edited it directly) and tell the page what changed, including the
+  // doc going missing (moved or deleted outside the app) and coming back.
   async function onFilesChanged() {
     try {
-      const doc = await readDoc(docPath);
+      let doc;
+      try {
+        doc = await readDoc(docPath);
+      } catch (error) {
+        if (error.code !== 'no_doc') throw error;
+        if (!missing) {
+          missing = true;
+          broadcast('missing', { missing: true, doc: basename(docPath) });
+        }
+        return;
+      }
+      if (missing) {
+        missing = false;
+        broadcast('missing', { missing: false, doc: basename(docPath) });
+      }
       if (doc.hash !== lastDocHash) {
         lastDocHash = doc.hash;
         await load(docPath);
@@ -249,6 +276,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       stopWatching();
       await dispatcher?.stop();
       docPath = target;
+      missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
       if (agent) await startDispatcher();
       broadcast('renamed', { doc: basename(docPath) });

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { applyOp, newId } from '../src/core/index.js';
 import { readSidecar, sidecarPath, update } from '../src/store/files.js';
 import {
-  createDoc, createUntitled, docPathFor, freeUntitledPath, renameDoc, withDocExtension,
+  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_RECENT, addRecent, readState, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import { tempDoc } from './helpers.js';
@@ -122,4 +122,22 @@ test('recent docs: newest first, no duplicates, at most ten, renames keep their 
   assert.equal(recent.filter((p) => p === '/d/5.md').length, 1);
   assert.equal(renameRecent(recent, '/d/11.md', '/d/eleven.md')[1], '/d/eleven.md');
   assert.ok(!removeRecent(recent, '/d/5.md').includes('/d/5.md'));
+});
+
+test('pathsFromArgs: doc paths from a launch, absolute, flags skipped', () => {
+  const cwd = join(tmpdir(), 'work');
+  assert.deepEqual(
+    pathsFromArgs(['electron', 'desktop/main.js', 'plan.md', '--inspect', join(cwd, 'b', 'x.md')], { packaged: false, cwd }),
+    [join(cwd, 'plan.md'), join(cwd, 'b', 'x.md')],
+  );
+  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', 'notes/idea.md'], { packaged: true, cwd }), [join(cwd, 'notes', 'idea.md')]);
+  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', '--allow-file-access'], { packaged: true, cwd }), []);
+  assert.deepEqual(pathsFromArgs(['electron', 'desktop/main.js'], { packaged: false, cwd }), []);
+});
+
+test('cleanPaths keeps absolute path strings only, up to a limit', () => {
+  const doc = join(tmpdir(), 'plan.md');
+  assert.deepEqual(cleanPaths([doc, 'relative.md', 42, null, { path: doc }]), [doc]);
+  assert.deepEqual(cleanPaths('not a list'), []);
+  assert.equal(cleanPaths(Array(30).fill(doc), 20).length, 20);
 });

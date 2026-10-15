@@ -87,6 +87,14 @@ window waits for the last save. Settings are the same `settings.json` as
 above, so they apply to every window and to `opendoc serve`. Recent docs and
 the last window size are kept in `state.json` in the same folder.
 
+There is one app for every launch: running `npm run desktop -- other.md`
+while the app is open opens `other.md` in the running app. Drop a `.md` file
+on any window to open it. The View menu switches focus mode, the outline, the
+word count, theme, font and page width for every window; File > Show in File
+Explorer (Reveal in Finder on macOS) shows the doc's folder. If the open doc is
+moved or deleted outside the app, a banner says so and saving stops until you
+click Save it here again (or the file comes back).
+
 ## CLI
 
 ```bash

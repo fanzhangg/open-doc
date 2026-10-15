@@ -318,6 +318,25 @@ Each phase is usable on its own and lands as its own PR.
    drop, native menus wired to the page's commands (focus mode, settings,
    shortcuts), Reveal in Explorer/Finder, OS recent documents, moved/deleted
    banner.
+   *Done.* Notes from building it:
+   - A second launch passes its resolved paths to the running app through
+     `requestSingleInstanceLock(additionalData)`, so relative paths resolve
+     against the folder the second launch ran in.
+   - Drops are read in the preload from the trusted drop event
+     (`webUtils.getPathForFile`); the page never supplies a path. Only
+     `.md`, `.markdown` and sidecar files are taken; other drops do nothing.
+   - The View menu writes settings.json directly (the main process uses
+     `src/store/settings.js`) and rebuilds from the same file, so menu
+     checkmarks and every open page always agree.
+   - Settings…, Keyboard Shortcuts and Focus Mode keep the page's own
+     shortcuts: on Windows and Linux the menu shows them without registering
+     them (`registerAccelerator: false`), on macOS the menu handles them.
+   - The server sends a `missing` event when the doc disappears or comes back.
+     `PUT /api/doc` with `recreate: true` writes the page's text back; the
+     comments come back only if their sidecar is still there.
+   - OS recent documents (`app.addRecentDocument`) only show up in the
+     Windows jump list once the app is installed and registered for `.md`
+     (phase 5); the macOS dock menu shows them from a checkout.
 4. **Agent in the app.** Settings > Agent with every option from the table,
    the readiness check, dispatcher restart on change, the `opendoc` shim on
    the run PATH, the hooks warning in the UI, first-time consent text.

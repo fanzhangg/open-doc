@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { startServer } from '../src/server/server.js';
@@ -325,5 +325,54 @@ test('settings: a change saved by another window arrives as an event', { timeout
       req.destroy();
       await other.close();
     }
+  });
+});
+
+test('a doc deleted while open: missing event, saves refused, recreate writes it back', { timeout: 15_000 }, async () => {
+  await withServer(async ({ server, docPath }) => {
+    const received = [];
+    const req = request({ port: server.port, path: `/api/events?t=${server.token}`, headers: { host: `127.0.0.1:${server.port}` } }, (res) => {
+      res.setEncoding('utf8');
+      let buffer = '';
+      res.on('data', (chunk) => {
+        buffer += chunk;
+        let index;
+        while ((index = buffer.indexOf('\n\n')) !== -1) {
+          const block = buffer.slice(0, index);
+          buffer = buffer.slice(index + 2);
+          if (/^event: missing$/m.test(block)) received.push(JSON.parse(block.match(/^data: (.+)$/m)[1]));
+        }
+      });
+    });
+    req.end();
+    const waitFor = async (missing) => {
+      const deadline = Date.now() + 5000;
+      while (received.at(-1)?.missing !== missing && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(received.at(-1)?.missing, missing);
+    };
+    try {
+      const { body: state } = await call(server, 'GET', '/api/state');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await rm(docPath);
+      await waitFor(true);
+      assert.equal(received.at(-1).doc, 'plan.md');
+
+      const plain = await call(server, 'PUT', '/api/doc', { body: { markdown: '# Back\n', baseHash: state.docHash } });
+      assert.equal(plain.status, 404);
+      const back = await call(server, 'PUT', '/api/doc', { body: { markdown: '# Back\n', baseHash: state.docHash, recreate: true } });
+      assert.equal(back.status, 200);
+      assert.equal(await readFile(docPath, 'utf8'), '# Back\n');
+      await waitFor(false);
+    } finally {
+      req.destroy();
+    }
+  });
+});
+
+test('recreate on a doc that is there is an ordinary conditional save', async () => {
+  await withServer(async ({ server, docPath }) => {
+    const stale = await call(server, 'PUT', '/api/doc', { body: { markdown: 'x', baseHash: 'sha256:0', recreate: true } });
+    assert.equal(stale.status, 409);
+    assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
   });
 });
