@@ -53,7 +53,7 @@ export async function openDoc(path) {
 }
 
 async function createDocWindow(docPath) {
-  const server = await startServer(docPath);
+  const server = await startServer(docPath, { agentFromSettings: true });
   const win = new BrowserWindow({
     ...nextBounds(),
     ...MIN_SIZE,

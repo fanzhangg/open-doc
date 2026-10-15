@@ -340,6 +340,24 @@ Each phase is usable on its own and lands as its own PR.
 4. **Agent in the app.** Settings > Agent with every option from the table,
    the readiness check, dispatcher restart on change, the `opendoc` shim on
    the run PATH, the hooks warning in the UI, first-time consent text.
+   *Done.* Notes from building it:
+   - Agent settings are the `agent` object in settings.json; a patch changes
+     only the agent keys it names. `src/server/agents/config.js` turns them
+     into the dispatcher's adapter, limits and hooks warning.
+   - Every server started without `--agent` flags (each desktop window, and
+     `opendoc serve`) takes its agent from settings and follows changes: it
+     stops starting runs, lets a run in progress finish, then restarts with
+     the new options. Closing a window ends a run instead of waiting for it.
+   - The agent's program (`agent.command`, `agent.bin`) decides what runs on
+     the machine, so `PUT /api/settings` may only clear it. The desktop app
+     sets it through the preload after a native dialog showing the exact
+     command (or a native file picker for Claude Code); otherwise it is set in
+     settings.json or with `--agent-cmd` / `--agent-bin`.
+   - Instead of a one-time consent prompt, the switch's description always
+     says what a run may do.
+   - Inside the app the `opendoc` shim runs the CLI with the app's own
+     runtime and `ELECTRON_RUN_AS_NODE=1`, so an agent's `opendoc reply`
+     never starts a second app.
 5. **Packaging.** electron-builder targets: Windows NSIS installer first,
    then macOS dmg and Linux AppImage. File associations, the Windows
    New > Markdown Document entry, icons, unsigned

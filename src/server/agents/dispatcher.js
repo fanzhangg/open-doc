@@ -29,13 +29,14 @@ export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
  * (runs per hour reached), unavailable (preflight failed), stopped.
  */
 export class Dispatcher {
-  constructor({ docPath, name, adapter, limits = {}, mentionsOnly = false, onStatus = () => {}, settleMs = 300 }) {
+  constructor({ docPath, name, adapter, limits = {}, mentionsOnly = false, warning = null, onStatus = () => {}, settleMs = 300 }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
     this.name = name;
     this.adapter = adapter;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
     this.mentionsOnly = mentionsOnly;
+    this.warning = warning;
     this.onStatus = onStatus;
     this.settleMs = settleMs;
     this.state = 'starting';
@@ -53,6 +54,9 @@ export class Dispatcher {
       name: this.name,
       state: this.state,
       mentionsOnly: this.mentionsOnly,
+      kind: this.adapter.name,
+      program: this.adapter.program ?? null,
+      warning: this.warning,
       threads: this.run?.threadIds.length ?? 0,
       threadIds: this.run?.threadIds ?? [],
       error: this.error,
@@ -96,6 +100,13 @@ export class Dispatcher {
     this.notify();
   }
 
+  /** Start no more runs and wait for the one in progress, if any, to end. */
+  async drain() {
+    this.draining = true;
+    clearTimeout(this.settleTimer);
+    if (this.run) await this.run.done;
+  }
+
   async stop() {
     this.state = 'stopped';
     clearTimeout(this.settleTimer);
@@ -125,7 +136,7 @@ export class Dispatcher {
     }
     this.checking = true;
     try {
-      if (this.run || !['ready', 'error', 'limited'].includes(this.state)) return;
+      if (this.run || this.draining || !['ready', 'error', 'limited'].includes(this.state)) return;
       const { sidecar } = await load(this.docPath);
       if (this.#waiting(sidecar).length === 0) {
         if (this.state === 'limited') this.#setState('ready');
@@ -375,14 +386,17 @@ function killTree(child) {
   }
 }
 
-// `opendoc` on the agent's PATH, pointing at this install, for sh and Windows shells.
+// `opendoc` on the agent's PATH, pointing at this install, for sh and Windows
+// shells. Inside the desktop app the runtime is Electron itself, which runs
+// the CLI as plain Node only with ELECTRON_RUN_AS_NODE set.
 async function makeShim() {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-bin-'));
   const node = process.execPath.replaceAll('\\', '/');
   const bin = BIN.replaceAll('\\', '/');
-  await writeFile(join(dir, 'opendoc'), `#!/bin/sh\nexec "${node}" "${bin}" "$@"\n`);
+  const electron = Boolean(process.versions.electron);
+  await writeFile(join(dir, 'opendoc'), `#!/bin/sh\n${electron ? 'ELECTRON_RUN_AS_NODE=1 ' : ''}exec "${node}" "${bin}" "$@"\n`);
   await chmod(join(dir, 'opendoc'), 0o755);
-  await writeFile(join(dir, 'opendoc.cmd'), `@"${process.execPath}" "${BIN}" %*\r\n`);
+  await writeFile(join(dir, 'opendoc.cmd'), `${electron ? '@set "ELECTRON_RUN_AS_NODE=1"\r\n' : ''}@"${process.execPath}" "${BIN}" %*\r\n`);
   return dir;
 }
 

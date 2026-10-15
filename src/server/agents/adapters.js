@@ -2,7 +2,7 @@
 // back whether it worked. The dispatcher knows nothing about specific agents.
 //
 // Adapter shape:
-//   name, supportsSessions
+//   name, program (the executable, for display), supportsSessions
 //   preflight() -> Promise<{ ok, error? }>
 //   command({ prompt, promptFile, threadsFile, docFile, sessionId }) -> { command, args }
 //   parse({ stdout, stderr, code }) -> { ok, error?, sessionId?, costUsd?, turns?, denials? }
@@ -47,11 +47,12 @@ export function claudeAdapter({ bin, model, maxTurns = 30, maxBudgetUsd, isolate
   const executable = bin ?? findClaude();
   return {
     name: 'claude',
+    program: executable,
     supportsSessions: true,
     async preflight() {
-      if (!executable) return { ok: false, error: 'Claude Code CLI not found; pass --agent-bin <path to claude>' };
+      if (!executable) return { ok: false, error: 'Claude Code was not found; set its path in Settings > Agent (or pass --agent-bin)' };
       if (isolated && !process.env.ANTHROPIC_API_KEY) {
-        return { ok: false, error: '--agent-isolated needs ANTHROPIC_API_KEY (bare mode does not use the normal sign-in)' };
+        return { ok: false, error: 'Isolated runs need ANTHROPIC_API_KEY (bare mode does not use the normal sign-in)' };
       }
       if (isolated) return { ok: true };
       const { stdout, error } = await run(executable, ['auth', 'status']);
@@ -104,6 +105,7 @@ export function customAdapter(template) {
   if (argv.length === 0) throw new Error('--agent-cmd is empty');
   return {
     name: 'custom',
+    program: argv[0],
     supportsSessions: false,
     async preflight() {
       return { ok: true };

@@ -9,6 +9,9 @@ the CLI, the local editor and the agent skill.
 
 ## Agent that answers on its own
 
+Turn it on in Settings > Agent (in the desktop app or the browser editor), or
+start one for a single run:
+
 ```bash
 opendoc serve plan.md --agent claude
 ```
@@ -28,11 +31,21 @@ time, and resume the same Claude session while the server runs. A failed run
 shows a note next to Claude's avatar (click it for the log) and is not retried
 until you reply or click Try again.
 
-Limits (flags on `serve`): `--max-turns 30`, `--run-timeout 10` (minutes),
-`--runs-per-hour 20`, optional `--max-budget-usd`. `--model` picks the model;
-`--agent-bin` points at `claude` if it is not found; `--agent-isolated` adds
-`--bare` (needs `ANTHROPIC_API_KEY`). Other agents: `--agent <name> --agent-cmd
-"<command with {promptFile} {threadsFile} {doc}>"`.
+Settings > Agent is saved with your other settings and applies to every doc:
+on or off, Claude Code or a custom command, the agent's name, which comments it
+answers, the model, limits (turns and minutes per run, runs per hour, budget),
+where Claude Code is, and isolated runs. A status line says whether the agent
+is ready, and changes restart it in every open doc once a run in progress
+finishes. The agent's program (a custom command, or the Claude Code path) can
+only be set in the desktop app, which asks you to confirm the exact command,
+or in `settings.json`; the browser editor can only clear it.
+
+The same options as `serve` flags, which apply instead of the settings for that
+run: `--max-turns 30`, `--run-timeout 10` (minutes), `--runs-per-hour 20`,
+optional `--max-budget-usd`. `--model` picks the model; `--agent-bin` points at
+`claude` if it is not found; `--agent-isolated` adds `--bare` (needs
+`ANTHROPIC_API_KEY`). Other agents: `--agent <name> --agent-cmd "<command with
+{promptFile} {threadsFile} {doc}>"`.
 
 ## Agent skill
 

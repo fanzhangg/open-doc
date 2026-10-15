@@ -107,3 +107,23 @@ test('watchSettings sees the file appear and change', async () => {
     stop();
   }
 });
+
+test('agent settings: defaults, key-by-key patches and merges', async () => {
+  assert.equal(DEFAULT_SETTINGS.agent.enabled, false);
+  assert.doesNotThrow(() => checkSettingsPatch({ agent: { enabled: true, maxTurns: 12, model: 'sonnet', maxBudgetUsd: null } }));
+  assert.throws(() => checkSettingsPatch({ agent: { maxTurns: 0 } }), /agent.maxTurns/);
+  assert.throws(() => checkSettingsPatch({ agent: { kind: 'robot' } }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agent: { name: 'two words' } }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agent: { command: 'a\nb' } }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ agent: { secret: 1 } }), /unknown setting: agent.secret/);
+  assert.throws(() => checkSettingsPatch({ agent: 'on' }), SettingsError);
+
+  const dir = await tempDir();
+  await updateSettings({ agent: { enabled: true, model: 'opus' } }, dir);
+  const after = await updateSettings({ agent: { maxTurns: 5 } }, dir);
+  assert.equal(after.agent.enabled, true);
+  assert.equal(after.agent.model, 'opus');
+  assert.equal(after.agent.maxTurns, 5);
+  assert.equal(after.agent.runsPerHour, 20);
+  assert.deepEqual(resolveSettings({ agent: { maxTurns: -1, name: 'bot' } }).agent, { ...DEFAULT_SETTINGS.agent, name: 'bot' });
+});

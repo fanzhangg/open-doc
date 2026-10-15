@@ -4,7 +4,7 @@
 // saves in flight it ignores those events: they may be echoes of an older
 // keystroke, and the last save's reply is the truth.
 
-import { DEFAULT_SETTINGS, resolveSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, mergeSettings, resolveSettings } from '../src/core/settings.js';
 
 const LEGACY_DISPLAY_KEY = 'opendoc.display';
 const LEGACY_NAME_KEY = 'opendoc.name';
@@ -27,9 +27,9 @@ export function createSettings(initial, { save, onError }) {
 
   return {
     get: () => current,
-    /** Apply `patch` here at once and save it for every doc. */
+    /** Apply `patch` here at once and save it for every doc; `agent` is partial. */
     set(patch) {
-      apply({ ...current, ...patch });
+      apply(mergeSettings(current, patch));
       inflight++;
       save(patch).then(
         (saved) => {
@@ -63,6 +63,7 @@ export function legacySettings() {
     const name = localStorage.getItem(LEGACY_NAME_KEY);
     const resolved = resolveSettings({ ...display, name });
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
+      if (key === 'agent') continue; // never kept in the browser
       const given = key === 'name' ? name : display?.[key];
       if (given !== undefined && given !== null && resolved[key] === given) patch[key] = given;
     }

@@ -82,7 +82,9 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
-  chrome = createChrome({ editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName });
+  chrome = createChrome({
+    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, agentSource: initial.agentSource,
+  });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
@@ -102,6 +104,7 @@ async function start() {
 
   presence = createAgentPresence(document.querySelector('.od-agent'), document.querySelector('.od-panel'));
   presence.render(initial.agent);
+  chrome.agentStatus(initial.agent);
   applySidecar(initial.sidecar);
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
@@ -128,6 +131,7 @@ async function start() {
   events.addEventListener('agent', (event) => {
     const next = JSON.parse(event.data);
     presence.render(next);
+    chrome.agentStatus(next);
   });
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
   events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));

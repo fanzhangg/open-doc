@@ -3,8 +3,7 @@
 
 import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve as resolvePath } from 'node:path';
+import { basename, resolve as resolvePath } from 'node:path';
 import {
   AnchorError, FormatError, OpError,
   activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, newId, project,
@@ -14,6 +13,7 @@ import { StoreError, load, moveDoc, update } from '../store/files.js';
 import { watchDoc } from '../store/watch.js';
 import { startServer } from '../server/server.js';
 import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
+import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
@@ -93,20 +93,19 @@ const COMMANDS = {
     const docPath = requireDoc(docArg);
     const port = values.port === undefined ? 0 : Number(values.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new UsageError('--port must be a port number');
-    const agent = agentOptions(values);
-    if (agent && agent.adapter.name === 'claude') {
-      const hooks = projectHooks(dirname(docPath));
-      if (hooks) out(`opendoc: warning: ${hooks} defines hooks; the agent's runs will execute them (use --agent-isolated to skip)`);
-    }
-    const server = await startServer(docPath, { port, agent });
+    // --agent flags pick the agent for this run; without them the agent is
+    // the one in the user's settings (Settings > Agent), which may be off.
+    const agent = agentOptions(values, docPath);
+    const server = await startServer(docPath, { port, agent, agentFromSettings: !agent });
     out(`opendoc: editing ${basename(docPath)} at ${server.url}`);
     if (server.dispatcher) {
       const status = server.dispatcher.status();
+      if (status.warning) out(`opendoc: warning: ${status.warning}`);
       out(status.state === 'unavailable'
-        ? `opendoc: agent ${agent.name} is unavailable: ${status.error}`
-        : agent.mentionsOnly
-          ? `opendoc: ${agent.name} answers comments that mention @${agent.name}`
-          : `opendoc: ${agent.name} answers every comment (except ones addressed to someone else)`);
+        ? `opendoc: agent ${status.name} is unavailable: ${status.error}`
+        : status.mentionsOnly
+          ? `opendoc: ${status.name} answers comments that mention @${status.name}`
+          : `opendoc: ${status.name} answers every comment (except ones addressed to someone else)`);
     }
     out('Press Ctrl+C to stop.');
     if (!values['no-open']) openBrowser(server.url);
@@ -258,7 +257,7 @@ async function writeAndPrint(docPath, values, out, threadId, change) {
   print(out, values.json, markdown, sidecar, [findThread(sidecar, threadId)]);
 }
 
-function agentOptions(values) {
+function agentOptions(values, docPath) {
   if (!values.agent) {
     if (values['agent-cmd']) throw new UsageError('--agent-cmd needs --agent <name>');
     if (values['mentions-only']) throw new UsageError('--mentions-only needs --agent <name>');
@@ -289,22 +288,8 @@ function agentOptions(values) {
   } else {
     throw new UsageError(`no preset for agent "${values.agent}"; pass --agent-cmd "<command>"`);
   }
-  return { name: values.agent, adapter, limits, mentionsOnly: values['mentions-only'] === true };
-}
-
-// The nearest .claude settings file that defines hooks, if any.
-function projectHooks(dir) {
-  for (let current = dir; ; current = dirname(current)) {
-    for (const file of ['settings.json', 'settings.local.json']) {
-      const path = join(current, '.claude', file);
-      try {
-        if (/"hooks"\s*:/.test(readFileSync(path, 'utf8'))) return path;
-      } catch {
-        // no such file
-      }
-    }
-    if (dirname(current) === current) return null;
-  }
+  const warning = hooksWarning(adapter, values['agent-isolated'] === true, docPath);
+  return { name: values.agent, adapter, limits, mentionsOnly: values['mentions-only'] === true, warning };
 }
 
 function openBrowser(url) {

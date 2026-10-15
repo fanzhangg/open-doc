@@ -125,6 +125,7 @@
       <button type="button" role="tab" data-section="general" data-icon="user">General</button>
       <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
       <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
+      <button type="button" role="tab" data-section="agent" data-icon="sparkle">Agent</button>
       <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     </nav>
     <div class="od-settings-main">
@@ -196,6 +197,88 @@
           </span>
           <input type="checkbox" class="od-switch" data-setting="focus">
         </label>
+      </section>
+
+      <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
+        <h2>Agent</h2>
+        <p class="od-agent-note od-agent-flags" hidden>This editor was started with <code>--agent</code> options; they apply instead of these settings until it is restarted.</p>
+        <label class="od-setting">
+          <span class="od-setting-text">
+            <span class="od-setting-label">AI co-author</span>
+            <span class="od-setting-hint">Answers comments in every doc: reads the doc, edits it and replies in the thread. A run may only read files, edit the open doc and run <code>opendoc</code>.</span>
+          </span>
+          <input type="checkbox" class="od-switch" data-agent="enabled">
+        </label>
+        <div class="od-agent-state" role="status">
+          <span class="od-agent-dot" aria-hidden="true"></span>
+          <span class="od-agent-state-text"></span>
+          <button type="button" class="od-link-button" data-action="agent-check" hidden>Check again</button>
+        </div>
+        <p class="od-agent-note od-agent-warning" hidden></p>
+        <div class="od-agent-options">
+          <div class="od-setting">
+            <span class="od-setting-text"><span class="od-setting-label">Agent</span></span>
+            <div class="od-segmented" role="radiogroup" aria-label="Agent">
+              <button type="button" role="radio" data-agent-kind="claude">Claude Code</button>
+              <button type="button" role="radio" data-agent-kind="custom">Custom command</button>
+            </div>
+          </div>
+          <div class="od-setting">
+            <span class="od-setting-text">
+              <label for="od-agent-name">Name</label>
+              <span class="od-setting-hint">Mention it as @name in comments.</span>
+            </span>
+            <input id="od-agent-name" class="od-input" type="text" data-agent="name" autocomplete="off" spellcheck="false" maxlength="64">
+          </div>
+          <div class="od-setting">
+            <span class="od-setting-text"><span class="od-setting-label">Answers</span></span>
+            <div class="od-segmented" role="radiogroup" aria-label="Answers">
+              <button type="button" role="radio" data-agent-mentions="false">Every comment</button>
+              <button type="button" role="radio" data-agent-mentions="true">Only @mentions</button>
+            </div>
+          </div>
+          <div class="od-setting" data-for="claude">
+            <span class="od-setting-text">
+              <label for="od-agent-model">Model</label>
+              <span class="od-setting-hint">For example sonnet or opus. Empty uses Claude Code's default.</span>
+            </span>
+            <input id="od-agent-model" class="od-input" type="text" data-agent="model" placeholder="Default" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="od-setting" data-for="claude">
+            <span class="od-setting-text">
+              <label for="od-agent-bin">Claude Code</label>
+              <span class="od-setting-hint">Empty finds it automatically.</span>
+            </span>
+            <div class="od-setting-row">
+              <input id="od-agent-bin" class="od-input" type="text" data-agent-program="bin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
+              <button type="button" class="od-secondary" data-action="choose-claude">Choose…</button>
+            </div>
+          </div>
+          <div class="od-setting od-setting-stacked" data-for="custom">
+            <span class="od-setting-text">
+              <label for="od-agent-command">Command</label>
+              <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code>, <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
+            </span>
+            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" autocomplete="off" spellcheck="false">
+          </div>
+          <p class="od-agent-note od-program-note" hidden>The agent's program can be set in the desktop app, or with <code>--agent-bin</code> and <code>--agent-cmd</code>.</p>
+          <div class="od-setting od-setting-stacked">
+            <span class="od-setting-text"><span class="od-setting-label">Limits</span></span>
+            <div class="od-limits">
+              <label data-for="claude">Turns per run <input class="od-input od-input-number" type="number" min="1" max="500" step="1" data-agent="maxTurns"></label>
+              <label>Minutes per run <input class="od-input od-input-number" type="number" min="1" max="240" step="1" data-agent="runTimeoutMinutes"></label>
+              <label>Runs per hour <input class="od-input od-input-number" type="number" min="1" max="1000" step="1" data-agent="runsPerHour"></label>
+              <label data-for="claude">Budget per run, USD <input class="od-input od-input-number" type="number" min="0.01" step="0.01" data-agent="maxBudgetUsd" placeholder="None"></label>
+            </div>
+          </div>
+          <label class="od-setting" data-for="claude">
+            <span class="od-setting-text">
+              <span class="od-setting-label">Isolated runs</span>
+              <span class="od-setting-hint">Skips your Claude Code settings and project hooks. Needs ANTHROPIC_API_KEY.</span>
+            </span>
+            <input type="checkbox" class="od-switch" data-agent="isolated">
+          </label>
+        </div>
       </section>
 
       <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>

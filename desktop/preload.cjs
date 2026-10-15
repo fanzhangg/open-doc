@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   newDoc: () => act('new'),
   open: () => act('open'),
   rename: () => act('rename'),
+  /** Set the agent's `command` or `bin` after the user confirms it; resolves to whether it was set. */
+  setAgentProgram: (key, value) => act('agentProgram', { key: String(key), value: value === null ? null : String(value) }),
+  chooseClaude: () => act('chooseClaude'),
   openRecent: (index) => act('openRecent', Number(index)),
   recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
   onRecentChanged: (callback) => {

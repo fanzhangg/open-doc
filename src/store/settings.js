@@ -6,7 +6,7 @@
 import { mkdir, readFile, rename } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { SETTINGS_VERSION, checkSettingsPatch, resolveSettings } from '../core/settings.js';
+import { SETTINGS_VERSION, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
 import { lockFile, writeAtomic } from './files.js';
 import { watchFiles } from './watch.js';
 
@@ -34,8 +34,9 @@ export async function readSettings(dir = configDir()) {
 }
 
 /**
- * Apply a validated partial `patch` and save. Keys this version does not know
- * are kept, so an older app does not erase a newer one's settings.
+ * Apply a validated partial `patch` (whose `agent` is itself partial) and
+ * save. Keys this version does not know are kept, so an older app does not
+ * erase a newer one's settings.
  * @returns {Promise<object>} the complete settings after the change
  */
 export async function updateSettings(patch, dir = configDir()) {
@@ -45,7 +46,7 @@ export async function updateSettings(patch, dir = configDir()) {
   const release = await lockFile(`${path}.lock`, path);
   try {
     const stored = (await readStored(dir)) ?? {};
-    const next = { ...stored, ...patch, version: SETTINGS_VERSION };
+    const next = { ...mergeSettings(stored, patch), version: SETTINGS_VERSION };
     await writeAtomic(path, JSON.stringify(next, null, 2) + '\n');
     return resolveSettings(next);
   } finally {

@@ -4,6 +4,7 @@ import { request } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
 import { main } from '../src/cli/main.js';
@@ -374,5 +375,62 @@ test('recreate on a doc that is there is an ordinary conditional save', async ()
     const stale = await call(server, 'PUT', '/api/doc', { body: { markdown: 'x', baseHash: 'sha256:0', recreate: true } });
     assert.equal(stale.status, 409);
     assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
+  });
+});
+
+const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-agent.js');
+
+async function waitUntil(check, ms = 8000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (await check()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
+
+test('agent from settings: starts when on, follows changes, stops when off', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const runLog = join(settingsDir, 'runs.log');
+  // The program can only be set outside the page: here, in settings.json.
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({
+    agent: { enabled: true, kind: 'custom', name: 'helper', command: `"${process.execPath}" "${FAKE_AGENT}" {threadsFile} reply "${runLog}"` },
+  }));
+  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
+  try {
+    let state = (await call(server, 'GET', '/api/state')).body;
+    assert.equal(state.agentSource, 'settings');
+    assert.equal(state.agent.name, 'helper');
+    assert.equal(state.agent.kind, 'custom');
+
+    // A comment wakes the agent configured in settings, which replies through the shim.
+    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_settings1', anchor: null, message: { id: 'm_settings1', author: human, body: 'Please look' } } } });
+    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages.length === 2), 'the agent replied');
+
+    // Changing an agent setting restarts it with the new options.
+    await call(server, 'PUT', '/api/settings', { body: { agent: { name: 'helper2', mentionsOnly: true } } });
+    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.agent?.name === 'helper2'), 'restarted with the new name');
+    state = (await call(server, 'GET', '/api/state')).body;
+    assert.equal(state.agent.mentionsOnly, true);
+
+    // Turning it off stops it.
+    await call(server, 'PUT', '/api/settings', { body: { agent: { enabled: false } } });
+    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.agent === null), 'stopped');
+    assert.equal((await call(server, 'GET', '/api/agent')).status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("agent settings: the page cannot set the agent's program, only clear it", async () => {
+  await withSettingsServer(async ({ server, settingsDir }) => {
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: 'evil --do-things' } } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { bin: 'C:\evil.exe' } } })).status, 403);
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { enabled: true, maxTurns: 9 } } })).status, 200);
+    await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ agent: { command: 'mybot {promptFile}' } }));
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: 'mybot {promptFile}', kind: 'custom' } } })).status, 200, 'unchanged is fine');
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: null } } })).status, 200, 'clearing is fine');
   });
 });

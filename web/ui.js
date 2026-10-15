@@ -4,6 +4,8 @@
 // the Settings dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
 
 import { hydrateIcons, icon } from './icons.js';
+import { api } from './api.js';
+import { checkSettingsPatch } from '../src/core/settings.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
@@ -37,14 +39,16 @@ export function keyLabel(keys) {
 
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
- *           getName: () => string, setName: (name: string) => boolean }} options
+ *           getName: () => string, setName: (name: string) => boolean,
+ *           agentSource: 'settings' | 'flags' | 'none' }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, agentSource }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
 
   const settings = setupSettings({ store, getName, setName });
+  const agentSettings = setupAgentSettings({ store, source: agentSource });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -146,6 +150,10 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   return {
     hideBubble() {
       bubble.hidden = true;
+    },
+    /** The agent's status changed (or it stopped: null). */
+    agentStatus(status) {
+      agentSettings.showStatus(status);
     },
     /** A command from the desktop app's menu: 'settings' or 'shortcuts'. */
     command(name) {
@@ -342,6 +350,150 @@ function setupSettings({ store, getName, setName }) {
       else open(section);
     },
   };
+}
+
+// ---- Settings > Agent ----
+
+const AGENT_STATES = {
+  starting: 'Getting ready…',
+  ready: 'Ready',
+  running: 'Working on comments',
+  paused: 'Paused',
+  error: 'The last run failed',
+  limited: 'Taking a break (hourly run limit)',
+  unavailable: 'Unavailable',
+  stopped: 'Stopped',
+};
+
+// The agent settings apply to every doc. Its program (the custom command or
+// the Claude Code path) is set through the desktop app, which asks the user
+// to confirm it; in a browser tab those fields are read-only.
+function setupAgentSettings({ store, source }) {
+  const section = document.querySelector('.od-settings-section[data-section="agent"]');
+  const desktop = window.opendocDesktop;
+  const stateText = section.querySelector('.od-agent-state-text');
+  const check = section.querySelector('[data-action="agent-check"]');
+  const warning = section.querySelector('.od-agent-warning');
+  const options = section.querySelector('.od-agent-options');
+  let status = null;
+
+  section.querySelector('.od-agent-flags').hidden = source !== 'flags';
+  section.querySelector('.od-program-note').hidden = Boolean(desktop);
+  section.querySelector('[data-action="choose-claude"]').hidden = !desktop;
+  for (const input of section.querySelectorAll('[data-agent-program]')) input.readOnly = !desktop;
+
+  const agent = () => store.get().agent;
+  const valid = (patch) => {
+    try {
+      checkSettingsPatch({ agent: patch });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const set = (patch) => {
+    if (valid(patch)) store.set({ agent: patch });
+  };
+
+  function paint() {
+    const current = agent();
+    section.dataset.kind = current.kind;
+    section.querySelector('[data-agent="enabled"]').checked = current.enabled;
+    section.querySelector('[data-agent="isolated"]').checked = current.isolated;
+    options.toggleAttribute('data-off', !current.enabled);
+    for (const button of section.querySelectorAll('[data-agent-kind]')) {
+      button.setAttribute('aria-checked', String(button.dataset.agentKind === current.kind));
+    }
+    for (const button of section.querySelectorAll('[data-agent-mentions]')) {
+      button.setAttribute('aria-checked', String(button.dataset.agentMentions === String(current.mentionsOnly)));
+    }
+    for (const input of section.querySelectorAll('input[data-agent]:not([type="checkbox"]), input[data-agent-program]')) {
+      if (document.activeElement === input) continue;
+      const key = input.dataset.agent ?? input.dataset.agentProgram;
+      input.value = current[key] ?? '';
+      input.removeAttribute('aria-invalid');
+    }
+    paintStatus();
+  }
+
+  function paintStatus() {
+    const current = agent();
+    let text;
+    let state = status?.state ?? 'off';
+    if (!status && (source === 'flags' || !current.enabled)) {
+      text = 'Off. Turn it on to have the agent answer comments.';
+    } else if (!status) {
+      state = 'starting';
+      text = AGENT_STATES.starting;
+    } else {
+      text = AGENT_STATES[status.state] ?? status.state;
+      if (status.error) text += `: ${status.error}`;
+      else if (status.program && ['ready', 'running', 'paused'].includes(status.state)) text += ` · ${status.program}`;
+    }
+    section.dataset.agentState = state;
+    stateText.textContent = text;
+    check.hidden = !status || !['unavailable', 'error'].includes(status.state);
+    warning.textContent = status?.warning ? `Note: ${status.warning}.` : '';
+    warning.hidden = !status?.warning;
+  }
+
+  section.addEventListener('click', async (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    if (button.dataset.agentKind) set({ kind: button.dataset.agentKind });
+    else if (button.dataset.agentMentions) set({ mentionsOnly: button.dataset.agentMentions === 'true' });
+    else if (button.dataset.action === 'choose-claude') desktop?.chooseClaude().catch(() => {});
+    else if (button.dataset.action === 'agent-check') {
+      check.disabled = true;
+      try {
+        showStatus(await api.agentAction('retry'));
+      } catch {
+        // no agent running here (yet)
+      } finally {
+        check.disabled = false;
+      }
+    }
+  });
+
+  section.addEventListener('change', (event) => {
+    const input = event.target;
+    if (input.type === 'checkbox' && input.dataset.agent) return set({ [input.dataset.agent]: input.checked });
+    if (input.dataset.agentProgram) return setProgram(input);
+    const key = input.dataset.agent;
+    if (!key) return;
+    const raw = input.value.trim();
+    let value = raw;
+    if (input.type === 'number') value = raw === '' ? null : Number(raw);
+    else if (key === 'model') value = raw || null;
+    if (!valid({ [key]: value })) {
+      input.setAttribute('aria-invalid', 'true');
+      return;
+    }
+    input.removeAttribute('aria-invalid');
+    set({ [key]: value });
+  });
+  section.addEventListener('focusout', (event) => {
+    if (event.target.matches?.('input[aria-invalid="true"]')) paint(); // an invalid value is not kept
+  });
+
+  async function setProgram(input) {
+    if (!desktop) return;
+    try {
+      const done = await desktop.setAgentProgram(input.dataset.agentProgram, input.value.trim() || null);
+      if (!done) input.value = agent()[input.dataset.agentProgram] ?? '';
+    } catch {
+      input.value = agent()[input.dataset.agentProgram] ?? '';
+    }
+  }
+
+  function showStatus(next) {
+    status = next;
+    paintStatus();
+  }
+
+  store.subscribe(paint);
+  paint();
+  return { showStatus };
 }
 
 function fillShortcuts(body) {

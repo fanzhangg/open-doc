@@ -11,12 +11,13 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp } from '../core/index.js';
 import { NAME_PATTERN } from '../core/mentions.js';
-import { SettingsError } from '../core/settings.js';
+import { AGENT_PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Dispatcher } from './agents/dispatcher.js';
+import { agentFromSettings } from './agents/config.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -40,14 +41,21 @@ class HttpError extends Error {
 
 /**
  * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
- * a headless agent run whenever a comment mentions that agent.
+ * a headless agent run whenever a comment mentions that agent. Without it,
+ * `agentFromSettings: true` takes the agent from the user's settings
+ * (Settings > Agent) and restarts it whenever they change.
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder).
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
  * @returns {Promise<{ url: string, port: number, token: string, dispatcher: Dispatcher | null, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
-export async function startServer(docPath, { port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent, settingsDir = configDir() } = {}) {
+export async function startServer(docPath, {
+  port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
+  settingsDir = configDir(),
+} = {}) {
+  let agent = fixedAgent;
+  const agentSource = fixedAgent ? 'flags' : useSettings ? 'settings' : 'none';
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
   let dispatcher = null;
@@ -129,8 +137,11 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
         return openEvents(req, res);
       case 'GET /api/settings':
         return sendJson(res, 200, await readSettings(settingsDir));
-      case 'PUT /api/settings':
-        return sendJson(res, 200, { settings: await updateSettings(await readJson(req), settingsDir) });
+      case 'PUT /api/settings': {
+        const patch = await readJson(req);
+        await checkAgentProgram(patch);
+        return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
+      }
       case 'GET /api/agent':
         if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
         return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
@@ -169,6 +180,19 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
     }
   }
 
+  // The agent's program (a custom command, or where Claude Code is) decides
+  // what runs on this machine, so a page can only clear it. Setting one takes
+  // the desktop app, which asks the user first, or editing settings.json.
+  async function checkAgentProgram(patch) {
+    if (!patch?.agent || typeof patch.agent !== 'object') return;
+    const current = (await readSettings(settingsDir)).settings.agent;
+    for (const key of AGENT_PROGRAM_KEYS) {
+      if (Object.hasOwn(patch.agent, key) && patch.agent[key] !== null && patch.agent[key] !== current[key]) {
+        throw new HttpError(403, 'forbidden', "the agent's program can be set in the desktop app or in settings.json, not from the page");
+      }
+    }
+  }
+
   async function state() {
     const { doc, sidecar } = await load(docPath);
     const { settings, saved } = await readSettings(settingsDir);
@@ -181,6 +205,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       settingsSaved: saved,
       defaultName: defaultName(),
       agent: dispatcher?.status() ?? null,
+      agentSource,
     };
   }
 
@@ -260,6 +285,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       if (json === lastSettings) return;
       lastSettings = json;
       broadcast('settings', settings);
+      if (useSettings) configureAgent(settings.agent);
     } catch (error) {
       console.error(error);
     }
@@ -270,6 +296,31 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
     await dispatcher.start();
   }
 
+  // Agent settings changed (or the server starts): let a run in progress
+  // finish, then stop the old agent and start the new one, if any. Changes
+  // apply one at a time, and settings that do not touch the agent do nothing.
+  let agentSettings = null;
+  let agentChanges = Promise.resolve();
+  let closed = false;
+  function configureAgent(next) {
+    const json = JSON.stringify(next);
+    if (json === agentSettings) return agentChanges;
+    agentSettings = json;
+    agentChanges = agentChanges.then(async () => {
+      if (dispatcher) {
+        const old = dispatcher;
+        await old.drain();
+        await old.stop();
+        if (dispatcher === old) dispatcher = null;
+      }
+      if (closed) return;
+      agent = agentFromSettings(next, docPath);
+      if (agent) await startDispatcher();
+      else broadcast('agent', null);
+    }).catch((error) => console.error('Could not start the agent:', error));
+    return agentChanges;
+  }
+
   async function moveTo(newPath, move = moveDoc) {
     return serial(async () => {
       const target = (await move(docPath, newPath)) ?? newPath;
@@ -278,6 +329,7 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       docPath = target;
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
+      if (useSettings && agentSettings) agent = agentFromSettings(JSON.parse(agentSettings), docPath); // hooks depend on the folder
       if (agent) await startDispatcher();
       broadcast('renamed', { doc: basename(docPath) });
       return docPath;
@@ -299,7 +351,8 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
   });
   actualPort = server.address().port;
 
-  if (agent) await startDispatcher();
+  if (fixedAgent) await startDispatcher();
+  else if (useSettings) await configureAgent((await readSettings(settingsDir)).settings.agent);
 
   return {
     url: `http://127.0.0.1:${actualPort}/?t=${token}`,
@@ -314,6 +367,9 @@ export async function startServer(docPath, { port = 0, token = randomBytes(16).t
       clearInterval(heartbeat);
       stopWatching();
       stopWatchingSettings();
+      closed = true;
+      await dispatcher?.stop(); // ends a run in progress, which a pending agent change may be waiting on
+      await agentChanges;
       await dispatcher?.stop();
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
