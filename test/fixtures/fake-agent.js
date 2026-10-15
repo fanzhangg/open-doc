@@ -1,6 +1,7 @@
 // A stand-in for a headless agent, launched by the dispatcher through a custom
 // command: fake-agent.js <threadsFile> <mode> <runLog>
-// Modes: reply, slow, edit, propose, fail, hang, silent (exits 0 without
+// Modes: reply, slow, edit, edit-slow (edits, then waits before replying),
+// propose, fail, hang, silent (exits 0 without
 // replying). It calls `opendoc` through a shell to prove the dispatcher's
 // PATH shim works.
 
@@ -18,7 +19,8 @@ if (mode === 'fail') {
 if (mode === 'hang') setInterval(() => {}, 1000);
 else if (mode !== 'silent') {
   if (mode === 'slow') await new Promise((r) => setTimeout(r, 1500));
-  if (mode === 'edit') writeFileSync(doc, readFileSync(doc, 'utf8').replace('extra load', 'extra peak load'));
+  if (mode === 'edit' || mode === 'edit-slow') writeFileSync(doc, readFileSync(doc, 'utf8').replace('extra load', 'extra peak load'));
+  if (mode === 'edit-slow') await new Promise((r) => setTimeout(r, 1500));
   for (const thread of threads) {
     if (mode === 'propose') {
       const input = JSON.stringify({ body: 'Suggest adding "peak".', changes: [{ before: 'extra load', after: 'extra peak load' }] });

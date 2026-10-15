@@ -176,6 +176,7 @@ export async function startServer(docPath, {
       const next = splice(current.markdown, incoming);
       if (next !== current.markdown) {
         await writeAtomic(docPath, next);
+        dispatcher?.humanEdited(current.markdown, next); // not the agent's edit
         await update(docPath, (s) => s); // refresh anchors against the saved doc
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];

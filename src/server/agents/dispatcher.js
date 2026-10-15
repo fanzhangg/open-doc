@@ -9,7 +9,8 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyOp, diffEdits, inbox, newId, project, sourceRange } from '../../core/index.js';
+import { applyOp, diffEdits, inbox, locate, newId, project, sourceRange } from '../../core/index.js';
+import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
 import { load, update } from '../../store/files.js';
@@ -228,7 +229,10 @@ export class Dispatcher {
 
     let finish;
     const done = new Promise((resolve) => { finish = resolve; });
-    this.run = { child, threadIds: threads.map((t) => t.id), done };
+    // `base` is the doc as it would be without this run: the doc it started
+    // from, plus every change the human saved meanwhile (humanEdited).
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown };
+    this.run = run;
     this.#setState('running');
 
     let over = false;
@@ -236,7 +240,7 @@ export class Dispatcher {
       if (over) return;
       over = true;
       clearTimeout(timer);
-      this.#finish({ threads, markdown, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }).finally(finish);
+      this.#finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }).finally(finish);
     };
     child.on('error', (error) => {
       spawnError = error;
@@ -245,7 +249,18 @@ export class Dispatcher {
     child.on('close', (code) => ended(code));
   }
 
-  async #finish({ threads, markdown, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
+  /**
+   * The human saved the doc from `before` to `after` while a run was going:
+   * keep that change out of what the run is said to have edited. Where it
+   * overlaps a change of the run, the human's text stands and the run's
+   * change there is not recorded.
+   */
+  humanEdited(before, after) {
+    if (!this.run || before === after) return;
+    this.run.base = merge3(before, after, this.run.base, { prefer: 'ours' }).text;
+  }
+
+  async #finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
     let result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
       : this.adapter.parse({ stdout, stderr, code });
@@ -255,7 +270,7 @@ export class Dispatcher {
     const ids = new Set(threads.map((t) => t.id));
     try {
       await update(this.docPath, (s, doc) => {
-        const recorded = this.#recordEdits(s, threads, markdown, doc.markdown);
+        const recorded = this.#recordEdits(s, threads, run.base, doc.markdown);
         return recorded.threads
           .filter((t) => ids.has(t.id) && t.working && sameName(t.working.by, this.name))
           .reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since: null }), recorded);
@@ -345,7 +360,7 @@ export class Dispatcher {
 
 /**
  * Which thread each change between `before` and `after` belongs to: the one
- * whose anchor (as claimed, against `before`) it overlaps or touches, the
+ * whose anchor (found in `before`) it overlaps or touches, the
  * most overlapped first. A change no anchor claims belongs to the only thread
  * of a one-thread run, or else to every thread of the run, as scope "run".
  * @returns {Map<string, object[]>} thread id → edits
@@ -357,9 +372,8 @@ export function attributeEdits(threads, before, after) {
   const anchored = threads.filter((t) => t.anchor && !t.detached);
   const projection = anchored.length > 0 ? project(before) : null;
   const ranges = anchored.flatMap((t) => {
-    const start = t.anchor.start;
-    const end = Math.min(start + t.anchor.exact.length, projection.text.length);
-    return start < end ? [{ id: t.id, ...sourceRange(projection, start, end) }] : [];
+    const found = locate(projection.text, t.anchor);
+    return found && found.start < found.end ? [{ id: t.id, ...sourceRange(projection, found.start, found.end) }] : [];
   });
   const add = (id, edit) => result.set(id, [...(result.get(id) ?? []), edit]);
   for (const { from, to, edit } of changes) {

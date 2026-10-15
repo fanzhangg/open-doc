@@ -1,8 +1,9 @@
 // The opendoc page: wires the editor, the comment margin, the agent's presence
 // and the server together. Saves are debounced and conditional on the hash
 // they were based on. Changes made on disk (usually by the agent) arrive as
-// SSE events and are merged into the page like a collaborator's edits: only
-// a change to the same paragraph the human changed asks them to choose.
+// SSE events and are merged into the page like a collaborator's edits, the
+// agent's typed in by its caret: only a change that overlaps what the human
+// changed in the same paragraph asks them to choose.
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
@@ -11,7 +12,7 @@ import { createAgentPresence } from './agent.js';
 import { createChrome } from './ui.js';
 import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
-import { merge3 } from './merge.js';
+import { merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
@@ -20,6 +21,7 @@ import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const SAVE_DELAY_MS = 800;
+const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
 
 const status = document.querySelector('.od-status');
 const banner = document.querySelector('.od-banner');
@@ -147,6 +149,7 @@ async function start() {
   events.addEventListener('sidecar', refreshThreads);
   events.addEventListener('agent', (event) => {
     const next = JSON.parse(event.data);
+    showAgentCaret(presence.status(), next);
     presence.render(next);
     chrome.agentStatus(next);
   });
@@ -169,6 +172,11 @@ function scheduleSave() {
 
 async function save() {
   if (saving || !dirty || !banner.hidden || missing) return;
+  if (editor.replaying()) {
+    // The text is between versions; the replay reports any typing when it ends.
+    scheduleSave();
+    return;
+  }
   saving = true;
   const savedVersion = version;
   const markdown = editor.getMarkdown();
@@ -205,6 +213,7 @@ async function save() {
 
 async function flushSave() {
   clearTimeout(saveTimer);
+  editor.finishReplay();
   while (dirty || saving) {
     if (!banner.hidden) throw new Error('resolve the conflict first');
     if (missing) throw new Error('the doc is missing from disk');
@@ -216,6 +225,7 @@ async function flushSave() {
 // Leaving with an edit not saved yet: hold the page and save it. A browser
 // asks before leaving; the desktop app retries closing until the save is in.
 window.addEventListener('beforeunload', (event) => {
+  editor?.finishReplay(); // what is on disk is the whole change: show it, then save any typing
   if (editor && !dirty && editor.getMarkdown() !== synced) {
     // Typing the editor has not reported yet (it does so on a debounce).
     dirty = true;
@@ -249,6 +259,9 @@ async function doSync() {
   if (fresh.docHash === baseHash) return;
   const by = editorName(fresh.sidecar);
   const theirs = editor.normalize(fresh.markdown);
+  // A replay still running is part of what is already on disk: complete it
+  // so its partial text is not taken for the human's.
+  editor.finishReplay();
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   const mine = editor.getMarkdown();
   const merged = merge3(synced, mine, theirs);
@@ -256,7 +269,8 @@ async function doSync() {
     showConflict(by);
     return;
   }
-  editor.applyMarkdown(merged.text, by);
+  // The agent's changes are typed in; anything else just appears.
+  editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
   baseHash = fresh.docHash;
   disk = fresh.markdown;
@@ -271,18 +285,35 @@ async function doSync() {
   }
 }
 
+// A run starting puts the agent's caret on the comment it is reading, as a
+// collaborator would scroll there; when it stops, the caret stays and fades.
+function showAgentCaret(before, after) {
+  if (!after) {
+    editor.agentLooking(null);
+    return;
+  }
+  const running = after.state === 'running';
+  if (running && before?.state !== 'running') {
+    const ids = after.threadIds ?? [];
+    const anchors = ids.map((id) => sidecar?.threads.find((t) => t.id === id)?.anchor).filter(Boolean);
+    editor.agentLooking(after.name, anchors);
+  } else if (!running && before?.state === 'running') {
+    editor.agentResting();
+  }
+}
+
 // Who most likely changed the file: the collaborator working on a comment.
 function editorName(nextSidecar) {
   const agent = presence.status();
   if (agent?.state === 'running') return agent.name;
   const working = nextSidecar.threads.map((t) => activeWorking(t)).find(Boolean);
-  return working?.by ?? 'Edited on disk';
+  return working?.by ?? ON_DISK;
 }
 
 function showConflict(by) {
   clearTimeout(saveTimer);
   setStatus('Needs your choice', 'conflict');
-  banner.querySelector('.od-banner-text').textContent = by === 'Edited on disk'
+  banner.querySelector('.od-banner-text').textContent = by === ON_DISK
     ? 'The file changed on disk in a paragraph you are editing.'
     : `${by} edited a paragraph you are editing.`;
   banner.hidden = false;
@@ -415,7 +446,9 @@ async function applyProposalEdit(threadId, message) {
   }
   const next = applyProposal(fresh.markdown, message.proposal);
   if (next === null) throw new Error('Cannot apply: the original text has changed since.');
-  editor.applyMarkdown(next, message.author.name);
+  // Played in as if the agent typed it, then saved.
+  editor.applyMarkdown(next, message.author.name, { animate: true });
+  await editor.replayDone();
   dirty = true;
   version++;
   await flushSave();
@@ -479,6 +512,7 @@ function newMessage(body) {
 
 function select(id, { focus = true } = {}) {
   if (id !== activeId) reviewing = null;
+  if (id) editor.clearReview(); // the human is looking at the comments now
   activeId = id;
   editor.setActive(id);
   margin.setActive(id, { focus });

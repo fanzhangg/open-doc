@@ -471,3 +471,28 @@ test("agent settings: the page cannot set the agent's program, only clear it", a
     assert.equal((await call(server, 'PUT', '/api/settings', { body: { agent: { command: null } } })).status, 200, 'clearing is fine');
   });
 });
+
+test("what the human saves during a run is not recorded as the agent's edit", { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const runLog = join(dirname(docPath), 'runs.log');
+  const adapter = customAdapter(`"${process.execPath}" "${FAKE_AGENT}" {threadsFile} edit-slow "${runLog}"`);
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  try {
+    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_during01', anchor: null, message: { id: 'm_during01', author: human, body: 'Mention the peak.' } } } });
+    // The agent has edited; the human saves a change elsewhere before it replies.
+    assert.ok(await waitUntil(async () => (await readFile(docPath, 'utf8')).includes('extra peak load')), 'the agent edited');
+    const { markdown, docHash } = (await call(server, 'GET', '/api/state')).body;
+    const saved = await call(server, 'PUT', '/api/doc', { body: { markdown: markdown.replace('six features', 'seven features'), baseHash: docHash } });
+    assert.equal(saved.status, 200);
+
+    assert.ok(await waitUntil(async () => server.dispatcher.status().state === 'ready' && server.dispatcher.status().lastRun), 'the run ended');
+    const thread = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0];
+    const reply = thread.messages.at(-1);
+    assert.equal(reply.author.name, 'claude');
+    assert.deepEqual(reply.edits.map((e) => [e.before, e.after]), [['', 'peak ']]);
+    assert.match(await readFile(docPath, 'utf8'), /seven features[\s\S]*extra peak load/);
+  } finally {
+    await server.close();
+  }
+});

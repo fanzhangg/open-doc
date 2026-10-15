@@ -1,9 +1,9 @@
 // The page: a Milkdown (ProseMirror) WYSIWYG editor with comment highlights,
 // a suggestion-style view of a proposal or a past edit, named
 // formatting commands for the toolbar, selection bubble and "/" menu, and
-// collaborator-style application of changes made on disk: only the blocks
-// that changed are replaced (the caret stays put) and the new text glows with
-// the author's name.
+// collaborator-style application of changes made on disk: the agent's
+// changes are replayed as typing (web/replay.js); other changes replace only
+// the blocks that differ (the caret stays put) and glow with the author's name.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
@@ -24,6 +24,7 @@ import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
 import { docRange, projectDoc, textRange } from './pm-text.js';
+import { createReplayer, diffBlocks } from './replay.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
@@ -104,6 +105,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     onKeyDown: (event) => keyHandler(event),
   };
   const host = stage.querySelector('.od-editor');
+  // While a replay runs, the doc passes through states that are neither the
+  // human's nor on disk; edits are reported once it ends (onReplayEnd).
+  let replayTarget = null;
+  const replayer = createReplayer({ getView: () => view(), stage, onEnd: (done) => onReplayEnd(done) });
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
@@ -114,12 +119,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       }));
       ctx.get(listenerCtx)
         .markdownUpdated((_ctx, next) => {
-          if (next !== baseline) onChange();
+          if (next !== baseline && !replayer.active()) onChange();
         })
         .updated(() => onDocUpdated());
     })
     .use(commonmark).use(gfm).use(cjkFriendly).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
+    .use($prose(() => replayer.plugin))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
@@ -378,11 +384,22 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
 
   // ---- changes from disk ----
 
-  /** Replace only the top-level blocks that differ; glow the new text, labelled `by`. */
-  function applyMarkdown(next, by) {
+  /**
+   * Show `next`, a change made by `by`. With `animate`, `by`'s caret types
+   * the change in; otherwise only the top-level blocks that differ are
+   * replaced and the new text glows, labelled `by`. A replay still running
+   * from an earlier change is completed first.
+   */
+  function applyMarkdown(next, by, { animate = false } = {}) {
+    replayer.finish();
     const v = view();
     const current = v.state.doc;
     const target = parse(next);
+    if (animate) {
+      replayTarget = next;
+      if (replayer.start(target, by)) return;
+      replayTarget = null;
+    }
     const hunks = diffBlocks(current, target);
     if (hunks.length === 0) {
       baseline = editor.action(getMarkdown());
@@ -399,6 +416,24 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     baseline = editor.action(getMarkdown());
     flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by);
     paintHighlights();
+  }
+
+  // The replay is over: what it typed stays marked until the human looks at
+  // the comments (clearReview), and typing that happened meanwhile is now
+  // reported as the human's edit.
+  function onReplayEnd({ ranges }) {
+    baseline = serialize(parse(replayTarget));
+    replayTarget = null;
+    const decorations = ranges.map((r) => Decoration.inline(r.from, r.to, { class: 'od-review' }, { review: true }));
+    if (decorations.length > 0) updateFlashes((set, doc) => set.add(doc, decorations));
+    paintHighlights();
+    if (editor.action(getMarkdown()) !== baseline) onChange();
+  }
+
+  function clearReview() {
+    const set = flashKey.getState(view().state);
+    const marked = set.find(undefined, undefined, (spec) => spec.review);
+    if (marked.length > 0) updateFlashes((current) => current.remove(marked));
   }
 
   function flash(ranges, by) {
@@ -426,8 +461,37 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     /** Markdown as this editor would write it, for comparing with its own output. */
     normalize: (md) => serialize(parse(md)),
     applyMarkdown,
+    /** Whether a change is being replayed; the doc is then between versions. */
+    replaying: () => replayer.active(),
+    /** Show the rest of a replay at once. */
+    finishReplay: () => replayer.finish(),
+    /** Resolves once no replay is running. */
+    replayDone: () => replayer.done(),
+    /** Remove the marks on text the agent typed. */
+    clearReview,
+    /**
+     * The agent `name` started on comments: put its caret at the first
+     * anchor of `anchors` that is found. Null takes the caret away.
+     */
+    agentLooking(name, anchors) {
+      if (!name) {
+        replayer.hide();
+        return;
+      }
+      const projection = projectDoc(view().state.doc);
+      for (const anchor of anchors) {
+        const found = anchor && locate(projection.text, anchor);
+        if (found) {
+          replayer.look(docRange(projection, found.start, found.end).from, name);
+          return;
+        }
+      }
+    },
+    /** The agent stopped working: its caret stays and fades. */
+    agentResting: () => replayer.rest(),
     /** Replace the content without reporting it as a local edit. */
     setMarkdown(next) {
+      replayer.finish();
       editor.action(replaceAll(next, true));
       baseline = editor.action(getMarkdown());
       paintHighlights();
@@ -591,67 +655,6 @@ function childPos(doc, index) {
   let pos = 0;
   for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize;
   return pos;
-}
-
-/**
- * Runs of top-level blocks that differ between two docs, aligned by a longest
- * common subsequence of equal blocks: [{ a0, a1, b0, b1 }], in order.
- */
-export function diffBlocks(a, b) {
-  const n = a.childCount;
-  const m = b.childCount;
-  let start = 0;
-  while (start < n && start < m && sameBlock(a.child(start), b.child(start))) start++;
-  let endA = n;
-  let endB = m;
-  while (endA > start && endB > start && sameBlock(a.child(endA - 1), b.child(endB - 1))) {
-    endA--;
-    endB--;
-  }
-  const rows = endA - start;
-  const cols = endB - start;
-  if (rows === 0 && cols === 0) return [];
-  if (rows === 0 || cols === 0 || rows * cols > 250_000) return [{ a0: start, a1: endA, b0: start, b1: endB }];
-
-  const width = cols + 1;
-  const table = new Uint32Array((rows + 1) * width);
-  const eq = (x, y) => sameBlock(a.child(start + x), b.child(start + y));
-  for (let x = rows - 1; x >= 0; x--) {
-    for (let y = cols - 1; y >= 0; y--) {
-      table[x * width + y] = eq(x, y) ? table[(x + 1) * width + y + 1] + 1 : Math.max(table[(x + 1) * width + y], table[x * width + y + 1]);
-    }
-  }
-  const hunks = [];
-  let x = 0;
-  let y = 0;
-  let open = null;
-  const close = () => {
-    if (open) hunks.push({ a0: start + open.x, a1: start + x, b0: start + open.y, b1: start + y });
-    open = null;
-  };
-  while (x < rows || y < cols) {
-    if (x < rows && y < cols && eq(x, y)) {
-      close();
-      x++;
-      y++;
-    } else {
-      open ??= { x, y };
-      if (y >= cols || (x < rows && table[(x + 1) * width + y] >= table[x * width + y + 1])) x++;
-      else y++;
-    }
-  }
-  close();
-  return hunks;
-}
-
-// Equal blocks, ignoring heading ids: the live editor derives them from the
-// text after parsing, so a freshly parsed copy of the same heading lacks one.
-function sameBlock(a, b) {
-  if (a.eq(b)) return true;
-  if (a.type !== b.type || !a.content.eq(b.content) || !Mark.sameSet(a.marks, b.marks)) return false;
-  const { id: _a, ...restA } = a.attrs;
-  const { id: _b, ...restB } = b.attrs;
-  return JSON.stringify(restA) === JSON.stringify(restB);
 }
 
 // The part of the new doc a hunk introduced: the changed characters when one

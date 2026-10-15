@@ -283,6 +283,23 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); animation: od-fade 6s ease-out forwards; }
 @keyframes od-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
+/* the agent's caret while it types a change in (web/replay.js), and after */
+.od-agent-caret { position: relative; display: inline; }
+.od-agent-caret::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); }
+.od-agent-caret-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--agent); color: #fff; font: 600 11px/1.6 var(--ui-font); white-space: nowrap; user-select: none; }
+.od-agent-caret[data-mode="active"] .od-agent-caret-label { cursor: pointer; }
+.od-agent-caret[data-mode="looking"] .od-agent-caret-label::after { content: '…'; animation: od-blink 1.2s steps(2) infinite; }
+.od-agent-caret[data-mode="looking"]::before { animation: od-blink 1.2s steps(2) infinite; }
+.od-agent-caret[data-mode="idle"] .od-agent-caret-label { opacity: 0.85; }
+.od-agent-caret[data-mode="faded"] { opacity: 0.35; transition: opacity 1.5s; }
+.od-agent-caret[data-mode="faded"] .od-agent-caret-label { display: none; }
+@keyframes od-blink { 50% { opacity: 0.35; } }
+.od-replay-select { background: var(--agent-glow); border-radius: 2px; }
+.od-review { background: var(--agent-soft); border-radius: 2px; }
+.od-agent-offscreen { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translateX(-50%); padding: 6px 14px; border: 0; border-radius: 999px; background: var(--agent); color: #fff; font: 600 12px/1.4 var(--ui-font); box-shadow: var(--shadow-raised); cursor: pointer; }
+.od-agent-offscreen[data-side="above"] { top: 72px; bottom: auto; }
+@media (prefers-reduced-motion: reduce) { .od-agent-caret, .od-agent-caret * { animation: none !important; } }
+
 /* ---- selection bubble ---- */
 
 .od-bubble { position: absolute; z-index: 12; display: flex; align-items: center; gap: 1px; padding: 3px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); animation: od-pop 0.12s ease-out; }

@@ -1,14 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { merge3 } from '../web/merge.js';
+import { merge3 } from '../src/core/merge.js';
 
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
 
 test('one side changed: take it', () => {
   const theirs = BASE.replace('Middle.', 'Middle, revised.');
-  assert.deepEqual(merge3(BASE, BASE, theirs), { text: theirs, conflict: false });
-  assert.deepEqual(merge3(BASE, theirs, BASE), { text: theirs, conflict: false });
+  assert.deepEqual(merge3(BASE, BASE, theirs), { text: theirs, conflict: false, dropped: [] });
+  assert.deepEqual(merge3(BASE, theirs, BASE), { text: theirs, conflict: false, dropped: [] });
 });
 
 test('edits to different paragraphs merge', () => {
@@ -30,16 +30,46 @@ test('an insertion merges with an edit elsewhere', () => {
 test('a deletion merges with an edit elsewhere', () => {
   const ours = BASE.replace('Intro.', 'Intro!');
   const theirs = BASE.replace('Middle.\n\n', '');
-  assert.deepEqual(merge3(BASE, ours, theirs), { text: doc('# Plan', '', 'Intro!', '', 'End.'), conflict: false });
+  assert.deepEqual(merge3(BASE, ours, theirs), { text: doc('# Plan', '', 'Intro!', '', 'End.'), conflict: false, dropped: [] });
 });
 
 test('the same edit on both sides is not a conflict', () => {
   const both = BASE.replace('Middle.', 'Same change.');
-  assert.deepEqual(merge3(BASE, both, both), { text: both, conflict: false });
+  assert.deepEqual(merge3(BASE, both, both), { text: both, conflict: false, dropped: [] });
 });
 
 test('different edits to the same paragraph conflict', () => {
   const ours = BASE.replace('Middle.', 'Mine.');
   const theirs = BASE.replace('Middle.', 'Theirs.');
   assert.deepEqual(merge3(BASE, ours, theirs), { text: null, conflict: true });
+});
+
+test('edits to different parts of the same paragraph merge by character', () => {
+  const base = doc('Intro.', '', 'The plan has three steps and one risk.');
+  const ours = base.replace('three steps', 'four steps');
+  const theirs = base.replace('one risk.', 'one known risk.');
+  assert.deepEqual(merge3(base, ours, theirs), { text: doc('Intro.', '', 'The plan has four steps and one known risk.'), conflict: false, dropped: [] });
+});
+
+test('two insertions at the same place in a line conflict', () => {
+  const ours = BASE.replace('Middle.', 'Middle. A');
+  const theirs = BASE.replace('Middle.', 'Middle. B');
+  assert.deepEqual(merge3(BASE, ours, theirs), { text: null, conflict: true });
+});
+
+test('a character merge never splits a surrogate pair', () => {
+  const base = 'a 😀 b';
+  const ours = 'a 😁 b';
+  const theirs = 'a 😀 b!';
+  assert.equal(merge3(base, ours, theirs).text, 'a 😁 b!');
+});
+
+test('preferring ours keeps our side of a conflict and reports theirs as dropped', () => {
+  const ours = BASE.replace('Middle.', 'Mine.').replace('End.', 'End!');
+  const theirs = BASE.replace('Middle.', 'Theirs.').replace('Intro.', 'Intro, agent.');
+  assert.deepEqual(merge3(BASE, ours, theirs, { prefer: 'ours' }), {
+    text: doc('# Plan', '', 'Intro, agent.', '', 'Mine.', '', 'End!'),
+    conflict: false,
+    dropped: [{ base: 'Middle.', theirs: 'Theirs.' }],
+  });
 });
