@@ -246,6 +246,10 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-editor th, .od-editor td { border: 1px solid var(--border-strong); padding: 6px 10px; text-align: left; vertical-align: top; }
 .od-editor th { background: var(--bg-soft); font-weight: 600; }
 .od-editor td p, .od-editor th p { margin: 0; }
+/* dragging across cells selects whole cells: ProseMirror hides the text selection and marks the cells */
+.od-editor .selectedCell { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.od-editor .ProseMirror.ProseMirror-hideselection ::selection { background: transparent; } /* over the .od-hl selection colour too */
+.od-editor .ProseMirror-hideselection { caret-color: transparent; }
 .od-editor hr { border: 0; border-top: 1px solid var(--border-strong); margin: 2em 0; }
 .od-editor img { max-width: 100%; border-radius: 6px; }
 .od-editor .ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }

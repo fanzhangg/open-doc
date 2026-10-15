@@ -23,7 +23,7 @@ import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
-import { docRange, projectDoc, textRange } from './pm-text.js';
+import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { createReplayer, diffBlocks } from './replay.js';
 
 const FLASH_MS = 6000;
@@ -197,7 +197,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   function selectionHint() {
     const v = view();
     const projection = projectDoc(v.state.doc);
-    const range = textRange(projection, v.state.selection.from, v.state.selection.to);
+    const { from, to } = selectionSpan(v.state.selection);
+    const range = textRange(projection, from, to);
     if (!range) return null;
     const { text } = projection;
     return {
@@ -365,7 +366,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   function counts() {
     const { state } = view();
     const words = (text) => (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
-    const { from, to, empty } = state.selection;
+    const { empty } = state.selection;
+    const { from, to } = selectionSpan(state.selection);
     return {
       words: words(state.doc.textBetween(0, state.doc.content.size, ' ', ' ')),
       selected: empty ? 0 : words(state.doc.textBetween(from, to, ' ', ' ')),
@@ -375,7 +377,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   /** Viewport rectangle of the selection, or null when there is none to point at. */
   function selectionRect() {
     const v = view();
-    const { from, to, empty } = v.state.selection;
+    const { empty } = v.state.selection;
+    const { from, to } = selectionSpan(v.state.selection);
     if (empty || !v.hasFocus()) return null;
     const start = v.coordsAtPos(from);
     const end = v.coordsAtPos(to);
@@ -577,7 +580,8 @@ function ancestor(state, test) {
 function markActive(state, name) {
   const type = state.schema.marks[name];
   if (!type) return null;
-  const { from, to, empty, $from } = state.selection;
+  const { empty, $from } = state.selection;
+  const { from, to } = selectionSpan(state.selection);
   if (empty) return type.isInSet(state.storedMarks ?? $from.marks()) ?? null;
   let found = null;
   state.doc.nodesBetween(from, to, (node) => {
