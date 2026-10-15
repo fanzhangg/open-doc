@@ -83,7 +83,10 @@ function planPair(x, y, pos, plan) {
     planInline(x, y, pos + 1, plan);
     return;
   }
-  if (sameType && !x.isTextblock && !x.isLeaf) {
+  // A table whose rows or columns change is retyped whole: removed or added
+  // cell by cell, it passes through ragged rows, which the table plugin pads
+  // with empty cells (at the start of the header row) before the replay ends.
+  if (sameType && !x.isTextblock && !x.isLeaf && (x.type.spec.tableRole !== 'table' || sameShape(x, y))) {
     planChildren(x, y, pos + 1, plan, false);
     return;
   }
@@ -224,6 +227,13 @@ export function sameBlock(a, b) {
   return a.type === b.type && a.content.eq(b.content) && Mark.sameSet(a.marks, b.marks) && sameAttrs(a, b);
 }
 
+// Two tables with as many rows, each with as many cells.
+function sameShape(a, b) {
+  if (a.childCount !== b.childCount) return false;
+  for (let i = 0; i < a.childCount; i++) if (a.child(i).childCount !== b.child(i).childCount) return false;
+  return true;
+}
+
 function sameAttrs(a, b) {
   const { id: _a, ...restA } = a.attrs;
   const { id: _b, ...restB } = b.attrs;
@@ -269,6 +279,16 @@ export function runOp(state, op, count = Infinity) {
     default: // select, pause: nothing to change
       return { tr: null, done: true, more: [], range: null, caret: op.to ?? null };
   }
+}
+
+/**
+ * Whether a transaction is the human's edit: not a replay step, not a change
+ * shown from disk, and not a plugin's follow-up to either (the table plugin
+ * fixing a table, say), which counts as whatever it follows.
+ */
+export function byHuman(tr) {
+  const origin = tr.getMeta('appendedTransaction') ?? tr;
+  return !origin.getMeta(replayKey) && origin.getMeta('addToHistory') !== false;
 }
 
 /** Map an op's positions through a transaction's mapping. */
@@ -405,7 +425,7 @@ export function createReplayer({ getView, stage, onEnd }) {
         for (const op of queue) mapOp(op, tr.mapping);
         if (caret) caret.pos = tr.mapping.map(caret.pos, 1);
         ranges = ranges.map((r) => ({ from: tr.mapping.map(r.from, 1), to: tr.mapping.map(r.to, -1) })).filter((r) => r.from < r.to);
-        if (tr.getMeta(replayKey) || tr.getMeta('addToHistory') === false) continue;
+        if (!byHuman(tr)) continue;
         lastHuman = Date.now();
         if (!active) continue;
         humanEdited = true;

@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Schema } from '@milkdown/kit/prose/model';
 import { EditorState } from '@milkdown/kit/prose/state';
-import { diffBlocks, mapOp, planReplay, replayAll, runOp } from '../web/replay.js';
+import { tableEditing, tableNodes } from '@milkdown/kit/prose/tables';
+import { byHuman, diffBlocks, mapOp, planReplay, replayAll, replayKey, runOp } from '../web/replay.js';
 
 // A small schema shaped like the editor's: headings carry an id the editor
 // derives, lists hold paragraphs, code blocks hold plain text.
@@ -109,4 +110,60 @@ test('typing elsewhere meanwhile: the rest of the replay still lands in place', 
     queue.unshift(...result.more);
   }
   assert.equal(state.doc.textBetween(0, state.doc.content.size, '\n'), 'Oh. Alpha beta.\nGamma epsilon delta.');
+});
+
+// Tables, with the table plugin the editor runs: it pads a row that is
+// shorter than the others with empty cells after every transaction.
+const tableSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: { group: 'block', content: 'text*' },
+    text: {},
+    ...tableNodes({ tableGroup: 'block', cellContent: 'paragraph', cellAttributes: {} }),
+  },
+});
+const tn = tableSchema.nodes;
+const cellOf = (type, text) => type.create(null, tn.paragraph.create(null, text ? tableSchema.text(text) : null));
+// table(['Kind', 'Pro'], ['Docs', 'Shared'], ...): a header row, then body rows.
+const table = (header, ...body) => tableSchema.node('doc', null, [tn.table.create(null, [
+  tn.table_row.create(null, header.map((text) => cellOf(tn.table_header, text))),
+  ...body.map((cells) => tn.table_row.create(null, cells.map((text) => cellOf(tn.table_cell, text)))),
+])]);
+const rowsOf = (d) => d.firstChild.content.content.map((row) => row.content.content.map((c) => c.textContent));
+
+function reachesWithTables(before, after) {
+  const ops = planReplay(before, after);
+  const end = replayAll(EditorState.create({ doc: before, plugins: [tableEditing()] }), ops);
+  assert.deepEqual(rowsOf(end.doc), rowsOf(after));
+  return ops;
+}
+
+test('a removed column: the table is retyped whole, so no row is padded at the front', () => {
+  const ops = reachesWithTables(
+    table(['Kind', 'Pro', 'Con', 'Ours'], ['Docs', 'Shared', 'Closed', 'Open'], ['Chat', 'Quick', 'No comments', 'Comments']),
+    table(['Kind', 'Pro', 'Con'], ['Docs', 'Shared', 'Closed'], ['Chat', 'Quick', 'No comments']),
+  );
+  assert.deepEqual(kinds(ops), ['select', 'swap']);
+});
+
+test('an added column or row also retypes the table', () => {
+  reachesWithTables(table(['Kind', 'Pro'], ['Docs', 'Shared']), table(['Kind', 'Pro', 'Con'], ['Docs', 'Shared', 'Closed']));
+  reachesWithTables(table(['Kind', 'Pro'], ['Docs', 'Shared']), table(['Kind', 'Pro'], ['Docs', 'Shared'], ['Chat', 'Quick']));
+});
+
+test('same rows and columns: changed cells are typed in place', () => {
+  const ops = reachesWithTables(table(['Kind', 'Pro'], ['Docs', 'Shared editing']), table(['Kind', 'Pro'], ['Docs', 'Live shared editing']));
+  assert.ok(!ops.some((op) => op.kind === 'swap' || op.kind === 'block'));
+});
+
+test("the table plugin's fix after a replay step is not the human's edit; after the human's, it is", () => {
+  const state = EditorState.create({ doc: table(['Kind', 'Pro'], ['Docs', 'Shared']), plugins: [tableEditing()] });
+  const lastHeaderCell = state.doc.firstChild.firstChild.lastChild;
+  const from = 1 + 1 + state.doc.firstChild.firstChild.firstChild.nodeSize; // inside the table, inside the header row, after its first cell
+  const ragged = () => state.tr.delete(from, from + lastHeaderCell.nodeSize);
+  for (const [tr, human] of [[ragged().setMeta(replayKey, true), false], [ragged(), true]]) {
+    const { transactions } = state.applyTransaction(tr);
+    assert.equal(transactions.length, 2, 'the table plugin padded the short row');
+    assert.equal(byHuman(transactions[1]), human);
+  }
 });
