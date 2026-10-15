@@ -80,9 +80,9 @@ change applies at once in every open editor.
 
 ## Desktop app (preview)
 
-The same editor in its own window, without a terminal or a browser tab. It runs
-from a checkout for now; installers come later
-([design and plan](docs/desktop-app.md)).
+The same editor in its own window, without a terminal or a browser tab
+([design and plan](docs/desktop-app.md)). Build the Windows installer with
+`npm run dist:desktop` (it lands in `release/`), or run it from a checkout:
 
 ```bash
 npm install
@@ -149,6 +149,16 @@ Re-anchoring tries an exact match, then the unchanged text around the quote
 npm install
 npm run build    # bundles the editor into dist/web
 npm test
+
+npm run pack:desktop    # the desktop app, unpacked, in release/
+npm run dist:desktop    # its installer (Windows: NSIS) in release/
+npm run smoke:desktop   # launch the built app (or this checkout's) and check it
 ```
+
+The installer is not signed yet, so Windows SmartScreen warns before running
+it. On Windows it adds OpenDoc to "Open with" for `.md` and `.markdown` and a
+New > Markdown Document entry in Explorer, without making itself the default
+app. `node_modules/.bin/electron scripts/make-icon.cjs` renders
+`build/icon.svg` to the `build/icon.png` the installers use.
 
 Requires Node 20 or later.

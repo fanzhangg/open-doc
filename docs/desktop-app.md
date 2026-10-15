@@ -363,6 +363,25 @@ Each phase is usable on its own and lands as its own PR.
    New > Markdown Document entry, icons, unsigned
    builds to start. A smoke test that launches the built app on a fixture doc
    and checks that the editor loads and a setting survives a relaunch.
+   *Done for Windows* (`npm run dist:desktop`); the macOS and Linux targets
+   are configured but not built yet. Notes from building it:
+   - `electron-builder.yml` sets the app's entry with `extraMetadata.main`,
+     so the npm package keeps the core library as its entry.
+   - No asar archive: agent runs read the skill file and run the bundled CLI
+     from the app's files, outside Electron's archive support.
+   - On Windows, electron-builder's own file association would make OpenDoc
+     the default class for `.md` (and leave `.md` pointing at a deleted class
+     after uninstall), so `build/installer.nsh` registers instead: a
+     `OpenDoc.md` type, OpenDoc in "Open with" for `.md` and `.markdown`, and
+     a New > Markdown Document entry if no other app has one. Uninstall
+     removes only those. macOS and Linux declare the types the usual way.
+   - `scripts/smoke-desktop.js` (`npm run smoke:desktop`) launches the
+     packaged app (or the checkout's) with remote debugging, a temp settings
+     folder and its own profile, so it never touches a running OpenDoc; it
+     checks the doc loads, a setting survives a relaunch, and the bundled
+     `opendoc` runs with `ELECTRON_RUN_AS_NODE`.
+   - The icon is `build/icon.svg`, rendered to `build/icon.png` by
+     `scripts/make-icon.cjs`.
 
 ### Risks
 

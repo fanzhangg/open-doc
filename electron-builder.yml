@@ -1,0 +1,52 @@
+# Installers for the OpenDoc desktop app (docs/desktop-app.md, phase 5).
+# Build with `npm run dist:desktop`; output goes to release/.
+
+appId: dev.opendoc.desktop
+productName: OpenDoc
+copyright: Copyright © 2026 fanzhangg
+directories:
+  output: release
+  buildResources: build
+
+# The npm package's entry is the core library; the app starts here.
+extraMetadata:
+  main: desktop/main.js
+
+files:
+  - package.json
+  - desktop/**
+  - bin/**
+  - src/**
+  - skills/**
+  - dist/web/**
+
+# No asar archive: agent runs read the skill file and run the bundled CLI
+# (`opendoc`) from these files directly, outside the app.
+asar: false
+
+win:
+  target: nsis
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+
+# On Windows, build/installer.nsh registers OpenDoc as an app that can open
+# .md files, without making it the default. macOS and Linux declare the types.
+mac:
+  target: dmg
+  category: public.app-category.productivity
+  icon: build/icon.png
+  fileAssociations: &markdown
+    - ext: [md, markdown]
+      name: Markdown Document
+      role: Editor
+
+linux:
+  target: AppImage
+  category: Office
+  icon: build/icon.png
+  fileAssociations: *markdown
