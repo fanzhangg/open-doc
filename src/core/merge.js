@@ -1,20 +1,23 @@
 // Three-way merge of markdown by line, for an agent editing the file while the
 // human types. The editor serializes each paragraph to one line, so a line is
 // close to a block: edits to different paragraphs merge, and edits to
-// different parts of the same paragraph merge by character. Edits that
+// different parts of the same paragraph merge by character (unless that would
+// change how the line renders, such as splitting a `**` pair). Edits that
 // overlap conflict.
 
 import { lineMatches as matches } from './diff.js';
+import { project } from './project.js';
 
 /**
  * With `prefer: 'ours'`, a conflict keeps our side and reports theirs as
- * dropped instead of failing: each entry is the base lines and their lines
- * of one region where their change was not kept.
+ * dropped instead of failing: each entry is one region where their change
+ * was not kept, with its base, our and their lines, and where our lines are
+ * in the result (`at`, a line index, and `count` lines).
  * @param {string} base the text both sides started from
  * @param {string} ours
  * @param {string} theirs
  * @param {{ prefer?: 'ours' }} [options]
- * @returns {{ text: string, conflict: false, dropped: { base: string, theirs: string }[] } | { text: null, conflict: true }}
+ * @returns {{ text: string, conflict: false, dropped: { at: number, count: number, base: string, ours: string, theirs: string }[] } | { text: null, conflict: true }}
  */
 export function merge3(base, ours, theirs, { prefer } = {}) {
   if (ours === theirs || theirs === base) return { text: ours, conflict: false, dropped: [] };
@@ -25,7 +28,7 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
   const mo = matches(b, o);
   const mt = matches(b, t);
   if (!mo || !mt) {
-    return prefer === 'ours' ? { text: ours, conflict: false, dropped: [{ base, theirs }] } : { text: null, conflict: true };
+    return prefer === 'ours' ? { text: ours, conflict: false, dropped: [{ at: 0, count: o.length, base, ours, theirs }] } : { text: null, conflict: true };
   }
 
   const out = [];
@@ -53,12 +56,12 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
     else if (same(theirChunk, baseChunk) || same(ourChunk, theirChunk)) out.push(...ourChunk);
     else {
       const line = baseChunk.length === 1 && ourChunk.length === 1 && theirChunk.length === 1
-        ? mergeLine(baseChunk[0], ourChunk[0], theirChunk[0])
+        ? mergeMarkdownLine(baseChunk[0], ourChunk[0], theirChunk[0])
         : null;
       if (line !== null) out.push(line);
       else if (prefer === 'ours') {
+        dropped.push({ at: out.length, count: ourChunk.length, base: baseChunk.join('\n'), ours: ourChunk.join('\n'), theirs: theirChunk.join('\n') });
         out.push(...ourChunk);
-        dropped.push({ base: baseChunk.join('\n'), theirs: theirChunk.join('\n') });
       } else return { text: null, conflict: true };
     }
     i = j;
@@ -66,6 +69,43 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
     ti = tEnd;
   }
   return { text: out.join('\n'), conflict: false, dropped };
+}
+
+// A character merge of one line of markdown, kept only when it renders as
+// the same merge of the rendered lines: merging next to markup can otherwise
+// pair a `*` from one side with a `*` from the other.
+function mergeMarkdownLine(base, ours, theirs) {
+  const line = mergeLine(base, ours, theirs);
+  if (line === null) return null;
+  const text = (md) => project(md).text;
+  return text(line) === mergeLine(text(base), text(ours), text(theirs)) ? line : null;
+}
+
+/**
+ * Where lines `at` to `at + count` of `from` ended up in `to`, a later
+ * version of it: { start, end } line indexes in `to`, taking in whatever
+ * changed between the nearest lines on either side that are still there.
+ */
+export function followLines(from, to, at, count) {
+  const a = from.split('\n');
+  const b = to.split('\n');
+  const map = matches(a, b);
+  if (!map) return null;
+  let start = 0;
+  for (let i = at - 1; i >= 0; i--) {
+    if (map[i] !== -1) {
+      start = map[i] + 1;
+      break;
+    }
+  }
+  let end = b.length;
+  for (let i = at + count; i < a.length; i++) {
+    if (map[i] !== -1) {
+      end = map[i];
+      break;
+    }
+  }
+  return { start, end: Math.max(start, end) };
 }
 
 /**

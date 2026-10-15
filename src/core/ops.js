@@ -156,13 +156,16 @@ function requireHuman(sidecar, { by, kind }) {
   if (kind !== undefined && kind !== 'human') throw new OpError('bad_input', `invalid participant kind: ${kind}`);
 }
 
+// Set a message's edits; an empty list removes them.
 function attachEdits(sidecar, { threadId, messageId, edits }) {
-  validateEdits(edits);
+  if (!Array.isArray(edits) || edits.length > 0) validateEdits(edits);
   return updateThread(sidecar, threadId, (t) => {
     const current = t.messages.find((m) => m.id === messageId);
     if (!current) throw new OpError('bad_input', `no message ${messageId} in thread ${threadId}`);
-    if (JSON.stringify(current.edits) === JSON.stringify(edits)) return t;
-    return { ...t, messages: t.messages.map((m) => (m === current ? { ...m, edits } : m)) };
+    if (JSON.stringify(current.edits ?? []) === JSON.stringify(edits)) return t;
+    const { edits: _old, ...rest } = current;
+    const next = edits.length > 0 ? { ...rest, edits } : rest;
+    return { ...t, messages: t.messages.map((m) => (m === current ? next : m)) };
   });
 }
 

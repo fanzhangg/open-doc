@@ -149,6 +149,12 @@ export async function startServer(docPath, {
         return sendJson(res, 200, { status: dispatcher.status(), log: dispatcher.log() });
       case 'POST /api/agent':
         return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
+      case 'POST /api/agent/overwritten': {
+        const changes = validChanges((await readJson(req))?.changes);
+        if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
+        const offered = await serial(() => dispatcher.overwritten(changes));
+        return sendJson(res, 200, { offered });
+      }
       default:
         throw new HttpError(404, 'not_found', 'not found');
     }
@@ -455,6 +461,16 @@ function validateOp(op) {
     default:
       return { type: 'reopen', threadId: threadId(op.threadId), by: human({ name: op.by }).name, kind: 'human' };
   }
+}
+
+// What the editor kept of the human's where the agent had changed the same
+// text: [{ before: the human's text, after: the agent's }].
+function validChanges(changes) {
+  const text = (v) => typeof v === 'string' && v.length <= 200_000;
+  const ok = Array.isArray(changes) && changes.length > 0 && changes.length <= 20
+    && changes.every((c) => c && text(c.before) && c.before.length > 0 && text(c.after) && c.before !== c.after);
+  if (!ok) throw new HttpError(400, 'bad_input', 'expected { changes: [{ before, after }] }');
+  return changes.map(({ before, after }) => ({ before, after }));
 }
 
 function validAnchor(anchor) {

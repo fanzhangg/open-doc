@@ -10,6 +10,7 @@ import { customAdapter } from '../src/server/agents/adapters.js';
 import { main } from '../src/cli/main.js';
 import { sidecarPath } from '../src/store/files.js';
 import { SAMPLE, tempDoc } from './helpers.js';
+import { applyProposal } from '../src/core/diff.js';
 
 async function withServer(fn, content = SAMPLE) {
   const docPath = await tempDoc(content);
@@ -492,6 +493,64 @@ test("what the human saves during a run is not recorded as the agent's edit", { 
     assert.equal(reply.author.name, 'claude');
     assert.deepEqual(reply.edits.map((e) => [e.before, e.after]), [['', 'peak ']]);
     assert.match(await readFile(docPath, 'utf8'), /seven features[\s\S]*extra peak load/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("the agent's text the human typed over comes back as a proposal on its comment", { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const runLog = join(dirname(docPath), 'runs.log');
+  const adapter = customAdapter(`"${process.execPath}" "${FAKE_AGENT}" {threadsFile} edit-slow "${runLog}"`);
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  const agentLine = 'The main risk is that the `sync` service cannot handle the extra peak load.';
+  const humanLine = 'The main risk is that the `sync` service cannot handle the extra holiday load.';
+  try {
+    assert.equal((await call(server, 'POST', '/api/agent/overwritten', { body: { changes: [] } })).status, 400);
+    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_overwr01', anchor: null, message: { id: 'm_overwr01', author: human, body: 'Mention the peak.' } } } });
+    // While the run goes on, the human's unsaved line wins over the agent's and is saved.
+    assert.ok(await waitUntil(async () => (await readFile(docPath, 'utf8')).includes(agentLine)), 'the agent edited');
+    const { markdown, docHash } = (await call(server, 'GET', '/api/state')).body;
+    assert.equal((await call(server, 'PUT', '/api/doc', { body: { markdown: markdown.replace(agentLine, humanLine), baseHash: docHash } })).status, 200);
+    const offered = await call(server, 'POST', '/api/agent/overwritten', { body: { changes: [{ before: humanLine, after: agentLine }] } });
+    assert.deepEqual(offered.body, { offered: true });
+
+    // The proposal follows the agent's own reply, once the run has ended.
+    assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages.length === 3), 'the proposal was posted');
+    const [, reply, offer] = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages;
+    assert.equal(reply.body, 'Handled by fake agent');
+    assert.equal(reply.edits, undefined, 'the overwritten change is not recorded as an edit');
+    assert.deepEqual(offer.author, { name: 'claude', kind: 'agent' });
+    assert.deepEqual(offer.proposal.map((c) => [c.before, c.after]), [[humanLine, agentLine]]);
+    assert.ok(applyProposal(await readFile(docPath, 'utf8'), offer.proposal).includes(agentLine), 'applying it brings the agent\'s line back');
+
+    // After the run, a change whose text is gone is dropped, and nothing is posted.
+    assert.deepEqual((await call(server, 'POST', '/api/agent/overwritten', { body: { changes: [{ before: 'not in the doc', after: 'x' }] } })).body, { offered: true });
+    assert.equal((await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages.length, 3);
+  } finally {
+    await server.close();
+  }
+});
+
+test('typed over after the run ended: the edit leaves the reply and comes back as a proposal', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const runLog = join(dirname(docPath), 'runs.log');
+  const adapter = customAdapter(`"${process.execPath}" "${FAKE_AGENT}" {threadsFile} edit "${runLog}"`);
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  const agentLine = 'The main risk is that the `sync` service cannot handle the extra peak load.';
+  const humanLine = 'The main risk is that the `sync` service cannot handle the extra holiday load.';
+  try {
+    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_overwr02', anchor: null, message: { id: 'm_overwr02', author: human, body: 'Mention the peak.' } } } });
+    const thread = async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0];
+    assert.ok(await waitUntil(async () => (await thread()).messages.at(-1).edits?.length === 1 && server.dispatcher.status().state === 'ready'), 'the run recorded its edit');
+    const { markdown, docHash } = (await call(server, 'GET', '/api/state')).body;
+    await call(server, 'PUT', '/api/doc', { body: { markdown: markdown.replace(agentLine, humanLine), baseHash: docHash } });
+    assert.deepEqual((await call(server, 'POST', '/api/agent/overwritten', { body: { changes: [{ before: humanLine, after: agentLine }] } })).body, { offered: true });
+    const [, reply, offer] = (await thread()).messages;
+    assert.equal(reply.edits, undefined, 'the replaced edit is gone from the reply');
+    assert.deepEqual(offer.proposal.map((c) => [c.before, c.after]), [[humanLine, agentLine]]);
   } finally {
     await server.close();
   }

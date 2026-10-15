@@ -9,7 +9,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyOp, diffEdits, inbox, locate, newId, project, sourceRange } from '../../core/index.js';
+import { applyOp, diffEdits, findEdit, inbox, locate, newId, project, proposeChanges, sourceRange } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
@@ -231,7 +231,8 @@ export class Dispatcher {
     const done = new Promise((resolve) => { finish = resolve; });
     // `base` is the doc as it would be without this run: the doc it started
     // from, plus every change the human saved meanwhile (humanEdited).
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown };
+    // `overwritten` holds changes to offer back once the run has replied.
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [] };
     this.run = run;
     this.#setState('running');
 
@@ -260,6 +261,58 @@ export class Dispatcher {
     this.run.base = merge3(before, after, this.run.base, { prefer: 'ours' }).text;
   }
 
+  /**
+   * The human was typing where the agent's last run changed the doc, and the
+   * editor kept the human's text. `changes` ({ before: the human's text now
+   * on disk, after: the agent's }) are offered back as a proposal, in a reply
+   * on the thread each belongs to; during a run, once the run has replied.
+   * False when there is no run to attach them to.
+   */
+  async overwritten(changes) {
+    if (this.run) {
+      this.run.overwritten.push(...changes);
+      return true;
+    }
+    if (!this.lastThreads) return false;
+    await this.#offer(this.lastThreads, changes);
+    return true;
+  }
+
+  async #offer(threads, changes) {
+    await update(this.docPath, (s, doc) => {
+      const byThread = new Map();
+      for (const change of changes) {
+        let proposal;
+        try {
+          [proposal] = proposeChanges(doc.markdown, [change]);
+        } catch {
+          continue; // the human's text changed again, or is not unique: nothing to point at
+        }
+        const id = threadAt(s.threads.filter((t) => threads.some((c) => c.id === t.id)), doc.markdown, proposal) ?? threads[0].id;
+        byThread.set(id, [...(byThread.get(id) ?? []), proposal]);
+      }
+      const now = new Date().toISOString();
+      let next = s;
+      // An edit the run recorded that the human's text has since replaced is
+      // now offered as a proposal; it no longer belongs on the run's reply.
+      const offered = [...byThread.values()].flat();
+      const replaced = (edit) => edit.after && offered.some((c) => c.after.includes(edit.after)) && !findEdit(doc.markdown, edit);
+      for (const claimed of threads) {
+        const known = new Set(claimed.messages.map((m) => m.id));
+        const thread = next.threads.find((t) => t.id === claimed.id);
+        for (const m of thread?.messages ?? []) {
+          if (known.has(m.id) || !m.edits || !sameName(m.author.name, this.name) || !m.edits.some(replaced)) continue;
+          next = applyOp(next, { type: 'attachEdits', threadId: thread.id, messageId: m.id, edits: m.edits.filter((e) => !replaced(e)) });
+        }
+      }
+      for (const [threadId, proposal] of byThread) {
+        const message = { id: newId('m'), author: { name: this.name, kind: 'agent' }, body: OVERWRITTEN, createdAt: now, proposal };
+        next = applyOp(next, { type: 'addMessage', threadId, message });
+      }
+      return next;
+    });
+  }
+
   async #finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
     let result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
@@ -284,6 +337,8 @@ export class Dispatcher {
       const silent = await this.#unanswered(threads);
       if (silent > 0) result = { ...result, ok: false, error: `finished without replying to ${silent === 1 ? 'a comment' : `${silent} comments`}` };
     }
+    this.lastThreads = threads;
+    if (run.overwritten.length > 0) await this.#offer(threads, run.overwritten).catch(() => {});
 
     this.lastRun = {
       startedAt: startedAt.toISOString(),
@@ -388,6 +443,21 @@ export function attributeEdits(threads, before, after) {
     else for (const t of threads) add(t.id, { ...edit, scope: 'run' });
   }
   return result;
+}
+
+const OVERWRITTEN = 'You were editing this when I changed it, so your text was kept. Here is my version, in case you want it instead.';
+
+// The thread whose anchor overlaps or touches a proposed change, if any.
+function threadAt(threads, markdown, change) {
+  const projection = project(markdown);
+  const end = change.start + change.before.length;
+  for (const t of threads) {
+    const found = t.anchor && !t.detached && locate(projection.text, t.anchor);
+    if (!found || found.start >= found.end) continue;
+    const range = sourceRange(projection, found.start, found.end);
+    if (range.start <= end && change.start <= range.end) return t.id;
+  }
+  return threads.length === 1 ? threads[0].id : null;
 }
 
 // A thread is retried after a failure only once a human adds a new message.

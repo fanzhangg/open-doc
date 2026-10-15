@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { merge3 } from '../src/core/merge.js';
+import { followLines, merge3 } from '../src/core/merge.js';
 
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
@@ -70,6 +70,18 @@ test('preferring ours keeps our side of a conflict and reports theirs as dropped
   assert.deepEqual(merge3(BASE, ours, theirs, { prefer: 'ours' }), {
     text: doc('# Plan', '', 'Intro, agent.', '', 'Mine.', '', 'End!'),
     conflict: false,
-    dropped: [{ base: 'Middle.', theirs: 'Theirs.' }],
+    dropped: [{ at: 4, count: 1, base: 'Middle.', ours: 'Mine.', theirs: 'Theirs.' }],
   });
+});
+
+test('a character merge that would change how the line renders conflicts', () => {
+  // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
+  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*'), { text: null, conflict: true });
+});
+
+test('following lines into a later version takes in what changed around them', () => {
+  const from = doc('# Plan', '', 'Mine.', '', 'End.');
+  assert.deepEqual(followLines(from, doc('# Plan', '', 'Mine, and more.', '', 'End.'), 2, 1), { start: 2, end: 3 });
+  assert.deepEqual(followLines(from, doc('# Plan', '', 'Mine.', 'More.', '', 'End.'), 2, 1), { start: 2, end: 4 });
+  assert.deepEqual(followLines(from, doc('Intro.', '', '# Plan', '', 'Mine.', '', 'End.'), 2, 1), { start: 4, end: 5 });
 });

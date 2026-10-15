@@ -137,10 +137,13 @@ test('edits: recorded on an agent reply, validated, idempotent; an undo notice w
   assert.equal(s.threads[0].status, 'resolved', 'attaching edits does not reopen');
   assert.equal(applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits: [{ ...edit }] }), s);
 
-  const bad = [[], [{ ...edit, after: 'load' }], [{ ...edit, prefix: 'p'.repeat(33) }], [{ ...edit, start: -1 }], [{ ...edit, scope: 'all' }]];
+  const bad = [null, [{ ...edit, after: 'load' }], [{ ...edit, prefix: 'p'.repeat(33) }], [{ ...edit, start: -1 }], [{ ...edit, scope: 'all' }]];
   for (const edits of bad) {
     assert.throws(() => applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits }), OpError);
   }
+  // An empty list takes the edits off the message.
+  const cleared = applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits: [] });
+  assert.equal('edits' in cleared.threads[0].messages[1], false);
   assert.throws(() => applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_nope00', edits: [edit] }), OpError);
 
   // A message can carry edits from the start; messages without them stay as they were.

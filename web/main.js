@@ -12,7 +12,7 @@ import { createAgentPresence } from './agent.js';
 import { createChrome } from './ui.js';
 import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
-import { merge3 } from '../src/core/merge.js';
+import { followLines, merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
@@ -47,6 +47,10 @@ let version = 0;
 let saveTimer;
 let pendingExternal = null;
 let pendingSelection = null;
+// The agent's text the last merge left out for the human's, offered back on
+// its comment once the human's is saved: { text: the merged markdown,
+// items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
+let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 
 async function start() {
@@ -190,6 +194,7 @@ async function save() {
       baseHash = data.docHash;
       synced = markdown;
       setDisk(data.markdown ?? disk);
+      offerOverwritten(markdown);
       if (version === savedVersion) dirty = false;
       if (dirty) setStatus('Saving…', 'saving');
       else setStatus('Saved');
@@ -264,11 +269,18 @@ async function doSync() {
   editor.finishReplay();
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   const mine = editor.getMarkdown();
-  const merged = merge3(synced, mine, theirs);
+  // Where the agent changed text the human is still typing in, the human's
+  // stays and the agent's goes back to its comment as a proposal. Other
+  // changes (another program, a collaborator the page does not know) still
+  // ask the human to choose.
+  const agent = presence.status();
+  const fromAgent = Boolean(agent) && by === agent.name;
+  const merged = merge3(synced, mine, theirs, fromAgent ? { prefer: 'ours' } : {});
   if (merged.conflict) {
     showConflict(by);
     return;
   }
+  keepOverwritten(merged);
   // The agent's changes are typed in; anything else just appears.
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
@@ -283,6 +295,39 @@ async function doSync() {
     version++;
     scheduleSave();
   }
+}
+
+// Remember what a merge left out of the agent's change, following anything
+// remembered from an earlier merge into this one's text.
+function keepOverwritten(merged) {
+  const items = [];
+  if (overwritten) {
+    for (const item of overwritten.items) {
+      const range = followLines(overwritten.text, merged.text, item.at, item.count);
+      if (range) items.push({ ...item, at: range.start, count: range.end - range.start });
+    }
+  }
+  for (const d of merged.dropped ?? []) items.push({ at: d.at, count: d.count, theirs: d.theirs });
+  overwritten = items.length > 0 ? { text: merged.text, items } : null;
+}
+
+// The human's text is saved: offer the agent's version of each region it was
+// kept over, as it reads now (`saved`, the markdown just saved).
+function offerOverwritten(saved) {
+  if (!overwritten) return;
+  const { text, items } = overwritten;
+  overwritten = null;
+  const lines = saved.split('\n');
+  const trim = (s) => s.replace(/^\n+|\n+$/g, '');
+  const changes = [];
+  for (const item of items) {
+    const range = followLines(text, saved, item.at, item.count);
+    if (!range) continue;
+    const before = trim(lines.slice(range.start, range.end).join('\n'));
+    const after = trim(item.theirs);
+    if (before && before !== after) changes.push({ before, after });
+  }
+  if (changes.length > 0) api.agentOverwritten(changes).catch(() => {});
 }
 
 // A run starting puts the agent's caret on the comment it is reading, as a
@@ -330,12 +375,20 @@ banner.querySelector('[data-action="reload"]').addEventListener('click', async (
   applySidecar(fresh.sidecar);
   setStatus('Saved');
 });
+// Keep the human's text where both changed it, and the other side's
+// changes everywhere else.
 banner.querySelector('[data-action="keep"]').addEventListener('click', async () => {
   const fresh = await api.state();
-  baseHash = fresh.docHash; // overwrite what is on disk with this page's text
-  synced = editor.normalize(fresh.markdown);
+  const theirs = editor.normalize(fresh.markdown);
+  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
+  editor.applyMarkdown(merged.text, editorName(fresh.sidecar));
+  baseHash = fresh.docHash;
+  synced = theirs;
+  disk = fresh.markdown;
+  applySidecar(fresh.sidecar);
   banner.hidden = true;
   dirty = true;
+  version++;
   await save();
 });
 
