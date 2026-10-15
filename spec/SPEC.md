@@ -91,8 +91,11 @@ The sidecar is a UTF-8 JSON object. The JSON Schema is
 | `working` | object or null | `{ "by": <name>, "since": <timestamp> }` while an agent is responding. Tools MUST treat a value older than 5 minutes as `null`. |
 | `messages` | array | At least one message, oldest first. |
 
-Anyone may resolve or reopen any thread. Reopening sets `resolvedBy` and
-`resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
+Only a participant with `kind: "human"` may resolve or reopen a thread;
+tools MUST refuse a resolve or reopen made as an agent. An agent answers by
+replying, and the human decides whether the thread is done. (Sidecars
+written before this rule may have threads resolved by an agent; they stay
+valid as they are.) Reopening sets `resolvedBy` and `resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
 message from the participant named in `working` clears `working`; resolving
 clears it too.
 
@@ -107,6 +110,8 @@ clears it too.
 | `createdAt` | string | RFC 3339 UTC timestamp. |
 | `edits` | array, optional | What the author changed in the doc while answering this thread (§2.5). |
 | `undoes` | string, optional | Id of a message whose `edits` this message reverted. Such a message is an **undo notice** (§5). |
+| `proposal` | array, optional | Changes the author suggests instead of making them (§2.6). |
+| `applies` | string, optional | Id of a message whose `proposal` this message applied. Such a message is an **apply notice** (§2.6); it carries the resulting `edits`. |
 
 ### 2.4 Participants
 
@@ -147,6 +152,35 @@ changed since and the tool MUST NOT undo. Otherwise it replaces each match
 with `before` and posts an undo notice: a human message with `undoes` set
 to the reverted message's id, which reopens the thread.
 
+### 2.6 Proposals
+
+A participant who should not change the doc directly (for example an agent
+whose edits need the human's approval) MAY reply with a **proposal**: the
+changes it suggests, which a human applies or ignores. Each change is to the
+doc's markdown source:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `before` | string | The source text to replace, non-empty. |
+| `after` | string | The source text to put in its place. Empty for a deletion. |
+| `prefix` | string | Up to 32 characters of source immediately before `before`, when the proposal was made. |
+| `suffix` | string | Up to 32 characters of source immediately after `before`, when the proposal was made. |
+| `start` | integer | Offset of `before` in the source when the proposal was made. A hint. |
+
+`before` and `after` differ. When a proposal is made, each `before` MUST
+occur exactly once in the doc's source and no two may overlap; a tool
+refuses the proposal otherwise, so the author can quote more text. To insert,
+quote the text next to the insertion point and repeat it in `after`.
+
+To **apply** a proposal, a tool finds each `before` in the current source by
+the undo rule of §2.5 run the other way (`exact` = `before`, §3.3 step 1
+only, keeping `prefix` or `suffix` next to it). If any change cannot be found
+this way, the text has changed since and the tool MUST NOT apply. Otherwise
+it replaces each match with `after`, saves the doc, and posts an apply
+notice: a human message with `applies` set to the proposal's message id and
+`edits` (§2.5) recording what changed, so it can be undone like any edit.
+Applying a proposal does not resolve the thread.
+
 ## 3. Anchors
 
 An anchor identifies a span of the doc's **rendered text** (§3.1):
@@ -165,7 +199,11 @@ This follows the W3C Web Annotation `TextQuoteSelector` plus a
 
 The rendered text is what a reader sees, with markdown syntax removed. Both
 the Node and the browser implementations MUST produce identical text for the
-same doc. It is built from the CommonMark + GFM syntax tree:
+same doc. It is built from the CommonMark + GFM syntax tree, with emphasis
+delimiters read by the CJK-friendly amendment
+([markdown-cjk-friendly](https://github.com/tats-u/markdown-cjk-friendly)), so
+`**熟悉：**直接` is bold as a Chinese writer means it, although plain
+CommonMark leaves the asterisks as text:
 
 1. Each **text block** contributes one line. Text blocks are: paragraphs,
    headings, table cells, code blocks and raw HTML blocks. Blocks nested in
@@ -255,13 +293,15 @@ mention.
 A thread is in participant `P`'s inbox when all of these hold:
 
 - `status` is `"open"`;
-- its latest message that is not an undo notice (§2.3) has an author with
-  `kind: "human"`;
+- its latest message that is not an undo notice or an apply notice (§2.3)
+  has an author with `kind: "human"`;
 - that message mentions `P`, or mentions no one;
 - it is not marked `working` by `P` (a stale value does not count).
 
 A comment addressed only to someone else does not wake `P`, and undoing an
-edit does not ask the agent to try again. The last rule
+edit or applying a proposal does not ask the agent to act again. A tool MAY
+let a participant narrow its inbox to messages that mention it (for example
+an agent set to "do not disturb"). The last rule
 keeps a participant who is still answering a thread from being handed it
 again. The inbox is
 computed from the sidecar alone; tools need no cursor or other state.
@@ -281,7 +321,8 @@ Writers MUST NOT lose each other's changes:
 
 Changes are expressed as operations (add thread, add message, resolve, reopen,
 set working, join, attach edits) carrying client-generated ids, so a retried operation is
-applied at most once.
+applied at most once. A proposal or an apply notice is an add-message
+operation whose message carries `proposal` or `applies`.
 
 ## 7. Compatibility
 

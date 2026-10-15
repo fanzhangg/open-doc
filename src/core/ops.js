@@ -9,7 +9,7 @@ export const WORKING_TTL_MS = 5 * 60 * 1000;
 const MESSAGE_ID = /^m_[A-Za-z0-9_-]{6,}$/;
 
 export class OpError extends Error {
-  /** @param {'unknown_thread' | 'bad_input'} code */
+  /** @param {'unknown_thread' | 'bad_input' | 'not_allowed'} code */
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -36,13 +36,18 @@ export function newId(prefix) {
  *   { type: 'join', participant: { name, kind } }
  *   { type: 'addThread', id, anchor | null, message: { id, author, body, createdAt } }
  *   { type: 'addMessage', threadId, message }
- *   { type: 'resolve', threadId, by, at }
- *   { type: 'reopen', threadId }
+ *   { type: 'resolve', threadId, by, kind?, at }   // humans only
+ *   { type: 'reopen', threadId, by, kind? }        // humans only
  *   { type: 'setWorking', threadId, by, since }   // since: null clears
  *   { type: 'attachEdits', threadId, messageId, edits }
  *
- * A message may carry `edits` (what its author changed in the doc, §2.5) and
- * `undoes` (the id of the message whose edits it reverted).
+ * A message may carry `edits` (what its author changed in the doc, §2.5),
+ * `undoes` (the id of the message whose edits it reverted), `proposal`
+ * (changes the author suggests instead of making them, §2.6) and `applies`
+ * (the id of the message whose proposal it applied).
+ *
+ * Only a human may resolve or reopen a thread (§2.2): `by` must not be a
+ * participant of kind "agent", and `kind`, when given, must be "human".
  */
 export function applyOp(sidecar, op) {
   switch (op.type) {
@@ -53,9 +58,11 @@ export function applyOp(sidecar, op) {
     case 'addMessage':
       return addMessage(sidecar, op);
     case 'resolve':
+      requireHuman(sidecar, op);
       return updateThread(sidecar, op.threadId, (t) =>
-        t.status === 'resolved' ? t : { ...t, status: 'resolved', resolvedBy: op.by, resolvedAt: op.at, working: null });
+        t.status === 'resolved' ? t : { ...t, status: 'resolved', resolvedBy: canonicalName(sidecar, op.by), resolvedAt: op.at, working: null });
     case 'reopen':
+      requireHuman(sidecar, op);
       return updateThread(sidecar, op.threadId, (t) =>
         t.status === 'open' ? t : { ...t, status: 'open', resolvedBy: null, resolvedAt: null });
     case 'setWorking':
@@ -108,7 +115,7 @@ function addMessage(sidecar, { threadId, message }) {
   }));
 }
 
-function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes }) {
+function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, proposal, applies }) {
   if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
   const message = {
     id,
@@ -118,11 +125,35 @@ function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes }) {
     createdAt,
   };
   if (edits !== undefined) message.edits = validateEdits(edits);
-  if (undoes !== undefined) {
-    if (!MESSAGE_ID.test(undoes ?? '')) throw new OpError('bad_input', `invalid message id: ${undoes}`);
-    message.undoes = undoes;
-  }
+  if (undoes !== undefined) message.undoes = validateMessageId(undoes);
+  if (proposal !== undefined) message.proposal = validateProposal(proposal);
+  if (applies !== undefined) message.applies = validateMessageId(applies);
   return message;
+}
+
+function validateMessageId(id) {
+  if (!MESSAGE_ID.test(id ?? '')) throw new OpError('bad_input', `invalid message id: ${id}`);
+  return id;
+}
+
+function validateProposal(proposal) {
+  const ok = Array.isArray(proposal) && proposal.length > 0 && proposal.every((c) => c
+    && typeof c.before === 'string' && c.before !== '' && typeof c.after === 'string' && c.before !== c.after
+    && typeof c.prefix === 'string' && c.prefix.length <= 32
+    && typeof c.suffix === 'string' && c.suffix.length <= 32
+    && Number.isInteger(c.start) && c.start >= 0);
+  if (!ok) throw new OpError('bad_input', 'invalid proposal');
+  return proposal;
+}
+
+// Resolving and reopening are the human's decisions (SPEC.md §2.2).
+function requireHuman(sidecar, { by, kind }) {
+  if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
+  const known = sidecar.participants.find((p) => sameName(p.name, by));
+  if (kind === 'agent' || known?.kind === 'agent') {
+    throw new OpError('not_allowed', `${by} is an agent; only a human can resolve or reopen a thread. Reply instead.`);
+  }
+  if (kind !== undefined && kind !== 'human') throw new OpError('bad_input', `invalid participant kind: ${kind}`);
 }
 
 function attachEdits(sidecar, { threadId, messageId, edits }) {

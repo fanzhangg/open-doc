@@ -1,9 +1,8 @@
-// The dispatcher: when a comment is waiting on the agent, claim the thread
-// (the page shows the agent working on it) and start one headless agent run
-// for the batch. By default every comment that mentions the agent or no one
-// is waiting on it, like a co-author who reads every comment; with
-// `mentionsOnly` only an explicit @mention is. At most one run per agent at a
-// time; a failed run never loops.
+// The dispatcher: when a comment is waiting on the agent (its latest message
+// is from a human and mentions @agent or no one), claim the thread (the page shows the
+// agent working on it) and start one headless agent run for the batch. The
+// edit mode decides whether the run edits the doc or only proposes changes.
+// At most one run per agent at a time; a failed run never loops.
 
 import { spawn } from 'node:child_process';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -25,17 +24,20 @@ const LOG_LINES = 40;
 export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
 
 /**
- * States: starting, ready, running, paused, error (last run failed), limited
- * (runs per hour reached), unavailable (preflight failed), stopped.
+ * States: starting, ready, running, error (last run failed), limited (runs
+ * per hour reached), unavailable (preflight failed), stopped.
+ * Presence, set by the human: 'online' answers every comment not addressed
+ * to someone else, 'dnd' (do not disturb) only comments that @mention it.
  */
 export class Dispatcher {
-  constructor({ docPath, name, adapter, limits = {}, mentionsOnly = false, warning = null, onStatus = () => {}, settleMs = 300 }) {
+  constructor({ docPath, name, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null, onStatus = () => {}, settleMs = 300 }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
     this.name = name;
     this.adapter = adapter;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
-    this.mentionsOnly = mentionsOnly;
+    this.editMode = editMode;
+    this.presence = presence;
     this.warning = warning;
     this.onStatus = onStatus;
     this.settleMs = settleMs;
@@ -46,14 +48,14 @@ export class Dispatcher {
     this.sessionId = null;
     this.failed = new Set(); // "threadId:lastMessageId" of a failed run's threads
     this.runStarts = [];
-    this.pausedAfterRun = false;
   }
 
   status() {
     return {
       name: this.name,
       state: this.state,
-      mentionsOnly: this.mentionsOnly,
+      editMode: this.editMode,
+      presence: this.presence,
       kind: this.adapter.name,
       program: this.adapter.program ?? null,
       warning: this.warning,
@@ -82,14 +84,11 @@ export class Dispatcher {
     this.settleTimer = setTimeout(() => this.#check(), this.settleMs);
   }
 
-  pause() {
-    if (this.run) this.pausedAfterRun = true;
-    else this.#setState('paused');
-  }
-
-  resume() {
-    this.pausedAfterRun = false;
-    if (this.state === 'paused') this.#setState('ready');
+  /** 'online' or 'dnd'. A run in progress finishes either way. */
+  setPresence(presence) {
+    if (presence === this.presence) return;
+    this.presence = presence;
+    this.onStatus(this.status());
     this.notify();
   }
 
@@ -167,7 +166,7 @@ export class Dispatcher {
   }
 
   #waiting(sidecar) {
-    return inbox(sidecar, this.name, Date.now(), { mentionsOnly: this.mentionsOnly })
+    return inbox(sidecar, this.name, Date.now(), { mentionsOnly: this.presence === 'dnd' })
       .filter((t) => !this.failed.has(failureKey(t)));
   }
 
@@ -189,14 +188,14 @@ export class Dispatcher {
     const runDir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
     const lines = threadLines(markdown, threads);
     const payload = { doc: this.docFile, threads: threads.map((t, i) => ({ ...t, line: lines[i] })) };
-    const prompt = buildPrompt({ name: this.name, docFile: this.docFile });
+    const prompt = buildPrompt({ name: this.name, docFile: this.docFile, editMode: this.editMode });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');
     await writeFile(threadsFile, JSON.stringify(payload, null, 2));
     await writeFile(promptFile, `${prompt}\n\n## Threads\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`);
 
     const { command, args } = this.adapter.command({
-      prompt, promptFile, threadsFile, docFile: this.docFile,
+      prompt, promptFile, threadsFile, docFile: this.docFile, editMode: this.editMode,
       sessionId: this.adapter.supportsSessions ? this.sessionId : null,
     });
     const child = spawn(command, args, {
@@ -247,7 +246,7 @@ export class Dispatcher {
   }
 
   async #finish({ threads, markdown, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
-    const result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
+    let result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
       : this.adapter.parse({ stdout, stderr, code });
 
@@ -263,6 +262,12 @@ export class Dispatcher {
       });
     } catch {
       // the doc may be gone; nothing to record or clear
+    }
+    // A run must end every thread with a reply. One that did not would be
+    // handed the same threads again at once, so it counts as failed instead.
+    if (result.ok) {
+      const silent = await this.#unanswered(threads);
+      if (silent > 0) result = { ...result, ok: false, error: `finished without replying to ${silent === 1 ? 'a comment' : `${silent} comments`}` };
     }
 
     this.lastRun = {
@@ -288,12 +293,7 @@ export class Dispatcher {
       this.sessionId = null;
       for (const t of threads) this.failed.add(failureKey(t));
     }
-    if (this.pausedAfterRun) {
-      this.pausedAfterRun = false;
-      this.#setState('paused', result.ok ? null : result.error);
-    } else {
-      this.#setState(result.ok ? 'ready' : 'error', result.ok ? null : result.error);
-    }
+    this.#setState(result.ok ? 'ready' : 'error', result.ok ? null : result.error);
     this.notify();
   }
 
@@ -316,10 +316,23 @@ export class Dispatcher {
       }
       const message = { id: newId('m'), author: { name: this.name, kind: 'agent' }, body: 'Edited the doc.', createdAt: now, edits };
       next = applyOp(next, { type: 'addMessage', threadId: thread.id, message });
-      // Adding a message reopens; keep a thread the agent resolved resolved.
-      if (thread.status === 'resolved') next = applyOp(next, { type: 'resolve', threadId: thread.id, by: thread.resolvedBy, at: thread.resolvedAt });
     }
     return next;
+  }
+
+  // How many of the run's threads are still open with no new message from the agent.
+  async #unanswered(threads) {
+    try {
+      const { sidecar } = await load(this.docPath);
+      return threads.filter((claimed) => {
+        const thread = sidecar.threads.find((t) => t.id === claimed.id);
+        if (!thread || thread.status !== 'open') return false;
+        const known = new Set(claimed.messages.map((m) => m.id));
+        return !thread.messages.some((m) => !known.has(m.id) && sameName(m.author.name, this.name));
+      }).length;
+    } catch {
+      return 0; // the doc may be gone
+    }
   }
 
   #setState(state, error = null) {

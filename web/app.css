@@ -22,9 +22,9 @@
   --accent: #2563eb;
   --accent-soft: rgba(37, 99, 235, 0.1);
   --on-accent: #ffffff;
-  --highlight: rgba(251, 188, 4, 0.2);
-  --highlight-line: rgba(232, 170, 0, 0.85);
-  --highlight-active: rgba(251, 188, 4, 0.45);
+  --highlight: rgba(55, 53, 47, 0.06);
+  --highlight-line: rgba(55, 53, 47, 0.32);
+  --highlight-active: rgba(251, 188, 4, 0.38);
   --agent: #6d3fe0;
   --agent-soft: rgba(124, 77, 255, 0.12);
   --agent-glow: rgba(124, 77, 255, 0.26);
@@ -62,7 +62,7 @@
     --text: rgba(255, 255, 255, 0.86); --text-soft: rgba(255, 255, 255, 0.56); --text-faint: rgba(255, 255, 255, 0.36);
     --border: rgba(255, 255, 255, 0.09); --border-strong: rgba(255, 255, 255, 0.16);
     --accent: #7aa7ff; --accent-soft: rgba(122, 167, 255, 0.14); --on-accent: #0b1a33;
-    --highlight: rgba(251, 188, 4, 0.13); --highlight-line: rgba(251, 188, 4, 0.55); --highlight-active: rgba(251, 188, 4, 0.3);
+    --highlight: rgba(255, 255, 255, 0.05); --highlight-line: rgba(255, 255, 255, 0.3); --highlight-active: rgba(251, 188, 4, 0.32);
     --agent: #b39dff; --agent-soft: rgba(179, 157, 255, 0.15); --agent-glow: rgba(179, 157, 255, 0.3);
     --success: #81c995; --danger: #f28b82; --warning: #fdd663; --ins: #81c995; --del: #f28b82;
     --banner: #332b1a; --tip: #3a3a3a;
@@ -77,7 +77,7 @@
   --text: rgba(255, 255, 255, 0.86); --text-soft: rgba(255, 255, 255, 0.56); --text-faint: rgba(255, 255, 255, 0.36);
   --border: rgba(255, 255, 255, 0.09); --border-strong: rgba(255, 255, 255, 0.16);
   --accent: #7aa7ff; --accent-soft: rgba(122, 167, 255, 0.14); --on-accent: #0b1a33;
-  --highlight: rgba(251, 188, 4, 0.13); --highlight-line: rgba(251, 188, 4, 0.55); --highlight-active: rgba(251, 188, 4, 0.3);
+  --highlight: rgba(255, 255, 255, 0.05); --highlight-line: rgba(255, 255, 255, 0.3); --highlight-active: rgba(251, 188, 4, 0.32);
   --agent: #b39dff; --agent-soft: rgba(179, 157, 255, 0.15); --agent-glow: rgba(179, 157, 255, 0.3);
   --success: #81c995; --danger: #f28b82; --warning: #fdd663; --ins: #81c995; --del: #f28b82;
   --banner: #332b1a; --tip: #3a3a3a;
@@ -122,7 +122,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 
 .od-people { display: flex; align-items: center; gap: 8px; }
 .od-me, .od-agent-face { border: 0; background: none; padding: 0; border-radius: 50%; display: flex; }
-.od-me:hover .od-avatar, .od-agent-face:hover .od-avatar { filter: brightness(1.08); box-shadow: 0 0 0 3px var(--hover); }
+.od-me:hover .od-avatar, .od-agent-face:hover .od-avatar { box-shadow: 0 0 0 3px var(--hover); }
 
 .od-avatar { --size: 30px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s; }
 .od-avatar-small { --size: 22px; }
@@ -130,22 +130,47 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 
 .od-agent { display: flex; align-items: center; gap: 8px; }
 .od-agent-line { font-size: 12.5px; color: var(--agent); white-space: nowrap; font-weight: 500; }
-.od-agent-face { position: relative; }
-.od-agent-face::after { content: ''; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--canvas); background: var(--text-faint); }
-.od-agent[data-state="ready"] .od-agent-face::after, .od-agent[data-state="running"] .od-agent-face::after { background: #1e8e3e; }
-.od-agent[data-state="error"] .od-agent-face::after, .od-agent[data-state="unavailable"] .od-agent-face::after { background: #d93025; }
-.od-agent[data-state="paused"] .od-agent-face::after, .od-agent[data-state="limited"] .od-agent-face::after { background: #f9ab00; }
+.od-agent-face, .od-profile-face { position: relative; display: flex; }
+
+/* presence: online (green), do not disturb (red with a bar), offline (grey ring, greyed avatar), connecting (grey) */
+.od-presence-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-faint); }
+.od-agent-face .od-presence-dot, .od-profile-face .od-presence-dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border: 2px solid var(--canvas); }
+.od-profile-face .od-presence-dot { border-color: var(--bg); width: 14px; height: 14px; }
+[data-presence="online"] .od-presence-dot, .od-presence-choice[data-presence="online"] .od-presence-dot { background: var(--success); }
+[data-presence="dnd"] .od-presence-dot, .od-presence-choice[data-presence="dnd"] .od-presence-dot { background: linear-gradient(#fff, #fff) center / 55% 2px no-repeat, var(--danger); }
+[data-presence="offline"] .od-presence-dot { background: var(--canvas); box-shadow: inset 0 0 0 2px var(--text-soft); }
+.od-profile[data-presence="offline"] .od-presence-dot { background: var(--bg); }
+[data-presence="offline"] .od-agent-face .od-avatar, .od-profile[data-presence="offline"] .od-avatar { filter: grayscale(1); opacity: 0.55; }
+[data-presence="connecting"] .od-agent-face .od-presence-dot { animation: od-fade-pulse 1.2s ease-in-out infinite; }
+@keyframes od-fade-pulse { 50% { opacity: 0.35; } }
 .od-agent[data-state="running"] .od-agent-face .od-avatar { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--agent); animation: od-ring 1.6s ease-in-out infinite; }
-.od-agent[data-state="error"] .od-agent-line, .od-agent[data-state="unavailable"] .od-agent-line { color: var(--danger); }
 @keyframes od-ring { 50% { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 6px var(--agent-glow); } }
 
-/* popovers anchored under the header */
-.od-panel { position: fixed; top: 50px; right: 12px; z-index: 30; background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; }
+/* profile cards under the header avatars */
+.od-panel { position: fixed; top: 50px; right: 12px; z-index: 30; width: 320px; padding: 16px; background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; font-size: 13px; }
 @keyframes od-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
-.od-panel { width: 340px; padding: 14px 16px; }
-.od-panel-title { font-weight: 600; margin-bottom: 4px; }
-.od-panel-text { color: var(--text-soft); font-size: 13px; margin-bottom: 10px; }
-.od-panel-log { margin: 10px 0 0; max-height: 40vh; overflow: auto; padding: 8px; border-radius: 6px; background: var(--bg-soft); font: 11px/1.5 var(--mono); white-space: pre-wrap; }
+.od-profile { display: flex; align-items: center; gap: 12px; }
+.od-profile .od-avatar { --size: 44px; }
+.od-profile-who { min-width: 0; }
+.od-profile-name { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
+.od-profile-sub { margin-top: 2px; color: var(--text-soft); }
+.od-profile-state { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--text-soft); }
+.od-profile-working { margin-top: 12px; color: var(--agent); font-weight: 500; }
+.od-profile-problem { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 9%, var(--bg-soft)); color: var(--text); overflow-wrap: anywhere; }
+.od-profile-actions { display: flex; gap: 8px; margin-top: 12px; }
+.od-profile-problem .od-profile-actions { margin-top: 10px; }
+.od-presence-choices { display: flex; flex-direction: column; gap: 2px; margin: 14px -8px 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.od-presence-choice { display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; }
+.od-presence-choice .od-presence-dot { margin-top: 4px; }
+.od-presence-choice:hover { background: var(--hover); }
+.od-presence-choice[aria-checked="true"] { background: var(--accent-soft); }
+.od-presence-choice-text { display: flex; flex-direction: column; }
+.od-presence-choice-title { font-weight: 500; }
+.od-presence-choice-hint { color: var(--text-soft); font-size: 12px; }
+.od-profile-facts { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 12px; }
+.od-profile-log { margin-top: 8px; color: var(--text-faint); font-size: 12px; }
+.od-profile-log summary { cursor: pointer; }
+.od-profile-log pre { margin: 6px 0 0; max-height: 30vh; overflow: auto; padding: 8px; border-radius: 6px; background: var(--bg-soft); color: var(--text-soft); font: 11px/1.5 var(--mono); white-space: pre-wrap; }
 
 /* ---- toolbar ---- */
 
@@ -234,9 +259,21 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 [data-focus] .od-margin:not(:hover):not(:focus-within) { opacity: 0.4; }
 
 /* comment highlights */
-.od-hl { background: var(--highlight); border-bottom: 2px solid var(--highlight-line); cursor: pointer; transition: background 0.2s; }
+.od-hl { background: var(--highlight); border-radius: 2px; cursor: text; transition: background 0.2s; }
+/* a selection inside commented text has to read over its grey */
+.od-editor .od-hl::selection, .od-editor .od-hl *::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .od-hl-active { background: var(--highlight-active); }
-.od-hl-working { background: var(--agent-soft); border-bottom-color: var(--agent); animation: od-shimmer 1.6s ease-in-out infinite; }
+.od-hl-working { background: var(--agent-soft); animation: od-shimmer 1.6s ease-in-out infinite; }
+/* a proposal or a past edit shown in the text; .od-replay plays it once: removal first, then the new text */
+.od-mark-del { color: var(--del); text-decoration: line-through; text-decoration-color: var(--del); background: color-mix(in srgb, var(--del) 8%, transparent); }
+.od-mark-ins { color: var(--ins); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--ins) 50%, transparent); background: color-mix(in srgb, var(--ins) 10%, transparent); }
+ins.od-mark-ins { margin-left: 0.15em; }
+del.od-mark-del { margin-right: 0.15em; }
+.od-mark-del.od-replay { animation: od-replay-del 0.6s ease-out both; }
+.od-mark-ins.od-replay { animation: od-replay-ins 0.7s ease-out 0.55s both; }
+@keyframes od-replay-del { from { text-decoration-color: transparent; background: transparent; color: var(--text); } }
+@keyframes od-replay-ins { from { opacity: 0; background: color-mix(in srgb, var(--ins) 35%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .od-replay { animation: none !important; } }
 @keyframes od-shimmer { 50% { background: var(--agent-glow); } }
 
 /* text the agent just changed, labelled with its name, fading out */
@@ -319,6 +356,9 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 
 .od-icon-button { border: 0; background: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; }
 .od-icon-button:hover { background: var(--accent-soft); color: var(--accent); }
+.od-resolve { opacity: 0; transition: opacity 0.15s; }
+.od-card:hover .od-resolve, .od-resolve:focus-visible { opacity: 1; }
+@media (hover: none) { .od-resolve { opacity: 1; } }
 .od-check { width: 18px; height: 18px; fill: currentColor; flex: none; }
 
 .od-typing { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--agent); }
@@ -332,13 +372,27 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-resolved-row span { flex: 1; }
 .od-link-button { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
 .od-link-button:hover { background: var(--accent-soft); }
-.od-edit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: var(--bg-soft); font-size: 12px; color: var(--text-soft); }
-.od-edit-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.od-edit-label { font-weight: 600; }
-.od-edit-before { color: var(--del); text-decoration: line-through; }
-.od-edit-after { color: var(--ins); text-decoration: none; }
-.od-edit-undone { font-style: italic; }
-.od-edit-error { flex-basis: 100%; color: var(--del); }
+.od-change { margin-top: 8px; padding: 4px 6px 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); font-size: 12.5px; }
+.od-change-head { display: flex; align-items: center; gap: 6px; min-height: 26px; }
+.od-change-label { flex: 1; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+.od-change-actions { display: flex; gap: 2px; }
+.od-change-button { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; transition: background 0.15s, color 0.15s; }
+.od-change-button .od-icon { width: 16px; height: 16px; stroke-width: 2; }
+.od-change-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.od-change-apply { color: var(--accent); }
+.od-change-apply:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.od-change-line { margin-top: 3px; padding-right: 4px; line-height: 1.55; color: var(--text-soft); overflow-wrap: anywhere; }
+.od-change-context { color: var(--text-faint); }
+.od-change-del { color: var(--del); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--del) 60%, transparent); background: color-mix(in srgb, var(--del) 8%, transparent); border-radius: 3px; padding: 0 2px; }
+.od-change-ins { color: var(--ins); text-decoration: none; background: color-mix(in srgb, var(--ins) 10%, transparent); border-radius: 3px; padding: 0 2px; }
+.od-change-lines { max-height: 7.75em; overflow: hidden; }
+.od-change-clipped { -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent); mask-image: linear-gradient(to bottom, #000 65%, transparent); }
+.od-change-reviewable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.od-change-reviewable:hover { border-color: var(--border-strong); }
+.od-change-reviewing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft)); }
+.od-change-more { margin-top: 3px; color: var(--text-faint); }
+.od-change-error { margin-top: 4px; color: var(--del); }
+.od-change-muted .od-change-line { opacity: 0.55; }
 
 .od-composer { position: relative; margin-top: 10px; }
 .od-composer textarea { display: block; width: 100%; resize: none; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--bg); color: var(--text); padding: 7px 14px; font: inherit; font-size: 14px; line-height: 1.4; transition: border-color 0.15s, box-shadow 0.15s; }

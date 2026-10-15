@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { basename, resolve as resolvePath } from 'node:path';
 import {
   AnchorError, FormatError, OpError,
-  activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, newId, project,
+  activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, newId, project, proposeChanges,
 } from '../core/index.js';
 import { threadLines } from '../core/lines.js';
 import { StoreError, load, moveDoc, update } from '../store/files.js';
@@ -15,6 +15,7 @@ import { startServer } from '../server/server.js';
 import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
+import { EDIT_MODES } from '../core/settings.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -28,20 +29,26 @@ Usage:
   opendoc wait     <doc> --as <name> [--timeout <seconds>] [--json]
   opendoc comment  <doc> [--quote "<text>" [--occurrence <n>]] "<body>" --as <name>
   opendoc reply    <doc> <thread-id> "<body>" --as <name>
-  opendoc resolve  <doc> <thread-id> --as <name>
-  opendoc reopen   <doc> <thread-id> --as <name>
+  opendoc propose  <doc> <thread-id> --as <name>   (stdin: {"body": "...", "changes": [{"before": "...", "after": "..."}]})
+  opendoc resolve  <doc> <thread-id> --as <name> --kind human
+  opendoc reopen   <doc> <thread-id> --as <name> --kind human
   opendoc mv       <old.md> <new.md>
 
-Agent options for serve (the server starts a headless run for each new comment that mentions
-@<name> or no one; --mentions-only limits it to comments that mention @<name>):
+Agent options for serve (the server starts a headless run for each new comment, except one
+addressed only to someone else):
   --agent claude                 Claude Code preset; --agent-bin <path> if claude is not found
   --agent <name> --agent-cmd "<command with {promptFile} {threadsFile} {doc}>"   any other agent
+  --edit-mode auto|approve       auto (default): the agent edits the doc and replies;
+                                 approve: it only replies with proposals for you to apply
   --model <name>  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
-  --max-budget-usd <n>  --agent-isolated (Claude --bare; needs ANTHROPIC_API_KEY)  --mentions-only
+  --max-budget-usd <n>  --agent-isolated (Claude --bare; needs ANTHROPIC_API_KEY)
 
 Identity: --as <name> (or OPENDOC_AS), --kind agent|human (or OPENDOC_KIND; default agent).
+A thread waits on <name> when its latest message is from a human and mentions @<name> or no one.
 wait blocks until a thread is waiting on <name>, marks it as being answered,
 prints it and exits 0; it exits 3 on timeout (default ${DEFAULT_WAIT_SECONDS}s, 0 = none).
+propose replies with changes instead of making them; each "before" must appear exactly
+once in the doc's markdown source. Only humans resolve and reopen threads.
 Exit codes: 0 ok, 1 error, 2 bad input, 3 wait timed out, 4 sidecar busy.`;
 
 class UsageError extends Error {}
@@ -65,12 +72,12 @@ const OPTIONS = {
   'run-timeout': { type: 'string' },
   'runs-per-hour': { type: 'string' },
   'max-budget-usd': { type: 'string' },
-  'mentions-only': { type: 'boolean' },
+  'edit-mode': { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 };
 
 /** Run the CLI. Returns the exit code; output goes to the given streams. */
-export async function main(argv, { stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
+export async function main(argv, { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, env = process.env } = {}) {
   const out = (line) => stdout.write(line + '\n');
   try {
     const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
@@ -81,7 +88,7 @@ export async function main(argv, { stdout = process.stdout, stderr = process.std
     }
     const handler = COMMANDS[command];
     if (!handler) throw new UsageError(`unknown command: ${command}`);
-    return (await handler(rest, values, { out, env })) ?? EXIT.ok;
+    return (await handler(rest, values, { out, env, stdin })) ?? EXIT.ok;
   } catch (error) {
     stderr.write(`opendoc: ${error.message}\n`);
     return exitCodeFor(error);
@@ -103,9 +110,7 @@ const COMMANDS = {
       if (status.warning) out(`opendoc: warning: ${status.warning}`);
       out(status.state === 'unavailable'
         ? `opendoc: agent ${status.name} is unavailable: ${status.error}`
-        : status.mentionsOnly
-          ? `opendoc: ${status.name} answers comments that mention @${status.name}`
-          : `opendoc: ${status.name} answers every comment (except ones addressed to someone else)`);
+        : `opendoc: ${status.name} is ${status.presence === 'dnd' ? `on do not disturb: it answers comments that mention @${status.name}` : 'online: it answers every comment (except ones addressed to someone else)'}, ${status.editMode === 'approve' ? 'proposing edits for you to apply' : 'editing the doc directly'}`);
     }
     out('Press Ctrl+C to stop.');
     if (!values['no-open']) openBrowser(server.url);
@@ -176,19 +181,30 @@ const COMMANDS = {
       applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
   },
 
+  async propose([docArg, threadId], values, { out, env, stdin }) {
+    const docPath = requireDoc(docArg);
+    const me = identity(values, env);
+    requireThreadId(threadId);
+    const { body, changes } = await readProposal(stdin);
+    return writeAndPrint(docPath, values, out, threadId, (s, doc) => applyOp(s, {
+      type: 'addMessage', threadId, message: { ...message(me, body), proposal: proposeChanges(doc.markdown, changes) },
+    }));
+  },
+
+  // Resolving and reopening are the human's call; the core refuses an agent.
   async resolve([docArg, threadId], values, { out, env }) {
     const docPath = requireDoc(docArg);
     const me = identity(values, env);
     requireThreadId(threadId);
     return writeAndPrint(docPath, values, out, threadId, (s) =>
-      applyOp(s, { type: 'resolve', threadId, by: me.name, at: new Date().toISOString() }));
+      applyOp(s, { type: 'resolve', threadId, by: me.name, kind: me.kind, at: new Date().toISOString() }));
   },
 
   async reopen([docArg, threadId], values, { out, env }) {
     const docPath = requireDoc(docArg);
-    identity(values, env);
+    const me = identity(values, env);
     requireThreadId(threadId);
-    return writeAndPrint(docPath, values, out, threadId, (s) => applyOp(s, { type: 'reopen', threadId }));
+    return writeAndPrint(docPath, values, out, threadId, (s) => applyOp(s, { type: 'reopen', threadId, by: me.name, kind: me.kind }));
   },
 
   async mv([fromArg, toArg], values, { out }) {
@@ -252,7 +268,7 @@ async function writeAndPrint(docPath, values, out, threadId, change) {
   let markdown;
   const sidecar = await update(docPath, (s, doc) => {
     markdown = doc.markdown;
-    return change(s);
+    return change(s, doc);
   });
   print(out, values.json, markdown, sidecar, [findThread(sidecar, threadId)]);
 }
@@ -260,9 +276,11 @@ async function writeAndPrint(docPath, values, out, threadId, change) {
 function agentOptions(values, docPath) {
   if (!values.agent) {
     if (values['agent-cmd']) throw new UsageError('--agent-cmd needs --agent <name>');
-    if (values['mentions-only']) throw new UsageError('--mentions-only needs --agent <name>');
+    if (values['edit-mode']) throw new UsageError('--edit-mode needs --agent <name>');
     return undefined;
   }
+  const editMode = values['edit-mode'] ?? 'auto';
+  if (!EDIT_MODES.includes(editMode)) throw new UsageError('--edit-mode must be auto or approve');
   if (!NAME_PATTERN.test(values.agent)) throw new UsageError('--agent must be a participant name (letters, digits, . _ -)');
   const number = (flag, fallback, { min = 1 } = {}) => {
     if (values[flag] === undefined) return fallback;
@@ -289,7 +307,7 @@ function agentOptions(values, docPath) {
     throw new UsageError(`no preset for agent "${values.agent}"; pass --agent-cmd "<command>"`);
   }
   const warning = hooksWarning(adapter, values['agent-isolated'] === true, docPath);
-  return { name: values.agent, adapter, limits, mentionsOnly: values['mentions-only'] === true, warning };
+  return { name: values.agent, adapter, limits, editMode, warning };
 }
 
 function openBrowser(url) {
@@ -305,6 +323,22 @@ function openBrowser(url) {
 
 function message(author, body) {
   return { id: newId('m'), author, body, createdAt: new Date().toISOString() };
+}
+
+// `propose` reads { body, changes: [{ before, after }] } as JSON on stdin.
+async function readProposal(stdin) {
+  if (stdin.isTTY) throw new UsageError('pipe the proposal as JSON on stdin: {"body": "...", "changes": [{"before": "...", "after": "..."}]}');
+  let text = '';
+  for await (const chunk of stdin) text += chunk;
+  let input;
+  try {
+    input = JSON.parse(text);
+  } catch {
+    throw new UsageError('the proposal on stdin is not valid JSON');
+  }
+  if (!input || typeof input.body !== 'string' || !input.body.trim()) throw new UsageError('the proposal needs a "body" explaining it');
+  if (!Array.isArray(input.changes) || input.changes.length === 0) throw new UsageError('the proposal needs "changes": [{ "before", "after" }]');
+  return { body: input.body.trim(), changes: input.changes };
 }
 
 // ---- output ----
@@ -329,7 +363,10 @@ function formatThread(thread, line) {
   const quote = thread.anchor ? `  "${truncate(thread.anchor.exact, 60)}"` : '';
   const working = activeWorking(thread);
   const lines = [`${thread.id}  ${thread.status}  ${where}${quote}`];
-  for (const m of thread.messages) lines.push(`  ${m.author.name} (${m.author.kind}): ${m.body.replace(/\n/g, '\n    ')}`);
+  for (const m of thread.messages) {
+    lines.push(`  ${m.author.name} (${m.author.kind}): ${m.body.replace(/\n/g, '\n    ')}`);
+    for (const c of m.proposal ?? []) lines.push(`    proposes: "${truncate(c.before, 40)}" -> "${truncate(c.after, 40)}"`);
+  }
   if (thread.status === 'resolved') lines.push(`  resolved by ${thread.resolvedBy}`);
   if (working) lines.push(`  ${working.by} is responding…`);
   return lines.join('\n');

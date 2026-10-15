@@ -1,6 +1,7 @@
 // The page: a Milkdown (ProseMirror) WYSIWYG editor with comment highlights,
-// named formatting commands for the toolbar, selection bubble and "/" menu,
-// and collaborator-style application of changes made on disk: only the blocks
+// a suggestion-style view of a proposal or a past edit, named
+// formatting commands for the toolbar, selection bubble and "/" menu, and
+// collaborator-style application of changes made on disk: only the blocks
 // that changed are replaced (the caret stays put) and the new text glows with
 // the author's name.
 
@@ -14,7 +15,8 @@ import { gfm, toggleStrikethroughCommand, insertTableCommand } from '@milkdown/k
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
+import { $prose, $remark, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import { lift } from '@milkdown/kit/prose/commands';
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
@@ -27,6 +29,11 @@ const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
+
+// CommonMark does not close `**熟悉：**直接` (a run after full-width
+// punctuation, before a CJK letter); this reads and writes it as bold, the
+// same way the core projection (src/core/project.js) does.
+const cjkFriendly = $remark('cjkFriendly', () => remarkCjkFriendly);
 
 // Decorations replaced wholesale through a meta, mapped through other edits.
 const decorationPlugin = (key) => $prose(() => new Plugin({
@@ -111,7 +118,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         })
         .updated(() => onDocUpdated());
     })
-    .use(commonmark).use(gfm).use(history).use(clipboard).use(listener)
+    .use(commonmark).use(gfm).use(cjkFriendly).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .create();
 
@@ -121,6 +128,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   baseline = editor.action(getMarkdown());
   let threads = [];
   let activeId = null;
+  let preview = { items: [], replay: 0 }; // see web/review.js; replay > 0 animates it once
+  let replays = 0;
   let draft = null; // anchor-like hint of the selection being commented on
   const layoutListeners = new Set();
 
@@ -128,11 +137,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const v = view();
     const projection = projectDoc(v.state.doc);
     const decorations = [];
-    const add = (anchor, id, classes) => {
+    const find = (anchor) => {
       const found = locate(projection.text, anchor);
-      if (!found) return;
-      const { from, to } = docRange(projection, found.start, found.end);
-      decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }));
+      return found && docRange(projection, found.start, found.end);
+    };
+    const add = (anchor, id, classes) => {
+      const range = find(anchor);
+      if (range) decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': id }));
     };
     const now = Date.now();
     for (const thread of threads) {
@@ -143,6 +154,22 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       add(thread.anchor, thread.id, classes);
     }
     if (draft) add(draft, 'draft', 'od-hl od-hl-active');
+    // A proposal or a past edit shows as a suggestion: removed text struck
+    // through, new text marked. Decorations only; the doc does not change. A
+    // new `replay` number gives the marks new attributes, so ProseMirror
+    // redraws them and their animation runs again.
+    const { replay } = preview;
+    const classes = (kind) => `od-mark-${kind}${replay ? ' od-replay' : ''}`;
+    preview.items.forEach(({ anchor, mark, widget }, i) => {
+      const range = find(anchor);
+      if (!range) return;
+      if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), 'data-replay': String(replay) }));
+      if (!widget) return;
+      const before = widget.side === 'before';
+      decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
+        side: before ? -1 : 1, key: `change-${replay}-${i}-${widget.kind}-${widget.text}`,
+      }));
+    });
     v.dispatch(v.state.tr.setMeta(highlightKey, DecorationSet.create(v.state.doc, decorations)).setMeta('addToHistory', false));
     for (const listener of layoutListeners) listener();
   }
@@ -413,6 +440,21 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       activeId = id;
       paintHighlights();
     },
+    /**
+     * Show changes in the text (items from web/review.js); [] clears.
+     * `replay` animates them once and scrolls the first into view.
+     */
+    setPreview(items, { replay = false } = {}) {
+      preview = { items, replay: replay ? ++replays : 0 };
+      paintHighlights();
+      if (!replay || items.length === 0) return;
+      const v = view();
+      const found = locate(projectDoc(v.state.doc).text, items[0].anchor);
+      if (!found) return;
+      const { from } = docRange(projectDoc(v.state.doc), found.start, found.end);
+      const { node } = v.domAtPos(from);
+      (node.nodeType === 1 ? node : node.parentElement)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    },
     setDraft(hint) {
       draft = hint && { exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start };
       paintHighlights();
@@ -525,6 +567,13 @@ function linkAround(doc, pos, type, side) {
 function blockType(state) {
   const parent = state.selection.$from.parent;
   return parent.type.name === 'heading' ? `h${parent.attrs.level}` : parent.type.name;
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = text;
+  return node;
 }
 
 function flag(name) {

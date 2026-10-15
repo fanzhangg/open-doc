@@ -9,14 +9,19 @@ export const SETTINGS_VERSION = 1;
 /**
  * The co-author agent the editor starts for every doc, off until the user
  * turns it on. `command` (a custom agent's command line) and `bin` (where
- * Claude Code is) decide what program runs.
+ * Claude Code is) decide what program runs. `editMode` is how far the agent
+ * may go: 'auto' edits the doc and replies, 'approve' only replies with a
+ * proposal the human applies. `presence` is when it answers: 'online', every
+ * comment not addressed to someone else; 'dnd' (do not disturb), only
+ * comments that @mention it.
  */
 export const DEFAULT_AGENT = Object.freeze({
   enabled: false,
   kind: 'claude',
   name: 'claude',
   command: null,
-  mentionsOnly: false,
+  editMode: 'auto',
+  presence: 'online',
   model: null,
   maxTurns: 30,
   runTimeoutMinutes: 10,
@@ -42,6 +47,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
 export const AGENT_PROGRAM_KEYS = Object.freeze(['command', 'bin']);
 
 const oneOf = (...values) => (v) => values.includes(v);
+export const EDIT_MODES = Object.freeze(['auto', 'approve']);
+export const PRESENCES = Object.freeze(['online', 'dnd']);
 const boolean = (v) => typeof v === 'boolean';
 const integer = (min, max) => (v) => Number.isInteger(v) && v >= min && v <= max;
 const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= max && !/[\0\r\n]/.test(v);
@@ -52,7 +59,8 @@ const AGENT_RULES = {
   kind: oneOf('claude', 'custom'),
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
   command: orNull(text(2000)),
-  mentionsOnly: boolean,
+  editMode: oneOf(...EDIT_MODES),
+  presence: oneOf(...PRESENCES),
   model: orNull((v) => typeof v === 'string' && /^[A-Za-z0-9._:[\]-]{1,100}$/.test(v)),
   maxTurns: integer(1, 500),
   runTimeoutMinutes: integer(1, 240),

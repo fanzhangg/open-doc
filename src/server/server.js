@@ -41,7 +41,7 @@ class HttpError extends Error {
 
 /**
  * `agent`, when given, is `{ name, adapter, limits }`: the server then starts
- * a headless agent run whenever a comment mentions that agent. Without it,
+ * a headless agent run whenever a comment waits on that agent. Without it,
  * `agentFromSettings: true` takes the agent from the user's settings
  * (Settings > Agent) and restarts it whenever they change.
  * `settingsDir` is the folder of the user's settings file (default: the
@@ -140,7 +140,9 @@ export async function startServer(docPath, {
       case 'PUT /api/settings': {
         const patch = await readJson(req);
         await checkAgentProgram(patch);
-        return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
+        const settings = await updateSettings(patch, settingsDir);
+        setPresence(settings.agent.presence); // at once, without waiting for the file watcher
+        return sendJson(res, 200, { settings });
       }
       case 'GET /api/agent':
         if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
@@ -165,7 +167,7 @@ export async function startServer(docPath, {
         await mkdir(dirname(docPath), { recursive: true });
         await writeAtomic(docPath, body.markdown);
         await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
-        return [res, 200, { docHash: hashBytes(Buffer.from(body.markdown)) }];
+        return [res, 200, { docHash: hashBytes(Buffer.from(body.markdown)), markdown: body.markdown }];
       }
       if (current.hash !== body.baseHash) {
         return [res, 409, { code: 'conflict', markdown: current.markdown, docHash: current.hash }];
@@ -176,7 +178,7 @@ export async function startServer(docPath, {
         await writeAtomic(docPath, next);
         await update(docPath, (s) => s); // refresh anchors against the saved doc
       }
-      return [res, 200, { docHash: hashBytes(Buffer.from(next)) }];
+      return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
   }
 
@@ -212,10 +214,8 @@ export async function startServer(docPath, {
   async function agentAction(body) {
     if (!dispatcher) throw new HttpError(404, 'no_agent', 'no agent is configured');
     const action = body?.action;
-    if (action === 'pause') dispatcher.pause();
-    else if (action === 'resume') dispatcher.resume();
-    else if (action === 'retry') await dispatcher.retry();
-    else throw new HttpError(400, 'bad_input', 'action must be pause, resume or retry');
+    if (action === 'retry') await dispatcher.retry();
+    else throw new HttpError(400, 'bad_input', 'action must be retry');
     return dispatcher.status();
   }
 
@@ -285,6 +285,7 @@ export async function startServer(docPath, {
       if (json === lastSettings) return;
       lastSettings = json;
       broadcast('settings', settings);
+      setPresence(settings.agent.presence);
       if (useSettings) configureAgent(settings.agent);
     } catch (error) {
       console.error(error);
@@ -292,18 +293,27 @@ export async function startServer(docPath, {
   }
 
   async function startDispatcher() {
-    dispatcher = new Dispatcher({ docPath, ...agent, onStatus: (status) => broadcast('agent', status) });
+    dispatcher = new Dispatcher({ docPath, ...agent, presence, onStatus: (status) => broadcast('agent', status) });
     await dispatcher.start();
+  }
+
+  // Presence (online / do not disturb) is the user's, from settings, for the
+  // agent of every doc (one started with flags too); it applies at once.
+  let presence = 'online';
+  function setPresence(next) {
+    presence = next;
+    dispatcher?.setPresence(next);
   }
 
   // Agent settings changed (or the server starts): let a run in progress
   // finish, then stop the old agent and start the new one, if any. Changes
-  // apply one at a time, and settings that do not touch the agent do nothing.
+  // apply one at a time, and settings that do not touch the agent (or only
+  // its presence) do nothing.
   let agentSettings = null;
   let agentChanges = Promise.resolve();
   let closed = false;
   function configureAgent(next) {
-    const json = JSON.stringify(next);
+    const json = JSON.stringify({ ...next, presence: undefined });
     if (json === agentSettings) return agentChanges;
     agentSettings = json;
     agentChanges = agentChanges.then(async () => {
@@ -339,6 +349,7 @@ export async function startServer(docPath, {
   lastDocHash = (await readDoc(docPath)).hash;
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
+  presence = JSON.parse(lastSettings).agent.presence;
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   const heartbeat = setInterval(() => {
@@ -406,7 +417,9 @@ function tokenMatches(given, token) {
   return timingSafeEqual(Buffer.from(given), Buffer.from(token));
 }
 
-// The browser speaks for a human. Timestamps come from the server clock.
+// The browser speaks for a human. Timestamps come from the server clock. A
+// message may carry `edits` and `undoes` (undoing an edit) or `applies`
+// (applying a proposal); the core validates their shape.
 function validateOp(op) {
   if (!op || !BROWSER_OPS.has(op.type)) throw new HttpError(400, 'bad_input', `operation not allowed: ${op?.type}`);
   const now = new Date().toISOString();
@@ -417,10 +430,12 @@ function validateOp(op) {
   const message = (m) => {
     if (!m || !ID.m.test(m.id ?? '') || typeof m.body !== 'string') throw new HttpError(400, 'bad_input', 'invalid message');
     const out = { id: m.id, author: human(m.author), body: m.body, createdAt: now };
-    if (m.undoes !== undefined) {
-      if (!ID.m.test(m.undoes ?? '')) throw new HttpError(400, 'bad_input', 'invalid undoes');
-      out.undoes = m.undoes;
+    for (const key of ['undoes', 'applies']) {
+      if (m[key] === undefined) continue;
+      if (!ID.m.test(m[key] ?? '')) throw new HttpError(400, 'bad_input', `invalid ${key}`);
+      out[key] = m[key];
     }
+    if (m.edits !== undefined) out.edits = m.edits;
     return out;
   };
   const threadId = (id) => {
@@ -435,9 +450,9 @@ function validateOp(op) {
     case 'addMessage':
       return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
     case 'resolve':
-      return { type: 'resolve', threadId: threadId(op.threadId), by: human({ name: op.by }).name, at: now };
+      return { type: 'resolve', threadId: threadId(op.threadId), by: human({ name: op.by }).name, kind: 'human', at: now };
     default:
-      return { type: 'reopen', threadId: threadId(op.threadId) };
+      return { type: 'reopen', threadId: threadId(op.threadId), by: human({ name: op.by }).name, kind: 'human' };
   }
 }
 

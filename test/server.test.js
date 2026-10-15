@@ -106,6 +106,7 @@ test('saves are conditional and byte-preserving', async () => {
     const onDisk = await readFile(docPath, 'utf8');
     assert.equal(onDisk, SAMPLE.replace('## Risks', '## Main risks'));
     assert.notEqual(saved.body.docHash, state.docHash);
+    assert.equal(saved.body.markdown, onDisk, 'the save says what is on disk now');
   });
 });
 
@@ -149,7 +150,38 @@ test('browser operations: always human, validated, persisted', async () => {
   });
 });
 
-test('agent endpoints: status in state, pause/resume, details; 404 without an agent', async () => {
+test('browser operations: resolve and reopen as the human; an agent name is refused', async () => {
+  await withServer(async ({ server, docPath }) => {
+    await main(['comment', docPath, '@claude look', '--as', 'fzhan', '--kind', 'human'], { stdout: { write() {} }, stderr: { write() {} }, env: {} });
+    await main(['reply', docPath, (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].id, 'Done.', '--as', 'claude'], { stdout: { write() {} }, stderr: { write() {} }, env: {} });
+    const threadId = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].id;
+    const op = (body) => call(server, 'POST', '/api/ops', { body: { op: body } });
+    assert.equal((await op({ type: 'resolve', threadId, by: 'claude' })).status, 400, 'claude is an agent');
+    const resolved = await op({ type: 'resolve', threadId, by: 'fzhan' });
+    assert.equal(resolved.body.sidecar.threads[0].status, 'resolved');
+    assert.equal((await op({ type: 'reopen', threadId })).status, 400, 'reopen says who');
+    assert.equal((await op({ type: 'reopen', threadId, by: 'claude' })).status, 400);
+    assert.equal((await op({ type: 'reopen', threadId, by: 'fzhan' })).body.sidecar.threads[0].status, 'open');
+  });
+});
+
+test('browser operations: an apply notice carries applies and edits', async () => {
+  await withServer(async ({ server }) => {
+    const op = (body) => call(server, 'POST', '/api/ops', { body: { op: body } });
+    await op({ type: 'addThread', id: 't_apply01', anchor: null, message: { id: 'm_apply01', author: human, body: 'hello' } });
+    const edit = { before: '', after: 'peak ', prefix: 'handle the extra ', suffix: 'load.', start: 126 };
+    const posted = await op({ type: 'addMessage', threadId: 't_apply01', message: { id: 'm_apply02', author: human, body: "Applied claude's proposal", applies: 'm_apply01', edits: [edit] } });
+    assert.equal(posted.status, 200);
+    const notice = posted.body.sidecar.threads[0].messages[1];
+    assert.equal(notice.applies, 'm_apply01');
+    assert.deepEqual(notice.edits, [edit]);
+    assert.equal(notice.author.kind, 'human');
+    assert.equal((await op({ type: 'addMessage', threadId: 't_apply01', message: { id: 'm_apply03', author: human, body: 'x', applies: 'nope' } })).status, 400);
+    assert.equal((await op({ type: 'addMessage', threadId: 't_apply01', message: { id: 'm_apply04', author: human, body: 'x', edits: [{ before: 'a' }] } })).status, 400);
+  });
+});
+
+test('agent endpoints: status in state, presence from settings, retry, details; 404 without an agent', async () => {
   await withServer(async ({ server }) => {
     assert.equal((await call(server, 'GET', '/api/state')).body.agent, null);
     assert.equal((await call(server, 'GET', '/api/agent')).status, 404);
@@ -163,12 +195,17 @@ test('agent endpoints: status in state, pause/resume, details; 404 without an ag
     const state = await call(server, 'GET', '/api/state');
     assert.equal(state.body.agent.name, 'claude');
     assert.equal(state.body.agent.state, 'ready');
-    const paused = await call(server, 'POST', '/api/agent', { body: { action: 'pause' } });
-    assert.equal(paused.body.status.state, 'paused');
-    const resumed = await call(server, 'POST', '/api/agent', { body: { action: 'resume' } });
-    assert.equal(resumed.body.status.state, 'ready');
-    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'explode' } })).status, 400);
-    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'pause' }, token: false })).status, 403);
+    assert.equal(state.body.agent.presence, 'online');
+    // Presence is the user's setting; saving it applies at once, without a restart.
+    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'dnd' } } });
+    assert.equal(server.dispatcher.status().presence, 'dnd');
+    assert.equal((await call(server, 'GET', '/api/state')).body.agent.presence, 'dnd');
+    await call(server, 'PUT', '/api/settings', { body: { agent: { presence: 'online' } } });
+    assert.equal(server.dispatcher.status().presence, 'online');
+    const retried = await call(server, 'POST', '/api/agent', { body: { action: 'retry' } });
+    assert.equal(retried.body.status.state, 'ready');
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'pause' } })).status, 400, 'pause is gone');
+    assert.equal((await call(server, 'POST', '/api/agent', { body: { action: 'retry' }, token: false })).status, 403);
     const details = await call(server, 'GET', '/api/agent');
     assert.equal(details.status, 200);
     assert.equal(typeof details.body.log, 'string');
@@ -406,14 +443,14 @@ test('agent from settings: starts when on, follows changes, stops when off', { t
     assert.equal(state.agent.kind, 'custom');
 
     // A comment wakes the agent configured in settings, which replies through the shim.
-    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_settings1', anchor: null, message: { id: 'm_settings1', author: human, body: 'Please look' } } } });
+    await call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id: 't_settings1', anchor: null, message: { id: 'm_settings1', author: human, body: '@helper please look' } } } });
     assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].messages.length === 2), 'the agent replied');
 
     // Changing an agent setting restarts it with the new options.
-    await call(server, 'PUT', '/api/settings', { body: { agent: { name: 'helper2', mentionsOnly: true } } });
+    await call(server, 'PUT', '/api/settings', { body: { agent: { name: 'helper2', editMode: 'approve' } } });
     assert.ok(await waitUntil(async () => (await call(server, 'GET', '/api/state')).body.agent?.name === 'helper2'), 'restarted with the new name');
     state = (await call(server, 'GET', '/api/state')).body;
-    assert.equal(state.agent.mentionsOnly, true);
+    assert.equal(state.agent.editMode, 'approve');
 
     // Turning it off stops it.
     await call(server, 'PUT', '/api/settings', { body: { agent: { enabled: false } } });

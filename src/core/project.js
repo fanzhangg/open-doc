@@ -4,6 +4,7 @@
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfm } from 'micromark-extension-gfm';
+import { cjkFriendlyExtension } from 'micromark-extension-cjk-friendly';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 
 const TEXT_BLOCKS = new Set(['paragraph', 'heading', 'tableCell', 'code', 'html']);
@@ -21,7 +22,7 @@ const WHITESPACE = /\s/;
  */
 export function project(markdown) {
   const tree = fromMarkdown(markdown, {
-    extensions: [gfm()],
+    extensions: [gfm(), cjkFriendlyExtension()],
     mdastExtensions: [gfmFromMarkdown()],
   });
 

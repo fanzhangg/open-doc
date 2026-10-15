@@ -80,3 +80,28 @@ test('edits and undo notices on messages are valid; malformed ones are rejected'
     assert.equal(validate(copy), false, name);
   }
 });
+
+test('proposals and apply notices on messages are valid; malformed ones are rejected', () => {
+  const sidecar = clone(example);
+  const change = { before: 'extra load', after: 'extra peak load', prefix: 'handle the ', suffix: '.', start: 120 };
+  const edit = { before: '', after: 'peak ', prefix: 'handle the extra ', suffix: 'load.', start: 126 };
+  const [first] = sidecar.threads[0].messages;
+  sidecar.threads[0].messages.push(
+    { id: 'm_prop0001', author: { name: 'claude', kind: 'agent' }, body: 'Suggest adding "peak".', mentions: [], createdAt: first.createdAt, proposal: [change, { ...change, before: 'sync', after: '' }] },
+    { id: 'm_apply001', author: first.author, body: "Applied claude's proposal", mentions: [], createdAt: first.createdAt, applies: 'm_prop0001', edits: [edit] },
+  );
+  assert.ok(validate(sidecar), JSON.stringify(validate.errors, null, 2));
+
+  const cases = {
+    'empty proposal': (m) => { m.proposal = []; },
+    'change with empty before': (m) => { m.proposal[0].before = ''; },
+    'change without after': (m) => { delete m.proposal[0].after; },
+    'change context longer than 32': (m) => { m.proposal[0].prefix = 'p'.repeat(33); },
+    'applies not a message id': (m, notice) => { notice.applies = 'proposal'; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const copy = clone(sidecar);
+    mutate(copy.threads[0].messages.at(-2), copy.threads[0].messages.at(-1));
+    assert.equal(validate(copy), false, name);
+  }
+});

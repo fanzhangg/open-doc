@@ -115,7 +115,29 @@
           "type": "string",
           "pattern": "^m_[A-Za-z0-9_-]{6,}$",
           "description": "Optional. Id of the message whose edits this message reverted."
+        },
+        "proposal": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/change" },
+          "description": "Optional. Changes the author suggests instead of making them (SPEC.md §2.6)."
+        },
+        "applies": {
+          "type": "string",
+          "pattern": "^m_[A-Za-z0-9_-]{6,}$",
+          "description": "Optional. Id of the message whose proposal this message applied."
         }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["before", "after", "prefix", "suffix", "start"],
+      "properties": {
+        "before": { "type": "string", "minLength": 1 },
+        "after": { "type": "string" },
+        "prefix": { "type": "string", "maxLength": 32 },
+        "suffix": { "type": "string", "maxLength": 32 },
+        "start": { "type": "integer", "minimum": 0 }
       }
     },
     "edit": {

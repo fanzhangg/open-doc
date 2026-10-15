@@ -40,9 +40,9 @@ test('operations are idempotent by id', () => {
   const reply = msg(claude, 'yo', 'm_fixed2');
   const twice = applyOp(once, { type: 'addMessage', threadId: 't_aaaaaa', message: reply });
   assert.equal(applyOp(twice, { type: 'addMessage', threadId: 't_aaaaaa', message: reply }), twice);
-  const resolved = applyOp(twice, { type: 'resolve', threadId: 't_aaaaaa', by: 'claude', at });
+  const resolved = applyOp(twice, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at });
   assert.equal(applyOp(resolved, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at }), resolved);
-  assert.equal(resolved.threads[0].resolvedBy, 'claude');
+  assert.equal(resolved.threads[0].resolvedBy, 'fzhan');
 });
 
 test('a reply reopens a resolved thread; the agent reply clears its working flag', () => {
@@ -51,13 +51,43 @@ test('a reply reopens a resolved thread; the agent reply clears its working flag
   assert.equal(s.threads[0].working.by, 'claude');
   s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(claude, 'Done.') });
   assert.equal(s.threads[0].working, null);
-  s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'claude', at });
+  s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at });
   s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(human, 'Not quite') });
   assert.equal(s.threads[0].status, 'open');
   assert.equal(s.threads[0].resolvedBy, null);
   s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at });
-  s = applyOp(s, { type: 'reopen', threadId: 't_aaaaaa' });
+  s = applyOp(s, { type: 'reopen', threadId: 't_aaaaaa', by: 'fzhan' });
   assert.equal(s.threads[0].status, 'open');
+});
+
+test('only a human resolves or reopens', () => {
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude?') });
+  const notAllowed = (e) => e instanceof OpError && e.code === 'not_allowed';
+  assert.throws(() => applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'claude', at }), notAllowed);
+  assert.throws(() => applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'CLAUDE', kind: 'human', at }), notAllowed, 'a known agent cannot claim to be human');
+  assert.throws(() => applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'newbot', kind: 'agent', at }), notAllowed);
+  assert.throws(() => applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', at }), OpError, 'who resolves must be known');
+  s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', kind: 'human', at });
+  assert.equal(s.threads[0].status, 'resolved');
+  assert.throws(() => applyOp(s, { type: 'reopen', threadId: 't_aaaaaa', by: 'claude' }), notAllowed);
+  assert.throws(() => applyOp(s, { type: 'reopen', threadId: 't_aaaaaa' }), OpError);
+  assert.equal(applyOp(s, { type: 'reopen', threadId: 't_aaaaaa', by: 'fzhan' }).threads[0].status, 'open');
+});
+
+test('proposals and apply notices on messages are validated', () => {
+  const change = { before: 'extra load', after: 'extra peak load', prefix: 'handle the ', suffix: '.', start: 120 };
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_prop01', anchor: null, message: msg(human, '@claude add peak') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_prop01', message: { ...msg(claude, 'Suggest "peak".', 'm_prop01'), proposal: [change] } });
+  assert.deepEqual(s.threads[0].messages[1].proposal, [change]);
+  const bad = [[], [{ ...change, before: '' }], [{ ...change, after: change.before }], [{ ...change, suffix: 's'.repeat(33) }], [{ ...change, start: 1.5 }]];
+  for (const proposal of bad) {
+    assert.throws(() => applyOp(s, { type: 'addMessage', threadId: 't_prop01', message: { ...msg(claude, 'x'), proposal } }), OpError);
+  }
+  const edit = { before: '', after: 'peak ', prefix: 'handle the extra ', suffix: 'load.', start: 126 };
+  s = applyOp(s, { type: 'addMessage', threadId: 't_prop01', message: { ...msg(human, "Applied claude's proposal"), applies: 'm_prop01', edits: [edit] } });
+  assert.equal(s.threads[0].messages[2].applies, 'm_prop01');
+  assert.deepEqual(inbox(s, 'claude'), [], 'applying asks the agent for nothing');
+  assert.throws(() => applyOp(s, { type: 'addMessage', threadId: 't_prop01', message: { ...msg(human, 'x'), applies: 'nope' } }), OpError);
 });
 
 test('bad input is refused', () => {
@@ -91,13 +121,17 @@ test('inbox: addressed to me or to no one, from a human, open, not already mine'
 
   s = applyOp(s, { type: 'addMessage', threadId: 't_noone1', message: msg(claude, 'Rewrote it.') });
   assert.ok(!inbox(s, 'claude', now).some((t) => t.id === 't_noone1'), 'an agent reply hands the turn back');
+  s = applyOp(s, { type: 'addMessage', threadId: 't_noone1', message: msg(human, 'Better, but shorter?') });
+  assert.ok(inbox(s, 'claude', now).some((t) => t.id === 't_noone1'), 'a follow-up wakes it without @');
+  const dnd = (sc) => inbox(sc, 'claude', now, { mentionsOnly: true }).map((t) => t.id);
+  assert.deepEqual(dnd(s), ['t_both01'], 'on do not disturb, only a mention wakes it');
 });
 
 test('edits: recorded on an agent reply, validated, idempotent; an undo notice wakes no one', () => {
   const edit = { before: 'load', after: 'peak load', prefix: 'the extra ', suffix: '.', start: 120 };
-  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_edit01', anchor: null, message: msg(human, 'add peak') });
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_edit01', anchor: null, message: msg(human, '@claude add peak') });
   s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(claude, 'Done.', 'm_reply1') });
-  s = applyOp(s, { type: 'resolve', threadId: 't_edit01', by: 'claude', at });
+  s = applyOp(s, { type: 'resolve', threadId: 't_edit01', by: 'fzhan', at });
   s = applyOp(s, { type: 'attachEdits', threadId: 't_edit01', messageId: 'm_reply1', edits: [edit] });
   assert.deepEqual(s.threads[0].messages[1].edits, [edit]);
   assert.equal(s.threads[0].status, 'resolved', 'attaching edits does not reopen');
@@ -119,7 +153,7 @@ test('edits: recorded on an agent reply, validated, idempotent; an undo notice w
   assert.equal(s.threads[0].status, 'open', 'the notice reopens the thread');
   assert.equal(s.threads[0].messages.at(-1).undoes, 'm_reply1');
   assert.deepEqual(inbox(s, 'claude'), [], 'and does not ask the agent to try again');
-  s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(human, 'Try "heavy" instead') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: msg(human, '@claude try "heavy" instead') });
   assert.deepEqual(inbox(s, 'claude').map((t) => t.id), ['t_edit01']);
   assert.throws(() => applyOp(s, { type: 'addMessage', threadId: 't_edit01', message: { ...msg(human, 'x'), undoes: 'nope' } }), OpError);
 });

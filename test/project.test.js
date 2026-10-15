@@ -63,3 +63,10 @@ test('offsets skip escape characters', () => {
 test('CRLF line endings project like LF', () => {
   assert.equal(textOf('# A\r\n\r\none\r\ntwo\r\n'), textOf('# A\n\none\ntwo\n'));
 });
+
+test('bold that ends on full-width punctuation before CJK text is still bold', () => {
+  // Plain CommonMark keeps these asterisks as text; the CJK-friendly rule does not.
+  assert.equal(textOf('- **熟悉：**直接继承\n- **实时：**agent在后台\n'), '熟悉：直接继承\n实时：agent在后台');
+  assert.equal(textOf('这是**重要**的。'), '这是重要的。');
+  assert.equal(textOf('a **b** c and 2 * 3 * 4'), 'a b c and 2 * 3 * 4', 'other text is unchanged');
+});

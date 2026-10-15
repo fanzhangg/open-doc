@@ -127,3 +127,21 @@ test('agent settings: defaults, key-by-key patches and merges', async () => {
   assert.equal(after.agent.runsPerHour, 20);
   assert.deepEqual(resolveSettings({ agent: { maxTurns: -1, name: 'bot' } }).agent, { ...DEFAULT_SETTINGS.agent, name: 'bot' });
 });
+
+test('agent edit mode: auto by default, approve allowed; the old mentionsOnly is gone', () => {
+  assert.equal(DEFAULT_SETTINGS.agent.editMode, 'auto');
+  assert.ok(!('mentionsOnly' in DEFAULT_SETTINGS.agent));
+  assert.doesNotThrow(() => checkSettingsPatch({ agent: { editMode: 'approve' } }));
+  assert.throws(() => checkSettingsPatch({ agent: { editMode: 'sometimes' } }), /agent\.editMode/);
+  assert.throws(() => checkSettingsPatch({ agent: { mentionsOnly: true } }), /unknown setting: agent\.mentionsOnly/);
+  // A settings file from an older version: mentionsOnly is ignored, editMode defaults.
+  assert.deepEqual(resolveSettings({ agent: { mentionsOnly: true, editMode: 'approve' } }).agent, { ...DEFAULT_SETTINGS.agent, editMode: 'approve' });
+  assert.equal(resolveSettings({ agent: { mentionsOnly: false } }).agent.editMode, 'auto');
+});
+
+test('agent presence: online by default, do not disturb allowed', () => {
+  assert.equal(DEFAULT_SETTINGS.agent.presence, 'online');
+  assert.doesNotThrow(() => checkSettingsPatch({ agent: { presence: 'dnd' } }));
+  assert.throws(() => checkSettingsPatch({ agent: { presence: 'away' } }), /agent\.presence/);
+  assert.equal(resolveSettings({ agent: { presence: 'away' } }).agent.presence, 'online');
+});

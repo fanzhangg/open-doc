@@ -5,6 +5,7 @@
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfm } from 'micromark-extension-gfm';
+import { cjkFriendlyExtension } from 'micromark-extension-cjk-friendly';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 
 const MAX_DIFF_CELLS = 4_000_000;
@@ -43,7 +44,7 @@ export function splice(oldSource, newSource) {
 }
 
 function blocksOf(source) {
-  const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const tree = fromMarkdown(source, { extensions: [gfm(), cjkFriendlyExtension()], mdastExtensions: [gfmFromMarkdown()] });
   return tree.children
     .filter((node) => node.position)
     .map((node) => ({ start: node.position.start.offset, end: node.position.end.offset, key: keyOf(node) }));

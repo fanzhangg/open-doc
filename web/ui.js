@@ -158,6 +158,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     /** A command from the desktop app's menu: 'settings' or 'shortcuts'. */
     command(name) {
       if (name === 'settings') settings.toggle('general');
+      else if (name === 'agent-settings') settings.toggle('agent');
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },
   };
@@ -337,7 +338,6 @@ function setupSettings({ store, getName, setName }) {
   });
 
   document.querySelector('.od-settings-toggle').addEventListener('click', () => open('general'));
-  document.querySelector('.od-me').addEventListener('click', () => open('general'));
 
   apply();
   return {
@@ -355,14 +355,13 @@ function setupSettings({ store, getName, setName }) {
 // ---- Settings > Agent ----
 
 const AGENT_STATES = {
-  starting: 'Getting ready…',
-  ready: 'Ready',
-  running: 'Working on comments',
-  paused: 'Paused',
-  error: 'The last run failed',
-  limited: 'Taking a break (hourly run limit)',
-  unavailable: 'Unavailable',
-  stopped: 'Stopped',
+  starting: 'Connecting…',
+  ready: 'Online',
+  running: 'Online, working on comments',
+  error: 'Offline: the last run failed',
+  limited: 'Offline: hourly run limit reached',
+  unavailable: 'Offline',
+  stopped: 'Offline',
 };
 
 // The agent settings apply to every doc. Its program (the custom command or
@@ -404,8 +403,8 @@ function setupAgentSettings({ store, source }) {
     for (const button of section.querySelectorAll('[data-agent-kind]')) {
       button.setAttribute('aria-checked', String(button.dataset.agentKind === current.kind));
     }
-    for (const button of section.querySelectorAll('[data-agent-mentions]')) {
-      button.setAttribute('aria-checked', String(button.dataset.agentMentions === String(current.mentionsOnly)));
+    for (const button of section.querySelectorAll('[data-agent-edit-mode]')) {
+      button.setAttribute('aria-checked', String(button.dataset.agentEditMode === current.editMode));
     }
     for (const input of section.querySelectorAll('input[data-agent]:not([type="checkbox"]), input[data-agent-program]')) {
       if (document.activeElement === input) continue;
@@ -427,8 +426,9 @@ function setupAgentSettings({ store, source }) {
       text = AGENT_STATES.starting;
     } else {
       text = AGENT_STATES[status.state] ?? status.state;
-      if (status.error) text += `: ${status.error}`;
-      else if (status.program && ['ready', 'running', 'paused'].includes(status.state)) text += ` · ${status.program}`;
+      if (status.presence === 'dnd' && ['ready', 'running'].includes(status.state)) text = text.replace('Online', 'Do not disturb');
+      if (status.error) text += `: ${status.error.replace(/\u001b\[[0-9;]*m/g, '')}`;
+      else if (status.program && ['ready', 'running'].includes(status.state)) text += ` · ${status.program}`;
     }
     section.dataset.agentState = state;
     stateText.textContent = text;
@@ -441,7 +441,7 @@ function setupAgentSettings({ store, source }) {
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.agentKind) set({ kind: button.dataset.agentKind });
-    else if (button.dataset.agentMentions) set({ mentionsOnly: button.dataset.agentMentions === 'true' });
+    else if (button.dataset.agentEditMode) set({ editMode: button.dataset.agentEditMode });
     else if (button.dataset.action === 'choose-claude') desktop?.chooseClaude().catch(() => {});
     else if (button.dataset.action === 'agent-check') {
       check.disabled = true;

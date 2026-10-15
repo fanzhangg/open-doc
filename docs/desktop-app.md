@@ -2,11 +2,9 @@
 
 ### Summary
 
-Turn the browser editor into a desktop app. The app opens a markdown file
-from its own Open dialog, from the OS (double-click, "Open with", drag onto
-the window or dock icon, or a command-line path), and keeps every setting in
-one user-level file, so a font picked once applies to every doc and every
-launch. The CLI, the sidecar format and the agent loop do not change.
+Turn the browser editor into a desktop app that opens markdown files from
+its own dialog or the OS, and keeps settings in one user-level file that
+applies to every doc. The CLI, sidecar format and agent loop do not change.
 
 Related docs:
 
@@ -119,7 +117,7 @@ saved. Quitting and relaunching keeps it. Settings sections:
 | Agent on/off | `--agent` | Off by default |
 | Agent | `--agent-cmd` | Claude Code, or Custom command with `{promptFile}`, `{threadsFile}`, `{doc}` |
 | Name | `--agent <name>` | The `@name` used in comments, default `claude` |
-| Answers | `--mentions-only` | Every comment not addressed to someone else, or only `@name` comments |
+| Edits | `--edit-mode` | Edit directly (`auto`, default): edits the doc and replies; Ask first (`approve`): replies with proposals the human applies. Either way it answers every comment not addressed only to someone else, and only the human resolves |
 | Model | `--model` | Claude Code only; blank uses Claude Code's default |
 | Max turns, run time, runs per hour, budget | `--max-turns`, `--run-timeout`, `--runs-per-hour`, `--max-budget-usd` | Same defaults as today |
 | Claude Code path | `--agent-bin` | Blank finds it on PATH and in the usual install folders |
@@ -128,8 +126,10 @@ saved. Quitting and relaunching keeps it. Settings sections:
 A status line under the agent choice says whether the agent is ready ("Claude
 Code found at ...", or what is missing), with a Check again button. Changes
 apply to every open doc: the app restarts each doc's dispatcher with the new
-options, after the run in progress finishes. Pause, resume and Try again stay
-on the agent's avatar in each window, since they are about one doc's runs.
+options, after the run in progress finishes. Presence (Online or Do not
+disturb) is set from the agent's avatar, saved as `agent.presence`, and applies
+at once to every doc; Try again stays on the avatar's card in each window,
+since it is about one doc's runs.
 
 **The agent** is off until the user turns it on once in Settings > Agent; after
 that it is on for every doc. The first time it is turned on, the dialog says
@@ -204,7 +204,8 @@ too, which fixes the reset bug for browser users as well.
     "kind": "claude",
     "name": "claude",
     "command": null,
-    "mentionsOnly": false,
+    "editMode": "auto",
+    "presence": "online",
     "model": null,
     "maxTurns": 30,
     "runTimeoutMinutes": 10,
@@ -394,7 +395,8 @@ Each phase is usable on its own and lands as its own PR.
 
 ### Open questions
 
-- Which platforms must the first release support? (Windows first is assumed.)
+- Platforms: Windows first, and macOS is a target too. Is Linux in scope for
+  the first release, or later?
 - Is code signing (Windows certificate, Apple Developer ID) in scope for the
   first release?
 - Should the app reopen the docs that were open when it quit?

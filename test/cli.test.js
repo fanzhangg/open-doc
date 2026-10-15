@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,11 +12,17 @@ import { SAMPLE, tempDoc } from './helpers.js';
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'opendoc.js');
 
 async function run(...argv) {
+  return runWith('', ...argv);
+}
+
+// Run with `input` (a string, or a value sent as JSON) on stdin.
+async function runWith(input, ...argv) {
   let stdout = '';
   let stderr = '';
   const code = await main(argv, {
     stdout: { write: (s) => { stdout += s; } },
     stderr: { write: (s) => { stderr += s; } },
+    stdin: Readable.from([typeof input === 'string' ? input : JSON.stringify(input)]),
     env: {},
   });
   return { code, stdout, stderr };
@@ -53,9 +60,14 @@ test('comment on a quote, list it with a line number, reply, resolve, reopen', a
   assert.match(listed.stdout, /fzhan \(human\): Is six realistic\?/);
 
   await json('reply', doc, thread.id, 'Cut to three.', ...asClaude);
-  const resolved = await json('resolve', doc, thread.id, ...asClaude);
+  const refused = await run('resolve', doc, thread.id, ...asClaude);
+  assert.equal(refused.code, EXIT.badInput, 'an agent cannot resolve');
+  assert.match(refused.stderr, /only a human can resolve/);
+  assert.equal((await run('resolve', doc, thread.id, '--as', 'claude', '--kind', 'human')).code, EXIT.badInput, 'nor claim to be human');
+  const resolved = await json('resolve', doc, thread.id, ...asHuman);
   assert.equal(resolved.threads[0].status, 'resolved');
-  assert.equal(resolved.threads[0].resolvedBy, 'claude');
+  assert.equal(resolved.threads[0].resolvedBy, 'fzhan');
+  assert.equal((await run('reopen', doc, thread.id, ...asClaude)).code, EXIT.badInput, 'an agent cannot reopen');
   assert.equal((await json('comments', doc)).threads.length, 0, 'open is the default filter');
   assert.equal((await json('comments', doc, '--status', 'all')).threads.length, 1);
 
@@ -91,7 +103,39 @@ test('inbox follows the mention rule', async () => {
   await run('comment', doc, '@fzhan note to self', ...asHuman);
   const waiting = await json('inbox', doc, ...asClaude);
   assert.deepEqual(waiting.threads.map((t) => t.messages[0].body), ['@claude quantify?', 'General: tighten this.']);
-  assert.match((await run('inbox', doc, '--as', 'nobody')).stdout, /quantify|tighten/);
+  assert.match((await run('inbox', doc, '--as', 'nobody')).stdout, /tighten/);
+});
+
+test('propose replies with a proposal; before must appear exactly once', async () => {
+  const doc = await tempDoc();
+  const { threads: [thread] } = await json('comment', doc, '--quote', 'extra load', '@claude add "peak"', ...asHuman);
+  const propose = (input) => runWith(input, 'propose', doc, thread.id, ...asClaude, '--json');
+
+  const ok = await propose({ body: 'Add "peak".', changes: [{ before: 'extra load', after: 'extra peak load' }] });
+  assert.equal(ok.code, 0, ok.stderr);
+  const reply = JSON.parse(ok.stdout).threads[0].messages.at(-1);
+  assert.equal(reply.author.name, 'claude');
+  assert.equal(reply.body, 'Add "peak".');
+  assert.deepEqual(reply.proposal, [{
+    before: 'extra load', after: 'extra peak load',
+    prefix: SAMPLE.slice(SAMPLE.indexOf('extra load') - 32, SAMPLE.indexOf('extra load')),
+    suffix: SAMPLE.slice(SAMPLE.indexOf('extra load') + 10, SAMPLE.indexOf('extra load') + 42),
+    start: SAMPLE.indexOf('extra load'),
+  }]);
+  assert.equal(await readFile(doc, 'utf8'), SAMPLE, 'the doc is untouched');
+  assert.match((await run('comments', doc)).stdout, /proposes: "extra load" -> "extra peak load"/);
+
+  const repeated = await propose({ body: 'x', changes: [{ before: 'the', after: 'a' }] });
+  assert.equal(repeated.code, EXIT.badInput);
+  assert.match(repeated.stderr, /more than once/);
+  const missing = await propose({ body: 'x', changes: [{ before: 'not in the doc', after: 'a' }] });
+  assert.equal(missing.code, EXIT.badInput);
+  assert.match(missing.stderr, /does not appear/);
+  assert.equal((await propose({ body: 'x', changes: [{ before: 'extra load', after: 'a' }, { before: 'load.', after: 'b' }] })).code, EXIT.badInput, 'overlapping');
+  assert.equal((await propose({ body: 'x', changes: [] })).code, EXIT.badInput);
+  assert.equal((await propose({ body: '', changes: [{ before: 'extra load', after: 'a' }] })).code, EXIT.badInput);
+  assert.equal((await runWith('not json', 'propose', doc, thread.id, ...asClaude)).code, EXIT.badInput);
+  assert.equal(JSON.parse(await readFile(sidecarPath(doc), 'utf8')).threads[0].messages.length, 2, 'refused proposals write nothing');
 });
 
 test('agent edits to the doc move anchors; deleted text detaches', async () => {

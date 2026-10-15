@@ -1,11 +1,13 @@
 // The comment margin, Google Docs style: one card per thread beside the text it
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. The agent shows up like any other collaborator: an avatar, its
-// replies (with what it changed in the doc, and Undo), "working on it" while
-// it runs, and "Resolved by …" when it is done, kept in place until the human
-// dismisses it.
+// replies (with what it changed in the doc and Undo, or the changes it
+// proposes and Apply), and "working on it" while it runs. Only the human
+// resolves threads.
 
 import { activeWorking } from '../src/core/ops.js';
+import { appliedBy } from './review.js';
+import { icon } from './icons.js';
 
 const GAP = 10;
 const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83', '#5f6368'];
@@ -16,6 +18,9 @@ const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
  *           onUndo: (threadId: string, message: object) => Promise<void>,
+ *           onApply: (threadId: string, message: object) => Promise<void>,
+ *           canApply: (message: object) => boolean,
+ *           onReview: (threadId: string, message: object) => void, reviewing: () => string | null,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number> }} handlers
  */
@@ -25,19 +30,15 @@ export function createCommentMargin(margin, handlers) {
   let activeId = null;
   let draft = null; // { hint } while composing; hint null for a comment on the whole doc
   let showResolved = false;
-  const recentlyResolved = new Set(); // resolved during this visit; shown until dismissed
-  const dismissed = new Set();
-  const knownOpen = new Set();
   const replyDrafts = new Map();
-  const undoing = new Set(); // message ids
-  const undoErrors = new Map(); // message id → why undo was refused
+  const busy = new Set(); // ids of messages being undone or applied
+  const errors = new Map(); // message id → why undo or apply failed
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
 
   function visibleThreads() {
-    if (showResolved) return sidecar.threads.filter((t) => t.status === 'resolved');
-    return sidecar.threads.filter((t) => t.status === 'open' || (recentlyResolved.has(t.id) && !dismissed.has(t.id)));
+    return sidecar.threads.filter((t) => t.status === (showResolved ? 'resolved' : 'open'));
   }
 
   function render() {
@@ -97,7 +98,10 @@ export function createCommentMargin(margin, handlers) {
         return;
       }
       const row = messageRow(message, i === 0 && thread.status === 'open' ? resolveButton(thread) : null);
-      if (message.edits?.length) row.append(editRow(thread, message));
+      if (message.proposal?.length) row.append(proposalBlock(thread, message, active));
+      // An apply notice's edits are shown, and undone, on the proposal it applied.
+      const applied = message.applies && messages.some((m) => m.id === message.applies);
+      if (message.edits?.length && !applied) row.append(editBlock(thread, message, active));
       card.append(row);
     });
 
@@ -109,15 +113,7 @@ export function createCommentMargin(margin, handlers) {
     if (thread.status === 'resolved') {
       const row = el('div', 'od-resolved-row');
       row.append(checkIcon(), el('span', '', `Resolved by ${thread.resolvedBy === me ? 'you' : thread.resolvedBy}`));
-      const reopen = linkButton('Reopen', () => handlers.onReopen(thread.id));
-      row.append(reopen);
-      if (!showResolved) {
-        row.append(linkButton('Dismiss', () => {
-          dismissed.add(thread.id);
-          if (activeId === thread.id) handlers.onSelect(null);
-          render();
-        }));
-      }
+      row.append(linkButton('Reopen', () => handlers.onReopen(thread.id)));
       card.append(row);
     }
     if (active && thread.status === 'open') card.append(composer(`reply:${thread.id}`, 'Reply…', 'Reply', async (body) => {
@@ -140,48 +136,113 @@ export function createCommentMargin(margin, handlers) {
     return row;
   }
 
-  // "Changed: before → after" under a reply that edited the doc, with Undo.
-  function editRow(thread, message) {
-    const [first, ...rest] = message.edits;
-    const row = el('div', 'od-edit');
-    const text = el('div', 'od-edit-text');
-    const run = message.edits.some((e) => e.scope === 'run');
-    const verb = !first.before ? 'Added' : !first.after ? 'Removed' : 'Changed';
-    text.append(el('span', 'od-edit-label', `${verb}${run ? ' in this run' : ''}: `));
-    if (first.before) text.append(el('del', 'od-edit-before', clip(first.before)));
-    if (first.before && first.after) text.append(el('span', 'od-edit-arrow', ' → '));
-    if (first.after) text.append(el('ins', 'od-edit-after', clip(first.after)));
-    if (rest.length) text.append(el('span', 'od-edit-more', ` and ${rest.length} more ${rest.length === 1 ? 'change' : 'changes'}`));
-    text.title = message.edits.map((e) => `${e.before || '∅'} → ${e.after || '∅'}`).join('\n').slice(0, 1000);
-    row.append(text);
-
+  // What a reply changed in the doc: an inline diff with a little context,
+  // and an Undo icon while the change can still be reverted.
+  function editBlock(thread, message, active) {
     const undone = thread.messages.some((m) => m.undoes === message.id);
-    if (undone) {
-      row.append(el('span', 'od-edit-undone', 'Undone'));
-    } else {
-      const button = linkButton(undoing.has(message.id) ? 'Undoing…' : 'Undo', async () => {
-        if (undoing.has(message.id)) return;
-        undoing.add(message.id);
-        undoErrors.delete(message.id);
-        render();
-        try {
-          await handlers.onUndo(thread.id, message);
-        } catch (error) {
-          undoErrors.set(message.id, error.message);
-        } finally {
-          undoing.delete(message.id);
-          render();
-        }
+    const run = message.edits.some((e) => e.scope === 'run');
+    const actions = undone ? [] : [actionButton('undo', 'Undo', `Revert ${message.author.name}'s change in the doc`, message, () => handlers.onUndo(thread.id, message))];
+    return changeBlock({
+      label: undone ? 'Undone' : run ? 'Edited in this run' : 'Edited',
+      changes: message.edits,
+      active,
+      muted: undone,
+      actions,
+      error: errors.get(message.id),
+      review: undone ? null : { thread, message },
+    });
+  }
+
+  // What a reply suggests changing, with an Apply icon. Once applied, Undo
+  // reverts the apply notice's edits; Apply is off when the original text
+  // has changed since.
+  function proposalBlock(thread, message, active) {
+    const notice = appliedBy(thread, message);
+    if (notice) {
+      return changeBlock({
+        label: 'Applied',
+        changes: message.proposal,
+        active,
+        actions: [actionButton('undo', 'Undo', 'Undo applying this change', notice, () => handlers.onUndo(thread.id, notice))],
+        error: errors.get(notice.id),
+        review: notice.edits?.length ? { thread, message: notice } : null,
       });
-      button.title = `Revert ${message.author.name}'s change in the doc`;
-      row.append(button);
     }
-    if (undoErrors.has(message.id)) row.append(el('div', 'od-edit-error', undoErrors.get(message.id)));
-    return row;
+    const available = handlers.canApply(message);
+    const apply = actionButton('check', 'Apply', available ? 'Apply this change to the doc' : 'The original text has changed since', message, () => handlers.onApply(thread.id, message));
+    apply.classList.add('od-change-apply');
+    apply.disabled ||= !available;
+    return changeBlock({
+      label: message.proposal.length === 1 ? 'Suggested edit' : `${message.proposal.length} suggested edits`,
+      changes: message.proposal,
+      active,
+      muted: !available,
+      actions: [apply],
+      error: errors.get(message.id) ?? (available ? null : 'The original text has changed since.'),
+      review: available ? { thread, message } : null,
+    });
+  }
+
+  // `changes` are edits (§2.5) or proposed changes (§2.6): both read as
+  // prefix + before → after + suffix. The lines are capped in height; with
+  // `review` ({ thread, message }), clicking the block shows the whole change
+  // in the doc, and clicking again hides it.
+  function changeBlock({ label, changes, active, muted = false, actions, error, review = null }) {
+    const block = el('div', 'od-change');
+    block.classList.toggle('od-change-muted', muted);
+    const head = el('div', 'od-change-head');
+    const tools = el('div', 'od-change-actions');
+    tools.append(...actions);
+    head.append(el('span', 'od-change-label', label), tools);
+    block.append(head);
+    const lines = el('div', 'od-change-lines');
+    const shown = active ? changes : changes.slice(0, 2);
+    for (const change of shown) lines.append(diffLine(change));
+    block.append(lines);
+    if (shown.length < changes.length) block.append(el('div', 'od-change-more', `${changes.length - shown.length} more`));
+    if (error) block.append(el('div', 'od-change-error', error));
+    if (review) {
+      block.classList.add('od-change-reviewable');
+      block.classList.toggle('od-change-reviewing', handlers.reviewing() === review.message.id);
+      block.title = handlers.reviewing() === review.message.id ? 'Hide this change in the doc' : 'Show this change in the doc';
+      block.addEventListener('click', (event) => {
+        if (event.target.closest('button')) return;
+        event.stopPropagation();
+        handlers.onReview(review.thread.id, review.message);
+      });
+    }
+    return block;
+  }
+
+  // A small icon button that runs `action` once at a time for `message`,
+  // keeping its error to show under the block.
+  function actionButton(name, label, title, message, action) {
+    const button = el('button', 'od-change-button');
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-label', label);
+    button.append(icon(name));
+    button.disabled = busy.has(message.id);
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      if (busy.has(message.id)) return;
+      busy.add(message.id);
+      errors.delete(message.id);
+      render();
+      try {
+        await action();
+      } catch (error) {
+        errors.set(message.id, error.message);
+      } finally {
+        busy.delete(message.id);
+        render();
+      }
+    });
+    return button;
   }
 
   function resolveButton(thread) {
-    const button = el('button', 'od-icon-button');
+    const button = el('button', 'od-icon-button od-resolve');
     button.type = 'button';
     button.title = 'Mark as resolved and hide';
     button.setAttribute('aria-label', 'Resolve');
@@ -279,6 +340,7 @@ export function createCommentMargin(margin, handlers) {
     if (showResolved || narrow.matches) {
       for (const card of cards) card.style.top = '';
       margin.style.height = '';
+      clipChanges();
       return;
     }
     const byId = new Map(sidecar.threads.map((t) => [t.id, t]));
@@ -313,21 +375,20 @@ export function createCommentMargin(margin, handlers) {
       bottom = Math.max(bottom, item.top + item.height);
     }
     margin.style.height = `${bottom + 40}px`;
+    clipChanges();
+  }
+
+  // Fade out the bottom of change lines taller than their cap.
+  function clipChanges() {
+    for (const lines of margin.querySelectorAll('.od-change-lines')) {
+      lines.classList.toggle('od-change-clipped', lines.scrollHeight > lines.clientHeight + 1);
+    }
   }
   window.addEventListener('resize', layout);
   narrow.addEventListener('change', layout);
 
   return {
     update(nextSidecar, nextMe) {
-      // A thread someone else resolved while the page was open stays visible
-      // as "Resolved by …" so the human sees what was done.
-      for (const thread of nextSidecar.threads) {
-        if (thread.status === 'open') knownOpen.add(thread.id);
-        else if (knownOpen.has(thread.id)) {
-          knownOpen.delete(thread.id);
-          if (thread.resolvedBy !== nextMe) recentlyResolved.add(thread.id);
-        }
-      }
       sidecar = nextSidecar;
       me = nextMe;
       render();
@@ -339,11 +400,12 @@ export function createCommentMargin(margin, handlers) {
       render();
       margin.querySelector('.od-card-draft textarea')?.focus();
     },
-    setActive(id) {
+    /** Make `id` the active card; `focus: false` leaves the caret where it is (e.g. in the doc). */
+    setActive(id, { focus = true } = {}) {
       activeId = id;
       render();
       if (narrow.matches) margin.querySelector(`[data-thread="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      if (id) margin.querySelector(`[data-thread="${id}"] textarea`)?.focus({ preventScroll: true });
+      if (id && focus) margin.querySelector(`[data-thread="${id}"] textarea`)?.focus({ preventScroll: true });
     },
     setShowResolved(value) {
       showResolved = value;
@@ -423,7 +485,23 @@ function el(tag, className, text) {
 }
 
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
-const clip = (s) => truncate(s.replace(/\s+/g, ' ').trim() || '⏎', 60);
+const oneLine = (s) => s.replace(/\s+/g, ' ');
+
+// One change as it reads in the text: "…context <del>before</del><ins>after</ins> context…",
+// the context cut at line breaks and to a few words.
+function diffLine({ prefix, before, after, suffix }) {
+  const line = el('div', 'od-change-line');
+  let lead = prefix.slice(prefix.lastIndexOf('\n') + 1);
+  if (lead.length > 24) lead = `…${lead.slice(-24).replace(/^\S*\s/, '')}`;
+  const end = suffix.indexOf('\n');
+  let tail = end === -1 ? suffix : suffix.slice(0, end);
+  if (tail.length > 24) tail = `${tail.slice(0, 24).replace(/\s\S*$/, '')}…`;
+  if (lead) line.append(el('span', 'od-change-context', oneLine(lead)));
+  if (before) line.append(el('del', 'od-change-del', truncate(oneLine(before), 160)));
+  if (after) line.append(el('ins', 'od-change-ins', truncate(oneLine(after), 160)));
+  if (tail) line.append(el('span', 'od-change-context', oneLine(tail)));
+  return line;
+}
 
 function relativeTime(iso) {
   const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diffEdits, findEdit, revertEdits } from '../src/core/diff.js';
+import { applyProposal, diffEdits, findEdit, findProposal, proposeChanges, revertEdits } from '../src/core/diff.js';
+import { OpError } from '../src/core/ops.js';
 import { project, createAnchor, findQuote } from '../src/core/index.js';
 import { attributeEdits } from '../src/server/agents/dispatcher.js';
 import { SAMPLE } from './helpers.js';
@@ -77,4 +78,47 @@ test('attribution: the thread whose anchor the change touches, else the run', ()
   const alone = attributeEdits([docLevel], SAMPLE, heading);
   assert.equal(alone.get('t_doc001')[0].after, ' (draft)');
   assert.equal(alone.get('t_doc001')[0].scope, undefined);
+});
+
+test('proposals: before must be unique; applying finds it again after other edits', () => {
+  const proposal = proposeChanges(SAMPLE, [
+    { before: 'extra load', after: 'extra peak load' },
+    { before: 'six features', after: 'three features' },
+  ]);
+  assert.deepEqual(proposal[0], {
+    before: 'extra load', after: 'extra peak load',
+    prefix: SAMPLE.slice(SAMPLE.indexOf('extra load') - 32, SAMPLE.indexOf('extra load')),
+    suffix: SAMPLE.slice(SAMPLE.indexOf('extra load') + 10, SAMPLE.indexOf('extra load') + 42),
+    start: SAMPLE.indexOf('extra load'),
+  });
+  const applied = applyProposal(SAMPLE, proposal);
+  assert.equal(applied, SAMPLE.replace('extra load', 'extra peak load').replace('six features', 'three features'));
+
+  // Edits elsewhere do not matter; a change to the proposed-on text does.
+  const elsewhere = '# Intro\n\nNew paragraph.\n\n' + SAMPLE;
+  assert.equal(applyProposal(elsewhere, proposal), '# Intro\n\nNew paragraph.\n\n' + applied);
+  assert.equal(findProposal(SAMPLE.replace('extra load', 'extra heavy load'), proposal[0]), null);
+  assert.equal(applyProposal(SAMPLE.replace('extra load', 'extra heavy load'), proposal), null, 'all or nothing');
+
+  // A deletion, and the edits it leaves can be undone.
+  const [deletion] = proposeChanges(SAMPLE, [{ before: ' for details', after: '' }]);
+  const deleted = applyProposal(SAMPLE, [deletion]);
+  assert.equal(deleted, SAMPLE.replace(' for details', ''));
+  assert.equal(revertEdits(deleted, diffEdits(SAMPLE, deleted).map((c) => c.edit)), SAMPLE);
+
+  const refused = (changes, pattern) => assert.throws(() => proposeChanges(SAMPLE, changes), (e) => e instanceof OpError && e.code === 'bad_input' && pattern.test(e.message));
+  refused([{ before: 'the', after: 'a' }], /more than once/);
+  refused([{ before: 'missing text', after: 'a' }], /does not appear/);
+  refused([{ before: '', after: 'a' }], /empty/);
+  refused([{ before: 'extra load', after: 'extra load' }], /the same/);
+  refused([{ before: 'extra load', after: 'a' }, { before: 'load.', after: 'b' }], /overlap/);
+  refused([], /at least one/);
+  refused([{ before: 'extra load' }], /strings/);
+});
+
+test('proposals on a CRLF doc use its line endings', () => {
+  const crlf = 'One line.\r\nTwo line.\r\n';
+  const [change] = proposeChanges(crlf, [{ before: 'One line.\nTwo', after: 'One\nTwo' }]);
+  assert.equal(change.before, 'One line.\r\nTwo');
+  assert.equal(applyProposal(crlf, [change]), 'One\r\nTwo line.\r\n');
 });

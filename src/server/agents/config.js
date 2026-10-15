@@ -8,7 +8,7 @@ import { claudeAdapter, customAdapter } from './adapters.js';
 
 /**
  * The agent for `docPath` from saved agent settings, or null when it is off.
- * @returns {null | { name: string, adapter: object, limits: object, mentionsOnly: boolean, warning: string | null }}
+ * @returns {null | { name: string, adapter: object, limits: object, editMode: 'auto' | 'approve', warning: string | null }}
  */
 export function agentFromSettings(settings, docPath) {
   if (!settings.enabled) return null;
@@ -30,7 +30,7 @@ export function agentFromSettings(settings, docPath) {
     name: settings.name,
     adapter,
     limits: { timeoutMs: settings.runTimeoutMinutes * 60 * 1000, runsPerHour: settings.runsPerHour },
-    mentionsOnly: settings.mentionsOnly,
+    editMode: settings.editMode,
     warning: hooksWarning(adapter, settings.isolated, docPath),
   };
 }

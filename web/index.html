@@ -23,17 +23,12 @@
         <span class="od-agent-line" role="status" aria-live="polite" hidden></span>
         <button class="od-agent-face" type="button" aria-label="Agent status"></button>
       </span>
-      <button class="od-me" type="button" title="You · change your name in Settings"></button>
+      <button class="od-me" type="button" title="You"></button>
     </div>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
 
-  <div class="od-panel" hidden>
-    <div class="od-panel-title"></div>
-    <div class="od-panel-text"></div>
-    <button class="od-panel-action od-secondary" type="button"></button>
-    <pre class="od-panel-log"></pre>
-  </div>
+  <div class="od-panel" role="dialog" aria-label="Profile" hidden></div>
 
   <div class="od-toolbar" role="toolbar" aria-label="Formatting">
     <div class="od-tool-group">
@@ -231,10 +226,13 @@
             <input id="od-agent-name" class="od-input" type="text" data-agent="name" autocomplete="off" spellcheck="false" maxlength="64">
           </div>
           <div class="od-setting">
-            <span class="od-setting-text"><span class="od-setting-label">Answers</span></span>
-            <div class="od-segmented" role="radiogroup" aria-label="Answers">
-              <button type="button" role="radio" data-agent-mentions="false">Every comment</button>
-              <button type="button" role="radio" data-agent-mentions="true">Only @mentions</button>
+            <span class="od-setting-text">
+              <span class="od-setting-label">Edits</span>
+              <span class="od-setting-hint">Either way, it replies and you resolve the comment.</span>
+            </span>
+            <div class="od-segmented" role="radiogroup" aria-label="Edits">
+              <button type="button" role="radio" data-agent-edit-mode="auto" title="Edits the doc, then replies with what it changed; you can undo">Edit directly</button>
+              <button type="button" role="radio" data-agent-edit-mode="approve" title="Replies with proposed changes; nothing changes until you apply them">Ask first</button>
             </div>
           </div>
           <div class="od-setting" data-for="claude">

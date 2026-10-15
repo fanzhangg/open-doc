@@ -13,12 +13,12 @@ test('agentFromSettings: off is null; on builds the adapter and limits', async (
   const doc = join(dir, 'plan.md');
   assert.equal(agentFromSettings(DEFAULT_AGENT, doc), null);
 
-  const claude = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, bin: join(dir, 'claude.exe'), runTimeoutMinutes: 3, runsPerHour: 7, mentionsOnly: true }, doc);
+  const claude = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, bin: join(dir, 'claude.exe'), runTimeoutMinutes: 3, runsPerHour: 7, editMode: 'approve' }, doc);
   assert.equal(claude.name, 'claude');
   assert.equal(claude.adapter.name, 'claude');
   assert.equal(claude.adapter.program, join(dir, 'claude.exe'));
   assert.deepEqual(claude.limits, { timeoutMs: 3 * 60 * 1000, runsPerHour: 7 });
-  assert.equal(claude.mentionsOnly, true);
+  assert.equal(claude.editMode, 'approve');
 
   const custom = agentFromSettings({ ...DEFAULT_AGENT, enabled: true, kind: 'custom', name: 'bot', command: 'mybot --prompt-file {promptFile}' }, doc);
   assert.equal(custom.adapter.name, 'custom');

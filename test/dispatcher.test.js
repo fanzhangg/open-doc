@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
-import { DENIED_READS, agentEnv, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
+import { DENIED_READS, agentEnv, buildPrompt, claudeAdapter, customAdapter, splitCommand } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 
@@ -16,21 +16,23 @@ const FAKE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-age
 const quiet = { stdout: { write() {} }, stderr: { write() {} }, env: {} };
 const human = ['--as', 'fzhan', '--kind', 'human'];
 
-async function withAgent(mode, fn, limits = {}, { mentionsOnly = false } = {}) {
+async function withAgent(mode, fn, limits = {}, { editMode = 'auto' } = {}) {
   const docPath = await tempDoc();
   const runLog = join(dirname(docPath), 'runs.log');
   await writeFile(runLog, '');
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = customAdapter(`"${process.execPath}" "${FAKE}" {threadsFile} ${mode} "${runLog}"`);
   const statuses = [];
-  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter, limits, mentionsOnly } });
+  const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter, limits, editMode } });
   server.dispatcher.onStatus = (s) => statuses.push(s.state);
   try {
     await fn({
       docPath,
       dispatcher: server.dispatcher,
       statuses,
-      runs: async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)),
+      runs: async () => (await log()).filter((entry) => entry.threads),
+      log,
       sidecar: async () => JSON.parse(await readFile(sidecarPath(docPath), 'utf8')),
       comment: (...args) => main(['comment', docPath, ...args, ...human], quiet),
       reply: (id, body) => main(['reply', docPath, id, body, ...human], quiet),
@@ -70,10 +72,12 @@ test('an @mention launches a run that replies, as the agent, in the doc folder',
   });
 });
 
-test('a comment that mentions no one launches a run by default', { timeout: 30_000 }, async () => {
-  await withAgent('reply', async ({ comment, sidecar }) => {
+test('a comment that mentions no one launches a run, and so does a follow-up', { timeout: 30_000 }, async () => {
+  await withAgent('reply', async ({ comment, reply, sidecar }) => {
     await comment('--quote', 'extra load', 'Tighten this.');
     await until(async () => replies((await sidecar()).threads[0]).length === 1, { what: 'a reply' });
+    await reply((await sidecar()).threads[0].id, 'Shorter, please.');
+    await until(async () => replies((await sidecar()).threads[0]).length === 2, { what: 'a second reply' });
   });
 });
 
@@ -88,15 +92,6 @@ test('a comment addressed to someone else does not launch a run', { timeout: 30_
     assert.deepEqual(replies(forDana), []);
     assert.ok((await runs()).every((run) => !run.threads.includes(forDana.id)));
   });
-});
-
-test('with mentionsOnly, a comment without a mention does not launch a run', { timeout: 30_000 }, async () => {
-  await withAgent('reply', async ({ runs, comment, dispatcher }) => {
-    assert.equal(dispatcher.status().mentionsOnly, true);
-    await comment('Note to self: tighten this.');
-    await sleep(1200);
-    assert.deepEqual(await runs(), []);
-  }, {}, { mentionsOnly: true });
 });
 
 test('a burst of comments becomes one run', { timeout: 30_000 }, async () => {
@@ -125,16 +120,34 @@ test('a comment during a run starts the next run', { timeout: 30_000 }, async ()
   });
 });
 
-test('an agent that edits the doc and resolves', { timeout: 30_000 }, async () => {
-  await withAgent('edit', async ({ docPath, sidecar, comment }) => {
+test('an agent that edits the doc replies and leaves the thread open for the human', { timeout: 30_000 }, async () => {
+  await withAgent('edit', async ({ docPath, dispatcher, sidecar, comment, log }) => {
     await comment('--quote', 'extra load', '@claude add "peak"');
-    const s = await until(async () => {
-      const current = await sidecar();
-      return current.threads[0].status === 'resolved' && current;
-    }, { what: 'resolved' });
+    await until(async () => (await log()).some((entry) => 'resolveRefused' in entry), { what: 'the resolve attempt' });
+    await until(() => dispatcher.status().state === 'ready', { what: 'run finished' });
+    const s = await sidecar();
+    assert.equal(s.threads[0].status, 'open');
+    assert.equal(s.threads[0].messages.at(-1).author.name, 'claude', 'its reply is the latest message');
+    assert.ok((await log()).find((entry) => 'resolveRefused' in entry).resolveRefused, 'the CLI refused to let it resolve');
     assert.match(await readFile(docPath, 'utf8'), /extra peak load/);
     assert.equal(s.threads[0].anchor.exact, 'extra peak load');
   });
+});
+
+test('in approve mode the run proposes instead of editing; the doc is unchanged', { timeout: 30_000 }, async () => {
+  await withAgent('propose', async ({ docPath, dispatcher, sidecar, comment }) => {
+    assert.equal(dispatcher.status().editMode, 'approve');
+    await comment('--quote', 'extra load', '@claude add "peak"');
+    const s = await until(async () => {
+      const current = await sidecar();
+      return replies(current.threads[0]).length === 1 && current;
+    }, { what: 'a proposal' });
+    const [reply] = replies(s.threads[0]);
+    assert.deepEqual(reply.proposal.map((c) => [c.before, c.after]), [['extra load', 'extra peak load']]);
+    assert.equal(reply.edits, undefined);
+    assert.equal(s.threads[0].status, 'open');
+    assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
+  }, {}, { editMode: 'approve' });
 });
 
 test('the agent reply records what the run changed, and undoing it restores the doc', { timeout: 30_000 }, async () => {
@@ -163,7 +176,7 @@ test('in a run for several threads, a change goes to the thread whose quote it t
       const current = await sidecar();
       return current.threads.some((t) => replies(t)[0]?.edits) && current;
     }, { what: 'recorded edits' });
-    assert.ok(s.threads.every((t) => t.status === 'resolved' && replies(t).length === 1));
+    assert.ok(s.threads.every((t) => t.status === 'open' && replies(t).length === 1));
     assert.equal((await runs()).length, 1, 'one run handled both');
     const [feedback, load] = s.threads;
     assert.equal(replies(feedback)[0].edits, undefined);
@@ -186,6 +199,18 @@ test('a failing run clears working, reports the error, and does not loop', { tim
   });
 });
 
+test('a run that ends without replying counts as failed and is not repeated', { timeout: 30_000 }, async () => {
+  await withAgent('silent', async ({ dispatcher, runs, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@claude quantify this');
+    await until(() => dispatcher.status().state === 'error', { what: 'error state' });
+    assert.match(dispatcher.status().error, /finished without replying to a comment/);
+    assert.equal(dispatcher.status().lastRun.ok, false);
+    assert.equal((await sidecar()).threads[0].working, null);
+    await sleep(1200);
+    assert.equal((await runs()).length, 1, 'no automatic relaunch');
+  });
+});
+
 test('a hanging run is killed at the timeout', { timeout: 30_000 }, async () => {
   await withAgent('hang', async ({ dispatcher, sidecar, comment }) => {
     await comment('--quote', 'extra load', '@claude quantify this');
@@ -195,15 +220,19 @@ test('a hanging run is killed at the timeout', { timeout: 30_000 }, async () => 
   }, { timeoutMs: 1500 });
 });
 
-test('pause holds comments; resume handles them', { timeout: 30_000 }, async () => {
-  await withAgent('reply', async ({ dispatcher, runs, comment }) => {
+test('do not disturb answers only @mentions; back online, the rest is answered', { timeout: 30_000 }, async () => {
+  await withAgent('reply', async ({ dispatcher, runs, comment, sidecar }) => {
     await until(() => dispatcher.status().state === 'ready', { what: 'ready' });
-    dispatcher.pause();
-    await comment('@claude while paused');
+    dispatcher.setPresence('dnd');
+    assert.equal(dispatcher.status().presence, 'dnd');
+    await comment('A note while it is on do not disturb');
     await sleep(1200);
     assert.deepEqual(await runs(), []);
-    dispatcher.resume();
-    await until(async () => (await runs()).length === 1, { what: 'run after resume' });
+    await comment('@claude this one, please');
+    await until(async () => (await runs()).length === 1, { what: 'a run for the mention' });
+    assert.equal((await runs())[0].threads.length, 1);
+    dispatcher.setPresence('online');
+    await until(async () => (await sidecar()).threads.every((t) => replies(t).length === 1), { what: 'the note answered' });
   });
 });
 
@@ -254,6 +283,18 @@ test('Claude adapter: command line and result parsing', () => {
   assert.deepEqual(args.slice(deny + 1, deny + 1 + DENIED_READS.length), DENIED_READS);
   assert.ok(DENIED_READS.includes('Read(//**/.env*)'));
   assert.ok(!args.includes('--bare'));
+
+  // Approve mode: the doc is not editable; the prompt asks for proposals.
+  const approve = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', editMode: 'approve' }).args;
+  assert.deepEqual(approve.slice(approve.indexOf('--allowedTools') + 1), ['Read', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.ok(!approve.some((a) => a.startsWith('Edit')));
+  const approvePrompt = buildPrompt({ name: 'claude', docFile: 'plan.md', editMode: 'approve' });
+  assert.match(approvePrompt, /opendoc propose plan\.md <thread-id> --as claude/);
+  assert.match(approvePrompt, /do not edit it/);
+  for (const prompt of [approvePrompt, buildPrompt({ name: 'claude', docFile: 'plan.md' })]) {
+    assert.doesNotMatch(prompt, /opendoc resolve/);
+    assert.match(prompt, /Never resolve a thread/);
+  }
 
   const ok = adapter.parse({ stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: false, session_id: 's1', total_cost_usd: 0.02, num_turns: 4, permission_denials: [] }), stderr: '', code: 0 });
   assert.deepEqual(ok, { ok: true, error: null, sessionId: 's1', costUsd: 0.02, turns: 4, denials: 0 });
