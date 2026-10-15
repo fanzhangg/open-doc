@@ -13,6 +13,7 @@ import {
 } from '@milkdown/kit/preset/commonmark';
 import { gfm, toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
+import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { $prose, $remark, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
@@ -275,7 +276,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     v.focus();
   }
 
-  /** What the toolbar reflects: active marks, the block type and lists at the caret. */
+  /**
+   * What the toolbar reflects: active marks, the block type and lists at the
+   * caret, and whether there is anything to undo or redo.
+   */
   function formatState() {
     const { state } = view();
     const active = new Set();
@@ -287,7 +291,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     if (ancestor(state, (node) => node.type.name === 'blockquote')) active.add('quote');
     const block = blockType(state);
     active.add(block);
-    return { active, block };
+    return { active, block, canUndo: undoDepth(state) > 0, canRedo: redoDepth(state) > 0 };
   }
 
   // ---- links, written in the link popover ----

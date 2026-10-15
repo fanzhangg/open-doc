@@ -80,9 +80,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   });
 
   function refresh() {
-    const { active, block } = editor.formatState();
+    const { active, block, canUndo, canRedo } = editor.formatState();
     for (const button of document.querySelectorAll('.od-toolbar [data-command], .od-bubble [data-command]')) {
-      if (['undo', 'redo'].includes(button.dataset.command)) continue;
+      const { command } = button.dataset;
+      if (command === 'undo' || command === 'redo') {
+        button.disabled = !(command === 'undo' ? canUndo : canRedo);
+        continue;
+      }
       button.setAttribute('aria-pressed', String(active.has(button.dataset.command)));
     }
     blockPicker.show(block);
