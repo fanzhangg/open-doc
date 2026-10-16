@@ -43,7 +43,9 @@
       "required": ["name", "kind"],
       "properties": {
         "name": { "$ref": "#/$defs/name" },
-        "kind": { "$ref": "#/$defs/kind" }
+        "kind": { "$ref": "#/$defs/kind" },
+        "persona": { "type": "string", "maxLength": 120, "pattern": "^[^\\r\\n]*$", "description": "Agents only: one line that defines the agent." },
+        "instructions": { "type": "string", "maxLength": 4000, "description": "Agents only: the details and rules behind the persona." }
       }
     },
     "anchor": {

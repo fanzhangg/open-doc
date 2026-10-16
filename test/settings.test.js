@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, createAgent, deleteAgent, disposable, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -111,7 +111,7 @@ test('watchSettings sees the file appear and change', async () => {
 
 test('agents: the app comes with Clippy, starred, generic, and no built-in roles', () => {
   const roster = resolveSettings(null).agents;
-  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.starred, a.session]), [['Clippy', '', true, null]], 'no persona, no job, kept');
+  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.starred, a.doc]), [['Clippy', '', true, null]], 'no persona, no job, kept');
   assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'A poet' }), 'A poet', 'the persona is the line on its card');
   assert.equal(introOf({ persona: '', instructions: 'You are a poet.' }), '', 'empty until the user writes one');
@@ -189,7 +189,7 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   assert.match(one.id, /^a_/);
   assert.equal(one.name, 'Rocky-2');
   assert.equal(createAgent(plain).name, 'agent', 'a plain name to start with');
-  assert.deepEqual([one.starred, one.session], [false, null], 'new agents are not starred');
+  assert.deepEqual([one.starred, one.doc], [false, null], 'new agents are not starred');
   assert.equal(one.autoComment, false, 'a new agent answers when @mentioned');
   assert.equal(createAgent([], { name: 'fzhan' }, ['fzhan']).name, 'fzhan-2', "not the human's name");
   assert.throws(() => createAgent([], { maxTurns: 0 }), AgentError);
@@ -207,19 +207,41 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   assert.throws(() => deleteAgent(roster, 'a_nobody'), /no such agent/);
 });
 
-test('agents: stars keep an agent; an unstarred one belongs to a doc session', () => {
-  const session = '4242:0123456789abcdef';
-  assert.doesNotThrow(() => checkAgentPatch({ starred: true, session }));
-  assert.throws(() => checkAgentPatch({ session: 'any doc' }), /session/);
+test('agents: an unstarred agent is one doc\'s own; names are unique where they show', () => {
+  const doc = '/home/me/plan.md';
+  assert.doesNotThrow(() => checkAgentPatch({ starred: false, doc }));
+  assert.throws(() => checkAgentPatch({ doc: '' }), /doc/);
   assert.throws(() => checkAgentPatch({ starred: 'yes' }), /starred/);
-  const [kept, made, old] = resolveRoster([
-    { id: 'a_kept01', name: 'kept', starred: true, session },
-    { id: 'a_made01', name: 'made', starred: false, session },
+  const [kept, own, old, stray] = resolveRoster([
+    { id: 'a_kept01', name: 'kept', starred: true, doc },
+    { id: 'a_own001', name: 'own', starred: false, doc },
     { id: 'a_old001', name: 'old' },
+    { id: 'a_stray1', name: 'stray', starred: false },
   ]);
-  assert.deepEqual([kept.starred, kept.session, disposable(kept)], [true, null, false], 'a starred agent belongs to no session');
-  assert.deepEqual([made.session, disposable(made)], [session, true]);
-  assert.deepEqual([old.starred, disposable(old)], [true, false], 'saved before stars: kept');
+  assert.deepEqual([kept.doc, docOnly(kept)], [null, false], 'a starred agent belongs to no doc');
+  assert.deepEqual([own.doc, docOnly(own), availableIn(own, doc), availableIn(own, '/home/me/other.md')], [doc, true, true, false]);
+  assert.deepEqual([old.starred, stray.starred], [true, true], 'saved before stars, or in no doc: the user\'s');
+
+  // Two docs may each have a reviewer; a starred one clashes everywhere.
+  const two = resolveRoster([
+    { id: 'a_rev001', name: 'reviewer', starred: false, doc },
+    { id: 'a_rev002', name: 'reviewer', starred: false, doc: '/home/me/other.md' },
+  ]);
+  assert.equal(two.length, 2);
+  assert.equal(createAgent(two, { name: 'reviewer', doc }).name, 'reviewer-2', 'not twice in one doc');
+  assert.equal(createAgent(two, { name: 'reviewer', doc: '/home/me/third.md' }).name, 'reviewer', 'free in a third doc');
+  assert.throws(() => updateAgent(two, 'a_rev001', { starred: true, doc: null }), /taken/, 'a starred one would show in the other doc too');
+});
+
+test('agents: the crew is starred agents only; Clippy is in it; Auto Commenter agents of old start in it', () => {
+  assert.equal(resolveSettings(null).agents[0].crew, true);
+  const [old, quiet, own] = resolveRoster([
+    { id: 'a_old001', name: 'pilot', autoComment: true },
+    { id: 'a_old002', name: 'quiet' },
+    { id: 'a_own001', name: 'own', starred: false, crew: true, doc: '/home/me/plan.md' },
+  ]);
+  assert.deepEqual([old.crew, quiet.crew, own.crew], [true, false, false], 'a doc\'s own agent is never in the crew');
+  assert.throws(() => checkAgentPatch({ crew: 'yes' }), /crew/);
 });
 
 test('agents: editAgents changes the roster under the lock and keeps other settings', async () => {

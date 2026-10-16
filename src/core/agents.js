@@ -8,20 +8,25 @@
 // - **Editor**: changes the doc. Without **Auto Editor** it proposes each
 //   change for the human to apply; with it, it edits directly. Neither: it
 //   only replies. Stored as `editMode`: 'none', 'approve' or 'auto'.
-// - **Auto Commenter** (`autoComment`): is in every doc and looks at every new
-//   comment that @mentions no one, answering the ones that fit its persona.
-//   Without it, an agent answers only when @mentioned, which also brings it
-//   into the doc, as mentioning a person shares a doc with them.
+// - **Auto Commenter** (`autoComment`): looks at every new comment that
+//   @mentions no one in the docs it is in, answering the ones that fit its
+//   persona. Without it, an agent answers only when @mentioned. Mentioning an
+//   agent brings it into the doc, as mentioning a person shares a doc with them.
 // - **Web Searcher** (`webAccess`): searches and fetches the web.
 // - **File Searcher** (`fileAccess`): reads the user's other files.
 // Turning on web or files when the agent has the other asks to confirm: one
 // that reads your files could otherwise send them to a website.
 //
-// Agents are light and disposable. A new one belongs to the doc session that
-// made it (`session`: the editor window, or `opendoc serve` run) and is
-// deleted when that session ends, unless the user **stars** it (`starred`),
-// which keeps it for every doc. Agents saved before stars existed count as
-// starred.
+// Agents are light. A new one belongs to the doc it was made in (`doc`: the
+// doc's path): it shows and answers only there, comes back whenever the doc
+// is opened, and is deleted when it is removed from the doc. Starring it
+// (`starred`) puts it in the user's library, for every doc. Agents saved
+// before stars existed count as starred. Names are unique among the starred
+// agents and each doc's own, so two docs may each have a "reviewer".
+//
+// The **crew** (`crew`, starred agents only) is who a doc starts with: the
+// first time a doc is opened with no agents in it, the crew joins it. The
+// user assembles it in the start window.
 //
 // Who an agent is takes two plain-text fields: its **persona**, one line
 // that defines it ("a strict copy editor") and shows on its card and in the
@@ -38,7 +43,7 @@ export const RUNTIMES = Object.freeze(['claude', 'codex', 'custom']);
 export const EDIT_MODES = Object.freeze(['none', 'approve', 'auto']);
 export const MAX_PERSONA = 120;
 export const MAX_INSTRUCTIONS = 4000;
-export const MAX_AGENTS = 50;
+export const MAX_AGENTS = 500;
 
 /**
  * One agent, as stored. `persona` is one line; `instructions` any length.
@@ -50,7 +55,8 @@ export const MAX_AGENTS = 50;
  */
 export const AGENT_DEFAULTS = Object.freeze({
   starred: false,
-  session: null,
+  crew: false,
+  doc: null,
   persona: '',
   instructions: '',
   runtime: 'claude',
@@ -70,11 +76,8 @@ export const AGENT_DEFAULTS = Object.freeze({
 /** Agent fields that choose the program to run: set only in the desktop app or settings.json. */
 export const AGENT_PROGRAM_KEYS = Object.freeze(['command']);
 
-/** Agent fields only the server sets: which doc session an unstarred agent belongs to. */
-export const AGENT_SERVER_KEYS = Object.freeze(['session']);
-
-/** A doc session's id: the process, and a random part for each session in it. */
-export const SESSION_PATTERN = /^\d{1,10}:[a-f0-9]{8,32}$/;
+/** Agent fields only the server sets: which doc an unstarred agent belongs to. */
+export const AGENT_SERVER_KEYS = Object.freeze(['doc']);
 
 const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
@@ -86,7 +89,8 @@ export const AGENT_RULES = Object.freeze({
   id: (v) => typeof v === 'string' && /^a_[A-Za-z0-9_-]{4,40}$/.test(v),
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
   starred: boolean,
-  session: orNull((v) => typeof v === 'string' && SESSION_PATTERN.test(v)),
+  crew: boolean,
+  doc: orNull((v) => typeof v === 'string' && v.length > 0 && v.length <= 4096 && !v.includes('\0')),
   persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !/[\0\r\n]/.test(v),
   instructions: (v) => typeof v === 'string' && v.length <= MAX_INSTRUCTIONS && !v.includes('\0'),
   runtime: oneOf(...RUNTIMES),
@@ -109,7 +113,7 @@ export const AGENT_RULES = Object.freeze({
  * ships no job titles; who does what is up to the personas people write.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: 'a_default_clippy', name: 'Clippy', starred: true, editMode: 'auto', autoComment: true },
+  { id: 'a_default_clippy', name: 'Clippy', starred: true, crew: true, editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -144,7 +148,11 @@ export function resolveAgent(saved) {
   }
   if (!Object.hasOwn(stored, 'autoComment') && (stored.autoPilot === true || stored.role === 'pilot')) out.autoComment = true;
   if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
-  if (out.starred) out.session = null;
+  if (!out.doc) out.starred = true; // in no doc: the user's
+  if (out.starred) out.doc = null;
+  // Before the crew, an agent with Auto Commenter was in every doc: it starts in the crew.
+  if (!Object.hasOwn(stored, 'crew')) out.crew = out.starred && out.autoComment;
+  if (!out.starred) out.crew = false;
   return out;
 }
 
@@ -164,9 +172,20 @@ function upgradePersona(stored) {
   return { ...rest, persona, instructions: old.trim() === persona ? '' : old.slice(0, MAX_INSTRUCTIONS) };
 }
 
-/** Whether `agent` goes away with its doc session: not starred, and made in one. */
-export function disposable(agent) {
-  return !agent.starred && agent.session !== null;
+/** Whether `agent` belongs to one doc only: not starred. */
+export function docOnly(agent) {
+  return !agent.starred && agent.doc !== null;
+}
+
+/** Whether `agent` shows and answers in the doc at `doc`: starred, or that doc's own. */
+export function availableIn(agent, doc) {
+  return agent.starred || agent.doc === doc;
+}
+
+// Two agents can be told apart by name only where both show: they clash
+// when either is starred, or both belong to the same doc.
+function clash(a, b) {
+  return sameName(a.name, b.name) && (a.starred || b.starred || a.doc === b.doc);
 }
 
 /** A stored roster → valid agents, each id and name once (names case-insensitively), at most MAX_AGENTS. */
@@ -174,7 +193,7 @@ export function resolveRoster(stored) {
   const out = [];
   for (const entry of Array.isArray(stored) ? stored : []) {
     const agent = resolveAgent(entry);
-    if (!agent || out.some((a) => a.id === agent.id || sameName(a.name, agent.name))) continue;
+    if (!agent || out.some((a) => a.id === agent.id || clash(a, agent))) continue;
     out.push(agent);
   }
   return out.slice(0, MAX_AGENTS);
@@ -188,11 +207,12 @@ export function resolveRoster(stored) {
 export function createAgent(roster, fields = {}, taken = []) {
   checkAgentPatch({ ...fields, id: 'a_check' });
   if (roster.length >= MAX_AGENTS) throw new AgentError(`at most ${MAX_AGENTS} agents`);
-  const used = [...roster.map((a) => a.name), ...taken];
+  const draft = { ...AGENT_DEFAULTS, ...fields, id: newId('a') };
   const base = fields.name ?? 'agent';
   let name = base;
-  for (let n = 2; used.some((u) => sameName(u, name)); n++) name = `${base.slice(0, 60)}-${n}`;
-  return { ...AGENT_DEFAULTS, ...fields, id: newId('a'), name };
+  const used = (n) => taken.some((t) => sameName(t, n)) || roster.some((a) => clash(a, { ...draft, name: n }));
+  for (let n = 2; used(name); n++) name = `${base.slice(0, 60)}-${n}`;
+  return { ...draft, name };
 }
 
 /** `roster` with agent `id` changed by `patch` (validated; the id cannot change). */
@@ -200,11 +220,12 @@ export function updateAgent(roster, id, patch, taken = []) {
   checkAgentPatch(patch);
   if (Object.hasOwn(patch, 'id')) throw new AgentError('an agent id cannot change');
   if (!roster.some((a) => a.id === id)) throw new AgentError('no such agent', 'not_found');
-  if (patch.name !== undefined) {
-    const clash = [...roster.filter((a) => a.id !== id).map((a) => a.name), ...taken].some((n) => sameName(n, patch.name));
-    if (clash) throw new AgentError(`the name ${patch.name} is taken`);
+  const next = { ...roster.find((a) => a.id === id), ...patch };
+  const others = roster.filter((a) => a.id !== id);
+  if ((patch.name !== undefined && taken.some((t) => sameName(t, next.name))) || others.some((a) => clash(a, next))) {
+    throw new AgentError(`the name ${next.name} is taken`);
   }
-  return roster.map((a) => (a.id === id ? { ...a, ...patch } : a));
+  return roster.map((a) => (a.id === id ? next : a));
 }
 
 /** `roster` without agent `id`. */
@@ -217,7 +238,7 @@ export function deleteAgent(roster, id) {
 export const PERMISSIONS = Object.freeze([
   { key: 'editor', label: 'Editor', hint: 'Changes the doc. Without Auto Editor, it proposes each change for you to apply.' },
   { key: 'autoEditor', label: 'Auto Editor', hint: 'Edits the doc directly, without asking you first. Every edit can be undone.' },
-  { key: 'autoComment', label: 'Auto Commenter', hint: 'Answers new comments that fit its persona without being @mentioned, in every doc.' },
+  { key: 'autoComment', label: 'Auto Commenter', hint: 'Answers new comments that fit its persona without being @mentioned, in the docs it is in.' },
   { key: 'web', label: 'Web Searcher', hint: 'Searches the web and opens web pages.' },
   { key: 'files', label: 'File Searcher', hint: 'Reads your other files, except keys and .env files.' },
 ].map((p) => Object.freeze(p)));

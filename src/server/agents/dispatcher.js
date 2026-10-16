@@ -78,7 +78,7 @@ export class Dispatcher {
    */
   constructor({
     docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
-    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, floor = new Floor(), others = () => [], join = true, source = 'flags',
+    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, floor = new Floor(), others = () => [], join = true, source = 'flags', participant = null,
   }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
@@ -89,6 +89,7 @@ export class Dispatcher {
     this.others = others;
     this.profile = profile;
     this.join = join;
+    this.participant = participant; // its entry when it joins: name, and who it is
     this.source = source;
     this.adapter = adapter;
     this.limits = { ...DEFAULT_LIMITS, ...limits };
@@ -135,7 +136,7 @@ export class Dispatcher {
   }
 
   async start() {
-    if (this.join) await update(this.docPath, (s) => applyOp(s, { type: 'join', participant: { name: this.name, kind: 'agent' } }));
+    if (this.join) await update(this.docPath, (s) => applyOp(s, { type: 'join', participant: this.participant ?? { name: this.name, kind: 'agent' } }));
     this.shimDir = await makeShim();
     await this.#preflight();
   }

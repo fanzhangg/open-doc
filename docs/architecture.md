@@ -77,12 +77,16 @@ same core library, so any of them can work without the others.
 - **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
   name, persona (one line), instructions (any length), runtime, permissions, limits,
   and whether it is starred. A new user has one plain agent, Clippy, starred;
-  there are no built-in roles. An unstarred agent records the doc session
-  that made it (`session`: process id and a random part, set only by the
-  server); closing that session's server deletes it from the profiles and the
-  doc's participants, and a server that starts deletes the ones whose process
-  is gone (a crash). **Membership**
-  lives in the sidecar's participants, so it travels with the doc.
+  there are no built-in roles. An unstarred agent is one doc's own (`doc`:
+  its full path, set only by the server, moved on rename): it shows and runs
+  only there, and removing it from the doc deletes it. Names are unique among
+  the starred agents and each doc's own. **Membership** lives in the
+  sidecar's participants, which also carry each agent's persona and
+  instructions (SPEC §2.4), so a doc travels with its agents: opening a doc
+  whose agents this machine lacks sets them up as its own, with the safest
+  permissions (never taken from the doc). The **crew** (starred agents with
+  `crew`) joins a doc the first time it is opened with no agents in it; the
+  desktop start window edits it through the preload API.
 - **Team** (`agents/team.js`): one dispatcher per agent in the open doc. They
   share a `Floor`, so only one runs at a time. This keeps each run's file
   changes attributable to it (recorded edits, undo, version history).

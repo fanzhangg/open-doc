@@ -31,16 +31,27 @@ rewrite them. OpenDoc comes with one agent,
 Auto Commenter switched on. There are no built-in roles: a grammar checker, a
 fact checker or a tough reader is an agent whose persona you wrote.
 
-Agents are light and disposable:
+Agents are light, and belong to the doc unless you star them:
 
 - **New agent** (People panel) pops a new agent into the doc and opens its
   card, ready to name: type a name, Enter, then its persona. On any card,
   click the name or the persona to edit it in place; Enter or leaving the
   field saves, Escape cancels. The settings button opens the Agents panel.
-- A new agent lasts as long as the doc window (or `opendoc serve` run) it was
-  made in. Closing it deletes the agent; its comments stay under its name.
-- **Star** an agent on its card to keep it for every doc. Agents made before
-  stars existed count as starred.
+- A new agent is the doc's own. It shows only in that doc, is saved with it
+  (name, persona and instructions in the sidecar), and is back whenever you
+  open the doc. Removing it from the doc deletes it; its comments stay under
+  its name.
+- **Star** an agent to put it in your agents, for every doc. Unstarring keeps
+  it in the docs that use it. Agents made before stars existed count as
+  starred.
+- A doc from someone else brings its agents, set up as its own with the
+  safest permissions (proposes edits, answers only when @mentioned, no web or
+  files). Permissions never come from the doc.
+- Your **crew** is who docs start with. The first time a doc with no agents
+  yet is opened, the crew joins it, so a new doc always shows up with its
+  agents. Assemble the crew in the start window's Crew row (your starred
+  agents' faces, greyed out when not in it): click one to take it in or out,
+  or + to add a new one by name. Clippy is in it to begin with. A doc that already has agents keeps its own.
 
 **Permissions** are plain switches on the agent's card:
 

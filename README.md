@@ -19,13 +19,23 @@ it answers your comments like a plain co-author. The product has no built-in
 roles; make a grammar checker, a fact checker or a tough reader by writing
 its persona, and rewrite or delete any agent.
 
-Agents are light and disposable. **New agent** in the People panel pops one
-into the doc and opens its card, ready to name: type a name, Enter, then its
-persona. Click the name or the persona on any card to edit it in place; the
-Agents panel holds the finer settings, such as instructions. A new agent lasts as long
-as the doc window (or `opendoc serve` run) it was made in: close it and the
-agent is deleted, its comments staying under its name. **Star** it on its card
-to keep it for every doc.
+Agents are light. **New agent** in the People panel pops one into the doc and
+opens its card, ready to name: type a name, Enter, then its persona. Click the
+name or the persona on any card to edit it in place; the Agents panel holds
+the finer settings, such as instructions. A new agent is the doc's own: it
+shows only in that doc, its name, persona and instructions are saved in the
+doc's sidecar, and it is back whenever you open the doc. Removing it from the
+doc (×) deletes it. **Star** it to put it in your agents, for every doc;
+unstarring one keeps it in the docs that use it. A doc you get from someone
+else (a cloned repo) brings its agents: they are set up as its own, proposing
+edits and with no web or file access until you switch more on, since
+permissions never come from the doc.
+
+Your **crew** is who docs start with: the first time a doc with no agents
+yet is opened, the crew joins it. Assemble it in the start window's Crew
+row: your starred agents' faces, in colour when in the crew; click one to take
+it in or out, or + to add a new one by name. Clippy is in it to begin with. A doc that already has agents keeps
+its own, and one you remove from a doc stays out.
 
 Every agent reads the doc it works on. Everything else is a switch on the
 agent's card (click its avatar) and in the **Agents** panel; flip one and
@@ -35,7 +45,7 @@ it holds from the agent's next run:
 | --- | --- |
 | **Editor** | changes the doc. Without Auto Editor it proposes each change: shown struck through and inserted in the text while the thread is selected, applied when you click Apply. Off, it only replies. |
 | **Auto Editor** | edits the doc directly and replies with what it changed, which you can undo. Needs Editor. |
-| **Auto Commenter** | is in every doc and looks at every new comment that @mentions no one, answering the ones that fit its persona. |
+| **Auto Commenter** | looks at every new comment that @mentions no one, in the docs it is in, answering the ones that fit its persona. |
 | **Web Searcher** | searches the web and opens web pages. |
 | **File Searcher** | reads your other files, never keys or `.env` files. |
 
@@ -70,7 +80,7 @@ The header shows you and the doc's agents side by side (people are circles,
 each agent a little face of its own; those with Auto Commenter first), then a
 round **People** button that opens a panel like a shared doc's, one line per
 person or agent:
-you, the agents here (× to remove one, except those with Auto Commenter), and
+you, the agents here (× to remove one), and
 the ones you can add (+). Click an agent for its card: name, persona,
 permission switches, a star, and a button for more settings; click the
 name or the persona to edit it in place.

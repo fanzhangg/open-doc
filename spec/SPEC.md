@@ -119,6 +119,13 @@ and a new message from a human that is not a notice (§5) empties `passed`.
 
 Each entry is `{ "name", "kind" }`. A name matches
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is unique, compared case-insensitively.
+An agent's entry MAY also say who the agent is, so the doc keeps its agents
+wherever it goes: `persona`, one line (at most 120 characters, no line
+breaks) that defines it, and `instructions`, the details and rules behind it
+(at most 4000 characters). Both are plain text written by people, given to
+the agent with every task. A tool that opens a doc MAY set up an agent from
+them, but never takes permissions from the sidecar: what an agent may do is
+decided on the machine that runs it.
 A participant is added the first time they post, when an agent starts
 waiting for comments, or when a human invites an agent into the doc. A
 participant who leaves (for example an agent the human removed from the doc)

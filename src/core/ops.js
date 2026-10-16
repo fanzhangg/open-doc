@@ -3,6 +3,7 @@
 // operation is applied at most once and unknown fields are preserved.
 
 import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
+import { AGENT_RULES } from './agents.js'; // used only inside functions, so the import cycle is safe
 
 export const FORMAT_VERSION = 1;
 export const WORKING_TTL_MS = 5 * 60 * 1000;
@@ -55,6 +56,8 @@ export function applyOp(sidecar, op) {
   switch (op.type) {
     case 'join':
       return join(sidecar, op.participant);
+    case 'describe':
+      return describe(sidecar, op);
     case 'leave':
       return leave(sidecar, op.name);
     case 'addThread':
@@ -99,7 +102,29 @@ function pass(sidecar, { threadId, by }) {
 function join(sidecar, participant) {
   validateParticipant(participant);
   if (sidecar.participants.some((p) => sameName(p.name, participant.name))) return sidecar;
-  return { ...sidecar, participants: [...sidecar.participants, { name: participant.name, kind: participant.kind }] };
+  return { ...sidecar, participants: [...sidecar.participants, { name: participant.name, kind: participant.kind, ...about(participant) }] };
+}
+
+// An agent in the doc carries who it is (SPEC §2.4): its persona and
+// instructions, so the doc keeps its agents wherever it goes. `describe`
+// sets them; an empty one is left out.
+function describe(sidecar, { name, persona = '', instructions = '' }) {
+  const at = sidecar.participants.findIndex((p) => p.kind === 'agent' && sameName(p.name, name ?? ''));
+  if (at === -1) throw new OpError('not_found', `no agent ${name} in this doc`);
+  const next = { name: sidecar.participants[at].name, kind: 'agent', ...about({ kind: 'agent', persona, instructions }) };
+  const participants = sidecar.participants.map((p, i) => (i === at ? next : p));
+  return { ...sidecar, participants };
+}
+
+function about({ kind, persona, instructions }) {
+  if (kind !== 'agent') return {};
+  const out = {};
+  for (const [key, value] of [['persona', persona], ['instructions', instructions]]) {
+    if (value === undefined || value === '') continue;
+    if (!AGENT_RULES[key](value)) throw new OpError('bad_input', `invalid ${key}`);
+    out[key] = value;
+  }
+  return out;
 }
 
 // A participant leaves the doc (an agent removed from it): they are no

@@ -464,9 +464,9 @@ async function withRoster(agents, fn, { mode = 'reply', agent, options = {} } = 
 const comment = (server, id, body) => call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id, anchor: null, message: { id: `m_${id.slice(2)}`, author: human, body } } } });
 const authorsOf = (thread) => thread.messages.slice(1).map((m) => m.author.name);
 
-test('an agent with Auto Commenter is in every doc and answers what mentions no one; any other answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
+test('the crew starts in the doc; Auto Commenter answers what mentions no one; any other answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
   await withRoster([{ name: 'helper', persona: 'Says it short', instructions: 'You are terse.' }], async ({ server, state, runs }) => {
-    // The agent with Auto Commenter joins at once; the other is not in the doc yet.
+    // Pilot (in the crew: it had Auto Commenter before there was one) joins the new doc at once; the other is not in the doc yet.
     let now = await state();
     assert.deepEqual(now.agents.map((a) => [a.name, a.autoComment]), [['Pilot', true]]);
     assert.ok(now.sidecar.participants.some((p) => p.name === 'Pilot' && p.kind === 'agent'));
@@ -500,13 +500,12 @@ test('an agent with Auto Commenter is in every doc and answers what mentions no 
     assert.ok(now.sidecar.participants.some((p) => p.name === 'editor') && !now.sidecar.participants.some((p) => p.name === 'helper'));
     assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { name: 'fzhan' } } })).status, 400, "not the human's name");
 
-    // Removed: it stops and leaves; its comment stays. An agent with Auto Commenter cannot be removed.
+    // Removed: it stops and leaves; its comment stays.
     const removed = await call(server, 'POST', '/api/agents/remove', { body: { name: 'editor' } });
     assert.equal(removed.status, 200);
     assert.deepEqual(removed.body.agents.map((a) => a.name), ['Pilot']);
     assert.ok(!removed.body.sidecar.participants.some((p) => p.name === 'editor'));
     assert.equal(removed.body.sidecar.threads[1].messages[1].author.name, 'helper');
-    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'Pilot' } })).status, 409);
 
     // Added back from the People panel.
     const added = await call(server, 'POST', '/api/agents/invite', { body: { id: 'a_test01' } });
@@ -514,7 +513,32 @@ test('an agent with Auto Commenter is in every doc and answers what mentions no 
     assert.ok(added.body.agents.some((a) => a.name === 'editor'));
     assert.equal((await call(server, 'POST', '/api/agents/invite', { body: { id: 'a_nobody' } })).status, 404);
     assert.equal((await call(server, 'POST', '/api/agent', { body: { name: 'Pilot', action: 'presence', presence: 'dnd' } })).status, 400, 'presence is gone');
+
+    // Even an agent with Auto Commenter can be removed from a doc.
+    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'Pilot' } })).status, 200);
+    assert.ok(!(await state()).agents.some((a) => a.name === 'Pilot'));
   });
+});
+
+test('a doc opened with no agents starts with the crew; one with agents keeps its own', { timeout: 30_000 }, async () => {
+  const fresh = await tempDoc(SAMPLE);
+  const settled = await tempDoc(SAMPLE);
+  await writeFile(sidecarPath(settled), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [], participants: [{ name: 'solo', kind: 'agent' }] }));
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: [
+    { id: 'a_crew01', name: 'scout', starred: true, crew: true, persona: 'Reads first' },
+    { id: 'a_crew02', name: 'keeper', starred: true, crew: true },
+    { id: 'a_auto01', name: 'chatty', starred: true, crew: false, autoComment: true },
+  ] }));
+  const participants = async (doc) => JSON.parse(await readFile(sidecarPath(doc), 'utf8')).participants.map((p) => p.name);
+  for (const doc of [fresh, settled]) {
+    const server = await startServer(doc, { assetsDir, settingsDir, agentFromSettings: true });
+    await server.close();
+  }
+  assert.deepEqual(await participants(fresh), ['scout', 'keeper'], 'the crew, and not an agent with Auto Commenter outside it');
+  assert.deepEqual(JSON.parse(await readFile(sidecarPath(fresh), 'utf8')).participants[0], { name: 'scout', kind: 'agent', persona: 'Reads first' });
+  assert.deepEqual(await participants(settled), ['solo'], 'a doc with agents keeps them');
 });
 
 test('an @mention typed in the doc becomes the human\'s comment once they pause, and the agent answers it', { timeout: 30_000 }, async () => {
@@ -542,36 +566,75 @@ test('an @mention typed in the doc becomes the human\'s comment once they pause,
   }, { options: { mentionSettleMs: 200 } });
 });
 
-test('a new agent lasts as long as its doc session unless starred; a crashed session\'s agents are cleared', { timeout: 30_000 }, async () => {
-  const docPath = await tempDoc(SAMPLE);
+test('a new agent is its doc\'s own: saved with the doc, back when it opens, gone when removed; a cloned doc brings its agents', { timeout: 30_000 }, async () => {
+  const docA = await tempDoc(SAMPLE);
+  const docB = await tempDoc(SAMPLE);
+  const docC = await tempDoc(SAMPLE);
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
-  const dead = { id: 'a_dead01', name: 'ghost', starred: false, session: '999999999:0123456789abcdef' };
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: [{ id: 'a_kept01', name: 'kept', starred: true }, dead] }));
-  const roster = async () => JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).agents.map((a) => a.name);
-  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: [{ id: 'a_kept01', name: 'kept', starred: true }] }));
+  const roster = async () => JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).agents;
+  const open = (doc) => startServer(doc, { assetsDir, settingsDir, agentFromSettings: true });
+  const participant = async (doc, name) => JSON.parse(await readFile(sidecarPath(doc), 'utf8')).participants.find((p) => p.name === name);
+
+  // Made in A: A's own, and A's sidecar says who it is.
+  let server = await open(docA);
+  let id;
   try {
-    assert.deepEqual(await roster(), ['kept'], 'the crashed session\'s agent is gone');
     const made = await call(server, 'POST', '/api/roster', { body: { agent: {}, invite: true } });
     assert.equal(made.status, 200);
+    id = made.body.agent.id;
     assert.deepEqual([made.body.agent.name, made.body.agent.starred], ['agent', false]);
-    assert.match(made.body.agent.session, /^\d+:[a-f0-9]+$/, 'it belongs to this session');
-    assert.ok(made.body.sidecar.participants.some((p) => p.name === 'agent'), 'and joins the doc at once');
-    const other = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'keeper' } } });
-    const starred = await call(server, 'PUT', '/api/roster', { body: { id: other.body.agent.id, patch: { starred: true } } });
-    assert.equal(starred.body.settings.agents.find((a) => a.name === 'keeper').session, null);
-    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { session: 'x' } } })).status, 400, 'the page cannot pick a session');
+    assert.equal((await call(server, 'GET', '/api/state')).body.docKey, made.body.agent.doc, 'it belongs to this doc');
+    await call(server, 'PUT', '/api/roster', { body: { id, patch: { name: 'critic', persona: 'A tough reader' } } });
+    assert.deepEqual(await participant(docA, 'critic'), { name: 'critic', kind: 'agent', persona: 'A tough reader' });
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { doc: '/x.md' } } })).status, 400, 'the page cannot pick a doc');
   } finally {
     await server.close();
   }
-  assert.deepEqual(await roster(), ['kept', 'keeper'], 'the unstarred one went with the session');
-  const sidecar = JSON.parse(await readFile(sidecarPath(docPath), 'utf8'));
-  assert.ok(!sidecar.participants.some((p) => p.name === 'agent'), 'and left the doc');
+  assert.ok((await roster()).some((a) => a.name === 'critic'), 'closing the doc keeps it');
+
+  // Not in B.
+  server = await open(docB);
+  try {
+    assert.ok(!(await call(server, 'GET', '/api/state')).body.agents.some((a) => a.name === 'critic'));
+    assert.equal((await call(server, 'POST', '/api/agents/invite', { body: { id } })).status, 404, 'another doc\'s own cannot be added');
+    // Unstarring a starred agent not in this doc takes it out of your agents.
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_kept01', patch: { starred: false } } })).status, 200);
+    assert.ok(!(await roster()).some((a) => a.name === 'kept'));
+  } finally {
+    await server.close();
+  }
+
+  // Back in A, then removed: deleted.
+  server = await open(docA);
+  try {
+    assert.ok((await call(server, 'GET', '/api/state')).body.agents.some((a) => a.name === 'critic'), 'back with the doc');
+    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'critic' } })).status, 200);
+    assert.ok(!(await roster()).some((a) => a.name === 'critic'), 'removing a doc\'s own deletes it');
+  } finally {
+    await server.close();
+  }
+
+  // A doc from elsewhere describes an agent this machine does not have: it is
+  // set up as that doc's own, with the safest permissions.
+  await writeFile(sidecarPath(docC), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [],
+    participants: [{ name: 'helper', kind: 'agent', persona: 'Says it short', instructions: 'Be terse.' }] }));
+  server = await open(docC);
+  try {
+    const helper = (await roster()).find((a) => a.name === 'helper');
+    assert.deepEqual([helper.persona, helper.instructions, helper.starred, helper.editMode, helper.autoComment, helper.webAccess, helper.fileAccess],
+      ['Says it short', 'Be terse.', false, 'approve', false, false, false]);
+    assert.equal(helper.doc, (await call(server, 'GET', '/api/state')).body.docKey);
+  } finally {
+    await server.close();
+  }
 });
 
 test('several agents with Auto Commenter each answer the open comments that fit them, and pass on the rest', { timeout: 30_000 }, async () => {
   await withRoster([{ name: 'second' }], async ({ server, state }) => {
-    // Switching Auto Commenter on brings an agent into the doc.
+    // Bring second in, and switch its Auto Commenter on.
+    assert.equal((await call(server, 'POST', '/api/agents/invite', { body: { id: 'a_test01' } })).status, 200);
     const switched = await call(server, 'PUT', '/api/roster', { body: { id: 'a_test01', patch: { autoComment: true } } });
     assert.equal(switched.status, 200);
     assert.ok(await waitUntil(async () => (await state()).agents.some((a) => a.name === 'second' && a.autoComment)), 'second joined');
