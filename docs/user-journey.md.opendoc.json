@@ -1,0 +1,284 @@
+{
+  "opendoc": 1,
+  "doc": "user-journey.md",
+  "docHash": "sha256:3ac2f1b2ca2e17dea6ee2a820250f511c5b5b7e8b504966063aba58f03f5f17f",
+  "participants": [
+    {
+      "name": "Dobby",
+      "kind": "agent"
+    },
+    {
+      "name": "fanzhang",
+      "kind": "human"
+    }
+  ],
+  "threads": [
+    {
+      "id": "t_rtpw2nvcgn",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nHow to Use This Doc\nThe step-by",
+        "start": 0
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_ve7auk45bk",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "I want write a user journey doc about my product open-doc (See the vision doc for ref). How do I structure the user journey doc? Can you create an outline for me?",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:38:30.829Z"
+        },
+        {
+          "id": "m_f3sgj21xtc",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "I added an outline below the title. It follows the user over time: Purpose and Scope, Personas, a Journey Overview table, then five stages (Discover, Set Up, First Collaboration, Everyday Use, Grow). Everyday Use has one journey for each core use case from the vision doc. It ends with Moments That Matter, Pain Points and Opportunities, Metrics by Stage, and Open Questions. Each section has a short note on what goes in it. I didn't write any content yet, so tell me which section to draft first, or which ones to cut or merge.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:38:50.294Z",
+          "edits": [
+            {
+              "before": "",
+              "after": "## Purpose and Scope\n\n- What this doc covers: how a person goes from hearing about open-doc to using it every week\n- Which product stage it describes (single agent + human, per the roadmap)\n- Link to the product vision doc\n\n## Personas\n\n- Who they are, drawn from the vision's target users (people who already write docs with AI, keep docs next to their code, value open tools)\n- Their goal, their current workflow (chat box + copy and paste), and their main frustration\n\n## Journey Overview\n\n- One table or diagram of the stages below: for each stage, what the user does, thinks, and feels, the touchpoint (CLI, browser editor, comments, agent), and the main pain point or risk\n\n## Stage 1: Discover\n\n- How they find open-doc and what makes them try it\n\n## Stage 2: Set Up\n\n- Install the CLI, connect an agent, open a doc in the editor\n- What must work on the first try\n\n## Stage 3: First Collaboration\n\n- Leave the first comment, see the agent respond, review the edit\n- The \"aha\" moment: the AI acts as a teammate in the doc, not a chat box\n\n## Stage 4: Everyday Use\n\nOne journey per core use case:\n\n- **AI writes, human edits**: the AI drafts, the human refines paragraph by paragraph with comments\n- **Human writes, AI edits**: the human owns the text, the AI makes small, scoped fixes\n- **Alongside chat-based agents**: big changes in the agent's CLI or app, small ones in the doc\n\nFor each: the step-by-step flow, where the user stays in control (scoped edits, proposals, undo, resolve), and where they might wait or get stuck\n\n## Stage 5: Grow\n\n- Bring in more agents with different roles, use it across more docs\n- What keeps them coming back\n\n## Moments That Matter\n\n- The few moments that decide whether the user stays or leaves (for example, the first agent reply, the first unwanted edit)\n\n## Pain Points and Opportunities\n\n- Problems found across the journey and the product ideas that address them\n\n## Metrics by Stage\n\n- How we know each stage works, tied to the vision's success metrics\n\n## Open Questions\n",
+              "prefix": "# User Journey\n\n",
+              "suffix": "",
+              "start": 16
+            }
+          ]
+        },
+        {
+          "id": "m_fsdx2nd8ic",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "I do not want to write a business report for my leader to review. I just want to anchor the UX in the doc for agent to review.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:42:02.857Z"
+        },
+        {
+          "id": "m_ff94goj5l5",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Got it. I replaced the business-report outline with a UX spec an agent can check the product against. It has a short How to Use This Doc section, a one-line description of the user, and then eight journeys: open a doc, ask for an edit, keep writing while the agent works, review the agent's work, ask for a proposal first, the agent needs the user, the commented text is gone, and several agents (later). Each journey has Start, Steps, Must hold and Must never happen; I left the last two blank for you. It ends with Rules for Every Journey and Not Covered. I dropped personas, stages, metrics and pain points. Your backticks on Personas went with that section. Want me to fill in Journey 2 as an example?",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:42:24.999Z",
+          "edits": [
+            {
+              "before": "Purpose and Scope\n\n- What this doc covers: how a person goes from hearing about open-doc to using it every week\n- Which product stage it describes (single agent + human, per the roadmap)\n- Link to the product vision doc",
+              "after": "How to Use This Doc",
+              "prefix": "# User Journey\n\n## ",
+              "suffix": "\n\n- The step-by-step experience ",
+              "start": 19
+            },
+            {
+              "before": "- Who they are, drawn from the vision's target users (people who already write docs with AI, keep docs next to their code, value open tools)\n- Their goal, their current workflow (chat box + copy and paste), and their main frustration",
+              "after": "## The User",
+              "prefix": "ny step that no longer matches\n\n",
+              "suffix": "\n\n- One or two lines: someone wh",
+              "start": 328
+            },
+            {
+              "before": "## Journey Overview",
+              "after": "- One or two lines: someone who writes markdown docs with an AI agent, locally, next to their code (see the vision doc)",
+              "prefix": "no longer matches\n\n## The User\n\n",
+              "suffix": "\n\n## Journey 1: Open a Doc\n\n- **",
+              "start": 341
+            },
+            {
+              "before": "- One table or diagram of the stages below: for each stage, what the user does, thinks, and feels, the touchpoint (CLI, browser editor, comments, agent), and the main pain point or risk",
+              "after": "## Journey 1: Open a Doc",
+              "prefix": "heir code (see the vision doc)\n\n",
+              "suffix": "\n\n- **Start:** a markdown file o",
+              "start": 462
+            },
+            {
+              "before": "## Stage 1: Discover",
+              "after": "- **Start:** a markdown file on disk, agent set up or not\n- **Steps:** open the doc, the editor shows it, the agent is on standby\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": "doc)\n\n## Journey 1: Open a Doc\n\n",
+              "suffix": "\n\n## Journey 2: Ask for an Edit\n",
+              "start": 488
+            },
+            {
+              "before": "- How they find open-doc and what makes them try it",
+              "after": "## Journey 2: Ask for an Edit",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** doc open, agent o",
+              "start": 661
+            },
+            {
+              "before": "## Stage 2: Set Up",
+              "after": "- **Start:** doc open, agent on standby\n- **Steps:** select text, comment, see the agent responding, see the edit land in the doc, read the reply in the thread\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": "\n## Journey 2: Ask for an Edit\n\n",
+              "suffix": "\n\n## Journey 3: Keep Writing Whi",
+              "start": 692
+            },
+            {
+              "before": "- Install the CLI, connect an agent, open a doc in the editor\n- What must work on the first try",
+              "after": "## Journey 3: Keep Writing While the Agent Works",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** the agent is hand",
+              "start": 895
+            },
+            {
+              "before": "## Stage 3: First Collaboration",
+              "after": "- **Start:** the agent is handling a comment\n- **Steps:** keep typing elsewhere; type in the same paragraph the agent is editing\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": " Writing While the Agent Works\n\n",
+              "suffix": "\n\n## Journey 4: Review the Agent",
+              "start": 945
+            },
+            {
+              "before": "- Leave the first comment, see the agent respond, review the edit\n- The \"aha\" moment: the AI acts as a teammate in the doc, not a chat box",
+              "after": "## Journey 4: Review the Agent's Work",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** the agent replied",
+              "start": 1117
+            },
+            {
+              "before": "## Stage 4: Everyday Use",
+              "after": "- **Start:** the agent replied and the thread waits on the user\n- **Steps:** accept and resolve, undo the edit, or reply to ask for more\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": "ney 4: Review the Agent's Work\n\n",
+              "suffix": "\n\n## Journey 5: Ask for a Propos",
+              "start": 1156
+            },
+            {
+              "before": "One journey per core use case:",
+              "after": "## Journey 5: Ask for a Proposal First",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** the user wants to",
+              "start": 1336
+            },
+            {
+              "before": "AI writes, human edits**: the AI drafts, the human refines paragraph by paragraph with comments\n- **Human writes, AI edits**: the human owns the text, the AI makes small, scoped fixes\n- **Alongside chat-based agents**: big changes in the agent's CLI or app, small ones in the doc",
+              "after": "Start:** the user wants to approve changes before they land\n- **Steps:** ask for a proposal (or turn on approve-every-change), see the suggested changes, apply or reject\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": ": Ask for a Proposal First\n\n- **",
+              "suffix": "\n\n## Journey 6: The Agent Needs ",
+              "start": 1380
+            },
+            {
+              "before": "For each: the step-by-step flow, where the user stays in control (scoped edits, proposals, undo, resolve), and where they might wait or get stuck",
+              "after": "## Journey 6: The Agent Needs the User",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** the agent can't f",
+              "start": 1593
+            },
+            {
+              "before": "## Stage 5: Grow",
+              "after": "- **Start:** the agent can't finish without a decision or a fact\n- **Steps:** the agent asks in the thread or starts a new thread, the user answers\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": "ey 6: The Agent Needs the User\n\n",
+              "suffix": "\n\n## Journey 7: The Commented Te",
+              "start": 1633
+            },
+            {
+              "before": "- Bring in more agents with different roles, use it across more docs\n- What keeps them coming back",
+              "after": "## Journey 7: The Commented Text Is Gone",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- **Start:** a thread's text w",
+              "start": 1824
+            },
+            {
+              "before": "## Moments That Matter",
+              "after": "- **Start:** a thread's text was rewritten or deleted\n- **Steps:** the thread shows as detached, the agent finds where the content went or asks\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": " 7: The Commented Text Is Gone\n\n",
+              "suffix": "\n\n## Journey 8: Several Agents i",
+              "start": 1866
+            },
+            {
+              "before": "- The few moments that decide whether the user stays or leaves (for example, the first agent reply, the first unwanted edit",
+              "after": "## Journey 8: Several Agents in One Doc (Later",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": ")\n\n- **Start:** more than one ag",
+              "start": 2053
+            },
+            {
+              "before": "## Pain Points and Opportunities",
+              "after": "- **Start:** more than one agent connected\n- **Steps:** mention one agent with `@name`, leave a comment for anyone\n- **Must hold:**\n- **Must never happen:**",
+              "prefix": "eral Agents in One Doc (Later)\n\n",
+              "suffix": "\n\n## Rules for Every Journey\n\n- ",
+              "start": 2102
+            },
+            {
+              "before": "- Problems found across the journey and the product ideas that address them",
+              "after": "## Rules for Every Journey",
+              "prefix": "ld:**\n- **Must never happen:**\n\n",
+              "suffix": "\n\n- Rules that hold in every ste",
+              "start": 2260
+            },
+            {
+              "before": "## Metrics by Stage",
+              "after": "- Rules that hold in every step (for example: the agent only changes what the comment is about; only the user resolves a thread; every change is explained in the thread and can be undone)",
+              "prefix": "**\n\n## Rules for Every Journey\n\n",
+              "suffix": "\n\n## Not Covered\n\n- Experiences ",
+              "start": 2288
+            },
+            {
+              "before": "- How we know each stage works, tied to the vision's success metrics",
+              "after": "## Not Covered",
+              "prefix": " the thread and can be undone)\n\n",
+              "suffix": "\n\n- Experiences we deliberately ",
+              "start": 2477
+            },
+            {
+              "before": "## Open Questions",
+              "after": "- Experiences we deliberately leave out (for example: chat window, cloud sync, people co-editing)",
+              "prefix": "can be undone)\n\n## Not Covered\n\n",
+              "suffix": "\n",
+              "start": 2493
+            }
+          ]
+        },
+        {
+          "id": "m_0ks9n53x7t",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "You were editing this when I changed it, so your text was kept. Here is my version, in case you want it instead.",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:42:31.844Z",
+          "proposal": [
+            {
+              "before": "## Personas",
+              "after": "- The step-by-step experience open-doc should give, written so an agent can check the product against it\n- Each journey: where the user starts, what they do, what they see, and what must hold\n- When reviewing a change, walk the affected journeys and flag any step that no longer matches",
+              "prefix": "ourney\n\n## How to Use This Doc\n\n",
+              "suffix": "\n\n## The User\n\n- One or two line",
+              "start": 40
+            }
+          ]
+        },
+        {
+          "id": "m_g9ayamhkul",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "Applied Dobby's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-15T19:43:16.336Z",
+          "edits": [
+            {
+              "before": "## Personas",
+              "after": "- The step-by-step experience open-doc should give, written so an agent can check the product against it\n- Each journey: where the user starts, what they do, what they see, and what must hold\n- When reviewing a change, walk the affected journeys and flag any step that no longer matches",
+              "prefix": "ourney\n\n## How to Use This Doc\n\n",
+              "suffix": "\n\n## The User\n\n- One or two line",
+              "start": 40
+            }
+          ],
+          "applies": "m_0ks9n53x7t"
+        }
+      ]
+    }
+  ]
+}
