@@ -27,6 +27,11 @@ import { availableIn } from '../src/core/agents.js';
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
 const TYPING_REPORT_MS = 1000;
+// Changes from disk and comment updates wait for a pause in typing this long,
+// but never longer than WAIT_FOR_PAUSE_MS: taking them in while keys arrive
+// would stall the keys.
+const TYPING_PAUSE_MS = 600;
+const WAIT_FOR_PAUSE_MS = 3000;
 const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
 
 const status = document.querySelector('.od-status');
@@ -57,6 +62,9 @@ let version = 0;
 let saveTimer;
 let pendingExternal = null;
 let pendingSelection = null;
+let typedAt = -Infinity; // when the human last typed in the doc
+let shownAgents = ''; // the agent statuses on screen, as JSON
+let shownSidecar = ''; // the sidecar on screen, as JSON
 // An agent's text the last merge left out for the human's, offered back on
 // its comment once the human's is saved: { by: the agent, text: the merged
 // markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
@@ -200,6 +208,7 @@ async function start() {
   settings.subscribe((next) => people.render({ roster: next.agents }));
   chrome.agentStatus(initial.agents);
   margin.setAgents(initial.agents);
+  shownAgents = JSON.stringify(initial.agents);
   applySidecar(initial.sidecar);
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
@@ -238,9 +247,10 @@ async function start() {
     if (!event.target.closest('.od-card, [data-thread], .od-bubble')) select(null);
   });
 
+  document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
   events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
-  events.addEventListener('sidecar', refreshThreads);
+  events.addEventListener('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.addEventListener('history', () => history.changed());
   // The running agent is about to edit there: its caret goes there first.
   events.addEventListener('agentTarget', (event) => {
@@ -357,7 +367,25 @@ function onDocEvent(hash) {
     pendingExternal = hash;
     return;
   }
-  syncFromDisk();
+  afterTyping('doc', syncFromDisk);
+}
+
+// Run `fn` once the human pauses typing (or WAIT_FOR_PAUSE_MS after it was
+// first asked for); asking again for the same `key` meanwhile runs it once.
+const waiting = new Map(); // key → { since, timer }
+function afterTyping(key, fn) {
+  const now = performance.now();
+  const entry = waiting.get(key) ?? { since: now, timer: 0 };
+  waiting.set(key, entry);
+  clearTimeout(entry.timer);
+  const pause = TYPING_PAUSE_MS - (now - typedAt);
+  const left = WAIT_FOR_PAUSE_MS - (now - entry.since);
+  if (pause <= 0 || left <= 0) {
+    waiting.delete(key);
+    fn();
+    return;
+  }
+  entry.timer = setTimeout(() => afterTyping(key, fn), Math.min(pause, left));
 }
 
 let syncing = null;
@@ -391,8 +419,12 @@ async function doSync() {
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
   baseHash = fresh.docHash;
-  disk = fresh.markdown;
-  applySidecar(fresh.sidecar);
+  if (JSON.stringify(fresh.sidecar) !== shownSidecar) {
+    disk = fresh.markdown;
+    applySidecar(fresh.sidecar);
+  } else {
+    setDisk(fresh.markdown); // the cards change only if a proposal's fate does
+  }
   if (merged.text === theirs) {
     dirty = false;
     setStatus('Saved');
@@ -475,6 +507,11 @@ function offerOverwritten(saved) {
 
 // The doc's agents changed (a status, or who is here).
 function showAgents(next) {
+  // The server repeats statuses (each connection starts with them); redrawing
+  // the faces and panels for the same ones is wasted work.
+  const json = JSON.stringify(next);
+  if (json === shownAgents) return;
+  shownAgents = json;
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   people.render({ agents: next });
   chrome.agentStatus(next);
@@ -589,18 +626,34 @@ missingBanner.querySelector('[data-action="recreate"]').addEventListener('click'
 
 // ---- threads ----
 
+// One refresh at a time; events during one bring one more after it.
+let refreshing = null;
+let refreshAgain = false;
 async function refreshThreads() {
-  try {
-    const fresh = await api.state();
-    disk = fresh.markdown;
-    applySidecar(fresh.sidecar);
-  } catch {
-    // the next event retries
+  if (refreshing) {
+    refreshAgain = true;
+    return refreshing;
   }
+  refreshing = (async () => {
+    do {
+      refreshAgain = false;
+      try {
+        const fresh = await api.state();
+        setDisk(fresh.markdown);
+        // A sidecar event can leave the threads as they are (an agent's
+        // working marker renewed, say); redrawing every card for that stalls typing.
+        if (JSON.stringify(fresh.sidecar) !== shownSidecar) applySidecar(fresh.sidecar);
+      } catch {
+        // the next event retries
+      }
+    } while (refreshAgain);
+  })().finally(() => { refreshing = null; });
+  return refreshing;
 }
 
 function applySidecar(next) {
   sidecar = next;
+  shownSidecar = JSON.stringify(next);
   editor.setThreads(sidecar.threads);
   margin.update(sidecar, me);
   people?.render({ participants: sidecar.participants });

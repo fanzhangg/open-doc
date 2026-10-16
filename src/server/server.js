@@ -196,7 +196,7 @@ export async function startServer(docPath, {
       }
       case 'POST /api/ops': {
         const body = await readJson(req);
-        return sendJson(res, 200, await serial(() => applyBrowserOp(body)));
+        return sendJson(res, 200, await applyBrowserOp(body));
       }
       case 'GET /api/events':
         return openEvents(req, res);
@@ -224,11 +224,11 @@ export async function startServer(docPath, {
       }
       case 'POST /api/agents/invite': {
         const body = await readJson(req);
-        return sendJson(res, 200, await serial(() => invite(body?.id)));
+        return sendJson(res, 200, await invite(body?.id));
       }
       case 'POST /api/agents/remove': {
         const body = await readJson(req);
-        return sendJson(res, 200, await serial(() => removeAgent(body?.name)));
+        return sendJson(res, 200, await removeAgent(body?.name));
       }
       case 'POST /api/roster': {
         const body = await readJson(req);
@@ -418,15 +418,17 @@ export async function startServer(docPath, {
   }
 
   // Invite agent `id` from the user's roster: it joins the doc's participants
-  // like a person added to it, and starts answering.
+  // like a person added to it, and starts answering. Only the sidecar write
+  // holds the write lock: starting the agent can wait on another agent's run,
+  // and saves must not wait with it.
   async function invite(id) {
     const agent = (await currentSettings()).agents.find((a) => a.id === id && availableIn(a, docKey()));
     if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
-    const sidecar = await update(docPath, (s) => {
+    const sidecar = await serial(() => update(docPath, (s) => {
       const taken = s.participants.find((p) => sameName(p.name, agent.name));
       if (taken && taken.kind !== 'agent') throw new HttpError(409, 'name_taken', `${taken.name} is a person in this doc; rename the agent first`);
       return applyOp(s, { type: 'join', participant: asParticipant(agent) });
-    });
+    }));
     await syncAgents();
     return { sidecar, agents: team.statuses() };
   }
@@ -440,8 +442,8 @@ export async function startServer(docPath, {
     if (!participants.some((p) => p.kind === 'agent' && sameName(p.name, name))) throw new HttpError(404, 'not_found', `no agent ${name} in this doc`);
     leaving.add(name.toLowerCase());
     try {
-      await syncAgents();
-      const sidecar = await update(docPath, (s) => applyOp(s, { type: 'leave', name }));
+      await syncAgents(); // ends its run, outside the write lock (see invite)
+      const sidecar = await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name })));
       // This doc's own agent has nowhere else to be: removing it deletes it.
       const own = useSettings ? (await currentSettings()).agents.find((a) => docOnly(a) && a.doc === docKey() && sameName(a.name, name)) : null;
       const settings = own ? await editAgents((agents) => deleteAgent(agents, own.id), settingsDir) : null;
@@ -469,7 +471,7 @@ export async function startServer(docPath, {
       created = createAgent(agents, { ...fields, ...lead }, [me]);
       return [...agents, created];
     }, settingsDir).catch(agentError);
-    const joined = body?.invite === true ? await serial(() => invite(created.id)) : {};
+    const joined = body?.invite === true ? await invite(created.id) : {};
     return { agent: created, settings, ...joined };
   }
 
@@ -669,7 +671,7 @@ export async function startServer(docPath, {
     settleMs: mentionSettleMs,
     mentionable: () => mentionableAgents(),
     text: async () => project((await readDoc(docPath)).markdown).text,
-    send: (ask) => serial(() => sendTextAsk(ask)),
+    send: (ask) => sendTextAsk(ask),
     open: async (threadId, messageId) => {
       try {
         const thread = (await readSidecar(docPath)).threads.find((t) => t.id === threadId);
@@ -691,7 +693,9 @@ export async function startServer(docPath, {
     const messageId = newId('m');
     let sent = false;
     let joined = false;
-    await update(docPath, (s) => {
+    // Only the write holds the lock: bringing an agent in (syncAgents) can
+    // wait on another agent's run, and saves must not wait with it.
+    await serial(() => update(docPath, (s) => {
       let next = asHuman(s, who);
       if (!next.participants.some((p) => sameName(p.name, name))) {
         const agent = roster.find((a) => sameName(a.name, name));
@@ -702,7 +706,7 @@ export async function startServer(docPath, {
       sent = true;
       const message = { id: messageId, author, body: text.slice(start, end), createdAt: new Date().toISOString() };
       return applyOp(next, { type: 'addThread', id: threadId, anchor: createAnchor(text, start, end), message });
-    });
+    }));
     freeParagraph(text, start);
     if (joined) await syncAgents();
     return sent ? { threadId, messageId } : null;
@@ -755,7 +759,8 @@ export async function startServer(docPath, {
     const message = op.message;
     const roster = message && useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
     let joined = false;
-    const sidecar = await update(docPath, (s) => {
+    // Only the write holds the lock (see sendTextAsk).
+    const sidecar = await serial(() => update(docPath, (s) => {
       let next = asHuman(s, who);
       for (const name of parseMentions(message?.body ?? '', roster)) {
         if (next.participants.some((p) => sameName(p.name, name))) continue;
@@ -763,7 +768,7 @@ export async function startServer(docPath, {
         joined = true;
       }
       return applyOp(next, op);
-    });
+    }));
     if (joined) await syncAgents();
     // Retrying an agent that cannot start checks its program again first.
     const retried = op.type === 'retry' ? team.get(op.name) : null;
@@ -778,6 +783,9 @@ export async function startServer(docPath, {
       connection: 'keep-alive',
     });
     res.write(`event: hello\ndata: ${JSON.stringify({ docHash: lastDocHash, sidecarHash: lastSidecarHash, missing })}\n\n`);
+    // Agents start after the server does, so their statuses may have changed
+    // since the page read /api/state.
+    res.write(`event: agents\ndata: ${JSON.stringify(team.statuses())}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
   }

@@ -94,6 +94,17 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     slash.refresh();
     mention.refresh();
     outline.refresh();
+    if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
+  }
+
+  // Counting words reads the whole doc, so it runs a few times a second at
+  // most, not on every keystroke or every frame of an agent's replay.
+  const COUNT_MS = 300;
+  let countTimer = 0;
+  let countedAt = -Infinity;
+  function refreshCount() {
+    countTimer = 0;
+    countedAt = performance.now();
     const { words, selected } = editor.counts();
     count.textContent = selected ? `${selected.toLocaleString()} of ${plural(words, 'word')}` : plural(words, 'word');
   }

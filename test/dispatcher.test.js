@@ -883,8 +883,22 @@ test('an unavailable agent does not launch and says why', { timeout: 30_000 }, a
   const adapter = claudeAdapter({ bin: join(tmpdir(), 'definitely-not-claude.exe') });
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
   try {
+    await server.team.get('claude').checked;
     assert.equal(server.team.get('claude').status().state, 'unavailable');
     assert.match(server.team.get('claude').status().error, /^Claude Code is not at /);
+  } finally {
+    await server.close();
+  }
+});
+
+test('opening a doc does not wait for an agent program check', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const adapter = customAdapter(`"${process.execPath}" -e "0"`);
+  adapter.preflight = () => new Promise(() => {}); // a check that never ends
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  try {
+    assert.equal(server.team.get('claude').status().state, 'starting');
   } finally {
     await server.close();
   }

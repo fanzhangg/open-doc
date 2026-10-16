@@ -12,13 +12,13 @@
 // Every run is a new session: nothing an agent learns carries over to the
 // next run except what it wrote in the doc or its threads.
 
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { MAX_HANDOFFS } from '../../core/index.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -616,13 +616,29 @@ const tail = (text) => {
   return last ? `: ${last}` : '';
 };
 
+// Starting a program blocks the thread that starts it until Windows has
+// loaded it: most of a second for claude.exe. A worker starts it, so the
+// server (in the desktop app, the whole main process) does not wait.
+// A file that is not a program (EFTYPE on Windows) makes execFile throw
+// instead of calling back; either way the error goes back with its code.
+const RUN_IN_WORKER = `
+const { parentPort, workerData: { command, args, options } } = require('node:worker_threads');
+const reply = (error, stdout) => parentPort.postMessage({ error: error && { message: error.message, code: error.code }, stdout: String(stdout ?? '') });
+try {
+  require('node:child_process').execFile(command, args, options, reply);
+} catch (error) {
+  reply(error, '');
+}`;
+
 function run(command, args) {
   return new Promise((resolve) => {
-    // A file that is not a program (EFTYPE on Windows) throws instead of calling back.
-    try {
-      execFile(command, args, { timeout: 15_000, windowsHide: true, env: agentEnv(process.env) }, (error, stdout) => resolve({ error, stdout: String(stdout ?? '') }));
-    } catch (error) {
-      resolve({ error, stdout: '' });
-    }
+    const options = { timeout: 15_000, windowsHide: true, env: agentEnv(process.env) };
+    const worker = new Worker(RUN_IN_WORKER, { eval: true, workerData: { command, args, options } });
+    worker.once('message', (result) => {
+      resolve(result);
+      worker.terminate();
+    });
+    worker.once('error', (error) => resolve({ error, stdout: '' }));
+    worker.once('exit', () => resolve({ error: new Error('the check ended without a result'), stdout: '' }));
   });
 }
