@@ -131,7 +131,6 @@ async function start() {
     onSelect: select,
     anchorTops: (items) => editor.anchorTops(items),
     mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
-    replyHint: (body, thread) => people?.replyHint(body, thread) ?? '',
     mentionable: () => people?.mentionable() ?? [],
   });
   editor.onLayout(() => margin.layout());

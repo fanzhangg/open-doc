@@ -58,13 +58,12 @@ Who answers what:
 - A comment that mentions no one goes to every agent with **Auto Commenter**. Each
   answers it only if it fits its persona, and leaves it otherwise. Out of
   the box only Clippy has it; an agent you add to a doc with no lead yet
-  gets it too. The line under the comment box says who may
-  reply ("Clippy will reply if it fits").
+  gets it too.
 - An agent without Auto Commenter answers only when you @mention it. Type
   `@` in a comment: the menu lists the agents in the doc and the ones you can
   bring in, each with its persona. Mentioning one that is not in the doc
   yet brings it in, as mentioning a person in a shared doc shares it with
-  them ("helper will reply · helper joins this doc").
+  them.
 - `@name` typed in the doc itself works too. Once you are done writing it
   (you move on to another paragraph, or finish the sentence and pause), it
   becomes your comment on the text from the `@` to the end of its paragraph,

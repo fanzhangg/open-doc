@@ -26,7 +26,6 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
- *           replyHint?: (body: string, thread: object | null) => string,
  *           mentionable?: () => { name: string, kind: string }[] }} handlers
  */
 export function createCommentMargin(margin, handlers) {
@@ -311,7 +310,7 @@ export function createCommentMargin(margin, handlers) {
     who.append(el('span', 'od-name', me));
     head.append(avatar(me, 'human'), who);
     card.append(head);
-    card.append(composer('draft', 'Comment, or @ an agent', 'Comment', async (body) => {
+    card.append(composer('draft', 'Comment…', 'Comment', async (body) => {
       await handlers.onCreate(body);
       draft = null;
       replyDrafts.delete('draft');
@@ -327,8 +326,7 @@ export function createCommentMargin(margin, handlers) {
 
   // A growing text box: Enter posts, Shift+Enter breaks the line, Escape
   // cancels. @ offers the agents and people to address, grouped (agents in
-  // the doc, agents to bring in, people), and a line under the box says who
-  // will reply.
+  // the doc, agents to bring in, people).
   function composer(id, placeholder, submitLabel, submit, cancel, draftKey) {
     const wrap = el('div', 'od-composer');
     wrap.dataset.box = id;
@@ -339,7 +337,6 @@ export function createCommentMargin(margin, handlers) {
     const menu = el('ul', 'od-mentions');
     menu.setAttribute('role', 'listbox');
     menu.hidden = true;
-    const hint = el('div', 'od-composer-hint');
     const buttons = el('div', 'od-composer-buttons');
     const send = el('button', 'od-primary', submitLabel);
     send.type = 'button';
@@ -354,11 +351,6 @@ export function createCommentMargin(margin, handlers) {
       box.style.height = `${box.scrollHeight}px`;
       send.disabled = !box.value.trim();
     };
-    const paintHint = () => {
-      const thread = id.startsWith('reply:') ? sidecar.threads.find((t) => t.id === id.slice(6)) : null;
-      hint.textContent = handlers.replyHint?.(box.value, thread) ?? '';
-      hint.hidden = !hint.textContent;
-    };
     const update = () => {
       if (draftKey) replyDrafts.set(draftKey, box.value);
       grow();
@@ -366,7 +358,6 @@ export function createCommentMargin(margin, handlers) {
       choices = match ? (handlers.mentionChoices?.(match[2], me) ?? []) : [];
       selected = 0;
       drawMenu();
-      paintHint();
       layout();
     };
     const drawMenu = () => fillMentionMenu(menu, choices, selected, (choice) => pick(choice.name));
@@ -376,7 +367,6 @@ export function createCommentMargin(margin, handlers) {
       box.setSelectionRange(before.length, before.length);
       choices = [];
       drawMenu();
-      paintHint();
       if (draftKey) replyDrafts.set(draftKey, box.value);
     };
     const post = async () => {
@@ -390,7 +380,6 @@ export function createCommentMargin(margin, handlers) {
       } finally {
         box.disabled = false;
         grow();
-        paintHint();
       }
     };
 
@@ -419,10 +408,9 @@ export function createCommentMargin(margin, handlers) {
     });
     send.addEventListener('click', post);
     cancelButton.addEventListener('click', cancel);
-    wrap.append(box, menu, hint, buttons);
+    wrap.append(box, menu, buttons);
     requestAnimationFrame(() => {
       grow();
-      paintHint();
       layout();
     });
     return wrap;

@@ -275,7 +275,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-mention-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .od-mention-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; }
 .od-mention-sub { overflow: hidden; color: var(--text-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-.od-composer-hint { margin: 4px 2px 0; color: var(--text-faint); font-size: 11.5px; }
 
 /* Settings > Agents */
 .od-persona { min-height: 110px; resize: vertical; font: 13px/1.5 var(--ui-font); }

@@ -14,12 +14,11 @@
 // in. Clicking an avatar opens that agent's card: its name, introduction and
 // permissions, each a switch you can flip right there.
 //
-// The comment box asks this module what to offer after @ and who will reply.
+// The comment box asks this module what to offer after @.
 
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar, namecardFor } from './threads.js';
-import { parseMentions } from '../src/core/mentions.js';
 import { MAX_PERSONA, PERMISSIONS, availableIn, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
@@ -375,7 +374,7 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     const who = el('div', 'od-profile-who');
     if (profile && !viewOnly) {
       // Click the name or the persona line to edit it right there.
-      who.append(inPlace(profile, 'name', 'od-profile-name', 'Name, as you @mention it'));
+      who.append(inPlace(profile, 'name', 'od-profile-name', 'Name'));
       who.append(inPlace(profile, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
     } else {
       who.append(el('div', 'od-profile-name', profile?.name ?? name));
@@ -645,38 +644,15 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     };
     const inDoc = here.filter((n) => matches(n, introOf(infoOf(n)))).map((n) => agentChoice(n, 'Agents in this doc'));
     const bring = roster.filter((a) => !here.some((n) => same(n, a.name)) && matches(a.name, introOf(a)))
-      .map((a) => agentChoice(a.name, 'Bring in (joins this doc)'));
+      .map((a) => agentChoice(a.name, 'Bring in'));
     const people = participants.filter((p) => p.kind === 'human' && !same(p.name, myName) && matches(p.name))
       .map((p) => ({ name: p.name, kind: 'human', group: 'People' }));
     return [...inDoc, ...bring, ...people].slice(0, 12);
   }
 
-  /**
-   * Who will answer a comment with this text, in a few words: the agents it
-   * mentions; else, in a thread an agent answered, that agent; else the
-   * agents with Auto Commenter, each if the comment fits it.
-   */
-  function replyHint(body, thread = null) {
-    const known = [...participants, ...roster.map((a) => ({ name: a.name, kind: 'agent' }))];
-    const mentioned = parseMentions(body, known);
-    const agents = mentioned.filter((n) => known.find((k) => same(k.name, n))?.kind === 'agent');
-    if (mentioned.length === 0) {
-      const answered = thread?.messages.findLast((m) => m.author.kind === 'agent' && !m.undoes && !m.applies)?.author.name;
-      if (answered) return `${answered} will reply · @ to ask someone else`;
-      const commenters = agentsHere().filter(onAutoComment);
-      if (commenters.length === 0) return 'No agent has Auto Commenter on · @ an agent to ask it';
-      if (commenters.length === 1) return `${commenters[0]} will reply if it fits · @ to ask someone else`;
-      return `${list(commenters, 'or')} will reply, whoever it fits · @ to ask one`;
-    }
-    if (agents.length === 0) return `For ${list(mentioned)}; no agent will reply`;
-    const joining = agents.filter((n) => !agentsHere().some((h) => same(h, n)));
-    return `${list(agents)} will reply${joining.length ? ` · ${list(joining)} ${joining.length === 1 ? 'joins' : 'join'} this doc` : ''}`;
-  }
-
   return {
     render,
     mentionChoices,
-    replyHint,
     mentionable,
     open,
     peek,
@@ -715,7 +691,7 @@ const BOTH_RISK = 'It can also use the other one. With both, it could be tricked
 // Where an agent in the doc stands, for its name card.
 // Where an agent stands in this doc, on its card under its name.
 const STANDING = {
-  autocomment: 'Answers new comments', idle: 'Answers when @mentioned', working: 'Working…',
+  working: 'Working…',
   queued: 'Waiting for its turn', offline: 'Offline', connecting: 'Connecting…', away: 'Not running here',
 };
 
@@ -748,7 +724,6 @@ function offlineReason(status) {
   return 'It stopped.';
 }
 
-const list = (names, and = 'and') => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} ${and} ${names.at(-1)}`);
 const time = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 // Terminal colour codes do not belong on the page.
 const plain = (text) => text.replace(/\u001b\[[0-9;]*m/g, '');

@@ -76,7 +76,7 @@ Agents are light, and belong to the doc unless you star them:
   (by default the first one, Clippy for a new user). Each answers only if it
   fits its persona.
 - `@name` calls a specific agent. Mentioning one that is not in the doc yet
-  brings it in. The line under the comment box says who will reply.
+  brings it in.
 - `@name` in the doc's text works like a comment. Type
   `@Clippy add the risks here` in a paragraph; once you are done writing it,
   it becomes your comment on the text from the `@` to the end of the
