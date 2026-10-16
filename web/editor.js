@@ -7,17 +7,16 @@
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
-  commonmark, toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
+  toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
   wrapInBulletListCommand, wrapInOrderedListCommand, turnIntoTextCommand,
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
 } from '@milkdown/kit/preset/commonmark';
-import { gfm, toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
+import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, $remark, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
-import remarkCjkFriendly from 'remark-cjk-friendly';
+import { $prose, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
@@ -26,6 +25,7 @@ import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
 import { MENTION_TOKEN } from '../src/core/mentions.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
+import { markdownPlugins } from './markdown-schema.js';
 import { createReplayer, diffBlocks } from './replay.js';
 
 const FLASH_MS = 6000;
@@ -33,11 +33,6 @@ const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
 const mentionKey = new PluginKey('opendoc-mentions');
-
-// CommonMark does not close `**熟悉：**直接` (a run after full-width
-// punctuation, before a CJK letter); this reads and writes it as bold, the
-// same way the core projection (src/core/project.js) does.
-const cjkFriendly = $remark('cjkFriendly', () => remarkCjkFriendly);
 
 // Decorations replaced wholesale through a meta, mapped through other edits.
 const decorationPlugin = (key) => $prose(() => new Plugin({
@@ -172,7 +167,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         })
         .updated(() => onDocUpdated());
     })
-    .use(commonmark).use(gfm).use(cjkFriendly).use(history).use(clipboard).use(listener)
+    .use(markdownPlugins).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(mentionPlugin).use(uiPlugin(hooks))
     .use($prose(() => replayer.plugin))
     .create();
