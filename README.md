@@ -14,8 +14,9 @@ Agents are collaborators, like people in a shared doc. Each has a name you
 "a strict copy editor", shown on its card and in the People panel), optional
 **instructions** (the details and rules behind the persona) and only the
 permissions you give it. Both go into the agent's prompt as one block.
-OpenDoc comes with one agent, **Clippy**, starred, with no persona and no job:
-it answers your comments like a plain co-author. The product has no built-in
+OpenDoc comes with one agent, **Clippy**, starred, with a
+generic persona: a general writing assistant that drafts and edits whatever
+the doc needs. The product has no built-in
 roles; make a grammar checker, a fact checker or a tough reader by writing
 its persona, and rewrite or delete any agent.
 
@@ -31,11 +32,10 @@ else (a cloned repo) brings its agents: they are set up as its own, proposing
 edits and with no web or file access until you switch more on, since
 permissions never come from the doc.
 
-Your **crew** is who docs start with: the first time a doc with no agents
-yet is opened, the crew joins it. Assemble it in the start window's Crew
-row: your starred agents' faces, in colour when in the crew; click one to take
-it in or out, or + to add a new one by name. Clippy is in it to begin with. A doc that already has agents keeps
-its own, and one you remove from a doc stays out.
+A new doc starts with **Clippy**: the first time a doc with no agents yet is
+opened, Clippy joins it (under whatever name you gave it). Add any other agent
+in the doc, from the People panel or by @mentioning it. A doc that already
+has agents keeps its own.
 
 Every agent reads the doc it works on. Everything else is a switch on the
 agent's card (click its avatar) and in the **Agents** panel; flip one and
@@ -45,7 +45,7 @@ it holds from the agent's next run:
 | --- | --- |
 | **Editor** | changes the doc. Without Auto Editor it proposes each change: shown struck through and inserted in the text while the thread is selected, applied when you click Apply. Off, it only replies. |
 | **Auto Editor** | edits the doc directly and replies with what it changed, which you can undo. Needs Editor. On for every new agent. |
-| **Auto Commenter** | looks at every new comment that @mentions no one, in the docs it is in, answering the ones that fit its persona. The first agent in a doc (or in your crew) starts with it, as the lead. |
+| **Auto Commenter** | looks at every new comment that @mentions no one, in the docs it is in, answering the ones that fit its persona. The first agent in a doc (Clippy, in a new one) starts with it, as the lead. |
 | **Web Searcher** | searches the web and opens web pages. |
 | **File Searcher** | reads your other files, never keys or `.env` files. |
 
@@ -191,7 +191,7 @@ The same editor in its own window, without a terminal or a browser tab
 
 ```bash
 npm install
-npm run desktop                      # start window: New doc, Open, recent docs
+npm run desktop                      # start window: New doc, Open, recent docs, Settings
 npm run desktop -- path/to/plan.md   # open a doc (asks before creating a missing one)
 ```
 

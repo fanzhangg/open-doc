@@ -11,7 +11,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp, blockAt, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
+import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
@@ -354,7 +354,7 @@ export async function startServer(docPath, {
   // ---- the doc's agents ----
 
   // Who should work on the doc now: the agent from flags, and the user's
-  // agents that are participants of the doc (the crew it started with, this
+  // agents that are participants of the doc (Clippy, whom it started with, this
   // doc's own, or starred ones brought in by an @mention or added), except
   // one being removed. Another doc's own agents never work here; this doc's own come
   // before a starred agent of the same name. A restart is due whenever an
@@ -508,13 +508,14 @@ export async function startServer(docPath, {
     if (key) throw new HttpError(400, 'bad_input', `${key} is set by the server`);
   }
 
-  // The first time a doc is opened with no agents in it, the user's crew
-  // joins it, so every doc starts with them. A doc that has agents keeps the
-  // ones it has; anyone removed stays out.
-  async function joinCrew() {
+  // The first time a doc is opened with no agents in it, Clippy (the agent
+  // the app comes with, under whatever name it has now) joins it, so every
+  // new doc has someone to answer; other agents are added in the doc. A doc
+  // that has agents keeps the ones it has.
+  async function joinDefaultAgent() {
     if (!useSettings) return;
-    const crew = (await currentSettings()).agents.filter((a) => a.starred && a.crew);
-    if (crew.length === 0) return;
+    const clippy = (await currentSettings()).agents.find((a) => a.id === DEFAULT_AGENT_ID && a.starred);
+    if (!clippy) return; // deleted or made one doc's own: no one
     let participants = [];
     try {
       participants = (await readSidecar(docPath)).participants;
@@ -522,10 +523,10 @@ export async function startServer(docPath, {
       return; // a sidecar that cannot be read invites no one
     }
     if (participants.some((p) => p.kind === 'agent')) return;
-    await serial(() => update(docPath, (s) => crew.reduce((next, agent) => {
-      if (next.participants.some((p) => sameName(p.name, agent.name))) return next; // a person of that name keeps it
-      return applyOp(next, { type: 'join', participant: asParticipant(agent) });
-    }, s)));
+    await serial(() => update(docPath, (s) => {
+      if (s.participants.some((p) => sameName(p.name, clippy.name))) return s; // a person of that name keeps it
+      return applyOp(s, { type: 'join', participant: asParticipant(clippy) });
+    }));
   }
 
   // A doc carries its agents (SPEC §2.4). One that is not set up here yet (a
@@ -885,9 +886,9 @@ export async function startServer(docPath, {
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   // The agents the doc carries, set up here if they are new to this machine;
-  // a doc with none yet starts with the crew.
+  // a doc with none yet starts with Clippy.
   await adoptDocAgents().catch((error) => console.error('Could not set up the doc\'s agents:', error));
-  await joinCrew().catch((error) => console.error('Could not bring in the crew:', error));
+  await joinDefaultAgent().catch((error) => console.error('Could not bring in Clippy:', error));
   await renameHuman().catch((error) => console.error('Could not put your name in the doc:', error));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);

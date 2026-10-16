@@ -450,6 +450,8 @@ async function withRoster(agents, fn, { mode = 'reply', agent, options = {} } = 
   const roster = [{ name: 'Pilot', autoComment: true, persona: 'You answer everything.' }, ...agents]
     .map((a, i) => ({ id: `a_test0${i}`, runtime: 'custom', command, autoComment: false, ...a }));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: roster }));
+  // Pilot is in the doc already; the others come in when added or @mentioned.
+  await writeFile(sidecarPath(docPath), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [], participants: [{ name: 'Pilot', kind: 'agent' }] }));
   const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true, agent, ...options });
   const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const state = async () => (await call(server, 'GET', '/api/state')).body;
@@ -463,9 +465,9 @@ async function withRoster(agents, fn, { mode = 'reply', agent, options = {} } = 
 const comment = (server, id, body) => call(server, 'POST', '/api/ops', { body: { op: { type: 'addThread', id, anchor: null, message: { id: `m_${id.slice(2)}`, author: human, body } } } });
 const authorsOf = (thread) => thread.messages.slice(1).map((m) => m.author.name);
 
-test('the crew starts in the doc; Auto Commenter answers what mentions no one; any other answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
+test('the doc\'s agent works in it; Auto Commenter answers what mentions no one; any other answers only its @mentions, which bring it in', { timeout: 30_000 }, async () => {
   await withRoster([{ name: 'helper', persona: 'Says it short', instructions: 'You are terse.' }], async ({ server, state, runs }) => {
-    // Pilot (in the crew: it had Auto Commenter before there was one) joins the new doc at once; the other is not in the doc yet.
+    // Pilot is in the doc; the other is not in the doc yet.
     let now = await state();
     assert.deepEqual(now.agents.map((a) => [a.name, a.autoComment]), [['Pilot', true]]);
     assert.ok(now.sidecar.participants.some((p) => p.name === 'Pilot' && p.kind === 'agent'));
@@ -519,25 +521,30 @@ test('the crew starts in the doc; Auto Commenter answers what mentions no one; a
   });
 });
 
-test('a doc opened with no agents starts with the crew; one with agents keeps its own', { timeout: 30_000 }, async () => {
+test('a doc opened with no agents starts with Clippy, under its name now; one with agents keeps its own', { timeout: 30_000 }, async () => {
   const fresh = await tempDoc(SAMPLE);
   const settled = await tempDoc(SAMPLE);
+  const without = await tempDoc(SAMPLE);
   await writeFile(sidecarPath(settled), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [], participants: [{ name: 'solo', kind: 'agent' }] }));
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents: [
-    { id: 'a_crew01', name: 'scout', starred: true, crew: true, persona: 'Reads first' },
-    { id: 'a_crew02', name: 'keeper', starred: true, crew: true },
-    { id: 'a_auto01', name: 'chatty', starred: true, crew: false, autoComment: true },
-  ] }));
+  const others = [
+    { id: 'a_scout01', name: 'scout', starred: true, persona: 'Reads first' },
+    { id: 'a_auto01', name: 'chatty', starred: true, autoComment: true },
+  ];
+  const roster = (agents) => writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents }));
   const participants = async (doc) => JSON.parse(await readFile(sidecarPath(doc), 'utf8')).participants.map((p) => p.name);
-  for (const doc of [fresh, settled]) {
-    const server = await startServer(doc, { assetsDir, settingsDir, agentFromSettings: true });
-    await server.close();
-  }
-  assert.deepEqual(await participants(fresh), ['scout', 'keeper'], 'the crew, and not an agent with Auto Commenter outside it');
-  assert.deepEqual(JSON.parse(await readFile(sidecarPath(fresh), 'utf8')).participants[0], { name: 'scout', kind: 'agent', persona: 'Reads first' });
+  const open = async (doc) => (await startServer(doc, { assetsDir, settingsDir, agentFromSettings: true })).close();
+
+  await roster([{ id: 'a_default_clippy', name: 'Paperclip', starred: true, persona: 'Helps' }, ...others]);
+  for (const doc of [fresh, settled]) await open(doc);
+  assert.deepEqual(await participants(fresh), ['Paperclip'], 'Clippy renamed, and none of the other agents');
+  assert.deepEqual(JSON.parse(await readFile(sidecarPath(fresh), 'utf8')).participants[0], { name: 'Paperclip', kind: 'agent', persona: 'Helps' });
   assert.deepEqual(await participants(settled), ['solo'], 'a doc with agents keeps them');
+
+  await roster(others); // Clippy deleted
+  await open(without);
+  assert.deepEqual(await participants(without).catch(() => []), [], 'no Clippy, no one');
 });
 
 // Saves the doc as the human, and tells the server where their caret is.

@@ -27,7 +27,8 @@ meaning"), shown on its card and in the People panel; it stays blank until
 you write one. **Instructions** (Agents panel) hold the details and rules
 behind it. Both go into the agent's prompt as one block, and anyone can
 rewrite them. OpenDoc comes with one agent,
-**Clippy**, starred, with no persona and no job, and Editor, Auto Editor and
+**Clippy**, starred, with a generic persona (a general writing assistant
+that helps draft and edit docs), and Editor, Auto Editor and
 Auto Commenter switched on. There are no built-in roles: a grammar checker, a
 fact checker or a tough reader is an agent whose persona you wrote.
 
@@ -47,11 +48,10 @@ Agents are light, and belong to the doc unless you star them:
 - A doc from someone else brings its agents, set up as its own with the
   safest permissions (proposes edits, answers only when @mentioned, no web or
   files). Permissions never come from the doc.
-- Your **crew** is who docs start with. The first time a doc with no agents
-  yet is opened, the crew joins it, so a new doc always shows up with its
-  agents. Assemble the crew in the start window's Crew row (your starred
-  agents' faces, greyed out when not in it): click one to take it in or out,
-  or + to add a new one by name. Clippy is in it to begin with. A doc that already has agents keeps its own.
+- A new doc starts with **Clippy**. The first time a doc with no agents yet
+  is opened, Clippy joins it (under whatever name you gave it), so a new doc
+  always has someone to answer. Add any other agent in the doc: the People
+  panel, or an @mention. A doc that already has agents keeps its own.
 
 **Permissions** are plain switches on the agent's card:
 
@@ -59,7 +59,7 @@ Agents are light, and belong to the doc unless you star them:
 - **Auto Editor**: edits directly and replies with what it changed (undoable).
   On for every new agent, as for a co-author; switch it off to review each change.
 - **Auto Commenter**: answers comments that mention no one, if they fit its persona.
-  The first agent in a doc (or in your crew) starts with it and leads; the
+  The first agent in a doc (Clippy, in a new one) starts with it and leads; the
   ones after it answer when @mentioned.
 - **Web Searcher** / **File Searcher**: may use the web / read your other files
   (never secrets). Turning one on asks to confirm, with a warning if the agent
@@ -135,7 +135,8 @@ Agents are light, and belong to the doc unless you star them:
   against the one before, and Restore. Kept in the config folder, not in the
   doc's folder.
 - **Settings** (name, theme, font, width, outline, word count, focus mode)
-  are global and apply at once to every open window.
+  are global and apply at once to every open window, the start window too
+  (its gear, or Ctrl+,).
 - **Files.** New Doc, New Doc in This Folder, and Rename (moves the comments
   too). Opening an already open doc focuses its window. If the file is moved
   or deleted outside the app, a banner says so and saving pauses.

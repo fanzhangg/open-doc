@@ -142,9 +142,9 @@ export function refreshStartWindow() {
   startWindow?.webContents.send('opendoc:recent-changed');
 }
 
-/** Tell the start window the user's agents changed (the crew it shows). */
-export function refreshCrew() {
-  startWindow?.webContents.send('opendoc:crew-changed');
+/** Tell the start window the user's settings changed (how it looks). */
+export function refreshSettings() {
+  startWindow?.webContents.send('opendoc:settings-changed');
 }
 
 function closeStartWindow() {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, leaderless, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, leaderless, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -111,7 +111,7 @@ test('watchSettings sees the file appear and change', async () => {
 
 test('agents: the app comes with Clippy, starred, generic, and no built-in roles', () => {
   const roster = resolveSettings(null).agents;
-  assert.deepEqual(roster.map((a) => [a.name, a.persona, a.starred, a.doc]), [['Clippy', '', true, null]], 'no persona, no job, kept');
+  assert.deepEqual(roster.map((a) => [a.id, a.name, a.persona, a.starred, a.doc]), [[DEFAULT_AGENT_ID, 'Clippy', 'A general writing assistant that helps draft and edit docs', true, null]], 'a generic writing assistant');
   assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'A poet' }), 'A poet', 'the persona is the line on its card');
   assert.equal(introOf({ persona: '', instructions: 'You are a poet.' }), '', 'empty until the user writes one');
@@ -248,15 +248,10 @@ test('agents: an unstarred agent is one doc\'s own; names are unique where they 
   assert.throws(() => updateAgent(two, 'a_rev001', { starred: true, doc: null }), /taken/, 'a starred one would show in the other doc too');
 });
 
-test('agents: the crew is starred agents only; Clippy is in it; Auto Commenter agents of old start in it', () => {
-  assert.equal(resolveSettings(null).agents[0].crew, true);
-  const [old, quiet, own] = resolveRoster([
-    { id: 'a_old001', name: 'pilot', autoComment: true },
-    { id: 'a_old002', name: 'quiet' },
-    { id: 'a_own001', name: 'own', starred: false, crew: true, doc: '/home/me/plan.md' },
-  ]);
-  assert.deepEqual([old.crew, quiet.crew, own.crew], [true, false, false], 'a doc\'s own agent is never in the crew');
-  assert.throws(() => checkAgentPatch({ crew: 'yes' }), /crew/);
+test('agents: a crew saved by an older app is dropped; new docs start with Clippy instead', () => {
+  const [old] = resolveRoster([{ id: 'a_old001', name: 'pilot', autoComment: true, crew: true }]);
+  assert.equal(Object.hasOwn(old, 'crew'), false);
+  assert.throws(() => checkAgentPatch({ crew: true }), /unknown agent setting: crew/);
 });
 
 test('agents: editAgents changes the roster under the lock and keeps other settings', async () => {

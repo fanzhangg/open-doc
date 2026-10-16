@@ -1,9 +1,10 @@
 // The chrome around the editor: the toolbar (reflecting the formatting at the
 // caret), a formatting bubble over selections, the link popover, the "/" block
-// menu, a floating outline, the word count, tooltips that show shortcuts, and
-// the Settings dialog (name, theme, font, width, outline, word count, focus mode, shortcuts).
+// menu, a floating outline and the word count. Tooltips and the Settings
+// dialog are in settings-dialog.js, shared with the desktop start window.
 
 import { hydrateIcons, icon } from './icons.js';
+import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { createAgentsPanel } from './agents-panel.js';
 import { fillMentionMenu } from './threads.js';
 
@@ -20,21 +21,8 @@ const SLASH_ITEMS = [
   { command: 'table', icon: 'table', label: 'Table', words: 'table grid' },
   { command: 'divider', icon: 'divider', label: 'Divider', words: 'divider hr rule line separator' },
 ];
-const SHORTCUTS = [
-  ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
-  ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E'], ['Link', 'Mod+K']]],
-  ['Blocks', [['Insert block', '/'], ['Normal text', 'Mod+Alt+0'], ['Heading 1–3', 'Mod+Alt+1…3'], ['Bulleted list', 'Mod+Alt+8'], ['Numbered list', 'Mod+Alt+7'], ['Quote', 'Mod+Shift+B'], ['Code block', 'Mod+Alt+C']]],
-  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
-];
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** "Mod+Shift+F" → "Ctrl+Shift+F", or "⌘⇧F" on a Mac. */
-export function keyLabel(keys) {
-  if (!mac) return keys.replace(/Mod/g, 'Ctrl');
-  const map = { Mod: '⌘', Shift: '⇧', Alt: '⌥', Ctrl: '⌃', Enter: '↩', Esc: 'esc' };
-  return keys.split('+').map((k) => map[k] ?? k).join('');
-}
 
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
@@ -46,8 +34,17 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
+  const count = document.querySelector('.od-count');
 
-  const settings = setupSettings({ store, getName, setName });
+  const settings = setupSettings({
+    store,
+    getName,
+    setName,
+    onApply(next) {
+      count.hidden = !next.wordCount;
+      window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
+    },
+  });
   const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
@@ -58,7 +55,6 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   const link = setupLink(editor);
   const outline = setupOutline(editor);
   const blockPicker = setupBlockPicker(editor);
-  const count = document.querySelector('.od-count');
 
   // Toolbar and bubble buttons act on the editor without taking its selection.
   for (const bar of [toolbar, bubble]) {
@@ -142,10 +138,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
 
   document.addEventListener('keydown', (event) => {
     const mod = mac ? event.metaKey : event.ctrlKey;
-    if (mod && !event.altKey && (event.key === '/' || event.key === ',')) {
-      event.preventDefault();
-      settings.toggle(event.key === '/' ? 'shortcuts' : 'general');
-    } else if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+    if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault();
       settings.set({ focus: !settings.get().focus });
     } else if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k' && event.target.closest?.('.od-editor')) {
@@ -265,131 +258,11 @@ function setupLink(editor) {
   };
 }
 
-// ---- settings: a dialog with General, Appearance, Editor and Shortcuts ----
-
-// Settings are saved for every doc and window (see settings.js); a change
-// made in another window shows up here too.
-function setupSettings({ store, getName, setName }) {
-  const dialog = document.querySelector('.od-settings');
-  const tabs = [...dialog.querySelectorAll('[role="tab"]')];
-  const sections = [...dialog.querySelectorAll('.od-settings-section')];
-  const nameInput = dialog.querySelector('#od-name-input');
-  const nameError = dialog.querySelector('.od-input-error');
-
-  fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
-
-  function apply() {
-    const settings = store.get();
-    const root = document.documentElement;
-    if (settings.theme === 'system') delete root.dataset.theme;
-    else root.dataset.theme = settings.theme;
-    root.dataset.font = settings.font;
-    root.dataset.width = settings.width;
-    root.toggleAttribute('data-focus', settings.focus);
-    root.toggleAttribute('data-no-outline', !settings.outline);
-    document.querySelector('.od-count').hidden = !settings.wordCount;
-    const mark = (selector, attr, value) => {
-      for (const button of dialog.querySelectorAll(selector)) button.setAttribute('aria-checked', String(button.dataset[attr] === value));
-    };
-    mark('[data-font]', 'font', settings.font);
-    mark('[data-theme-choice]', 'themeChoice', settings.theme);
-    mark('[data-width]', 'width', settings.width);
-    for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
-    if (document.activeElement !== nameInput) nameInput.value = getName();
-    window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
-  }
-  store.subscribe(apply);
-  const set = (patch) => store.set(patch);
-
-  function show(section) {
-    for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
-    for (const panel of sections) panel.hidden = panel.dataset.section !== section;
-  }
-
-  function open(section = 'general') {
-    nameInput.value = getName();
-    nameError.hidden = true;
-    show(section);
-    if (!dialog.open) dialog.showModal();
-    if (section === 'general') nameInput.focus();
-    else tabs.find((tab) => tab.dataset.section === section).focus();
-  }
-
-  // The name takes effect as soon as it is valid; an invalid one is pointed out and not kept.
-  nameInput.addEventListener('input', () => {
-    const next = nameInput.value.trim();
-    nameError.hidden = next === '' || setName(next);
-  });
-  nameInput.addEventListener('blur', () => {
-    nameInput.value = getName();
-    nameError.hidden = true;
-  });
-
-  dialog.addEventListener('click', (event) => {
-    if (event.target === dialog) return dialog.close(); // backdrop
-    const button = event.target.closest('button');
-    if (!button) return;
-    if (button.dataset.action === 'close') dialog.close();
-    else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
-    else if (button.dataset.font) set({ font: button.dataset.font });
-    else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
-    else if (button.dataset.width) set({ width: button.dataset.width });
-  });
-  dialog.addEventListener('change', (event) => {
-    const key = event.target.dataset?.setting;
-    if (key) set({ [key]: event.target.checked });
-  });
-  // Up and down move between sections, as in a vertical tab list.
-  dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {
-    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-    event.preventDefault();
-    const at = tabs.indexOf(document.activeElement);
-    const next = tabs[(at + (event.key === 'ArrowDown' ? 1 : tabs.length - 1)) % tabs.length];
-    show(next.dataset.section);
-    next.focus();
-  });
-
-  document.querySelector('.od-settings-toggle').addEventListener('click', () => open('general'));
-
-  apply();
-  return {
-    get: () => store.get(),
-    set,
-    open,
-    /** Open on `section`, or close when it is already showing that section. */
-    toggle(section) {
-      const showing = dialog.open && !sections.find((panel) => panel.dataset.section === section).hidden;
-      if (showing) dialog.close();
-      else open(section);
-    },
-  };
-}
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-function fillShortcuts(body) {
-  for (const [group, rows] of SHORTCUTS) {
-    const section = document.createElement('section');
-    const title = document.createElement('h3');
-    title.textContent = group;
-    section.append(title);
-    for (const [label, keys] of rows) {
-      const row = document.createElement('div');
-      row.className = 'od-shortcut';
-      const name = document.createElement('span');
-      name.textContent = label;
-      const kbd = document.createElement('kbd');
-      kbd.textContent = keyLabel(keys);
-      row.append(name, kbd);
-      section.append(row);
-    }
-    body.append(section);
-  }
 }
 
 // ---- "Normal text ▾" block style picker ----
@@ -638,40 +511,6 @@ function setupOutline(editor) {
 }
 
 // ---- tooltips: label plus shortcut, after a short hover ----
-
-function setupTooltips() {
-  const tip = document.querySelector('.od-tip');
-  let timer;
-  let owner = null;
-  const hide = () => {
-    clearTimeout(timer);
-    tip.hidden = true;
-    owner = null;
-  };
-  document.addEventListener('mouseover', (event) => {
-    const target = event.target.closest?.('[data-tip]');
-    if (target === owner) return;
-    hide();
-    if (!target) return;
-    owner = target;
-    timer = setTimeout(() => {
-      tip.replaceChildren(target.dataset.tip);
-      if (target.dataset.keys) {
-        const kbd = document.createElement('kbd');
-        kbd.textContent = keyLabel(target.dataset.keys);
-        tip.append(kbd);
-      }
-      tip.hidden = false;
-      const box = target.getBoundingClientRect();
-      const left = Math.min(Math.max(box.left + box.width / 2 - tip.offsetWidth / 2, 8), window.innerWidth - tip.offsetWidth - 8);
-      const below = box.bottom + 8 + tip.offsetHeight < window.innerHeight;
-      tip.style.left = `${left}px`;
-      tip.style.top = `${below ? box.bottom + 8 : box.top - tip.offsetHeight - 8}px`;
-    }, 450);
-  });
-  document.addEventListener('mousedown', hide, true);
-  document.addEventListener('scroll', hide, true);
-}
 
 function plural(n, word) {
   return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;

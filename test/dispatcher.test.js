@@ -303,7 +303,7 @@ test('a chat session waiting at the same time never double-answers', { timeout: 
   });
 });
 
-// Several agents in one doc, all in its crew so they start with it. `guarded`
+// Several agents in one doc, all in it from the start. `guarded`
 // makes their program one whose every edit passes the guard's hooks, as
 // Claude Code's does.
 async function withTeam(names, mode, fn, { editMode = 'auto', guarded = false } = {}) {
@@ -312,8 +312,10 @@ async function withTeam(names, mode, fn, { editMode = 'auto', guarded = false } 
   const runLog = join(settingsDir, 'runs.log');
   await writeFile(runLog, '');
   const command = `"${process.execPath}" "${FAKE}" {threadsFile} ${mode} "${runLog}"`;
-  const agents = names.map((name, i) => ({ id: `a_team0${i}`, name, starred: true, crew: true, runtime: 'custom', command, editMode, autoComment: false }));
+  const agents = names.map((name, i) => ({ id: `a_team0${i}`, name, starred: true, runtime: 'custom', command, editMode, autoComment: false }));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents }));
+  const participants = names.map((name) => ({ name, kind: 'agent' }));
+  await writeFile(sidecarPath(docPath), JSON.stringify({ opendoc: 1, doc: basename(docPath), docHash: null, threads: [], participants }));
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
   const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));

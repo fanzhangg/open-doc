@@ -27,9 +27,9 @@
 // before stars existed count as starred. Names are unique among the starred
 // agents and each doc's own, so two docs may each have a "reviewer".
 //
-// The **crew** (`crew`, starred agents only) is who a doc starts with: the
-// first time a doc is opened with no agents in it, the crew joins it. The
-// user assembles it in the start window.
+// A new doc starts with Clippy, the agent the app comes with: the first time
+// a doc is opened with no agents in it, Clippy joins it (under whatever name
+// the user gave it). Every other agent is added in the doc.
 //
 // Who an agent is takes two plain-text fields: its **persona**, one line
 // that defines it ("a strict copy editor") and shows on its card and in the
@@ -62,7 +62,6 @@ export const MAX_AGENTS = 500;
 export const AGENT_DEFAULTS = Object.freeze({
   face: null,
   starred: false,
-  crew: false,
   doc: null,
   persona: '',
   instructions: '',
@@ -100,7 +99,6 @@ export const AGENT_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
   face: orNull(FACE_RULE),
   starred: boolean,
-  crew: boolean,
   doc: orNull((v) => typeof v === 'string' && v.length > 0 && v.length <= 4096 && !v.includes('\0')),
   persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !/[\0\r\n]/.test(v),
   instructions: (v) => typeof v === 'string' && v.length <= MAX_INSTRUCTIONS && !v.includes('\0'),
@@ -118,13 +116,16 @@ export const AGENT_RULES = Object.freeze({
   fileAccess: boolean,
 });
 
+/** The id of Clippy, the agent the app comes with and every new doc starts with. */
+export const DEFAULT_AGENT_ID = 'a_default_clippy';
+
 /**
- * The roster a new user starts with: Clippy, starred, with no persona and no
- * role, answering comments the way a plain co-author would. The product
- * ships no job titles; who does what is up to the personas people write.
+ * The roster a new user starts with: Clippy, starred, a generic writing
+ * assistant that drafts and edits whatever the doc needs. The product ships
+ * no job titles; who does what is up to the personas people write, Clippy's too.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: 'a_default_clippy', name: 'Clippy', starred: true, crew: true, editMode: 'auto', autoComment: true },
+  { id: DEFAULT_AGENT_ID, name: 'Clippy', persona: 'A general writing assistant that helps draft and edit docs', starred: true, editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -161,9 +162,6 @@ export function resolveAgent(saved) {
   if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
   if (!out.doc) out.starred = true; // in no doc: the user's
   if (out.starred) out.doc = null;
-  // Before the crew, an agent with Auto Commenter was in every doc: it starts in the crew.
-  if (!Object.hasOwn(stored, 'crew')) out.crew = out.starred && out.autoComment;
-  if (!out.starred) out.crew = false;
   return out;
 }
 

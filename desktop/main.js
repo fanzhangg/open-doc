@@ -8,7 +8,7 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'elect
 import { statSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
 import { checkSettingsPatch } from '../src/core/settings.js';
-import { checkAgentPatch, createAgent, leaderless, updateAgent } from '../src/core/agents.js';
+import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
 import { editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
@@ -58,7 +58,7 @@ watchSettings(async () => {
   try {
     settings = (await readSettings()).settings;
     buildMenu();
-    windows.refreshCrew();
+    windows.refreshSettings();
   } catch (error) {
     console.error('Could not read the settings:', error);
   }
@@ -256,9 +256,12 @@ function saveState() {
 const PAGE_KEY = { registerAccelerator: isMac };
 
 function buildMenu() {
-  const doc = windows.docFor(BrowserWindow.getFocusedWindow());
+  const focused = BrowserWindow.getFocusedWindow();
+  const doc = windows.docFor(focused);
+  // Settings and Keyboard Shortcuts open in the start window too.
+  const page = Boolean(doc) || windows.isStartWindow(focused);
   const settingsItem = {
-    label: 'Settings…', accelerator: 'CmdOrCtrl+,', ...PAGE_KEY, enabled: Boolean(doc),
+    label: 'Settings…', accelerator: 'CmdOrCtrl+,', ...PAGE_KEY, enabled: page,
     click: (_item, win) => pageCommand(win, 'settings'),
   };
   const template = [
@@ -325,7 +328,7 @@ function buildMenu() {
       role: 'help',
       submenu: [
         {
-          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', ...PAGE_KEY, enabled: Boolean(doc),
+          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', ...PAGE_KEY, enabled: page,
           click: (_item, win) => pageCommand(win, 'shortcuts'),
         },
       ],
@@ -349,7 +352,8 @@ function setSettings(patch) {
 
 // Ask the doc page in `win` to open part of its own UI.
 function pageCommand(win, name) {
-  windows.docFor(win)?.win.webContents.send('opendoc:command', name);
+  const page = windows.docFor(win)?.win ?? (windows.isStartWindow(win) ? win : null);
+  page?.webContents.send('opendoc:command', name);
 }
 
 // ---- the agent's program ----
@@ -424,34 +428,17 @@ function recentMenu() {
   ];
 }
 
-// ---- the crew (start window) ----
+// ---- the start window's settings ----
 
-// The user's starred agents, and which are in the crew: who every new doc
-// starts with.
-async function crewChoices() {
-  const { agents } = (await readSettings()).settings;
-  return agents.filter((a) => a.starred).map(({ id, name, persona, crew }) => ({ id, name, persona, crew }));
-}
+// The settings the start window shows and changes (its Settings dialog):
+// your name and how things look, never the agents or their programs.
+const PAGE_SETTING_KEYS = ['name', 'face', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus'];
+const pageSettings = (all) => Object.fromEntries(PAGE_SETTING_KEYS.map((key) => [key, all[key]]));
 
-async function setCrew(arg) {
-  const id = String(arg?.id ?? '');
-  await editAgents((agents) => {
-    if (!agents.some((a) => a.id === id && a.starred)) throw new Error('no such agent');
-    return updateAgent(agents, id, { crew: arg?.on === true });
-  });
-  return crewChoices();
-}
-
-// A new agent straight into the crew: starred, so it can be in every doc.
-// The first in the crew leads it, with Auto Commenter.
-async function addCrew(arg) {
-  const name = String(arg?.name ?? '').trim();
-  const persona = String(arg?.persona ?? '').trim();
-  await editAgents((agents, current) => {
-    const autoComment = leaderless(agents.filter((a) => a.starred && a.crew));
-    return [...agents, createAgent(agents, { name, persona, starred: true, crew: true, autoComment }, current.name ? [current.name] : [])];
-  });
-  return crewChoices();
+async function saveStartSettings(patch) {
+  const isPlainObject = typeof patch === 'object' && patch !== null && !Array.isArray(patch);
+  if (!isPlainObject || !Object.keys(patch).every((key) => PAGE_SETTING_KEYS.includes(key))) throw new Error('not allowed');
+  return pageSettings(await updateSettings(patch));
 }
 
 // ---- requests from pages (preload.cjs) ----
@@ -473,9 +460,8 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
     for (const path of cleanPaths(arg, 20)) await openPath(path, { parent: win });
     return undefined;
   }
-  if (action === 'crew' && fromStart) return crewChoices();
-  if (action === 'setCrew' && fromStart) return setCrew(arg);
-  if (action === 'addCrew' && fromStart) return addCrew(arg);
+  if (action === 'settings' && fromStart) return pageSettings((await readSettings()).settings);
+  if (action === 'saveSettings' && fromStart) return saveStartSettings(arg);
   if (action === 'openRecent' && fromStart) {
     const path = recentDocs()[arg];
     if (path) await openPath(path, { parent: win });

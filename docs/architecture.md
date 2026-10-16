@@ -85,7 +85,7 @@ same core library, so any of them can work without the others.
 
 - **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
   name, persona (one line), instructions (any length), runtime, permissions, limits,
-  and whether it is starred. A new user has one plain agent, Clippy, starred;
+  and whether it is starred. A new user has one generic agent, Clippy (a general writing assistant), starred;
   there are no built-in roles. An unstarred agent is one doc's own (`doc`:
   its full path, set only by the server, moved on rename): it shows and runs
   only there, and removing it from the doc deletes it. Names are unique among
@@ -93,9 +93,9 @@ same core library, so any of them can work without the others.
   sidecar's participants, which also carry each agent's persona and
   instructions (SPEC §2.4), so a doc travels with its agents: opening a doc
   whose agents this machine lacks sets them up as its own, with the safest
-  permissions (never taken from the doc). The **crew** (starred agents with
-  `crew`) joins a doc the first time it is opened with no agents in it; the
-  desktop start window edits it through the preload API.
+  permissions (never taken from the doc). Clippy (`DEFAULT_AGENT_ID`, under
+  whatever name it has) joins a doc the first time it is opened with no
+  agents in it; every other agent is added in the doc.
 - **Team** (`agents/team.js`): one dispatcher per agent in the open doc.
   Their runs go on at the same time; they share a `Floor` so only one writes
   the doc at a time. A run that cannot edit never takes it. A Claude Code run

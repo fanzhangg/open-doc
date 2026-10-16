@@ -47,12 +47,12 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   onRecentChanged: (callback) => {
     ipcRenderer.on('opendoc:recent-changed', () => callback());
   },
-  /** The start window's crew: your starred agents, and who every new doc starts with. */
-  crew: () => ipcRenderer.invoke('opendoc:action', 'crew'),
-  setCrew: (id, on) => act('setCrew', { id: String(id), on: on === true }),
-  addCrewAgent: (name, persona = '') => act('addCrew', { name: String(name), persona: String(persona) }),
-  onCrewChanged: (callback) => {
-    ipcRenderer.on('opendoc:crew-changed', () => callback());
+  /** The start window's settings (name and look), and saving a change to them. */
+  settings: () => ipcRenderer.invoke('opendoc:action', 'settings'),
+  saveSettings: (patch) => act('saveSettings', patch),
+  /** The settings changed, here or in another window. */
+  onSettingsChanged: (callback) => {
+    ipcRenderer.on('opendoc:settings-changed', () => callback());
   },
   /** Menu commands for the page: 'settings' or 'shortcuts'. */
   onCommand: (callback) => {
