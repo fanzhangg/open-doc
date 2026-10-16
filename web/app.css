@@ -482,38 +482,36 @@ del.od-mark-del { margin-right: 0.15em; }
 
 .od-card-note { font-size: 12px; color: var(--text-soft); margin-bottom: 6px; }
 .od-quote { margin: 0 0 8px; padding-left: 8px; border-left: 3px solid var(--highlight-line); color: var(--text-soft); font-size: 13px; }
-/* who and when sit on one quiet line; what they said reads under it, indented past the avatar */
+/* who and when sit on one quiet line; what they said reads under it, full width */
 .od-msg + .od-msg, .od-more + .od-msg { margin-top: 14px; }
-.od-msg-head { display: flex; align-items: center; gap: 8px; min-height: 24px; }
-.od-msg-head .od-avatar { --size: 24px; }
+.od-msg-head { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.od-msg-head .od-avatar { --size: 18px; }
 .od-who { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 6px; min-width: 0; flex: 1; line-height: 1.3; }
-.od-name { font-weight: 600; font-size: 12.5px; color: var(--text-soft); display: inline-flex; align-items: center; gap: 5px; }
+.od-name { font-weight: 500; font-size: 12px; color: var(--text-soft); display: inline-flex; align-items: center; gap: 5px; }
 .od-ai { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: var(--agent); background: var(--agent-soft); border-radius: 4px; padding: 0 4px; line-height: 1.6; }
 .od-time { color: var(--text-faint); font-size: 12px; font-weight: 400; }
-.od-body, .od-fold, .od-msg .od-change, .od-more { margin-left: 32px; }
-.od-body { margin-top: 2px; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: var(--text); }
+.od-body { margin-top: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: var(--text); }
 .od-body-folded { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .od-card:not(.od-card-active) .od-body-folded { -webkit-line-clamp: 3; }
-/* Show more / less and folded replies: a chevron that flips, so each reads as a toggle */
-.od-fold, .od-more { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--accent); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
-/* padded for a hover fill, pulled left so the text lines up with the body */
-.od-fold { border: 0; background: none; margin: 2px 0 0 26px; padding: 2px 6px; border-radius: 6px; }
+/* Show more / less and folded replies: quiet text with a chevron that flips; the comment text stays the focus */
+.od-fold, .od-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; padding: 0; font: inherit; font-size: 12px; font-weight: 400; color: var(--text-faint); cursor: pointer; transition: color 0.15s; }
+.od-fold { margin-top: 2px; }
 .od-fold[hidden] { display: none; }
-.od-fold:hover, .od-fold:focus-visible { background: var(--accent-soft); }
-.od-fold .od-icon, .od-more .od-icon { width: 14px; height: 14px; transition: transform 0.15s; }
+.od-fold:hover, .od-fold:focus-visible, .od-more:hover, .od-more:focus-visible { color: var(--text-soft); }
+.od-fold .od-icon, .od-more .od-icon { width: 13px; height: 13px; transition: transform 0.15s; }
 .od-fold[aria-expanded="true"] .od-icon, .od-more[aria-expanded="true"] .od-icon { transform: rotate(180deg); }
-/* folded replies: a pill with the repliers' faces, so it reads as openable */
-.od-more { gap: 6px; margin-top: 10px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
-.od-more[aria-expanded="false"] { padding-left: 4px; }
-.od-more:hover, .od-more:focus-visible { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+/* folded replies: the repliers' faces and a count in the link color, so it reads as something to open */
+.od-more { margin: 10px 0 0 -6px; padding: 3px 6px; gap: 6px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--accent); transition: background 0.15s; }
+.od-more:hover, .od-more:focus-visible { color: var(--accent); background: var(--accent-soft); }
 .od-more + .od-msg { margin-top: 10px; }
-.od-more-faces { display: inline-flex; }
-.od-more-faces .od-avatar { --size: 18px; box-shadow: 0 0 0 2px var(--bg); }
-.od-more-faces .od-avatar + .od-avatar { margin-left: -5px; }
+/* side by side, not stacked: agent faces are blobs, and a ring cut around one would bite into the next */
+.od-more-faces { display: inline-flex; gap: 2px; }
+.od-more-faces .od-avatar { --size: 16px; }
 
 .od-icon-button { border: 0; background: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; }
 .od-icon-button:hover { background: var(--accent-soft); color: var(--accent); }
 .od-resolve { opacity: 0; transition: opacity 0.15s; }
+.od-msg-head .od-icon-button { width: 24px; height: 24px; margin: -1px 0; }
 .od-card:hover .od-resolve, .od-resolve:focus-visible { opacity: 1; }
 @media (hover: none) { .od-resolve { opacity: 1; } }
 .od-check { width: 18px; height: 18px; fill: currentColor; flex: none; }
