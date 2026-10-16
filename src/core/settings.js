@@ -3,14 +3,16 @@
 // file itself is handled by src/store/settings.js.
 
 import { NAME_PATTERN } from './mentions.js';
-import { AgentError, DEFAULT_AGENTS, checkAgentPatch, MAX_AGENTS, resolveAgent, resolveRoster } from './agents.js';
+import { AgentError, DEFAULT_AGENTS, FACE_RULE, checkAgentPatch, MAX_AGENTS, resolveAgent, resolveRoster } from './agents.js';
 
 export { EDIT_MODES } from './agents.js';
 
 export const SETTINGS_VERSION = 1;
 
 /**
- * `name: null` means "not chosen yet": the server suggests one. `agents` is
+ * `name: null` means "not chosen yet": the server suggests one. `face` is
+ * the seed the human's face is drawn from (web/faces.js); null draws it from
+ * the name, until the name first changes. `agents` is
  * the user's roster of agents (src/core/agents.js), the default one until
  * the user changes it: an agent with Auto Commenter works in every doc, any other
  * in the docs where it was @mentioned. `claudeBin` and `codexBin` are where
@@ -19,6 +21,7 @@ export const SETTINGS_VERSION = 1;
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   name: null,
+  face: null,
   theme: 'system',
   font: 'sans',
   width: 'normal',
@@ -39,6 +42,7 @@ const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.l
 
 const RULES = {
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
+  face: (v) => v === null || FACE_RULE(v),
   theme: oneOf('system', 'light', 'dark'),
   font: oneOf('sans', 'serif', 'mono'),
   width: oneOf('normal', 'wide'),

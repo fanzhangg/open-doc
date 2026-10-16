@@ -210,6 +210,13 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   assert.throws(() => updateAgent(roster, will.id, { name: 'ROCKY' }), /taken/);
   assert.throws(() => updateAgent(roster, will.id, { id: 'a_other1' }), AgentError);
   assert.throws(() => updateAgent(roster, 'a_nobody', { persona: '' }), /no such agent/);
+  const renamed = updateAgent(roster, will.id, { name: 'Bill' }).find((a) => a.id === will.id);
+  assert.equal(renamed.face, 'Will', 'a new name keeps the face');
+  assert.equal(updateAgent(updateAgent(roster, will.id, { face: 'x1' }), will.id, { name: 'Bill' }).find((a) => a.id === will.id).face, 'x1');
+  assert.equal(updateAgent(roster, will.id, { name: 'Bill', face: null }).find((a) => a.id === will.id).face, null);
+  assert.throws(() => checkAgentPatch({ face: '' }), AgentError);
+  assert.equal(resolveSettings({ face: 'abc' }).face, 'abc');
+  assert.equal(resolveSettings({ face: 'a\nb' }).face, null);
   const both = updateAgent(roster, will.id, { autoComment: true });
   assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['Clippy', 'Will']);
   assert.equal(updateAgent(roster, plainAgent.id, { autoComment: false }).some((a) => a.autoComment), false);

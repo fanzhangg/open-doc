@@ -7,7 +7,7 @@
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
-import { avatar, createCommentMargin, namecardFor } from './threads.js';
+import { avatar, createCommentMargin, namecardFor, setFaces } from './threads.js';
 import { createPeople } from './agent.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
@@ -20,7 +20,8 @@ import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
 import { canApply, editItems, openProposal, previewItems } from './review.js';
 import { createHistory } from './history.js';
 import { activeWorking, newId } from '../src/core/ops.js';
-import { NAME_PATTERN } from '../src/core/mentions.js';
+import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
+import { availableIn } from '../src/core/agents.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
@@ -78,7 +79,11 @@ async function start() {
   });
   if (!initial.settingsSaved) adoptLegacySettings();
   me = settings.get().name ?? defaultName;
-  settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
+  setFaces(faceOf);
+  settings.subscribe((next, prev) => {
+    renameMe(next.name ?? defaultName); // before the dialog's, which shows `me`
+    if (facesOf(next) !== facesOf(prev)) repaintFaces();
+  });
   showDocName(initial.doc);
   offerRename();
   paintNameChip();
@@ -141,6 +146,8 @@ async function start() {
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
+    setName,
+    setFace: (face) => settings.set({ face }),
     docKey: () => docKey,
     openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
     onSidecar: applySidecar,
@@ -767,11 +774,30 @@ function paintNameChip() {
   button.setAttribute('aria-label', `You (${me})`);
 }
 
-/** Rename the human in comments, in every doc; false when the name is not allowed. */
+/** Rename the human in comments, in every doc; false when the name is not allowed. Your face stays. */
 function setName(next) {
   if (!NAME_PATTERN.test(next)) return false;
-  if (next !== me) settings.set({ name: next });
+  if (next !== me) settings.set({ name: next, face: settings.get().face ?? me });
   return true;
+}
+
+// The seed of a face (see setFaces): yours and your agents' as saved, so a
+// new name keeps the old face.
+function faceOf(name, kind) {
+  const saved = settings.get();
+  if (kind !== 'agent') return sameName(name, me) ? saved.face ?? me : name;
+  const mine = saved.agents.filter((a) => sameName(a.name, name));
+  const agent = mine.find((a) => availableIn(a, docKey)) ?? mine[0];
+  return agent?.face ?? name;
+}
+
+const facesOf = (saved) => JSON.stringify([saved.face, ...saved.agents.map((a) => [a.id, a.face])]);
+
+// A face changed: everywhere it shows. (People's own repaint comes with the roster.)
+function repaintFaces() {
+  paintNameChip();
+  margin?.rerender();
+  people?.renameMe();
 }
 
 function renameMe(next) {

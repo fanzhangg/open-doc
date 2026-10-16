@@ -385,7 +385,7 @@ export async function startServer(docPath, {
       if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, autoComment: undefined, watchDoc: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
+      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, watchDoc: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
       specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: false, participant: asParticipant(agent) });
     }
     return specs;

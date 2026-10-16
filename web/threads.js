@@ -605,12 +605,22 @@ export function namecardFor(node, name, kind, how) {
   return node;
 }
 
+// Who has a face of their own (a seed saved for you or one of your agents),
+// so a new name keeps the old face; anyone else's is drawn from their name.
+let faceOf = (name) => name;
+
+/** `resolve(name, kind)` → the seed of that face. */
+export function setFaces(resolve) {
+  faceOf = resolve;
+}
+
 export function avatar(name, kind, small = false) {
   const agent = kind === 'agent';
   const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`);
   // Everyone is a face of their own (faces.js): people round, agents a soft
   // blob, so several in one doc are told apart at a glance.
-  node.append(agent ? agentFace(name) : personFace(name));
+  const seed = faceOf(name, kind) ?? name;
+  node.append(agent ? agentFace(seed) : personFace(seed));
   node.title = name;
   return node;
 }

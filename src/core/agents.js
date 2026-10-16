@@ -41,6 +41,9 @@
 // task, so the same agent can run on another runtime without being
 // rewritten. The runtime is what executes it: 'claude'
 // (Claude Code), 'codex' (OpenAI Codex CLI) or 'custom' (any command line).
+//
+// An agent's face (web/faces.js) is drawn from its `face`, a seed: null
+// draws it from the name. Renaming one keeps the face it had.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 import { newId } from './ops.js';
@@ -60,6 +63,7 @@ export const MAX_AGENTS = 500;
  * `maxBudgetUsd`, `isolated` and `fileAccess` only to Claude.
  */
 export const AGENT_DEFAULTS = Object.freeze({
+  face: null,
   starred: false,
   crew: false,
   doc: null,
@@ -92,9 +96,13 @@ const integer = (min, max) => (v) => Number.isInteger(v) && v >= min && v <= max
 const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= max && !/[\0\r\n]/.test(v);
 const orNull = (rule) => (v) => v === null || rule(v);
 
+/** A face seed (web/faces.js): any short line. Shared with the human's in settings. */
+export const FACE_RULE = text(64);
+
 export const AGENT_RULES = Object.freeze({
   id: (v) => typeof v === 'string' && /^a_[A-Za-z0-9_-]{4,40}$/.test(v),
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
+  face: orNull(FACE_RULE),
   starred: boolean,
   crew: boolean,
   doc: orNull((v) => typeof v === 'string' && v.length > 0 && v.length <= 4096 && !v.includes('\0')),
@@ -236,7 +244,10 @@ export function updateAgent(roster, id, patch, taken = []) {
   checkAgentPatch(patch);
   if (Object.hasOwn(patch, 'id')) throw new AgentError('an agent id cannot change');
   if (!roster.some((a) => a.id === id)) throw new AgentError('no such agent', 'not_found');
-  const next = { ...roster.find((a) => a.id === id), ...patch };
+  const before = roster.find((a) => a.id === id);
+  const next = { ...before, ...patch };
+  // A new name keeps the face the old one drew.
+  if (patch.name !== undefined && patch.face === undefined && before.face === null && patch.name !== before.name) next.face = before.name;
   const others = roster.filter((a) => a.id !== id);
   if ((patch.name !== undefined && taken.some((t) => sameName(t, next.name))) || others.some((a) => clash(a, next))) {
     throw new AgentError(`the name ${next.name} is taken`);

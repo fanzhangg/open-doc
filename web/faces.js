@@ -1,6 +1,7 @@
-// Avatars: a face drawn from the name. Everyone gets their own colour and
-// expression, a little personality, and keeps it wherever they show up (the
-// header, threads, history) and on every machine, since nothing is stored.
+// Avatars: a face drawn from a seed, the name unless one is saved (yours
+// and your agents', so a new name keeps the face; see threads.js avatar).
+// Everyone gets their own colour and expression, a little personality, and
+// keeps it wherever they show up (the header, threads, history).
 // People are round; agents are soft blobs that stay close to a circle, so
 // they still read as avatars but are told apart from people at a glance.
 //
@@ -29,11 +30,11 @@ const COLORS = [
 
 let ids = 0; // gradient ids, unique per page
 
-/** @param {string} name */
-export const agentFace = (name) => face(name, false);
+/** @param {string} seed */
+export const agentFace = (seed) => face(seed, false);
 
-/** @param {string} name */
-export const personFace = (name) => face(name, true);
+/** @param {string} seed */
+export const personFace = (seed) => face(seed, true);
 
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 

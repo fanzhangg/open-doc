@@ -12,7 +12,9 @@
 // one brings it into the doc. The People panel works like Docs' share
 // dialog: who is here, what each may do, Remove, and the agents you can bring
 // in. Clicking an avatar opens that agent's card: its name, introduction and
-// permissions, each a switch you can flip right there.
+// permissions, each a switch you can flip right there. Your own card works
+// the same way: a click on your name edits it in place. On either, a click
+// on the face draws a new one; a new name keeps the face.
 //
 // The comment box asks this module what to offer after @.
 
@@ -23,14 +25,18 @@ import { MAX_PERSONA, PERMISSIONS, availableIn, introOf, permissionPatch, permis
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
+const ME = 'me'; // your card's id for its name field: no agent's (theirs start with a_)
+const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
+// A seed for a new face (web/faces.js).
+const newFace = () => Math.random().toString(36).slice(2, 10);
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string,
- *           openSettings: (section: string, agentId?: string) => void, onSidecar: (sidecar: object) => void,
+ *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void, onSidecar: (sidecar: object) => void,
  *           onSettings: (settings: object) => void, onError: (message: string) => void,
  *           onPeople?: () => void }} options   onPeople: who is here or what they are changed
  */
-export function createPeople({ root, invite, panel, me, getName, docKey = () => null, openSettings, onSidecar, onSettings, onError, onPeople = () => {} }) {
+export function createPeople({ root, invite, panel, me, getName, setName, setFace, docKey = () => null, openSettings, onSidecar, onSettings, onError, onPeople = () => {} }) {
   let statuses = []; // the agents running here (server)
   let participants = []; // the doc's participants: [{ name, kind }]
   let saved = []; // the user's agents, as the settings have them
@@ -215,7 +221,7 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
   }
 
   // A person's card is an agent's with less on it: face, name, where they
-  // stand. Yours, editable, can change your name.
+  // stand.
   function personHead(name, standing) {
     const head = el('div', 'od-profile');
     const pic = el('span', 'od-profile-face');
@@ -226,15 +232,31 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     return head;
   }
 
+  // Yours works as an agent's does: editable, a click on your name edits it
+  // in place and a click on your face draws a new one.
   function meCard() {
-    const head = personHead(getName(), 'You');
-    if (viewOnly) return [head];
-    const actions = el('div', 'od-profile-actions');
-    actions.append(button('Change name', 'od-secondary', () => {
+    if (viewOnly) return [personHead(getName(), 'You')];
+    const head = el('div', 'od-profile');
+    const who = el('div', 'od-profile-who');
+    who.append(inPlace({ id: ME, name: getName() }, 'name', 'od-profile-name', 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
+    const tools = el('div', 'od-profile-tools');
+    tools.append(iconButton('settings', 'More settings', () => {
       close();
       openSettings('general');
     }));
-    return [head, actions];
+    head.append(facePicker(getName(), 'human', () => setFace(newFace())), who, tools);
+    return [head];
+  }
+
+  // A face to click for a new one.
+  function facePicker(name, kind, pick) {
+    const face = avatar(name, kind);
+    face.removeAttribute('title');
+    const node = button('', 'od-profile-face od-face-picker', pick);
+    node.title = 'Change avatar';
+    node.setAttribute('aria-label', 'Change avatar');
+    node.append(face);
+    return node;
   }
 
   function personCard(name) {
@@ -369,8 +391,9 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     const info = infoOf(name);
     const head = el('div', 'od-profile');
     head.dataset.presence = modeOf(status);
-    const pic = el('span', 'od-profile-face');
+    let pic = el('span', 'od-profile-face');
     pic.append(avatar(name, 'agent'));
+    if (profile && !viewOnly) pic = facePicker(name, 'agent', () => changeFace(profile));
     const who = el('div', 'od-profile-who');
     if (profile && !viewOnly) {
       // Click the name or the persona line to edit it right there.
@@ -445,9 +468,10 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
 
   async function commit(agent, key, field) {
     const value = field.value.trim();
+    if (agent.id === ME) return commitMyName(field, value);
     const next = key === 'name' && naming === agent.id ? 'persona' : null; // a new agent: name, then persona
     if (value === (key === 'name' ? agent.name : agent.persona)) return settle(next);
-    if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, 'Letters, digits, dot, dash or underscore, starting with a letter or digit', key);
+    if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, key);
     // A new agent's persona field opens at once, while its name saves, so
     // nothing typed right after Enter is lost.
     if (next) settle(next);
@@ -459,6 +483,12 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     } catch (failure) {
       fail(field, failure.message, key);
     }
+  }
+
+  function commitMyName(field, value) {
+    if (value !== getName() && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, 'name');
+    settle(null);
+    setName(value);
   }
 
   // The field is done: back to text, or on to the next one.
@@ -583,6 +613,10 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     take(await api.removeAgent(name));
     if (showing === `agent:${name}`) close(); // not a card opened meanwhile
   }, 'Could not remove the agent');
+
+  const changeFace = (agent) => act(async () => {
+    take(await api.updateAgent(agent.id, { face: newFace() }));
+  }, 'Could not change the avatar');
 
   const retry = (name) => act(async () => {
     const next = await api.agentAction(name, 'retry');
