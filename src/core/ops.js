@@ -45,6 +45,9 @@ export function newId(prefix) {
  *   { type: 'reopen', threadId, by, kind? }        // humans only
  *   { type: 'setWorking', threadId, by, since }   // since: null clears `by`'s
  *   { type: 'pass', threadId, by }                 // `by` leaves an open ask to others
+ *   { type: 'fail', threadId, by, error, at }      // `by`'s run on the ask failed
+ *   { type: 'retry', threadId, name, by, kind? }   // humans only: `name` tries the ask again
+ *   { type: 'cancel', threadId, name, by, kind? }  // humans only: takes the ask back from `name`
  *   { type: 'attachEdits', threadId, messageId, edits }
  *
  * A message may carry `edits` (what its author changed in the doc, §2.5),
@@ -54,8 +57,9 @@ export function newId(prefix) {
  * carry `to`, another agent it hands the thread to (SPEC.md §5): at most
  * MAX_HANDOFFS of them since the thread's latest message from a human.
  *
- * Only a human may resolve or reopen a thread (§2.2): `by` must not be a
- * participant of kind "agent", and `kind`, when given, must be "human".
+ * Only a human may resolve or reopen a thread, or retry or cancel an agent's
+ * request (§2.2): `by` must not be a participant of kind "agent", and
+ * `kind`, when given, must be "human".
  */
 export function applyOp(sidecar, op) {
   switch (op.type) {
@@ -86,6 +90,14 @@ export function applyOp(sidecar, op) {
       });
     case 'pass':
       return pass(sidecar, op);
+    case 'fail':
+      return fail(sidecar, op);
+    case 'retry':
+      requireHuman(sidecar, op, 'retry an agent');
+      return settle(sidecar, op, false);
+    case 'cancel':
+      requireHuman(sidecar, op, "cancel an agent's request");
+      return settle(sidecar, op, true);
     case 'attachEdits':
       return attachEdits(sidecar, op);
     default:
@@ -104,6 +116,42 @@ function pass(sidecar, { threadId, by }) {
     if (passed.some((n) => sameName(n, by))) return working === t.working ? t : { ...t, working };
     return { ...t, working, passed: [...passed, canonicalName(sidecar, by)] };
   });
+}
+
+// An agent's run on the thread's ask failed with `error`: the ask is out of
+// its inbox until a human retries it, cancels it or asks again. `failed` is
+// optional; a thread without it has no failures.
+function fail(sidecar, { threadId, by, error, at }) {
+  if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
+  if (typeof error !== 'string' || error.trim() === '') throw new OpError('bad_input', 'a failure needs an error');
+  return updateThread(sidecar, threadId, (t) => ({
+    ...t,
+    working: stopWorking(t, by),
+    failed: [...(t.failed ?? []).filter((f) => !sameName(f.name, by)), { name: canonicalName(sidecar, by), error: error.slice(0, 500), at }],
+  }));
+}
+
+// A human settles agent `name`'s failed request: retrying puts the ask back
+// in its inbox; cancelling takes the ask back from it (`cancelled`) until a
+// human asks again.
+function settle(sidecar, { threadId, name }, cancel) {
+  if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new OpError('bad_input', `invalid participant name: ${name}`);
+  return updateThread(sidecar, threadId, (t) => {
+    const failed = (t.failed ?? []).filter((f) => !sameName(f.name, name));
+    const cancelled = t.cancelled ?? [];
+    const next = { ...t };
+    if (t.failed) next.failed = failed;
+    if (cancel && !cancelled.some((n) => sameName(n, name))) next.cancelled = [...cancelled, canonicalName(sidecar, name)];
+    if (cancel) next.working = stopWorking(t, name);
+    return next;
+  });
+}
+
+// What a new ask from a human resets.
+function fresh(t) {
+  const out = {};
+  for (const key of ['passed', 'failed', 'cancelled']) if (t[key]?.length) out[key] = [];
+  return out;
 }
 
 function join(sidecar, participant) {
@@ -146,6 +194,8 @@ function identify(sidecar, participant, aka = []) {
     resolvedBy: rename(t.resolvedBy),
     ...(t.working ? { working: { ...t.working, by: rename(t.working.by) } } : {}),
     ...(t.passed ? { passed: t.passed.map(rename).filter(once) } : {}),
+    ...(t.failed ? { failed: t.failed.map((f) => ({ ...f, name: rename(f.name) })).filter((f, i, all) => all.findIndex((g) => sameName(g.name, f.name)) === i) } : {}),
+    ...(t.cancelled ? { cancelled: t.cancelled.map(rename).filter(once) } : {}),
     messages: t.messages.map((m) => {
       const mine = m.author.id === id || (m.author.id === undefined && m.author.kind === kind && was(m.author.name));
       return { ...m, ...(mine ? { author: { ...m.author, name, id } } : {}), mentions: m.mentions.map(rename).filter(once) };
@@ -221,8 +271,9 @@ function addMessage(sidecar, { threadId, message }) {
     resolvedAt: null,
     // The agent's reply ends its "responding…" state.
     working: stopWorking(t, message.author.name),
-    // A new ask from a human is open to every agent again.
-    ...(t.passed?.length && message.author.kind === 'human' && !message.undoes && !message.applies ? { passed: [] } : {}),
+    // A new ask from a human is open to every agent again, and asks again
+    // the ones that failed it or had it taken back.
+    ...(message.author.kind === 'human' && !message.undoes && !message.applies ? fresh(t) : {}),
     messages: [...t.messages, buildMessage(joined, message, t)],
   }));
 }
@@ -287,11 +338,11 @@ function validateProposal(proposal) {
 }
 
 // Resolving and reopening are the human's decisions (SPEC.md §2.2).
-function requireHuman(sidecar, { by, kind }) {
+function requireHuman(sidecar, { by, kind }, action = 'resolve or reopen a thread') {
   if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
   const known = sidecar.participants.find((p) => sameName(p.name, by));
   if (kind === 'agent' || known?.kind === 'agent') {
-    throw new OpError('not_allowed', `${by} is an agent; only a human can resolve or reopen a thread. Reply instead.`);
+    throw new OpError('not_allowed', `${by} is an agent; only a human can ${action}. Reply instead.`);
   }
   if (kind !== undefined && kind !== 'human') throw new OpError('bad_input', `invalid participant kind: ${kind}`);
 }

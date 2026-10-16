@@ -34,7 +34,7 @@ const ASSETS = {
   '/assets/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
-const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);
+const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen', 'retry', 'cancel']);
 const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
 
 class HttpError extends Error {
@@ -732,7 +732,10 @@ export async function startServer(docPath, {
       return applyOp(next, op);
     });
     if (joined) await syncAgents();
-    return { sidecar, ...(joined ? { agents: team.statuses() } : {}) };
+    // Retrying an agent that cannot start checks its program again first.
+    const retried = op.type === 'retry' ? team.get(op.name) : null;
+    if (retried?.status().state === 'unavailable') await retried.retry();
+    return { sidecar, ...(joined || retried ? { agents: team.statuses() } : {}) };
   }
 
   function openEvents(req, res) {
@@ -1003,6 +1006,10 @@ function validateOp(op, me) {
       return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
     case 'resolve':
       return { type: 'resolve', threadId: threadId(op.threadId), by: me.name, kind: 'human', at: now };
+    case 'retry':
+    case 'cancel':
+      if (!NAME_PATTERN.test(op.name ?? '')) throw new HttpError(400, 'bad_input', 'invalid agent name');
+      return { type: op.type, threadId: threadId(op.threadId), name: op.name, by: me.name, kind: 'human' };
     default:
       return { type: 'reopen', threadId: threadId(op.threadId), by: me.name, kind: 'human' };
   }

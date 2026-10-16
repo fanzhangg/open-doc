@@ -174,7 +174,6 @@ export class Dispatcher {
     this.error = null;
     this.run = null;
     this.lastRun = null;
-    this.failed = new Set(); // "threadId:lastMessageId" of a failed run's threads
     this.runStarts = [];
     this.leased = false; // whether an edit the guard let through holds the floor
   }
@@ -228,8 +227,11 @@ export class Dispatcher {
     this.notify();
   }
 
+  /**
+   * Check the program again (unavailable) or clear the last run's error. The
+   * comments a run failed stay failed: each is retried from its card.
+   */
   async retry() {
-    this.failed.clear();
     if (this.state === 'unavailable') await this.#preflight();
     else if (this.state === 'error') this.#setState('ready');
     this.notify();
@@ -320,7 +322,7 @@ export class Dispatcher {
   #waiting(sidecar) {
     const now = Date.now();
     return inbox(sidecar, this.name, now, { mentionsOnly: this.presence === 'dnd' })
-      .filter((t) => !this.failed.has(failureKey(t)) && !this.held(t.id) && !(this.#open(t) && activeWorking(t, now).length > 0));
+      .filter((t) => !this.held(t.id) && !(this.#open(t) && activeWorking(t, now).length > 0));
   }
 
   // Whether the thread is an open ask for it, one it may take or leave: not
@@ -614,14 +616,24 @@ export class Dispatcher {
     // A run must end every thread addressed to it with a reply. One that did
     // not would be handed the same threads again at once, so it counts as
     // failed instead. An open ask it left without a reply is passed on.
-    if (result.ok) {
-      const silent = await this.#unanswered(threads);
-      const passing = silent.filter((t) => run.open.has(t.id));
-      if (passing.length > 0) {
-        await update(this.docPath, (s) => passing.reduce((acc, t) => applyOp(acc, { type: 'pass', threadId: t.id, by: this.name }), s)).catch(() => {});
-      }
-      const missed = silent.length - passing.length;
-      if (missed > 0) result = { ...result, ok: false, error: `finished without replying to ${missed === 1 ? 'a comment' : `${missed} comments`}` };
+    // Every comment a run left unanswered records the failure on its thread,
+    // where the human retries or cancels it: nothing is retried on its own.
+    // A run stopped because its comment changed, or because the agent was
+    // stopped (it left the doc, or its settings changed), did not fail: its
+    // comments wait for whoever answers next.
+    const silent = run.restarted || this.state === 'stopped' ? [] : await this.#unanswered(threads);
+    const passing = result.ok ? silent.filter((t) => run.open.has(t.id)) : [];
+    const failing = silent.filter((t) => !passing.includes(t));
+    if (result.ok && failing.length > 0) {
+      result = { ...result, ok: false, error: `finished without replying to ${failing.length === 1 ? 'a comment' : `${failing.length} comments`}` };
+    }
+    if (passing.length > 0 || failing.length > 0) {
+      const at = new Date().toISOString();
+      const error = plainError(result.error) || 'the run failed';
+      await update(this.docPath, (s) => {
+        const passed = passing.reduce((acc, t) => applyOp(acc, { type: 'pass', threadId: t.id, by: this.name }), s);
+        return failing.reduce((acc, t) => applyOp(acc, { type: 'fail', threadId: t.id, by: this.name, error, at }), passed);
+      }).catch(() => {});
     }
     this.lastThreads = threads;
     if (run.overwritten.length > 0) await this.#offer(threads, run.overwritten).catch(() => {});
@@ -644,11 +656,6 @@ export class Dispatcher {
     await rm(runDir, { recursive: true, force: true });
     if (this.state === 'stopped') return;
 
-    if (result.ok) {
-      this.failed.clear();
-    } else if (!run.restarted) {
-      for (const t of threads) this.failed.add(failureKey(t));
-    }
     const fine = result.ok || run.restarted;
     this.#setState(fine ? 'ready' : 'error', fine ? null : result.error);
     this.notify();
@@ -747,8 +754,8 @@ function threadAt(threads, markdown, change) {
   return threads.length === 1 ? threads[0].id : null;
 }
 
-// A thread is retried after a failure only once a human adds a new message.
-const failureKey = (thread) => `${thread.id}:${thread.messages.at(-1).id}`;
+// An error on one line, without terminal colours, short enough for a comment card.
+const plainError = (text) => (text ?? '').replace(/\u001b\[[0-9;]*m/g, '').split('\n').map((l) => l.trim()).filter(Boolean).join(' ').slice(0, 300);
 
 function killTree(child) {
   if (child.exitCode !== null || child.pid === undefined) return;

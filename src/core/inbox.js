@@ -15,6 +15,9 @@ import { MAX_HANDOFFS, activeWorking, handoffs } from './ops.js';
  * until each has answered; one addressed to no one (an open ask) waits on
  * everyone who takes open asks, until each answered or passed (`passed`):
  * an agent with Auto Commenter answers only the ones that fit its persona.
+ * An ask whose run by `name` failed (`failed`), or that a human took back
+ * from `name` (`cancelled`), waits until a human retries it or asks again:
+ * a failure is never tried again on its own.
  * Notices are skipped: undoing an edit (`undoes`) or applying a proposal
  * (`applies`) asks nobody to act. A thread an agent handed to `name` since
  * (`handedTo`) waits on `name` too. A thread `name` is
@@ -28,6 +31,7 @@ export function inbox(sidecar, name, now = Date.now(), { mentionsOnly = false } 
   return sidecar.threads.filter((thread) => {
     if (thread.status !== 'open') return false;
     if (!asked(thread, name, mentionsOnly) && !handedTo(thread, name)) return false;
+    if (failedFor(thread, name) || cancelledFor(thread, name)) return false;
     return !activeWorking(thread, now).some((w) => sameName(w.by, name));
   });
 }
@@ -64,6 +68,16 @@ export function openAsk(thread) {
 }
 
 const passed = (thread, name) => (thread.passed ?? []).some((n) => sameName(n, name));
+
+/** Agent `name`'s failure on the thread's ask, `{ name, error, at }`, or null. */
+export function failedFor(thread, name) {
+  return (thread.failed ?? []).find((f) => sameName(f.name, name)) ?? null;
+}
+
+/** Whether a human took the thread's ask back from agent `name`. */
+export function cancelledFor(thread, name) {
+  return (thread.cancelled ?? []).some((n) => sameName(n, name));
+}
 
 /**
  * Whom message `at` of `said` (a thread's messages, notices left out) is

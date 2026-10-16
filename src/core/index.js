@@ -22,6 +22,6 @@ export {
   newId,
   workingList,
 } from './ops.js';
-export { handedTo, inbox, openAsk } from './inbox.js';
+export { cancelledFor, failedFor, handedTo, inbox, openAsk } from './inbox.js';
 export { FormatError, parseSidecar, serializeSidecar } from './format.js';
 export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, leaderless, PERMISSIONS, createAgent, deleteAgent, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from './agents.js';
