@@ -1,16 +1,18 @@
 // window.opendocDesktop: the few things a page may ask the desktop app to do,
 // all started by the user (a click or a key). The page never passes a path;
-// the app shows its own dialog or looks the doc up by its place in the list.
-// The one path that reaches the app from a window is a file the user dropped
-// on it, read here from the drop itself, never from the page.
+// the app shows its own dialog or looks the doc up in its own list (the
+// recent docs, or the docs of a folder window, which the app checks). The one
+// path that reaches the app from a window is a file or folder the user
+// dropped on it, read here from the drop itself, never from the page.
 
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const DROPPABLE = /\.(md|markdown)(\.opendoc\.json)?$/i;
 const carriesFiles = (event) => Boolean(event.dataTransfer?.types.includes('Files'));
 
-// Dropping a doc on any window opens it. Other files are ignored; the
-// browser never navigates to a dropped file.
+// Dropping a doc or a folder on any window opens it. Other files are ignored
+// (the app tells a folder from a file); the browser never navigates to a
+// dropped file.
 window.addEventListener('dragover', (event) => {
   if (!carriesFiles(event)) return;
   event.preventDefault();
@@ -20,7 +22,8 @@ window.addEventListener('drop', (event) => {
   if (!carriesFiles(event)) return;
   event.preventDefault();
   if (!event.isTrusted) return;
-  const paths = [...event.dataTransfer.files].map((file) => webUtils.getPathForFile(file)).filter((path) => DROPPABLE.test(path));
+  const paths = [...event.dataTransfer.files].map((file) => webUtils.getPathForFile(file))
+    .filter((path) => path && (DROPPABLE.test(path) || !/\.[^\\/.]+$/.test(path)));
   if (paths.length === 0) return;
   event.stopPropagation();
   ipcRenderer.invoke('opendoc:action', 'drop', paths).catch(() => {});
@@ -34,6 +37,21 @@ function act(action, arg) {
 contextBridge.exposeInMainWorld('opendocDesktop', {
   newDoc: () => act('new'),
   open: () => act('open'),
+  openFolder: () => act('openFolder'),
+  /**
+   * The folder window's sidebar: { name, docs (paths in the folder, `/`
+   * between folders), truncated, current, expanded (open subfolders) }, or
+   * null in a window with a single doc.
+   */
+  folder: () => ipcRenderer.invoke('opendoc:action', 'folder'),
+  /** Show the folder's doc `path` (one of `folder().docs`) in this window. */
+  openInFolder: (path) => act('openInFolder', String(path)),
+  folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
+  showSidebar: (open) => act('folderSidebar', Boolean(open)),
+  /** The folder's docs changed, or this window started listing a folder. */
+  onFolderChanged: (callback) => {
+    ipcRenderer.on('opendoc:folder-changed', () => callback());
+  },
   rename: () => act('rename'),
   /**
    * Set agent `id`'s `command`, or `claudeBin` or `codexBin` for every agent, after the user

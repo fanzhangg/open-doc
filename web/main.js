@@ -19,6 +19,7 @@ import { createAnchor, locate } from '../src/core/anchor.js';
 import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
 import { canApply, editItems, openProposal, previewItems } from './review.js';
 import { createHistory } from './history.js';
+import { createFileList } from './files.js';
 import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
 import { availableIn } from '../src/core/agents.js';
@@ -42,6 +43,7 @@ let history;
 let settings;
 let defaultName;
 let docKey; // the doc's full path: which of your unstarred agents are its own
+let folderName = null; // the folder the doc was opened from, whose files its agents may read
 let me;
 let sidecar;
 let baseHash;
@@ -60,6 +62,27 @@ let pendingSelection = null;
 // markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
+let files; // the folder sidebar (desktop folder windows)
+
+// The desktop app swaps one doc's page for another without a blank frame: it
+// shows this page once `opendocReady` resolves (the doc and the sidebar are
+// drawn), and before replacing it, or closing its window, asks it to let go
+// of its doc (`opendocLeave`): save the last edit, stop taking input, and say
+// how it was left, for the next page. `opendocStay` undoes that when the
+// switch fails.
+let markReady;
+window.opendocReady = new Promise((resolve) => { markReady = resolve; });
+window.opendocLeave = async () => {
+  if (editor) {
+    takeUnreportedTyping();
+    await flushSave();
+  }
+  document.body.inert = true;
+  return { ...files?.state(), commentsHidden: !commentsShown() };
+};
+window.opendocStay = () => {
+  document.body.inert = false;
+};
 
 async function start() {
   let initial;
@@ -73,6 +96,7 @@ async function start() {
   disk = initial.markdown;
   defaultName = initial.defaultName;
   docKey = initial.docKey;
+  folderName = initial.folder ?? null;
   settings = createSettings(initial.settings, {
     save: api.saveSettings,
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
@@ -115,9 +139,16 @@ async function start() {
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
+    folder: () => folderName,
     mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
+  files = createFileList({
+    onError: (message) => setStatus(message, 'error'),
+    onCarry: (carry) => {
+      if (carry.commentsHidden) showComments(false);
+    },
+  });
 
   margin = createCommentMargin(document.querySelector('.od-margin'), {
     onCreate: createThread,
@@ -222,12 +253,16 @@ async function start() {
     docKey = data.docKey ?? docKey; // its own agents moved with it
     people?.render({ roster: settings.get().agents });
   });
+  events.addEventListener('folder', (event) => {
+    folderName = JSON.parse(event.data).folder ?? null;
+  });
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
   events.addEventListener('hello', (event) => {
     if (Boolean(JSON.parse(event.data).missing) !== missing) setMissing(!missing);
     else if (!missing) setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
   });
+  await files.ready;
 }
 
 // ---- saving ----
@@ -293,17 +328,23 @@ async function flushSave() {
 // Leaving with an edit not saved yet: hold the page and save it. A browser
 // asks before leaving; the desktop app retries closing until the save is in.
 window.addEventListener('beforeunload', (event) => {
-  editor?.finishReplay(); // what is on disk is the whole change: show it, then save any typing
-  if (editor && !dirty && editor.getMarkdown() !== synced) {
-    // Typing the editor has not reported yet (it does so on a debounce).
-    dirty = true;
-    version++;
-  }
+  takeUnreportedTyping();
   if (!dirty && !saving) return;
   event.preventDefault();
   event.returnValue = true;
   flushSave().catch(() => {});
 });
+
+// Typing the editor has not reported yet (it does so on a debounce) is an
+// edit to save too. What is on disk is the whole change: a replay still
+// running is shown first.
+function takeUnreportedTyping() {
+  editor?.finishReplay();
+  if (editor && !dirty && editor.getMarkdown() !== synced) {
+    dirty = true;
+    version++;
+  }
+}
 
 // ---- changes from disk ----
 
@@ -821,4 +862,5 @@ function setStatus(text, state = 'saved') {
   status.title = problem ? text : '';
 }
 
-start();
+// Ready once drawn: two frames after the page is built.
+start().finally(() => requestAnimationFrame(() => requestAnimationFrame(markReady)));

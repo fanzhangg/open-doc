@@ -30,7 +30,7 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
  *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void,
  *           mentionChoices?: (query: string) => { name, kind, group, tagline? }[] }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, mentionChoices = () => [] }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, folder = () => null, mentionChoices = () => [] }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -45,7 +45,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
     },
   });
-  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey });
+  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey, folder });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);

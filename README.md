@@ -191,8 +191,9 @@ The same editor in its own window, without a terminal or a browser tab
 
 ```bash
 npm install
-npm run desktop                      # start window: New doc, Open, recent docs, Settings
+npm run desktop                      # start window: New doc, Open, Open Folder, recent docs, Settings
 npm run desktop -- path/to/plan.md   # open a doc (asks before creating a missing one)
+npm run desktop -- path/to/docs      # open a folder: its docs in a sidebar
 ```
 
 Each doc opens in its own window; opening a doc that is already open focuses
@@ -213,6 +214,17 @@ word count, theme, font and page width for every window; File > Show in File
 Explorer (Reveal in Finder on macOS) shows the doc's folder. If the open doc is
 moved or deleted outside the app, a banner says so and saving stops until you
 click Save it here again (or the file comes back).
+
+File > Open Folder (Ctrl/Cmd+Shift+O), or a folder dropped on a window or
+named on the command line, opens one window with a sidebar listing every
+`.md` and `.markdown` file in the folder and its subfolders (hidden folders
+and `node_modules` are left out). It starts on the doc last open there, else
+the README. Clicking a doc shows it in the same window: the last doc is saved
+first, and its agents stop, since each doc still has its own server and agents
+that work only on it. While a doc is open from a folder, its agents may also
+read the other files in that folder, but never edit them; a Web Searcher agent
+there could be tricked by a web page into sending them out. The sidebar button
+in the header hides and shows the list.
 
 ## CLI
 

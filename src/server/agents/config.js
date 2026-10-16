@@ -10,7 +10,9 @@
 // adapter, plus its name to RUNTIMES in src/core/agents.js.
 //
 // Web Searcher and File Searcher are granted as they are switched on: the
-// run gets the tools, or never sees them.
+// run gets the tools, or never sees them. A doc opened from a folder (the
+// desktop app's sidebar) lets its agents read the other files in that folder,
+// never edit them.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,7 +21,7 @@ import { claudeAdapter, codexAdapter, customAdapter } from './adapters.js';
 export const RUNTIMES = {
   claude: {
     label: 'Claude Code',
-    adapter: (agent, { claudeBin }) => claudeAdapter({
+    adapter: (agent, { claudeBin }, _docPath, { folder }) => claudeAdapter({
       bin: claudeBin ?? undefined,
       agentName: agent.name,
       model: agent.model ?? undefined,
@@ -28,15 +30,17 @@ export const RUNTIMES = {
       isolated: agent.isolated,
       webAccess: agent.webAccess,
       fileAccess: agent.fileAccess,
+      folder,
     }),
   },
   codex: {
     label: 'Codex',
-    adapter: (agent, { codexBin }) => codexAdapter({
+    adapter: (agent, { codexBin }, _docPath, { folder }) => codexAdapter({
       bin: codexBin ?? undefined,
       agentName: agent.name,
       model: agent.model ?? undefined,
       webAccess: agent.webAccess,
+      folder,
     }),
   },
   custom: {
@@ -49,22 +53,23 @@ export const RUNTIMES = {
 
 /**
  * The dispatcher options for roster agent `agent` working on `docPath`.
- * `settings` gives what all agents share (where Claude Code and Codex are).
+ * `settings` gives what all agents share (where Claude Code and Codex are);
+ * `folder`, the folder the doc was opened from, which the agent may read.
  * An agent with Auto Commenter also looks at comments that mention no one
  * (presence 'online'); any other only at comments addressed to it ('dnd').
  * @returns {{ id: string, name: string, persona: string, profile: object, adapter: object, limits: object, editMode: 'auto' | 'approve' | 'none', presence: 'online' | 'dnd', warning: string | null }}
  */
-export function agentSpec(agent, settings, docPath) {
+export function agentSpec(agent, settings, docPath, { folder = null } = {}) {
   const runtime = RUNTIMES[agent.runtime];
   const adapter = runtime
-    ? runtime.adapter(agent, settings, docPath)
+    ? runtime.adapter(agent, settings, docPath, { folder })
     : unavailableAdapter(agent.runtime, `${agent.runtime} agents are not supported by this version of OpenDoc`);
   return {
     id: agent.id,
     name: agent.name,
     // One block for the prompt: the persona line, then the instructions.
     persona: [agent.persona, agent.instructions].map((t) => t.trim()).filter(Boolean).join('\n\n'),
-    profile: { webAccess: agent.webAccess, fileAccess: agent.fileAccess },
+    profile: { webAccess: agent.webAccess, fileAccess: agent.fileAccess, folder },
     adapter,
     limits: { timeoutMs: agent.runTimeoutMinutes * 60 * 1000, runsPerHour: agent.runsPerHour },
     editMode: agent.editMode,

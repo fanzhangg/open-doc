@@ -560,6 +560,20 @@ test('Claude adapter: command line and result parsing', () => {
   assert.equal(claudeAdapter({ bin: 'claude', fileAccess: true }).workdir(docPath), null);
   assert.deepEqual(allowed({ fileAccess: true }), ['Read', 'Edit(./plan.md)', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
   assert.deepEqual(allowed({ webAccess: true, fileAccess: true }), ['Read', 'Edit(./plan.md)', 'WebSearch', 'WebFetch', 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  // Opened from a folder: still the private folder, but the folder is a
+  // working directory its read-only tools may look in; only the doc is editable.
+  const folder = join(tmpdir(), 'docs');
+  const inFolder = claudeAdapter({ bin: 'claude', folder });
+  assert.equal(inFolder.workdir(docPath), privateWorkdir(docPath));
+  const folderArgs = inFolder.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath }).args;
+  assert.deepEqual(folderArgs.slice(folderArgs.indexOf('--add-dir'), folderArgs.indexOf('--add-dir') + 3), ['--add-dir', folder, '--disallowedTools']);
+  assert.deepEqual(allowed({ folder }), [`Read(${doc})`, `Read(${rulePath(folder)}/**)`, `Edit(${doc})`, 'Bash(opendoc *)', 'PowerShell(opendoc *)']);
+  assert.ok(!claudeAdapter({ bin: 'claude', folder, fileAccess: true }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath }).args.includes('--add-dir'));
+  assert.ok(!args.includes('--add-dir'));
+  const folderPrompt = buildPrompt({ name: 'claude', docFile: 'plan.md', folder });
+  assert.match(folderPrompt, new RegExp(`opened this doc from the folder ${folder.replaceAll('\\', '\\\\')}`));
+  assert.match(folderPrompt, /never edit them/);
+  assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md', folder, fileAccess: true }), /opened this doc from the folder/);
 
   // Approve mode: the doc is not editable; the prompt asks for proposals.
   const approve = adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, editMode: 'approve' }).args;
@@ -655,6 +669,16 @@ test('Codex permissions: in the doc folder only the doc and its sidecar; secrets
     'plan.md.opendoc.json': 'read',
   });
   assert.equal(codexPermissions(docPath, { siblings, home, editMode: 'approve' })[folder]['plan.md'], 'read', 'approve mode: the doc is read-only');
+  // Opened from a folder: the files next to the doc are read-only, secrets still denied.
+  assert.deepEqual(codexPermissions(docPath, { siblings, home, readSiblings: true })[folder], {
+    '.': 'write',
+    ...Object.fromEntries(CODEX_DENIED_GLOBS.map((glob) => [glob, 'deny'])),
+    '.env': 'deny',
+    drafts: 'read',
+    'secret.txt': 'read',
+    'plan.md': 'write',
+    'plan.md.opendoc.json': 'read',
+  });
   for (const dir of [join(tmpdir(), 'work'), tmpdir(), join(tmpdir(), '..')]) {
     assert.deepEqual(Object.keys(table[resolve(dir)] ?? {}), CODEX_DENIED_GLOBS, `secrets denied in ${dir}`);
   }

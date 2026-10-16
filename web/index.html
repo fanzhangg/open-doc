@@ -9,7 +9,17 @@
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
+  <aside class="od-files" aria-label="Docs in this folder" hidden>
+    <div class="od-files-head">
+      <span class="od-files-icon" data-icon="folder"></span>
+      <span class="od-files-name"></span>
+    </div>
+    <ul class="od-files-tree"></ul>
+    <p class="od-files-more" hidden></p>
+  </aside>
+
   <header class="od-header">
+    <button class="od-icon-btn od-files-toggle" type="button" data-icon="sidebar" data-tip="Hide docs" aria-label="Docs in this folder" aria-pressed="true" hidden></button>
     <div class="od-title">
       <span class="od-doc-icon" data-icon="file"></span>
       <span class="od-doc-name"></span>
@@ -168,7 +178,7 @@
 
         <section class="od-agent-block">
           <h3>What it can do</h3>
-          <p class="od-agent-block-hint">Every agent reads the doc it works on.</p>
+          <p class="od-agent-block-hint od-agent-reads">Every agent reads the doc it works on.</p>
           <div class="od-agent-perms" role="group" aria-label="Permissions"></div>
           <p class="od-agent-risk" hidden></p>
         </section>

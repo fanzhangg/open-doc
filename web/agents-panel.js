@@ -25,7 +25,11 @@ const PROBLEMS = {
 /**
  * @param {{ store: object, onResult: (result: { settings?, sidecar?, agents? }) => void }} options
  */
-export function createAgentsPanel({ store, onResult, docKey = () => null }) {
+/**
+ * `folder()` names the folder the doc was opened from (whose files every
+ * agent may read), or is null.
+ */
+export function createAgentsPanel({ store, onResult, docKey = () => null, folder = () => null }) {
   const dialog = document.querySelector('.od-agents-dialog');
   const desktop = window.opendocDesktop;
   const list = dialog.querySelector('.od-agents-list');
@@ -40,6 +44,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   const where = form.querySelector('.od-agent-where');
   const perms = form.querySelector('.od-agent-perms');
   const risk = form.querySelector('.od-agent-risk');
+  const reads = form.querySelector('.od-agent-reads');
   const hooks = form.querySelector('.od-agent-hooks');
   perms.replaceChildren(...PERMISSIONS.map(permissionRow));
   let statuses = [];
@@ -108,7 +113,10 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
       box.disabled = unsupported;
       box.closest('.od-perm-row').title = unsupported ? 'Codex agents cannot be kept to your files' : '';
     }
-    risk.textContent = riskOf(agent);
+    reads.textContent = folder()
+      ? `Every agent reads the doc it works on, and the other files in ${folder()}. It edits only the doc.`
+      : 'Every agent reads the doc it works on.';
+    risk.textContent = riskOf(agent, Boolean(folder()));
     risk.hidden = !risk.textContent;
     for (const input of form.querySelectorAll('input[data-agent]:not([type="checkbox"]), textarea[data-agent], input[data-agent-program]')) {
       if (document.activeElement === input) continue;
@@ -298,10 +306,12 @@ function permissionRow({ key, label, hint }) {
 }
 
 // What the agent's reach beyond the doc risks, in a sentence, or ''.
-function riskOf(agent) {
+// `inFolder`: it may also read the files of the folder the doc was opened from.
+function riskOf(agent, inFolder = false) {
   if (agent.webAccess && agent.fileAccess) return 'With Web Searcher and File Searcher both on, a web page could trick it into sending your files to a website.';
+  if (agent.webAccess && inFolder) return "A web page can hide instructions that trick it into sending this doc, or the folder's files, to a website.";
   if (agent.webAccess) return 'A web page can hide instructions that trick it into sending this doc to a website.';
-  if (agent.fileAccess) return 'A file can hide instructions it then follows.';
+  if (agent.fileAccess || inFolder) return 'A file can hide instructions it then follows.';
   return '';
 }
 

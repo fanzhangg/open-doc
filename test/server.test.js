@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import { Readable } from 'node:stream';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
@@ -979,4 +979,22 @@ test('a rename keeps the human one person in the doc: their comments follow the 
   } finally {
     await server.close();
   }
+});
+
+test('a doc opened from a folder tells the page which folder its agents may read', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  await writeFile(join(assetsDir, 'index.html'), '<!doctype html><title>opendoc</title>');
+  const folder = dirname(docPath);
+  const server = await startServer(docPath, { assetsDir, folder });
+  try {
+    assert.equal((await call(server, 'GET', '/api/state')).body.folder, basename(folder));
+    await server.setFolder(null);
+    assert.equal((await call(server, 'GET', '/api/state')).body.folder, null);
+  } finally {
+    await server.close();
+  }
+  await withServer(async ({ server: single }) => {
+    assert.equal((await call(single, 'GET', '/api/state')).body.folder, null);
+  });
 });

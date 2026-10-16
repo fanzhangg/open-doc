@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { applyOp, newId } from '../src/core/index.js';
@@ -8,7 +8,8 @@ import { readSidecar, sidecarPath, update } from '../src/store/files.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
 } from '../desktop/files.js';
-import { MAX_RECENT, addRecent, readState, removeRecent, renameRecent, writeState } from '../desktop/state.js';
+import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
+import { docInFolder, firstDoc, listDocs, relativeDoc, watchFolder } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
@@ -104,12 +105,15 @@ test('renameDoc can change only the case of the name', async () => {
 
 test('state round-trips and survives a missing or corrupt file', async () => {
   const dir = await tempDir();
-  assert.deepEqual(await readState(dir), { recent: [], lastFolder: null, bounds: null });
-  const state = { recent: ['/a/x.md'], lastFolder: '/a', bounds: { x: 1, y: 2, width: 800, height: 600 } };
+  const empty = { recent: [], folderDocs: {}, lastFolder: null, bounds: null };
+  assert.deepEqual(await readState(dir), empty);
+  const state = { recent: ['/a/x.md', '/b'], folderDocs: { '/b': 'notes/y.md' }, lastFolder: '/a', bounds: { x: 1, y: 2, width: 800, height: 600 } };
   await writeState(state, dir);
   assert.deepEqual(await readState(dir), state);
   await writeFile(join(dir, 'state.json'), '{ nope');
-  assert.deepEqual(await readState(dir), { recent: [], lastFolder: null, bounds: null });
+  assert.deepEqual(await readState(dir), empty);
+  await writeFile(join(dir, 'state.json'), JSON.stringify({ folderDocs: { '/b': 3, '/c': 'z.md' } }));
+  assert.deepEqual((await readState(dir)).folderDocs, { '/c': 'z.md' });
 });
 
 test('recent docs: newest first, no duplicates, at most ten, renames keep their place', () => {
@@ -140,4 +144,73 @@ test('cleanPaths keeps absolute path strings only, up to a limit', () => {
   assert.deepEqual(cleanPaths([doc, 'relative.md', 42, null, { path: doc }]), [doc]);
   assert.deepEqual(cleanPaths('not a list'), []);
   assert.equal(cleanPaths(Array(30).fill(doc), 20).length, 20);
+});
+
+test('the doc last open in a folder: newest first, one per folder, at most fifty folders', () => {
+  let folderDocs = {};
+  for (let i = 0; i < MAX_FOLDER_DOCS + 5; i++) folderDocs = rememberFolderDoc(folderDocs, `/f/${i}`, 'a.md');
+  assert.equal(Object.keys(folderDocs).length, MAX_FOLDER_DOCS);
+  folderDocs = rememberFolderDoc(folderDocs, '/f/10', 'sub/b.md');
+  assert.deepEqual(Object.entries(folderDocs)[0], ['/f/10', 'sub/b.md']);
+  assert.equal(Object.keys(folderDocs).filter((k) => k === '/f/10').length, 1);
+});
+
+test('listDocs: the docs in a folder and its subfolders, subfolders first, hidden folders and packages left out', async () => {
+  const dir = await tempDir();
+  const files = [
+    'README.md', 'b.markdown', 'a 10.md', 'a 2.md', 'notes.txt', 'plan.md.opendoc.json', '.hidden.md',
+    'guides/intro.md', 'guides/deep/more.md', 'empty/nothing.txt', '.git/HEAD.md', 'node_modules/pkg/readme.md',
+  ];
+  for (const file of files) {
+    await mkdir(dirname(join(dir, file)), { recursive: true });
+    await writeFile(join(dir, file), '');
+  }
+  await symlink(join(dir, 'guides'), join(dir, 'linked'));
+  const { docs, truncated } = await listDocs(dir);
+  assert.deepEqual(docs, ['guides/deep/more.md', 'guides/intro.md', 'a 2.md', 'a 10.md', 'b.markdown', 'README.md']);
+  assert.equal(truncated, false);
+  assert.deepEqual(await listDocs(dir, { max: 2 }), { docs: ['guides/deep/more.md', 'guides/intro.md'], truncated: true });
+  assert.deepEqual(await listDocs(join(dir, 'missing')), { docs: [], truncated: false });
+  assert.equal(docInFolder(dir, 'guides/deep/more.md'), join(dir, 'guides', 'deep', 'more.md'));
+});
+
+test('relativeDoc says where a doc is in a folder, and null outside it', () => {
+  const root = join(tmpdir(), 'work');
+  assert.equal(relativeDoc(root, join(root, 'a', 'b.md')), 'a/b.md');
+  assert.equal(relativeDoc(root, join(root, 'b.md')), 'b.md');
+  assert.equal(relativeDoc(root, join(tmpdir(), 'other', 'b.md')), null);
+  assert.equal(relativeDoc(root, join(root, '..', 'b.md')), null);
+  assert.equal(relativeDoc(root, join(root, '..work', 'b.md')), '..work/b.md');
+  assert.equal(relativeDoc(root, root), null);
+});
+
+test('firstDoc: the one last open, else a README or index at the top, else the first', () => {
+  assert.equal(firstDoc(['a/x.md', 'b.md', 'README.md'], 'a/x.md'), 'a/x.md');
+  assert.equal(firstDoc(['a/x.md', 'b.md', 'README.md'], 'gone.md'), 'README.md');
+  assert.equal(firstDoc(['a/README.md', 'b.md', 'index.md']), 'index.md');
+  assert.equal(firstDoc(['a/x.md', 'b.md']), 'b.md');
+  assert.equal(firstDoc(['a/x.md']), 'a/x.md');
+  assert.equal(firstDoc([]), null);
+});
+
+test('watchFolder notices docs added, removed and renamed in subfolders, but not edits', async () => {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'sub'));
+  await writeFile(join(dir, 'sub', 'a.md'), 'one');
+  let changes = 0;
+  const stop = watchFolder(dir, () => changes++);
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
+  try {
+    await settle();
+    changes = 0;
+    await writeFile(join(dir, 'sub', 'b.md'), 'new');
+    await settle();
+    assert.ok(changes >= 1, 'a new doc');
+    changes = 0;
+    await rename(join(dir, 'sub', 'b.md'), join(dir, 'sub', 'c.md'));
+    await settle();
+    assert.ok(changes >= 1, 'a renamed doc');
+  } finally {
+    stop();
+  }
 });

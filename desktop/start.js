@@ -1,4 +1,4 @@
-// The start window: New doc, Open, the recent docs and Settings. Bundled
+// The start window: New doc, Open, Open Folder, the recent docs and folders, and Settings. Bundled
 // into dist/web/start.js (scripts/build.js) so it shares the editor's look
 // and parts: its stylesheet and theme, tooltips and the Settings dialog.
 
@@ -15,6 +15,7 @@ hydrateIcons();
 setupTooltips();
 document.querySelector('[data-action="new"]').addEventListener('click', () => desktop.newDoc().catch(() => {}));
 document.querySelector('[data-action="open"]').addEventListener('click', () => desktop.open().catch(() => {}));
+document.querySelector('[data-action="open-folder"]').addEventListener('click', () => desktop.openFolder().catch(() => {}));
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -43,16 +44,16 @@ desktop.onCommand((name) => settings?.toggle(name === 'shortcuts' ? 'shortcuts' 
 // Changed in another window, or in settings.json: the look follows.
 desktop.onSettingsChanged(() => desktop.settings().then((next) => store?.receive(next), () => {}));
 
-// ---- recent docs ----
+// ---- recent docs and folders ----
 
 async function showRecent() {
   const recent = await desktop.recent();
-  list.replaceChildren(...recent.map(({ name, folder }, index) => {
+  list.replaceChildren(...recent.map(({ name, folder, kind }, index) => {
     const button = el('button');
     button.type = 'button';
     button.title = folder;
     // rtl keeps the end of a long path visible; the marks keep it readable
-    button.append(icon('file'), el('span', 'od-recent-name', name), el('span', 'od-recent-folder', `‎${folder}‎`));
+    button.append(icon(kind === 'folder' ? 'folder' : 'file'), el('span', 'od-recent-name', name), el('span', 'od-recent-folder', `‎${folder}‎`));
     button.addEventListener('click', () => desktop.openRecent(index).catch(() => {}));
     const item = el('li');
     item.append(button);

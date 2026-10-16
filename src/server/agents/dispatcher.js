@@ -136,8 +136,9 @@ export class Dispatcher {
    * other agents of the doc; `floor` is how they take turns writing it. `join` adds
    * the agent to the doc's participants when it starts (an agent from flags;
    * one from the roster is there because it was invited). `profile`
-   * ({ webAccess, fileAccess }) is shown with the status and told to
-   * its runs. `humanName()` resolves to the human's name, for the prompt.
+   * ({ webAccess, fileAccess, folder }) is shown with the status and told to
+   * its runs; `folder` is the folder the doc was opened from, which runs may
+   * read. `humanName()` resolves to the human's name, for the prompt.
    * `catchUp()` has the server take in the doc as it is on disk, run when a
    * run ends and before it counts as over, so the run's last edits are known
    * to be its own.
@@ -186,6 +187,7 @@ export class Dispatcher {
       autoComment: this.presence === 'online',
       webAccess: Boolean(this.profile.webAccess),
       fileAccess: Boolean(this.profile.fileAccess),
+      readsFolder: Boolean(this.profile.folder),
       persona: this.persona,
       state: this.state,
       editMode: this.editMode,
@@ -384,6 +386,7 @@ export class Dispatcher {
       name: this.name, docFile: docRef, editMode: this.editMode, typing, persona: this.persona, autoComment: this.presence === 'online', others: this.others(),
       human: await this.humanName().catch(() => null),
       webAccess: Boolean(this.profile.webAccess), fileAccess: Boolean(this.profile.fileAccess), docFolder: dirname(this.docPath),
+      folder: this.profile.folder ?? null,
     });
     const threadsFile = join(runDir, 'threads.json');
     const promptFile = join(runDir, 'prompt.md');

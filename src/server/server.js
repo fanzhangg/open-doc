@@ -61,10 +61,13 @@ class HttpError extends Error {
  * when it ends a sentence, or at once when the human moves on from it.
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
- * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
+ * `folder`, when given, is the folder the doc was opened from (the desktop
+ * app's sidebar): the user's agents may read every file in it, though they
+ * still work only on this doc. `setFolder(folder)` changes it.
+ * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => Promise<void>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
-  port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
+  port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false, folder = null,
   settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = typingMs,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
@@ -348,6 +351,7 @@ export async function startServer(docPath, {
       defaultName: defaultName(),
       agents: team.statuses(),
       docKey: docKey(), // which of the user's unstarred agents are this doc's own
+      folder: folder && basename(folder), // the folder the agents may read, if any
     };
   }
 
@@ -377,8 +381,8 @@ export async function startServer(docPath, {
       if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
-      specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: false, participant: asParticipant(agent) });
+      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, folder });
+      specs.push({ ...agentSpec(agent, settings, docPath, { folder }), key, source: 'roster', join: false, participant: asParticipant(agent) });
     }
     return specs;
   }
@@ -932,6 +936,11 @@ const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+    async setFolder(next) {
+      folder = next;
+      broadcast('folder', { folder: folder && basename(folder) });
+      await syncAgents(); // they restart with the folder to read
+    },
 };
 
 // DNS rebinding: only answer requests addressed to the loopback name we serve.

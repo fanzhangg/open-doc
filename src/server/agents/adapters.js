@@ -72,11 +72,12 @@ export function rulePath(path) {
  * `others` the names of the other agents in the doc; every runtime gets them
  * the same way. `webAccess` and `fileAccess` say what it may reach beyond the
  * doc; `docFolder` is where the doc is, for an agent that may read the
- * human's other files. `human` is the human's name.
+ * human's other files. `folder` is the folder the doc was opened from, whose
+ * files it may read but not edit. `human` is the human's name.
  */
 export function buildPrompt({
   name, docFile, editMode = 'auto', typing = null, persona = '', autoComment = false, others = [], webAccess = false, fileAccess = false, docFolder = null,
-  human = null,
+  folder = null, human = null,
 }) {
   const doc = /[\s'"]/.test(docFile) ? `"${docFile}"` : docFile;
   const reply = `\`opendoc reply ${doc} <thread-id> "<text>" --as ${name}\``;
@@ -110,6 +111,7 @@ export function buildPrompt({
     `The comment threads waiting on you are given as JSON (on stdin, or in the threads file). ${handle} Never resolve a thread: the human decides when it is done.`,
     ...(webAccess ? ['You may search the web and open web pages.'] : []),
     ...(fileAccess ? [`You may read the human's other files${docFolder ? ` (the doc is in ${docFolder})` : ''}; read only what the comments need.`] : []),
+    ...(folder && !fileAccess ? [`The human opened this doc from the folder ${folder}. You may read the other files in it (and its subfolders) when a comment needs them, but never edit them: you work only on this doc.`] : []),
     ...(typing ? [`The human is typing in the paragraph that starts "${typing}" right now. Edit other parts of the doc first; an edit there may be refused while they type.`] : []),
     // Replies read like a colleague's in a doc review, not a report.
     'Write every reply and comment the way a person comments in a doc review: at most 280 characters, like a tweet, in one or two plain sentences on the single most important point. No numbered lists, headings, preamble or recap of the question; this holds even when asked for a review or for several points. If you have several points, make the one that matters most, or start a separate comment on the text each is about. `opendoc` refuses a longer comment.',
@@ -137,10 +139,13 @@ export function agentEnv(env) {
 /**
  * Claude Code in print mode (see docs/agent-launcher design). Unless
  * `fileAccess`, a run reads and edits only the doc: it starts in a private
- * folder and its rules name the doc by absolute path. `webAccess` adds
+ * folder and its rules name the doc by absolute path. With `folder` (the
+ * folder the doc was opened from) that folder is also a working directory
+ * (`--add-dir`), where Claude Code lets read-only tools look without asking;
+ * dontAsk still denies an edit of any file but the doc. `webAccess` adds
  * searching and fetching the web.
  */
-export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBudgetUsd, isolated = false, webAccess = false, fileAccess = false } = {}) {
+export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBudgetUsd, isolated = false, webAccess = false, fileAccess = false, folder = null } = {}) {
   const executable = bin ?? findClaude();
   return {
     name: 'claude',
@@ -184,9 +189,10 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
       // Variadic: each list ends at the next flag; keep the last one last so it
       // cannot swallow other arguments. Unless it may edit directly, the doc
       // is not editable at all: dontAsk denies an Edit the model tries anyway.
+      if (folder && !fileAccess) args.push('--add-dir', folder);
       args.push('--disallowedTools', ...DENIED_READS);
       const doc = fileAccess ? `./${docFile}` : rulePath(docPath);
-      const read = fileAccess ? ['Read'] : [`Read(${doc})`];
+      const read = fileAccess ? ['Read'] : [`Read(${doc})`, ...(folder ? [`Read(${rulePath(folder)}/**)`] : [])];
       const edit = editMode === 'auto' ? [`Edit(${doc})`] : [];
       const web = webAccess ? ['WebSearch', 'WebFetch'] : [];
       args.push('--allowedTools', ...read, ...edit, ...web, 'Bash(opendoc *)', 'PowerShell(opendoc *)');
@@ -216,9 +222,10 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
  * sandbox. Its commands, `opendoc` too, run under the profile `prepare` writes
  * to the private folder's .codex/config.toml (see `codexPermissions`); a
  * profile with denied reads is never lifted, by rules or otherwise.
- * `webAccess` turns on Codex's live web search.
+ * `webAccess` turns on Codex's live web search; `folder` (the folder the doc
+ * was opened from) lets it read the files next to the doc too.
  */
-export function codexAdapter({ bin, agentName = '', model, webAccess = false, codexHome = defaultCodexHome() } = {}) {
+export function codexAdapter({ bin, agentName = '', model, webAccess = false, folder = null, codexHome = defaultCodexHome() } = {}) {
   const executable = bin ?? findCodex();
   return {
     name: 'codex',
@@ -232,7 +239,7 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, co
     // read-only to it.
     async prepare({ workdir, docPath, editMode = 'auto' }) {
       const siblings = await readdir(dirname(resolve(docPath))).catch(() => []);
-      const table = codexPermissions(docPath, { editMode, siblings, codexHome });
+      const table = codexPermissions(docPath, { editMode, siblings, codexHome, readSiblings: Boolean(folder) });
       await mkdir(join(workdir, '.codex'), { recursive: true });
       await writeFile(join(workdir, '.codex', 'config.toml'), [
         '# Written by opendoc before each Codex run: what its commands may touch.',
@@ -409,16 +416,17 @@ export const CODEX_DENIED_GLOBS = ['.env*', '*.pem', '*.key'];
  * The filesystem table of the permission profile a Codex run on `docPath`
  * gets; `siblings` are the names in the doc's folder when the run starts.
  * Everything is readable (Codex's elevated Windows sandbox refuses to start
- * otherwise) except: every sibling but the doc and its sidecar files, secret
- * files in the folders above, and `~/.ssh`, `~/.aws` and Codex's own folder
- * (its sign-in). Only the doc's folder is writable, because the sandboxed
+ * otherwise) except: every sibling but the doc and its sidecar files (unless
+ * `readSiblings`, for a doc opened from a folder: then they are read-only, and
+ * only secret files among them are hidden), secret files in the folders
+ * above, and `~/.ssh`, `~/.aws` and Codex's own folder (its sign-in). Only the doc's folder is writable, because the sandboxed
  * `opendoc reply` creates the sidecar's lock and temp files there; the doc is
  * read-only unless it may edit directly, and the sidecar is changed only by replacing it.
  * Known gaps: a file added next to the doc during a run is readable, and the
  * run could replace (not read) any file in the folder by renaming another
  * file over it.
  */
-export function codexPermissions(docPath, { editMode = 'auto', siblings = [], home = homedir(), codexHome = join(home, '.codex') } = {}) {
+export function codexPermissions(docPath, { editMode = 'auto', siblings = [], readSiblings = false, home = homedir(), codexHome = join(home, '.codex') } = {}) {
   const doc = resolve(docPath);
   const folder = dirname(doc);
   const name = basename(doc);
@@ -432,13 +440,17 @@ export function codexPermissions(docPath, { editMode = 'auto', siblings = [], ho
   }
   table[folder] = {
     '.': 'write',
-    ...Object.fromEntries(siblings.filter((n) => !own(n)).sort().map((n) => [n, 'deny'])),
+    ...(readSiblings ? secrets : {}),
+    ...Object.fromEntries(siblings.filter((n) => !own(n)).sort().map((n) => [n, readSiblings && !isSecret(n) ? 'read' : 'deny'])),
     [name]: editMode === 'auto' ? 'write' : 'read',
     [`${name}.opendoc.json`]: 'read',
   };
   for (const dir of [join(home, '.ssh'), join(home, '.aws'), resolve(codexHome)]) table[dir] = 'deny';
   return table;
 }
+
+// Whether a file name matches one of CODEX_DENIED_GLOBS.
+const isSecret = (name) => /^\.env|\.(pem|key)$/i.test(name);
 
 /** A string or a table of them as a TOML value (inline table), for `-c`. */
 export function toml(value) {

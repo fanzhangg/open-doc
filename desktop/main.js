@@ -1,11 +1,13 @@
 // The OpenDoc desktop app (Electron main process): app lifecycle, one app
-// instance for every launch, the menus, the Open / New Doc / Rename dialogs,
-// and the app state (recent docs, last folder, window bounds). Each doc window
-// runs the same editor page and local server as `opendoc serve`; settings are
-// the user's settings.json, shared by every window.
+// instance for every launch, the menus, the Open / Open Folder / New Doc /
+// Rename dialogs, and the app state (recent docs and folders, last folder,
+// window bounds). Each doc window runs the same editor page and local server
+// as `opendoc serve`; settings are the user's settings.json, shared by every
+// window.
 
-import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session, shell } from 'electron';
 import { statSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { basename, dirname, sep } from 'node:path';
 import { checkSettingsPatch } from '../src/core/settings.js';
 import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
@@ -13,7 +15,8 @@ import { editAgents, readSettings, updateSettings, watchSettings } from '../src/
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
 } from './files.js';
-import { addRecent, readState, removeRecent, renameRecent, writeState } from './state.js';
+import { docInFolder, firstDoc, listDocs, relativeDoc } from './folder.js';
+import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
 
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
@@ -74,6 +77,7 @@ let quitting = false;
  * create a doc that does not exist (a path typed in a shell).
  */
 async function openPath(path, { create = false, parent = null } = {}) {
+  if (isDirectory(path)) return openFolder(path, parent);
   const docPath = docPathFor(path);
   if (!docPath) {
     await warn(parent, `OpenDoc can't open ${basename(path)}.`,
@@ -113,13 +117,59 @@ async function openLaunched(paths) {
   if (!opened) windows.bringToFront();
 }
 
+// A doc inside the folder of the folder window it is opened from takes that
+// window's place; any other gets a window of its own.
 async function show(docPath, parent) {
   try {
-    const { entry } = await windows.openDoc(docPath);
-    remember(entry.docPath);
+    const here = windows.docFor(parent);
+    const real = await realpath(docPath);
+    if (here?.folder && relativeDoc(here.folder, real) && !windows.windowOf(real)) {
+      const entry = await windows.switchDoc(here, real);
+      rememberIn(entry);
+      return true;
+    }
+    const { entry } = await windows.openDoc(real);
+    rememberIn(entry);
     return true;
   } catch (error) {
     return failed(parent, `Could not open ${basename(docPath)}.`, error);
+  }
+}
+
+/**
+ * Open a folder: a window that lists its docs, showing the one last open
+ * there (or its README). A folder without docs offers to start one.
+ */
+async function openFolder(path, parent = null) {
+  let folder;
+  try {
+    folder = await realpath(path);
+  } catch (error) {
+    forget(path);
+    return failed(parent, `${basename(path)} could not be found.`, error);
+  }
+  const open = windows.folderWindow(folder);
+  if (open) return show(open.docPath, parent);
+  const { docs } = await listDocs(folder);
+  // A doc another window has open stays there; start with one that is free.
+  const free = docs.filter((rel) => !windows.windowOf(docInFolder(folder, rel)));
+  const remembered = Object.hasOwn(state.folderDocs, folder) ? state.folderDocs[folder] : null;
+  let rel = firstDoc(free, remembered) ?? firstDoc(docs);
+  if (!rel) {
+    const name = basename(folder) || folder;
+    if (!(await ask(parent, `${name} has no docs yet.`, `Start one in ${folder}?`, 'New Doc'))) return false;
+    try {
+      rel = relativeDoc(folder, await createUntitled(folder));
+    } catch (error) {
+      return failed(parent, `Could not create a doc in ${name}.`, error);
+    }
+  }
+  try {
+    const { entry } = await windows.openDoc(docInFolder(folder, rel), { folder });
+    rememberIn(entry);
+    return true;
+  } catch (error) {
+    return failed(parent, `Could not open ${basename(folder)}.`, error);
   }
 }
 
@@ -132,6 +182,18 @@ async function openDialog(parent) {
   }));
   if (canceled) return;
   for (const path of filePaths) await openPath(path, { parent });
+}
+
+/** File > Open Folder: a folder's docs in one window, with a sidebar. */
+async function openFolderDialog(parent) {
+  const { canceled, filePaths } = await dialog.showOpenDialog(...withParent(parent, {
+    title: 'Open Folder',
+    buttonLabel: 'Open',
+    defaultPath: startFolder(parent),
+    properties: ['openDirectory', 'createDirectory'],
+  }));
+  if (canceled || filePaths.length === 0) return;
+  await openFolder(filePaths[0], parent);
 }
 
 // ---- creating and renaming docs ----
@@ -188,6 +250,7 @@ async function renameDialog(win) {
     state.recent = renameRecent(state.recent, from, to);
     app.addRecentDocument(to);
     state.lastFolder = dirname(to);
+    if (entry.folder) rememberIn(entry);
     saveState();
     recentChanged();
   } catch (error) {
@@ -208,8 +271,9 @@ function startFolder(win) {
 
 // ---- recent docs and app state ----
 
+// Docs and folders.
 function recentDocs() {
-  const present = state.recent.filter(isFile);
+  const present = state.recent.filter((path) => isFile(path) || isDirectory(path));
   if (present.length !== state.recent.length) {
     state.recent = present;
     saveState();
@@ -223,6 +287,19 @@ function remember(docPath) {
   state.recent = addRecent(state.recent, docPath);
   app.addRecentDocument(docPath);
   state.lastFolder = dirname(docPath);
+  saveState();
+  recentChanged();
+}
+
+// A folder window is remembered as its folder, and the doc it shows as the
+// one to open there next time.
+function rememberIn(entry) {
+  if (!entry.folder) return remember(entry.docPath);
+  const rel = relativeDoc(entry.folder, entry.docPath);
+  if (rel) state.folderDocs = rememberFolderDoc(state.folderDocs, entry.folder, rel);
+  state.recent = addRecent(state.recent, entry.folder);
+  app.addRecentDocument(entry.folder);
+  state.lastFolder = dirname(entry.docPath);
   saveState();
   recentChanged();
 }
@@ -288,6 +365,7 @@ function buildMenu() {
         { label: 'New Doc in This Folder', accelerator: 'CmdOrCtrl+Alt+N', enabled: Boolean(doc), click: (_item, win) => newDocHere(win) },
         { type: 'separator' },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: (_item, win) => openDialog(win) },
+        { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: (_item, win) => openFolderDialog(win) },
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
         { label: 'Rename…', enabled: Boolean(doc), click: (_item, win) => renameDialog(win) },
@@ -352,7 +430,7 @@ function setSettings(patch) {
 
 // Ask the doc page in `win` to open part of its own UI.
 function pageCommand(win, name) {
-  const page = windows.docFor(win)?.win ?? (windows.isStartWindow(win) ? win : null);
+  const page = windows.docFor(win)?.view ?? (windows.isStartWindow(win) ? win : null);
   page?.webContents.send('opendoc:command', name);
 }
 
@@ -412,7 +490,7 @@ function revealDoc(win) {
 function recentMenu() {
   const recent = recentDocs();
   if (recent.length === 0) return [{ label: 'No Recent Docs', enabled: false }];
-  const label = (path) => `${basename(path)}  —  ${dirname(path)}`.replaceAll('&', '&&');
+  const label = (path) => `${basename(path)}${isDirectory(path) ? sep : ''}  —  ${dirname(path)}`.replaceAll('&', '&&');
   return [
     ...recent.map((path) => ({ label: label(path), click: (_item, win) => openPath(path, { parent: win }) })),
     { type: 'separator' },
@@ -444,20 +522,32 @@ async function saveStartSettings(patch) {
 // ---- requests from pages (preload.cjs) ----
 
 ipcMain.handle('opendoc:action', async (event, action, arg) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
+  // A doc's page is in a view of its window; the start window's is the window's own.
+  const win = windows.windowForContents(event.sender) ?? BrowserWindow.fromWebContents(event.sender);
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');
   const fromStart = windows.isStartWindow(win);
   const fromDoc = Boolean(windows.docFor(win));
   if (action === 'new' && (fromStart || fromDoc)) return void (await newDocDialog(win));
   if (action === 'open' && (fromStart || fromDoc)) return void (await openDialog(win));
+  if (action === 'openFolder' && (fromStart || fromDoc)) return void (await openFolderDialog(win));
+  if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
+  if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
+  if (action === 'folderExpand' && fromDoc) {
+    if (typeof arg?.path === 'string') windows.setExpanded(win, arg.path, Boolean(arg.open));
+    return undefined;
+  }
+  if (action === 'folderSidebar' && fromDoc) return void windows.setSidebar(win, Boolean(arg));
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'agentProgram' && fromDoc) return setAgentProgram(win, arg);
   if (action === 'chooseProgram' && fromDoc) return chooseProgram(win, arg);
   if (action === 'recent' && fromStart) {
-    return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
+    return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path), kind: isDirectory(path) ? 'folder' : 'doc' }));
   }
   if (action === 'drop' && (fromStart || fromDoc)) {
-    for (const path of cleanPaths(arg, 20)) await openPath(path, { parent: win });
+    // Docs and folders; any other file dropped is ignored.
+    for (const path of cleanPaths(arg, 20)) {
+      if (isDirectory(path) || docPathFor(path)) await openPath(path, { parent: win });
+    }
     return undefined;
   }
   if (action === 'settings' && fromStart) return pageSettings((await readSettings()).settings);
@@ -469,6 +559,14 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   }
   throw new Error(`not allowed: ${action}`);
 });
+
+// The sidebar of a folder window names a doc of its own list (`/` between
+// folders); anything else is refused.
+async function openInFolder(win, rel) {
+  const entry = windows.docFor(win);
+  if (!entry?.folder || typeof rel !== 'string' || !(await windows.folderDocs(entry)).includes(rel)) throw new Error('not allowed');
+  await openPath(docInFolder(entry.folder, rel), { parent: win });
+}
 
 // ---- lifecycle ----
 
@@ -511,6 +609,8 @@ async function start() {
       saveState();
     },
     onClosed: buildMenu,
+    // A new page's background until it draws: the editor's canvas in the user's theme.
+    background: () => ((settings.theme === 'dark' || (settings.theme !== 'light' && nativeTheme.shouldUseDarkColors)) ? '#191919' : '#ffffff'),
   });
   buildMenu();
   app.on('browser-window-focus', buildMenu);
