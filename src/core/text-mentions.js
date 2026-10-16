@@ -129,7 +129,7 @@ function inLine(lineA, lineB, atA, atB) {
  */
 export function carry(changes, start, end) {
   let shift = 0;
-  for (const { a0, a1, b0, b1 } of changes) {
+  for (const { a0, a1, b1 } of changes) {
     if (end <= a0) break;
     if (start < a1) return null;
     shift = b1 - a1;

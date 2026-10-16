@@ -18,7 +18,7 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { $prose, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
-import { Fragment, Mark } from '@milkdown/kit/prose/model';
+import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';

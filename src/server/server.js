@@ -128,7 +128,14 @@ export async function startServer(docPath, {
     handle(req, res).catch((error) => {
       const status = error.status ?? statusFor(error);
       if (status >= 500) console.error(error);
-      sendJson(res, status, { error: error.message, code: error.code ?? 'internal' });
+      try {
+        sendJson(res, status, { error: error.message, code: error.code ?? 'internal' });
+      } catch (failed) {
+        // Even the error reply failed (a bad header, say): drop the
+        // connection rather than leave the request hanging.
+        console.error(failed);
+        res.destroy();
+      }
     });
   });
 
@@ -369,7 +376,7 @@ export async function startServer(docPath, {
     if (fixedAgent) specs.push({ presence: 'online', ...fixedAgent, key: 'flags', source: 'flags', join: true });
     if (!useSettings) return specs;
     const { settings } = await readSettings(settingsDir);
-    let participants = [];
+    let participants;
     try {
       participants = (await readSidecar(docPath)).participants;
     } catch {
@@ -520,7 +527,7 @@ export async function startServer(docPath, {
     if (!useSettings) return;
     const clippy = (await currentSettings()).agents.find((a) => a.id === DEFAULT_AGENT_ID && a.starred);
     if (!clippy) return; // deleted or made one doc's own: no one
-    let participants = [];
+    let participants;
     try {
       participants = (await readSidecar(docPath)).participants;
     } catch {

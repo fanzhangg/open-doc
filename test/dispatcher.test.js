@@ -353,7 +353,8 @@ test('a comment that @mentions three agents starts all three runs at once, and e
         return list?.length === 3 && list;
       }, { what: 'three at work' });
       assert.deepEqual(working.map((w) => w.by).sort(), ['ann', 'bob', 'cat']);
-      assert.deepEqual(server.team.statuses().map((a) => a.state), ['running', 'running', 'running']);
+      // The thread names an agent just before its run starts: wait for the runs.
+      await until(() => server.team.statuses().every((a) => a.state === 'running'), { what: 'three runs' });
 
       const s = await until(async () => {
         const current = await sidecar();
@@ -582,8 +583,9 @@ test('Claude adapter: command line and result parsing', () => {
   const approvePrompt = buildPrompt({ name: 'claude', docFile: 'plan.md', editMode: 'approve' });
   assert.match(approvePrompt, /opendoc propose plan\.md <thread-id> --as claude/);
   assert.match(approvePrompt, /do not edit it/);
-  const absolute = buildPrompt({ name: 'claude', docFile: 'C:/My Docs/plan.md' });
-  assert.match(absolute, /opendoc reply "C:\/My Docs\/plan\.md" <thread-id>/);
+  const absoluteDoc = process.platform === 'win32' ? 'C:/My Docs/plan.md' : '/My Docs/plan.md'; // absolute on this platform
+  const absolute = buildPrompt({ name: 'claude', docFile: absoluteDoc });
+  assert.ok(absolute.includes(`opendoc reply "${absoluteDoc}" <thread-id>`));
   assert.doesNotMatch(absolute, /working directory/);
   for (const prompt of [approvePrompt, buildPrompt({ name: 'claude', docFile: 'plan.md' })]) {
     assert.doesNotMatch(prompt, /opendoc resolve/);

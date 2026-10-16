@@ -1,11 +1,16 @@
-# Builds the desktop installers from every push to main and posts them to
-# the "nightly" pre-release (https://github.com/fanzhangg/open-doc/releases/tag/nightly).
+# Checks every pull request and push to main. The gate, on Windows and macOS:
+# lint, the installers, and a smoke test that opens a doc in the packaged
+# app. Pushes to main that pass it replace the "nightly" pre-release
+# (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
+# that cannot open a doc never replaces a working one. The unit tests run
+# once, on Linux, and report without holding back the nightly.
 
 name: Desktop builds
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -20,9 +25,12 @@ jobs:
         include:
           - os: macos-latest
             args: --mac --arm64 --x64
+            app: release/mac-arm64/OpenDoc.app/Contents/MacOS/OpenDoc
           - os: windows-latest
             args: --win --x64
+            app: release/win-unpacked/OpenDoc.exe
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,8 +38,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
       - run: npx electron-builder ${{ matrix.args }} --publish never
+      - name: Smoke test the packaged app
+        run: node scripts/smoke-desktop.js ${{ matrix.app }}
+        timeout-minutes: 5
       - uses: actions/upload-artifact@v4
         with:
           name: opendoc-${{ runner.os }}
@@ -40,8 +52,22 @@ jobs:
             release/*.exe
           if-no-files-found: error
 
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
   release:
-    needs: build
+    needs: build # not test: failing unit tests show on the PR but do not hold back the nightly
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
