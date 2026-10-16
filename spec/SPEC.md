@@ -304,14 +304,20 @@ mention.
 
 A human may also @mention an agent in the doc itself, outside code and raw
 HTML (by the same rule, applied to the rendered text, §3.1). A tool MAY turn
-such a mention into a thread: once the human has added it and paused, it
-creates a thread as that human, anchored on the rendered text from the `@` to
-the end of its block, with that text as the first message's `body`. Only a
+such a mention into a thread: once the human has added it and is done
+writing it, it creates a thread as that human, anchored on the rendered text
+from the `@` to the end of its block, with that text as the first message's
+`body`. When the human is done is the tool's to judge (for example: they move
+on to another block, or the block has been still for a while). Only a
 mention the human added counts, not one that was already there or one an
-agent wrote. The thread is then like any other; the sidecar format does not
-change and the inbox (§5) is still computed from the sidecar alone. The agent
-that answers it SHOULD remove the mention's text from the doc once it is done
-(or propose removing it).
+agent wrote. Until an agent answers it, a tool MAY keep the thread bound to
+that text: when the human rewrites it, the tool MAY hold the thread back from
+the agents it runs, stop a run answering it, and then replace the first
+message's `body` (and `mentions`) and the anchor with the new text. The thread
+is otherwise like any other; the sidecar format does not change and the inbox
+(§5) is still computed from the sidecar alone. The agent that answers it
+SHOULD remove the mention's text from the doc once it is done (or propose
+removing it).
 
 ## 5. Inbox
 

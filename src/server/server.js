@@ -9,7 +9,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, createAnchor, locate, newId, project, sourceRange, textMentions } from '../core/index.js';
+import { OpError, applyOp, blockAt, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
@@ -19,13 +19,14 @@ import { configDir, editAgents, readSettings, updateSettings, watchSettings } fr
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Team } from './agents/team.js';
+import { TextAsks } from './text-asks.js';
 import { agentSpec } from './agents/config.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
 const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
-const MENTION_SETTLE_MS = 3_000; // an @mention typed in the doc becomes a comment once the human pauses this long
+const MENTION_SETTLE_MS = 3_000; // an @mention typed in the doc that ends a sentence is sent once its paragraph is still this long
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/assets/app.js': ['app.js', 'text/javascript; charset=utf-8'],
@@ -55,6 +56,9 @@ class HttpError extends Error {
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder). `typingMs` is how long the human counts as typing
  * in a paragraph after their last keystroke there (default 15 s).
+ * An @mention typed in the doc is sent once its paragraph has been still for
+ * `mentionIdleMs` (default `typingMs`), or `mentionSettleMs` (default 3 s)
+ * when it ends a sentence, or at once when the human moves on from it.
  * `watchSettleMs` is how long the doc must be still before a Doc Watcher looks.
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
@@ -62,7 +66,7 @@ class HttpError extends Error {
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, watchSettleMs,
+  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = typingMs, watchSettleMs,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -81,6 +85,7 @@ export async function startServer(docPath, {
       typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
       humanName: async () => (await human()).name,
       catchUp: () => onFilesChanged(),
+      held: (threadId) => textAsks.held(threadId),
       ...(watchSettleMs === undefined ? {} : { watchSettleMs }),
     }),
   });
@@ -223,6 +228,15 @@ export async function startServer(docPath, {
       case 'POST /api/editing': {
         const anchor = (await readJson(req))?.anchor;
         editing = anchor ? { anchor: validAnchor(anchor), at: Date.now() } : null;
+        textAsks.caret(editing?.anchor ?? null);
+        return sendJson(res, 200, {});
+      }
+      case 'POST /api/caret': {
+        // Where the caret is (an anchor on its paragraph), or null when the
+        // editor lost focus: an @mention typed in the text is sent once the
+        // human moves on from it. Unlike typing, it keeps no agent out.
+        const anchor = (await readJson(req))?.anchor;
+        textAsks.caret(anchor ? validAnchor(anchor) : null);
         return sendJson(res, 200, {});
       }
       case 'POST /api/agent/overwritten': {
@@ -283,7 +297,7 @@ export async function startServer(docPath, {
         tellAgents(next, author);
         await update(docPath, (s) => s); // refresh anchors against the saved doc
         await noteVersion(next, { kind: 'edit', author });
-        await noteTextMentions(current.markdown, next);
+        textAsks.humanSaved(current.markdown, next);
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
@@ -600,69 +614,73 @@ export async function startServer(docPath, {
   }
 
   // An @mention of an agent typed in the doc's text, not in a comment, works
-  // like one: once the human pauses, it becomes the human's comment on the
-  // text from the @ to the end of its paragraph, and the agent answers it.
-  // Only the human's saves count, and only when they add a mention (more
-  // @name than before), so editing around an old one does not ask again.
-  // `pendingMentions` holds, per agent, its mentions before the human added one.
-  const pendingMentions = new Map();
-  let mentionTimer = null;
-  async function noteTextMentions(before, after) {
-    for (const name of after.includes('@') ? await mentionableAgents() : []) {
-      if (pendingMentions.has(name.toLowerCase())) continue;
-      const was = textMentions(before, [name]);
-      if (textMentions(after, [name]).length > was.length) pendingMentions.set(name.toLowerCase(), { name, was: was.map((m) => m.quote) });
-    }
-    if (pendingMentions.size === 0) return;
-    clearTimeout(mentionTimer); // still typing: wait for the pause
-    mentionTimer = setTimeout(() => {
-      serial(settleTextMentions).catch((error) => console.error('Could not turn an @mention in the doc into a comment:', error));
-    }, mentionSettleMs);
-  }
-
-  async function settleTextMentions() {
-    const pending = [...pendingMentions.values()];
-    pendingMentions.clear();
-    const { markdown } = await readDoc(docPath);
-    const { text } = project(markdown);
-    const author = await human();
-    const asks = [];
-    for (const { name, was } of pending) {
-      const now = textMentions(markdown, [name]);
-      const added = now.length - was.length;
-      if (added <= 0) continue; // deleted again before the pause
-      const left = [...was];
-      const fresh = now.filter((m) => {
-        const i = left.indexOf(m.quote);
-        if (i === -1) return true;
-        left.splice(i, 1);
+  // like one (src/server/text-asks.js): once the human is done writing it,
+  // it becomes their comment on the text from the @ to the end of its
+  // paragraph, and the agent answers it. Until then, and until the agent
+  // answers, the comment follows that text.
+  const textAsks = new TextAsks({
+    idleMs: mentionIdleMs,
+    settleMs: mentionSettleMs,
+    mentionable: () => mentionableAgents(),
+    text: async () => project((await readDoc(docPath)).markdown).text,
+    send: (ask) => serial(() => sendTextAsk(ask)),
+    open: async (threadId, messageId) => {
+      try {
+        const thread = (await readSidecar(docPath)).threads.find((t) => t.id === threadId);
+        return Boolean(thread && thread.status === 'open' && thread.messages.at(-1)?.id === messageId);
+      } catch {
         return false;
-      });
-      asks.push(...fresh.slice(-added).map((m) => ({ ...m, name })));
-    }
-    if (asks.length === 0) return;
+      }
+    },
+    rebind: (ask) => serial(() => rebindTextAsk(ask)),
+    restart: (threadId) => team.restart(threadId),
+    release: () => team.notify(),
+  });
+
+  async function sendTextAsk({ name, text, start, end }) {
     const roster = useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
-    const typed = editing;
+    const author = await human();
+    const threadId = newId('t');
+    const messageId = newId('m');
+    let sent = false;
     let joined = false;
     await update(docPath, (s) => {
       let next = s;
-      for (const ask of asks) {
-        if (!next.participants.some((p) => sameName(p.name, ask.name))) {
-          const agent = roster.find((a) => sameName(a.name, ask.name));
-          if (!agent) continue;
-          next = applyOp(next, { type: 'join', participant: asParticipant(agent) });
-          joined = true;
-        }
-        const message = { id: newId('m'), author, body: ask.quote, createdAt: new Date().toISOString() };
-        next = applyOp(next, { type: 'addThread', id: newId('t'), anchor: createAnchor(text, ask.start, ask.end), message });
+      if (!next.participants.some((p) => sameName(p.name, name))) {
+        const agent = roster.find((a) => sameName(a.name, name));
+        if (!agent) return s;
+        next = applyOp(next, { type: 'join', participant: asParticipant(agent) });
+        joined = true;
       }
-      return next;
+      sent = true;
+      const message = { id: messageId, author, body: text.slice(start, end), createdAt: new Date().toISOString() };
+      return applyOp(next, { type: 'addThread', id: threadId, anchor: createAnchor(text, start, end), message });
     });
-    // The pause that made the ask means the human is done typing it: the
-    // agent may edit that paragraph to answer (a new keystroke there counts again).
-    const at = typed && editing === typed && locate(text, typed.anchor);
-    if (at && asks.some((a) => a.start <= at.end && at.start <= a.end)) editing = null;
+    freeParagraph(text, start);
     if (joined) await syncAgents();
+    return sent ? { threadId, messageId } : null;
+  }
+
+  // The human rewrote an ask already sent, before the agent answered: the
+  // comment takes the new text, as a new ask to every agent.
+  async function rebindTextAsk({ threadId, messageId, text, start, end }) {
+    await update(docPath, (s) => {
+      const thread = s.threads.find((t) => t.id === threadId);
+      if (!thread || thread.messages.at(-1)?.id !== messageId) return s;
+      const body = text.slice(start, end);
+      const messages = thread.messages.map((m) => (m.id === messageId ? { ...m, body, mentions: parseMentions(body, s.participants) } : m));
+      const next = { ...thread, anchor: createAnchor(text, start, end), detached: false, messages, ...(thread.passed ? { passed: [] } : {}) };
+      return { ...s, threads: s.threads.map((t) => (t === thread ? next : t)) };
+    });
+    freeParagraph(text, start);
+  }
+
+  // The human is done with the ask at `start` of `text`: the agent may edit
+  // its paragraph to answer (a new keystroke there counts again).
+  function freeParagraph(text, start) {
+    const at = editing && locate(text, editing.anchor);
+    const block = blockAt(text, start);
+    if (at && block.start <= at.end && at.start <= block.end) editing = null;
   }
 
   // Agents an @mention in the text can reach: the doc's agents, and the
@@ -863,7 +881,7 @@ export async function startServer(docPath, {
     moveTo,
     async close() {
       clearInterval(heartbeat);
-      clearTimeout(mentionTimer);
+      textAsks.stop();
       stopWatching();
       stopWatchingSettings();
       closed = true;

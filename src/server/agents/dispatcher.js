@@ -92,7 +92,7 @@ export class Dispatcher {
    */
   constructor({
     docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', watch = false, warning = null,
-    onStatus = () => {}, settleMs = 300, watchSettleMs = WATCH_SETTLE_MS, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, floor = new Floor(), others = () => [], join = true, source = 'flags', participant = null,
+    onStatus = () => {}, settleMs = 300, watchSettleMs = WATCH_SETTLE_MS, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = new Floor(), others = () => [], join = true, source = 'flags', participant = null,
   }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
@@ -118,6 +118,7 @@ export class Dispatcher {
     this.typingIn = typingIn;
     this.humanName = humanName;
     this.catchUp = catchUp;
+    this.held = held; // threadId → whether the human is still rewriting its ask (not yet for agents)
     this.state = 'starting';
     this.error = null;
     this.run = null;
@@ -292,11 +293,12 @@ export class Dispatcher {
   }
 
   // Threads for this agent, except ones another participant is answering
-  // right now: they come back if that one ends without a reply.
+  // right now (they come back if that one ends without a reply) and ones
+  // whose ask the human is still rewriting.
   #waiting(sidecar) {
     const now = Date.now();
     return inbox(sidecar, this.name, now, { mentionsOnly: this.presence === 'dnd' })
-      .filter((t) => !this.failed.has(failureKey(t)) && !activeWorking(t, now));
+      .filter((t) => !this.failed.has(failureKey(t)) && !activeWorking(t, now) && !this.held(t.id));
   }
 
   // Whether others changed the doc since this Doc Watcher last looked and the
@@ -449,6 +451,18 @@ export class Dispatcher {
     this.run.base = merge3(before, after, this.run.base, { prefer: 'ours' }).text;
   }
 
+  /**
+   * The human changed the ask of thread `threadId`: end the run answering
+   * it, if one is, so the thread is answered afresh. Not a failure: what the
+   * run did so far stays, and threads it did not answer go back to the inbox.
+   */
+  restart(threadId) {
+    if (!this.run?.threadIds.includes(threadId)) return false;
+    this.run.restarted = true;
+    killTree(this.run.child);
+    return true;
+  }
+
   /** The guard refused an edit of the run because the human is typing there. */
   avoided() {
     if (this.run) this.run.avoided++;
@@ -507,7 +521,8 @@ export class Dispatcher {
   }
 
   async #finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
-    let result = spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
+    let result = run.restarted ? { ok: false, error: 'stopped: the comment it was answering changed' }
+      : spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
       : this.adapter.parse({ stdout, stderr, code });
     await this.catchUp().catch(() => {}); // the file watcher may not have seen the last edit yet
@@ -569,10 +584,11 @@ export class Dispatcher {
 
     if (result.ok) {
       this.failed.clear();
-    } else {
+    } else if (!run.restarted) {
       for (const t of threads) this.failed.add(failureKey(t));
     }
-    this.#setState(result.ok ? 'ready' : 'error', result.ok ? null : result.error);
+    const fine = result.ok || run.restarted;
+    this.#setState(fine ? 'ready' : 'error', fine ? null : result.error);
     this.floor.release(this); // after the state, so the next agent's run starts after this one is seen to end
     this.notify();
   }

@@ -106,6 +106,7 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
+  editor.onUi(reportCaret);
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
@@ -364,6 +365,28 @@ function reportTyping() {
     const anchor = editor.caretBlock();
     if (anchor) api.typing(anchor).catch(() => {});
   }, Math.max(0, TYPING_REPORT_MS - (Date.now() - typingSentAt)));
+}
+
+// Tell the server when the caret moves to another paragraph, or out of the
+// doc, so an @mention typed in the text is sent once the human moves on from
+// it (src/server/text-asks.js).
+let caretAt; // index of the block last reported, null for none
+let blurTimer = null;
+function reportCaret() {
+  const at = editor.caretIndex();
+  if (at === caretAt) return;
+  if (at === null) {
+    // Clicking the @ menu takes the focus for a moment: wait for it to come back.
+    blurTimer ??= setTimeout(() => {
+      blurTimer = null;
+      if (editor.caretIndex() !== null || caretAt === null) return;
+      caretAt = null;
+      api.caret(null).catch(() => {});
+    }, 300);
+    return;
+  }
+  caretAt = at;
+  api.caret(editor.caretBlock()).catch(() => {});
 }
 
 // Remember what a merge left out of agent `by`'s change, following anything

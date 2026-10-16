@@ -65,10 +65,12 @@ Who answers what:
   bring in, each with its persona. Mentioning one that is not in the doc
   yet brings it in, as mentioning a person in a shared doc shares it with
   them ("helper will reply · helper joins this doc").
-- `@name` typed in the doc itself works too. Once you pause, it becomes your
-  comment on the text from the `@` to the end of its paragraph, and the agent
-  answers there; when it is done it removes that text (or proposes removing
-  it). Mentions in code do not count.
+- `@name` typed in the doc itself works too. Once you are done writing it
+  (you move on to another paragraph, or finish the sentence and pause), it
+  becomes your comment on the text from the `@` to the end of its paragraph,
+  and the agent answers there; when it is done it removes that text (or
+  proposes removing it). Reword it before the agent answers and the agent
+  takes the new words. Mentions in code do not count.
 - A reply that mentions no one continues with the agent that answered last in
   that thread. A comment that mentions several agents waits on each of them.
 - Agents take turns: only one runs at a time in a doc, so their edits never

@@ -7,8 +7,8 @@
 // nothing with them), watch-edit (adds a line to the doc and comments on it),
 // watch-edit-silent (adds the line without a comment). It calls `opendoc`
 // through a shell to prove the dispatcher's PATH shim works. Each run logs
-// when it starts and ends, the changes it was handed, and the persona in its
-// prompt (when given the prompt file).
+// when it starts and ends, the asks and changes it was handed, and the
+// persona in its prompt (when given the prompt file).
 
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -16,7 +16,7 @@ import { execSync } from 'node:child_process';
 const [threadsFile, mode, runLog, promptFile] = process.argv.slice(2);
 const { doc, threads, changes } = JSON.parse(readFileSync(threadsFile, 'utf8'));
 const persona = promptFile ? readFileSync(promptFile, 'utf8').match(/<persona>\n([\s\S]*?)\n<\/persona>/)?.[1] ?? null : undefined;
-appendFileSync(runLog, JSON.stringify({ threads: threads.map((t) => t.id), changes: changes ?? null, as: process.env.OPENDOC_AS, cwd: process.cwd(), doc, persona, start: Date.now() }) + '\n');
+appendFileSync(runLog, JSON.stringify({ threads: threads.map((t) => t.id), asks: threads.map((t) => t.messages.findLast((m) => m.author.kind === 'human')?.body ?? null), changes: changes ?? null, as: process.env.OPENDOC_AS, cwd: process.cwd(), doc, persona, start: Date.now() }) + '\n');
 
 if (changes && mode.startsWith('watch-edit')) {
   const text = readFileSync(doc, 'utf8');

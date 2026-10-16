@@ -541,32 +541,122 @@ test('a doc opened with no agents starts with the crew; one with agents keeps it
   assert.deepEqual(await participants(settled), ['solo'], 'a doc with agents keeps them');
 });
 
-test('an @mention typed in the doc becomes the human\'s comment once they pause, and the agent answers it', { timeout: 30_000 }, async () => {
-  await withRoster([{ name: 'helper' }], async ({ server, state }) => {
-    const save = async (markdown) => {
+// Saves the doc as the human, and tells the server where their caret is.
+function writer(server, state) {
+  return {
+    save: async (markdown) => {
       const { docHash } = await state();
       assert.equal((await call(server, 'PUT', '/api/doc', { body: { markdown, baseHash: docHash } })).status, 200);
-    };
-    // Typed in two saves: the comment waits for the whole ask.
+    },
+    typingIn: async (exact) => assert.equal((await call(server, 'POST', '/api/editing', { body: { anchor: { exact, prefix: '', suffix: '', start: 0 } } })).status, 200),
+    caretIn: async (exact) => assert.equal((await call(server, 'POST', '/api/caret', { body: { anchor: exact && { exact, prefix: '', suffix: '', start: 0 } } })).status, 200),
+  };
+}
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test('an @mention typed in the doc is sent as the human\'s comment once they are done writing it, and the agent answers it', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'helper' }], async ({ server, state }) => {
+    const { save, typingIn, caretIn } = writer(server, state);
+    const threads = async () => (await state()).sidecar.threads;
+
+    // Written over several saves: a bare @name, then an ask still being
+    // written, wait; the sentence ending sends it once the paragraph is still.
     await save(`${SAMPLE}\nShip it. @helper\n`);
+    await typingIn('Ship it.');
+    await pause(500);
+    assert.equal((await threads()).length, 0, 'a bare @name waits');
     await save(`${SAMPLE}\nShip it. @helper add the risks here\n`);
-    const typed = { exact: 'Ship it. @helper add the risks here', prefix: '', suffix: '', start: 0 };
-    assert.equal((await call(server, 'POST', '/api/editing', { body: { anchor: typed } })).status, 200);
-    assert.equal((await state()).sidecar.threads.length, 0, 'not while typing');
-    assert.ok(await waitUntil(async () => (await state()).sidecar.threads.length === 1), 'a comment after the pause');
+    await pause(500);
+    assert.equal((await threads()).length, 0, 'not while the sentence is unfinished');
+    await save(`${SAMPLE}\nShip it. @helper add the risks here.\n`);
+    assert.ok(await waitUntil(async () => (await threads()).length === 1), 'sent once the sentence ends');
     assert.equal(await server.team.get('helper').typingIn(), null, 'the paragraph of the ask is free for the agent to edit');
-    let [thread] = (await state()).sidecar.threads;
-    assert.equal(thread.anchor.exact, '@helper add the risks here');
+    let [thread] = await threads();
+    assert.equal(thread.anchor.exact, '@helper add the risks here.');
     assert.deepEqual([thread.messages[0].author, thread.messages[0].mentions], [{ name: 'fzhan', kind: 'human' }, ['helper']]);
     assert.ok((await state()).sidecar.participants.some((p) => p.name === 'helper' && p.kind === 'agent'), 'the mention brought it in');
-    assert.ok(await waitUntil(async () => (await state()).sidecar.threads[0].messages.length === 2), 'helper answered');
-    assert.equal((await state()).sidecar.threads[0].messages[1].author.name, 'helper');
+    assert.ok(await waitUntil(async () => (await threads())[0].messages.length === 2), 'helper answered');
+    assert.equal((await threads())[0].messages[1].author.name, 'helper');
 
-    // Editing around it, or a mention in code, asks nothing new.
-    await save(`${SAMPLE}\nShip it soon. @helper add the risks here, please\n\nSee \`@helper\` in code.\n`);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    assert.equal((await state()).sidecar.threads.length, 1);
-  }, { options: { mentionSettleMs: 200 } });
+    // Moving the caret to another paragraph sends an unfinished one at once.
+    let doc = `${SAMPLE}\nShip it. @helper add the risks here.\n\nAlso. @helper check the dates\n`;
+    await save(doc);
+    await typingIn('Also.');
+    await pause(400);
+    assert.equal((await threads()).length, 1, 'still writing it');
+    await caretIn('Q4 Launch Plan');
+    assert.ok(await waitUntil(async () => (await threads()).length === 2), 'sent on moving on');
+    assert.equal((await threads())[1].messages[0].body, '@helper check the dates');
+
+    // So does a change the human saves in another paragraph.
+    doc = `${doc}\nLater.\n`;
+    await save(doc);
+    await typingIn('Later.');
+    doc = doc.replace('Later.', 'Later. @helper fix the table');
+    await save(doc);
+    await pause(400);
+    assert.equal((await threads()).length, 2);
+    doc = doc.replace('# Q4 Launch Plan', '# Q4 Launch Plan v2');
+    await save(doc);
+    assert.ok(await waitUntil(async () => (await threads()).length === 3), 'sent on typing elsewhere');
+
+    // Leaving the editor sends one too.
+    doc = `${doc}\nLast. @helper sum up\n`;
+    await save(doc);
+    await typingIn('Last.');
+    await pause(400);
+    assert.equal((await threads()).length, 3);
+    await caretIn(null);
+    assert.ok(await waitUntil(async () => (await threads()).length === 4), 'sent on leaving the editor');
+
+    // Editing around one, or a mention in code, asks nothing new.
+    await save(doc.replace('Ship it.', 'Ship it soon.').replace('risks here.', 'risks here, please.') + '\nSee `@helper` in code.\n');
+    await pause(600);
+    assert.equal((await threads()).length, 4);
+  }, { options: { mentionSettleMs: 200, mentionIdleMs: 60_000 } });
+});
+
+test('an unfinished @mention in the doc is sent once its paragraph has been still for a while', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'helper' }], async ({ server, state }) => {
+    const { save, typingIn } = writer(server, state);
+    await save(`${SAMPLE}\nShip it. @helper add the risks here\n`);
+    await typingIn('Ship it.');
+    await pause(400);
+    assert.equal((await state()).sidecar.threads.length, 0);
+    assert.ok(await waitUntil(async () => (await state()).sidecar.threads.length === 1), 'sent once the paragraph is still');
+  }, { options: { mentionSettleMs: 200, mentionIdleMs: 1200 } });
+});
+
+test('a sent @mention follows its text until answered: a queued agent takes the new text, a running one starts over', { timeout: 30_000 }, async () => {
+  await withRoster([{ name: 'helper' }], async ({ server, state, runs }) => {
+    const { save, typingIn } = writer(server, state);
+    const threads = async () => (await state()).sidecar.threads;
+    const helperRuns = async () => (await runs()).filter((r) => r.as === 'helper');
+
+    // Pilot holds the turn, so helper waits; meanwhile the human rewrites the ask.
+    await comment(server, 't_noone001', 'Is this clear?');
+    assert.ok(await waitUntil(async () => (await runs()).length === 1), 'Pilot is running');
+    await save(`${SAMPLE}\nShip it. @helper add the risks.\n`);
+    await typingIn('Ship it.');
+    assert.ok(await waitUntil(async () => (await threads()).length === 2), 'sent');
+    await save(`${SAMPLE}\nShip it. @helper add the risks and costs.\n`);
+    assert.ok(await waitUntil(async () => (await threads())[1].messages[0].body === '@helper add the risks and costs.'), 'the comment took the new text');
+    assert.ok(await waitUntil(async () => (await threads())[1].messages.length === 2), 'helper answered');
+    assert.deepEqual((await helperRuns()).map((r) => r.asks), [['@helper add the risks and costs.']], 'once, with the new text');
+
+    // While helper is answering, the human changes the ask: the run stops and starts over.
+    await save(`${SAMPLE}\nShip it. @helper add the risks and costs.\n\nAlso. @helper check the dates.\n`);
+    await typingIn('Also.');
+    assert.ok(await waitUntil(async () => (await helperRuns()).length === 2), 'helper is answering');
+    await save(`${SAMPLE}\nShip it. @helper add the risks and costs.\n\nAlso. @helper check the dates and owners.\n`);
+    assert.ok(await waitUntil(async () => (await helperRuns()).length === 3), 'started over');
+    assert.deepEqual((await helperRuns())[2].asks, ['@helper check the dates and owners.']);
+    assert.ok(await waitUntil(async () => (await threads())[2].messages.length === 2), 'answered once');
+    const thread = (await threads())[2];
+    assert.equal(thread.messages[0].body, '@helper check the dates and owners.');
+    assert.equal(thread.anchor.exact, '@helper check the dates and owners.');
+    assert.notEqual((await state()).agents.find((a) => a.name === 'helper').state, 'error', 'a restart is not a failure');
+  }, { mode: 'slow', options: { mentionSettleMs: 200, mentionIdleMs: 60_000 } });
 });
 
 test('a new agent is its doc\'s own: saved with the doc, back when it opens, gone when removed; a cloned doc brings its agents', { timeout: 30_000 }, async () => {

@@ -38,11 +38,20 @@ same core library, so any of them can work without the others.
   its latest human message mentions it (or no one, for agents taking open
   asks) and the agent has not answered since. No cursors or server state.
 - **Mentions in the doc text** (SPEC §4.1) become threads, so the inbox rule
-  stays the same. When a human save adds an `@name` of an agent outside code
-  (`src/core/text-mentions.js`), the server waits for a 3-second pause in the
-  human's saves, then adds a thread as the human, anchored from the `@` to the
-  end of its block. Only saves that raise the number of mentions of an agent
-  count, so edits around an old mention, and agents' own writes, ask nothing.
+  stays the same. On each human save the server diffs the rendered text
+  (lines, then the characters of changed lines) and takes as new each
+  `@name` of an agent outside code that is not an old one carried over
+  untouched (`addedMentions`, `src/core/text-mentions.js`); agents' writes
+  ask nothing. `src/server/text-asks.js` follows each by an anchor on its
+  `@name` and sends it, as a thread by the human anchored from the `@` to the
+  end of its block, once the human is done writing it: the caret (the page
+  reports moves between paragraphs and blur, `POST /api/caret`) or a save is
+  in another paragraph, or the paragraph has been still for 15 s, or 3 s when
+  the ask ends a sentence. Until the agent answers, the thread follows the
+  text: a human change to the ask holds the thread back from the agents
+  (`held`, checked by each dispatcher), stops a run answering it (not counted
+  as a failure), and once the human is done again rewrites the first
+  message and anchor and lets the agents look.
 - **Writes** take a short exclusive lock file, re-read, apply an operation with
   a client-generated id, and rename a temp file over the sidecar. Concurrent
   writers never lose changes; retries apply at most once.
@@ -54,7 +63,7 @@ same core library, so any of them can work without the others.
 | `spec/` | Format spec, JSON Schema, example doc. The contract between tools. |
 | `src/core/` | Pure library, same output in Node and the browser: rendered text (`project`), anchors, sidecar ops, inbox, mentions (in comments and in the doc text), diffs/edits/proposals, three-way merge, settings and agent profiles. |
 | `src/store/` | Disk: locked sidecar writes, file watching, user settings, version history. |
-| `src/server/` | Local HTTP server per doc: API, SSE, byte-preserving saves (`splice.js`), and the agent runner (`agents/`). |
+| `src/server/` | Local HTTP server per doc: API, SSE, byte-preserving saves (`splice.js`), @mentions typed in the text (`text-asks.js`), and the agent runner (`agents/`). |
 | `src/cli/` | `opendoc` CLI: `comment`, `comments`, `inbox`, `wait`, `reply`, `propose`, `resolve`, `mv`, `serve`, `guard`. `--json` and stable exit codes. |
 | `web/` | Editor page: Milkdown (ProseMirror) editor, comment margin, replay of agent edits, proposal previews, panels. Bundled by esbuild into `dist/web`. |
 | `desktop/` | Electron shell: windows, menus, dialogs, OS file association, start window, `opendoc` shim. |

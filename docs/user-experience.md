@@ -78,11 +78,22 @@ Agents are light, and belong to the doc unless you star them:
 - `@name` calls a specific agent. Mentioning one that is not in the doc yet
   brings it in. The line under the comment box says who will reply.
 - `@name` in the doc's text works like a comment. Type
-  `@Clippy add the risks here` in a paragraph; once you pause (3 seconds), it
-  becomes your comment on the text from the `@` to the end of the paragraph,
-  and the agent answers there and removes that text when it is done (or
-  proposes removing it). Mentions in code do not count, and editing around
-  an old mention does not ask again.
+  `@Clippy add the risks here` in a paragraph; once you are done writing it,
+  it becomes your comment on the text from the `@` to the end of the
+  paragraph, and the agent answers there and removes that text when it is
+  done (or proposes removing it). There is nothing to press: you are done
+  when you move on (your caret goes to another paragraph, you type
+  elsewhere, or you leave the editor), when the ask ends a sentence
+  (`.` `!` `?` `。` …) and you pause for 3 seconds, or when the paragraph has
+  been still for 15 seconds. Stopping mid-sentence to think does not cut the
+  ask short, and typing elsewhere does not hold it back. A bare `@Clippy`
+  with nothing after it waits until you move on.
+- Until the agent answers, the comment follows the text. Reword the ask
+  while the agent waits its turn and it gets the new words; reword it while
+  the agent is working on it and that run stops and starts over with them
+  once you are done again.
+- Each mention counts once: editing around an old one, moving text before
+  it, or a mention in code asks nothing new.
 - A follow-up with no mention continues with the agent that answered last.
 - Comments never make agents wake each other. A Doc Watcher wakes on another
   agent's change too, so agents with Doc Watcher can play off each other (a

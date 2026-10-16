@@ -629,6 +629,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     },
     requestComment,
     caretBlock,
+    /** Which top-level block holds the caret (its index), or null when the editor has no focus. */
+    caretIndex() {
+      const v = view();
+      if (!v.hasFocus()) return null;
+      const { $from } = v.state.selection;
+      return $from.depth === 0 ? -1 : $from.index(0);
+    },
     run,
     formatState,
     slashQuery,

@@ -43,6 +43,8 @@ export const api = {
   deleteAgent: async (id) => okData(await request('POST', '/api/roster/delete', { id })),
   /** The human is typing in the block `anchor` points at (an anchor on the rendered text). */
   typing: (anchor) => request('POST', '/api/editing', { anchor }),
+  /** The caret moved to the block `anchor` points at, or out of the doc (null). */
+  caret: (anchor) => request('POST', '/api/caret', { anchor }),
   /** Offer back changes of agent `name` the human's text was kept over: [{ before, after }]. */
   agentOverwritten: async (name, changes) => (await request('POST', '/api/agent/overwritten', { name, changes })).data.offered,
   /** The doc's versions, oldest first (src/store/history.js). */

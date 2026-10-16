@@ -92,6 +92,11 @@ export class Team {
     return ran.at(-1)?.dispatcher ?? null;
   }
 
+  /** The human changed the ask of thread `threadId`: a run answering it starts over. */
+  restart(threadId) {
+    return this.members.some((m) => m.dispatcher.restart(threadId));
+  }
+
   /** The sidecar changed: every agent looks for comments waiting on it. */
   notify() {
     for (const m of this.members) m.dispatcher.notify();
