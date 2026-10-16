@@ -31,45 +31,18 @@ const COLORS = [
 let ids = 0; // gradient ids, unique per page
 
 /** @param {string} seed */
-export const agentFace = (seed) => seed.trim().toLowerCase() === 'clippy' ? clippyFace() : face(seed, false);
+export const agentFace = (seed) => face(seed, false);
 
 /** @param {string} seed */
 export const personFace = (seed) => face(seed, true);
 
-// Follow the original sketch: a wide warm yellow coil, eyes on either side and
-// asymmetric brows. Rounded arcs and a soft gaze gently refine its expression.
-export function clippyFace() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
-  const id = `od-clippy-${++ids}`;
-  const defs = node('defs', {});
-  const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  for (const [offset, color] of [[0, '#ffe9a3'], [0.55, '#ffd05b'], [1, '#edac38']]) {
-    gradient.append(node('stop', { offset, 'stop-color': color }));
-  }
-  defs.append(gradient);
-  const body = node('g', {});
-  svg.append(defs, body);
-  body.append(node('path', {
-    class: 'od-face-body',
-    d: 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50',
-    fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  }));
-  const features = node('g', { class: 'od-face-look' });
-  drawEye(features, 'big', 23, 46, -1, 1.55, [0.8, -0.3]);
-  drawEye(features, 'big', 77, 43, 1, 1.55, [-0.8, -0.3]);
-  // A small highlight softens the gaze without adding another facial feature.
-  for (const [x, y] of [[22, 43], [74, 40]]) {
-    features.append(node('circle', { cx: x, cy: y, r: '1.7', fill: '#fff' }));
-  }
-  features.append(stroke('M13 26Q22 22 31 25', 3.5), stroke('M68 21Q76 16 84 18', 3.5));
-  svg.append(features);
-  return svg;
-}
+// The app's icons show the face of Clippy, the agent the app comes with
+// (src/core/agents.js), drawn from its name like any agent's.
+const MASCOT = 'Clippy';
 
-// The app icon: Clippy on a paper tile, the shape and size of Apple's icon grid
-// (824 of 1024). macOS 26 shrinks an icon that does not fill this shape onto a
-// grey plate, which is how the bare coil showed in the Dock and Finder.
+// The app icon: that face on a paper tile, the shape and size of Apple's icon
+// grid (824 of 1024). macOS 26 shrinks an icon that does not fill this shape
+// onto a grey plate.
 export function appIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
   const defs = node('defs', {});
@@ -81,16 +54,15 @@ export function appIcon() {
     x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
     fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
   }));
-  const avatar = clippyFace();
-  const mark = node('g', { transform: 'translate(50 50.5) scale(0.64) translate(-50 -51)' });
-  mark.append(...avatar.childNodes);
+  const mark = node('g', { transform: 'translate(50 50) scale(0.6) translate(-50 -50)' });
+  mark.append(...agentFace(MASCOT).childNodes);
   svg.append(mark);
   return svg;
 }
 
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
-// A large warm yellow coil overlaps the folded page, following the original sketch.
+// A doc: a folded page with the same face over its corner, ringed in white.
 export function documentIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
@@ -99,14 +71,13 @@ export function documentIcon() {
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
-  const avatar = clippyFace();
-  svg.append(avatar.querySelector('defs'));
-  const coil = avatar.querySelector('.od-face-body');
-  const halo = coil.cloneNode(true);
+  const avatar = agentFace(MASCOT);
+  const halo = avatar.querySelector('.od-face-body').cloneNode(true);
+  halo.setAttribute('fill', '#fff');
   halo.setAttribute('stroke', '#fff');
-  halo.setAttribute('stroke-width', '16');
-  const mark = node('g', { transform: 'translate(-1 20) scale(0.73)' });
-  mark.append(halo, coil);
+  halo.setAttribute('stroke-width', '12');
+  const mark = node('g', { transform: 'translate(4 40) scale(0.56)' });
+  mark.append(halo, ...avatar.childNodes);
   svg.append(mark);
   return svg;
 }
