@@ -536,6 +536,13 @@ test('Claude adapter: command line and result parsing', () => {
   // Every run is a new session, and none is kept to resume.
   assert.ok(args.includes('--no-session-persistence'));
   assert.ok(!args.includes('--resume'));
+  // The model asked for, at low effort unless told otherwise.
+  assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'sonnet']);
+  assert.deepEqual(args.slice(args.indexOf('--effort'), args.indexOf('--effort') + 2), ['--effort', 'low']);
+  const high = claudeAdapter({ bin: 'claude', effort: 'high' }).command({ prompt: 'P', docFile: 'plan.md', docPath }).args;
+  assert.equal(high[high.indexOf('--effort') + 1], 'high');
+  // No model set: a fast one.
+  assert.equal(high[high.indexOf('--model') + 1], 'haiku');
   // Kept to the doc by default: one file, by absolute path, from a private folder.
   assert.equal(adapter.workdir(docPath), privateWorkdir(docPath));
   assert.notEqual(privateWorkdir(docPath), dirname(docPath));
@@ -630,6 +637,7 @@ test('Codex adapter: command line and result parsing', async () => {
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);
   assert.equal(args.at(-1), 'PROMPT');
   assert.ok(!args.includes('resume'), 'every run is a new session');
+  assert.ok(args.includes('--ephemeral'), 'and none is kept');
 
   const lines = (...events) => events.map((e) => JSON.stringify(e)).join('\n');
   const ok = adapter.parse({

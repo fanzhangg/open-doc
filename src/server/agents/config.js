@@ -25,6 +25,7 @@ export const RUNTIMES = {
       bin: claudeBin ?? undefined,
       agentName: agent.name,
       model: agent.model ?? undefined,
+      effort: agent.effort,
       maxTurns: agent.maxTurns,
       maxBudgetUsd: agent.maxBudgetUsd ?? undefined,
       isolated: agent.isolated,

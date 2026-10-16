@@ -119,7 +119,8 @@ agent's card) lists your agents on the left and edits the one you pick on the
 right, in the order you are likely to change things: name and persona,
 whether it is starred, what it can do (the same switches as its card), its
 instructions, and under **Advanced**
-how it runs: runtime, model, limits (turns and minutes per run, runs per hour,
+how it runs: runtime, model (Claude agents default to haiku, which is fast),
+effort (low, medium or high; low by default), limits (turns and minutes per run, runs per hour,
 budget) and isolated runs (Codex agents have model, minutes and runs per
 hour). A problem (it cannot start, its last run failed) shows at the top only
 when there is one. **Programs** at the foot of the list holds where Claude
@@ -138,7 +139,8 @@ opendoc serve plan.md --agent claude --persona "A strict copy editor: fix gramma
 
 with `--edit-mode auto|approve|none`, `--max-turns 30`, `--run-timeout 10`
 (minutes), `--runs-per-hour 20`, optional `--max-budget-usd`. `--model` picks
-the model; `--agent-bin` points at `claude` if it is not found;
+the model (haiku by default) and `--effort low|medium|high` how hard it
+thinks (low by default); `--agent-bin` points at `claude` if it is not found;
 `--agent-isolated` adds `--bare` (needs `ANTHROPIC_API_KEY`). Other agents:
 `--agent <name> --agent-cmd "<command with {promptFile} {threadsFile} {doc}>"`.
 

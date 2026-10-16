@@ -104,6 +104,9 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     for (const button of form.querySelectorAll('[data-agent-runtime]')) {
       button.setAttribute('aria-checked', String(button.dataset.agentRuntime === agent.runtime));
     }
+    for (const button of form.querySelectorAll('[data-agent-effort]')) {
+      button.setAttribute('aria-checked', String(button.dataset.agentEffort === agent.effort));
+    }
     const has = permissionsOf(agent);
     for (const box of perms.querySelectorAll('input[data-permission]')) {
       const key = box.dataset.permission;
@@ -180,6 +183,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
       programs = true;
       paint();
     } else if (button.dataset.agentRuntime) save({ runtime: button.dataset.agentRuntime });
+    else if (button.dataset.agentEffort) save({ effort: button.dataset.agentEffort });
     else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
     else if (button.dataset.action === 'new-agent') {
       try {

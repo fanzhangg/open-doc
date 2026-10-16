@@ -143,9 +143,12 @@ export function agentEnv(env) {
  * folder the doc was opened from) that folder is also a working directory
  * (`--add-dir`), where Claude Code lets read-only tools look without asking;
  * dontAsk still denies an edit of any file but the doc. `webAccess` adds
- * searching and fetching the web.
+ * searching and fetching the web. By default it runs on a fast model at low
+ * `effort`, since a comment is usually a small change and the human waits.
  */
-export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBudgetUsd, isolated = false, webAccess = false, fileAccess = false, folder = null } = {}) {
+export const CLAUDE_DEFAULT_MODEL = 'haiku';
+
+export function claudeAdapter({ bin, agentName = '', model = CLAUDE_DEFAULT_MODEL, effort = 'low', maxTurns = 30, maxBudgetUsd, isolated = false, webAccess = false, fileAccess = false, folder = null } = {}) {
   const executable = bin ?? findClaude();
   return {
     name: 'claude',
@@ -181,6 +184,7 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
         '--no-session-persistence',
       ];
       if (model) args.push('--model', model);
+      if (effort) args.push('--effort', effort);
       if (maxBudgetUsd) args.push('--max-budget-usd', String(maxBudgetUsd));
       if (isolated) args.push('--bare');
       // Before each edit, `opendoc guard` asks the server whether the human
@@ -266,6 +270,7 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, fo
       const args = [
         'exec',
         '--json',
+        '--ephemeral',
         '--color', 'never',
         '--skip-git-repo-check',
         '--ignore-user-config',

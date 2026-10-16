@@ -23,6 +23,13 @@ test('agentSpec: each runtime builds its adapter; the persona and limits carry o
   assert.equal(claude.editMode, 'approve');
   assert.equal(claude.presence, 'dnd', 'answers only when @mentioned');
   assert.equal(agentSpec(agent({ autoComment: true }), { claudeBin: null }, doc).presence, 'online', 'with Auto Commenter, also open comments');
+  // A new agent runs fast: haiku at low effort; both can be changed.
+  const fast = claude.adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
+  assert.equal(fast[fast.indexOf('--model') + 1], 'haiku');
+  assert.equal(fast[fast.indexOf('--effort') + 1], 'low');
+  const careful = agentSpec(agent({ model: 'opus', effort: 'high' }), { claudeBin: 'claude' }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
+  assert.equal(careful[careful.indexOf('--model') + 1], 'opus');
+  assert.equal(careful[careful.indexOf('--effort') + 1], 'high');
   const searcher = agentSpec(agent({ webAccess: true }), { claudeBin: 'claude' }, doc).adapter.command({ prompt: 'P', docFile: 'plan.md', docPath: doc }).args;
   assert.ok(searcher.includes('WebSearch'), 'Web Searcher is granted as switched on');
 
@@ -41,6 +48,7 @@ test('agentSpec: each runtime builds its adapter; the persona and limits carry o
   const args = codex.adapter.command({ prompt: 'PROMPT', docFile: 'plan.md', docPath: doc }).args;
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'gpt-5']);
   assert.ok(args.includes('web_search="live"'));
+  assert.ok(!args.includes('--effort'), 'effort is for Claude only');
   assert.equal(codex.warning, null, 'Claude Code hooks do not apply to Codex');
   assert.deepEqual(Object.keys(RUNTIMES), ['claude', 'codex', 'custom']);
   assert.deepEqual(Object.keys(RUNTIMES), [...AGENT_RUNTIMES]);

@@ -15,7 +15,7 @@ import { startServer } from '../server/server.js';
 import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
-import { EDIT_MODES, MAX_INSTRUCTIONS } from '../core/agents.js';
+import { EDIT_MODES, EFFORTS, MAX_INSTRUCTIONS } from '../core/agents.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -44,7 +44,7 @@ it or no one):
   --edit-mode auto|approve|none  auto (default): the agent edits the doc and replies;
                                  approve: it replies with proposals for you to apply;
                                  none: it only replies
-  --model <name>  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
+  --model <name> (haiku)  --effort low|medium|high (low)  --max-turns <n> (30)  --run-timeout <minutes> (10)  --runs-per-hour <n> (20)
   --max-budget-usd <n>  --agent-isolated (Claude --bare; needs ANTHROPIC_API_KEY)
   --agent-web                    let Claude search and fetch the web (off by default)
   --agent-read-files             let Claude read files other than the doc (off by default)
@@ -83,6 +83,7 @@ const OPTIONS = {
   'agent-web': { type: 'boolean' },
   'agent-read-files': { type: 'boolean' },
   model: { type: 'string' },
+  effort: { type: 'string' },
   'max-turns': { type: 'string' },
   'run-timeout': { type: 'string' },
   'runs-per-hour': { type: 'string' },
@@ -359,9 +360,11 @@ function agentOptions(values, docPath) {
   if (values['agent-cmd']) {
     adapter = customAdapter(values['agent-cmd']);
   } else if (values.agent.toLowerCase() === 'claude') {
+    if (values.effort !== undefined && !EFFORTS.includes(values.effort)) throw new UsageError(`--effort must be ${EFFORTS.join(', ')}`);
     adapter = claudeAdapter({
       bin: values['agent-bin'],
       model: values.model,
+      effort: values.effort ?? 'low',
       maxTurns: number('max-turns', 30),
       maxBudgetUsd: values['max-budget-usd'] === undefined ? undefined : number('max-budget-usd', undefined, { min: 0.01 }),
       isolated: values['agent-isolated'] === true,
