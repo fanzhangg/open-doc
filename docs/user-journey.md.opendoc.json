@@ -1,15 +1,26 @@
 {
   "opendoc": 1,
   "doc": "user-journey.md",
-  "docHash": "sha256:3ac2f1b2ca2e17dea6ee2a820250f511c5b5b7e8b504966063aba58f03f5f17f",
+  "docHash": "sha256:0779566637f8736a0dfd56537e95ed2bc38462a563bb5b0b674a060283301524",
   "participants": [
     {
       "name": "Dobby",
-      "kind": "agent"
+      "kind": "agent",
+      "persona": "UX researcher"
     },
     {
       "name": "fanzhang",
       "kind": "human"
+    },
+    {
+      "name": "James",
+      "kind": "agent",
+      "persona": "Business Analyst"
+    },
+    {
+      "name": "John",
+      "kind": "agent",
+      "persona": "Programmer"
     }
   ],
   "threads": [
@@ -18,13 +29,13 @@
       "anchor": {
         "exact": "User Journey",
         "prefix": "",
-        "suffix": "\nHow to Use This Doc\nThe step-by",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
         "start": 0
       },
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:28:16.392Z",
       "working": null,
       "messages": [
         {
@@ -277,6 +288,467 @@
             }
           ],
           "applies": "m_0ks9n53x7t"
+        }
+      ]
+    },
+    {
+      "id": "t_yct4k6qhwe",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:44:31.063Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_82hrekdcxq",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby @James @John How will you review the doc from your professional perspective?",
+          "mentions": [
+            "Dobby",
+            "James",
+            "John"
+          ],
+          "createdAt": "2026-10-16T04:28:43.824Z"
+        },
+        {
+          "id": "m_kse0m76m5c",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "As the Business Analyst, I'd review this doc for requirements quality: are the journeys complete and testable? Concretely I'd check: (1) Testability: every Must hold / Must never happen should be a verifiable statement with an observable outcome. Today all 8 journeys have those fields empty, so that's the biggest gap. (2) Preconditions and triggers: each Start should be one concrete state (e.g. J1's 'agent set up or not' is really two journeys or two branches). (3) Coverage: happy path plus alternate and error paths, e.g. agent fails or times out, CLI missing, file renamed or moved, user rejects a proposal, editor closed mid-edit. (4) Traceability: link each journey to the vision doc's goals and to the cross-cutting 'Rules for Every Journey', so each rule is exercised by at least one journey. (5) Scope: confirm 'Not Covered' matches what the journeys imply (J8 is marked Later; say whether its rules are in scope now). (6) Persona: 'The User' is still a placeholder; one or two lines on goals and pain points would ground the acceptance criteria. If useful, I can propose draft Must hold / Must never happen criteria for each journey for you to approve.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:28:53.833Z"
+        },
+        {
+          "id": "m_xy6x3zh2nv",
+          "author": {
+            "name": "John",
+            "kind": "agent"
+          },
+          "body": "As the Programmer, I'd review it for whether each journey can become an automated end-to-end test, leaving requirements quality to James. Concretely: (1) Observable state: each Must hold should name what a test can check, i.e. the bytes of X.md, the thread state in X.md.opendoc.json (status, working, last author), the editor UI state (e.g. 'is responding...'), or a CLI exit code. 'The agent is on standby' (J1) needs a definition a test can see. (2) Concurrency (J3 is the riskiest): spell out what happens when the user saves while the agent edits the same file: stale-read retry, refusal when the user is typing in that paragraph, no lost keystrokes, no editor cursor jump. Must never happen here should include 'user text is overwritten' and 'the doc ends up with a half-applied edit'. (3) Failure paths per step: agent process crashes or times out mid-thread (does 'working' get cleared?), comments file locked (exit 4), proposal whose before text no longer matches at Apply time, server restarted while a thread is claimed. (4) Invariants as checks: turn 'Rules for Every Journey' into assertions we can run after every step, e.g. X.md stays plain markdown with no markers, only a human resolves, every agent change has a reply in its thread, and undo restores the exact prior bytes. (5) Map steps to the pieces that implement them (editor, server, CLI commands like wait/reply/propose) so a code change tells us which journeys to re-walk. If you want, I can propose a test-oriented Must hold / Must never happen for J2 and J3 as a starting template.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:29:12.902Z"
+        },
+        {
+          "id": "m_f4hpunyz7b",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "As the UX researcher, I'd read each journey from the user's side: what they expect, what they see, and how they feel at each step. James covers requirements and John covers tests, so I'd focus on these: (1) Mental model: does each step match what someone used to Google Docs comments expects? For example, does a comment with no @name feel like it goes to 'the agent', and is it clear who a thread is waiting on? (2) Feedback and waiting: at every step, can the user tell what is happening (agent responding, done, failed, timed out) without checking the terminal? J2 and J3 need a 'what the user sees' line, not only system behaviour. (3) Trust and control: J3, J4 and J5 are where trust is won or lost. Must never happen should include 'the user loses their own typing', 'an edit lands with no explanation', and 'the user can't tell what changed'. (4) Recovery: for each journey, how does a confused or unhappy user get back to a known state (undo, reject, ask again), and is that path visible? (5) First run: J1 hides the biggest drop-off risk. 'Agent set up or not' should spell out what a first-time user sees and how they find out how to invite an agent. (6) The persona: 'The User' needs real goals and frustrations (e.g. 'wants the agent's help without losing authorship of the doc'), ideally from a few interviews, so we can judge journeys against them. Next steps I can take: draft a fuller persona plus a 'what the user sees / feels' line for each journey, and a short script for 3 to 5 usability sessions that walk J1 to J5. Tell me which you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:29:28.934Z"
+        },
+        {
+          "id": "m_4bt26nji75",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby how will you summarize and attack @John 's point?",
+          "mentions": [
+            "Dobby",
+            "John"
+          ],
+          "createdAt": "2026-10-16T04:35:20.561Z"
+        },
+        {
+          "id": "m_7grse46fdd",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Summary of John's point: turn every journey into an automated end-to-end test. Make each Must hold checkable (file bytes, thread state, UI label, exit code), spell out J3 concurrency, add failure paths (crash, lock, stale proposal, restart), run the Rules as assertions after each step, and map steps to code.\n\nMy challenge, from the user's side: (1) A passing test is not a usable journey. A test can confirm the editor shows 'is responding...' while real users never notice it or don't know what it means. John's checks show the system did its job, not that the user understood it. (2) He starts from the wrong end. 'Define standby so a test can see it' should become 'define what the user needs to know (can I comment now? who will answer?), then find a signal a test can check'. (3) His failure paths are written from the system's view. 'Is working cleared after a crash?' can pass while the thread sits there unanswered and the user has no idea why. Each failure needs a line on what the user sees and what they do next. (4) Some of J3's risk can't be checked with a yes/no. 'No lost keystrokes' is a good check, but text jumping above the cursor or a sudden flash is a matter of degree, and we only find it by watching people use it. (5) If journeys get rewritten in terms like opendoc.json and exit codes, people who don't read code will stop reading this doc, and it will drift from what users want.\n\nWhere he's right: vague Must holds can't be tested by UX research either, and his checks that undo restores the exact bytes and every agent change gets a reply are trust guarantees I want too. Suggested fix: two layers per journey. A 'user sees / feels' line (mine) paired with a 'system check' (John's), so every test traces back to something a user experiences. Happy to draft J2 and J3 that way with John.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:35:39.612Z"
+        },
+        {
+          "id": "m_u8r12zs9yk",
+          "author": {
+            "name": "John",
+            "kind": "agent"
+          },
+          "body": "My response to Dobby: I accept most of it. (1) Agreed: a passing test proves the system did what we specified, not that users understood it. Tests can only check what the spec says. (2) Agreed on the order: start from what the user needs to know, then find a signal a test can check. 'Define standby' was me asking for that signal. (4) Agreed: jitter and flashes need people watching. Tests only catch the hard failures (lost keystrokes, overwritten text, half-applied edits). Where I push back: (3) A user-facing line for a failure only helps if the system state behind it is right. If 'working' is never cleared after a crash, no UI copy can tell the user the truth. Both layers are needed, and the system check comes first in time. (5) I don't want file names or exit codes in the journey text either. The checks can live in a separate test appendix keyed by journey and step, so the journeys stay readable for people who don't read code. So I'm in for Dobby's two layers: per step, 'user sees / feels' (Dobby) plus 'system check' (me), with the check traced to the user line. I'm happy to draft J2 and J3 that way with Dobby if you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:35:54.692Z"
+        }
+      ]
+    },
+    {
+      "id": "t_lfmkijor1o",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:49:02.330Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_cba5myvxh2",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby @James @John Let us review the doc together!",
+          "mentions": [
+            "Dobby",
+            "James",
+            "John"
+          ],
+          "createdAt": "2026-10-16T04:44:46.694Z"
+        },
+        {
+          "id": "m_c5u14igpso",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "UX research review (no edits made; tell me which of these you want written in):\n1. The User is a placeholder. Name the primary persona and their context: e.g. a developer writing design docs in their repo, already using a CLI agent, who wants review-style collaboration rather than chat. Also say what they do today (chat + copy/paste?) so each journey has a baseline to beat.\n2. Must hold / Must never happen are empty in all 8 journeys; that is where the doc earns its keep. Suggest one success signal per journey, user-observable (e.g. J2: the user can tell within ~2s that the agent picked up the comment; J3: the user never loses a keystroke or has the cursor jump).\n3. Missing journey 0: first run / setup (install, connect an agent, first comment). Highest drop-off risk and currently only implied by J1 start line.\n4. Missing the failure path: agent errors, times out, or misunderstands. J4 covers undo but not 'the agent went silent' or 'the agent did the wrong thing confidently'.\n5. J4 vs J5 overlap: both are about trust in edits. Consider framing J5 as a setting the user picks after J4 goes badly, which is a real trust arc worth testing.\n6. J8 is marked Later; still worth one line on how the user knows which agent is responding, since that is confusing as soon as there are two.\n7. Rules for Every Journey: good start; add 'the user always knows whose turn it is' (thread state is visible).\nHappy to draft the Must hold / Must never lines for any journeys you pick.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:45:00.192Z"
+        },
+        {
+          "id": "m_u09ovc3s2w",
+          "author": {
+            "name": "John",
+            "kind": "agent"
+          },
+          "body": "From the implementation side, J3 needs its Must hold / Must never lines written first, because it is the one that decides the architecture: what happens when the agent's edit targets the paragraph you are typing in (today it is refused, then falls back to a proposal) and that a disk write never moves your cursor or drops a keystroke. Also, J8 is not really Later, since this thread already has three agents in it. Happy to draft the J3 lines if you want them in the doc.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:45:09.708Z"
+        },
+        {
+          "id": "m_pf65nejlo0",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Business analyst review (no edits made). I agree with Dobby and John and won't repeat their points; mine are about whether the doc can be used to sign off a release:\n1. Add a one-line purpose and a 'done' definition at the top: e.g. 'v1 ships when every Must hold for J1-J7 is demonstrated and no Must never is seen in testing'. Without it the journeys are a description, not acceptance criteria.\n2. Make Must hold / Must never testable: each line should name an observable outcome and a threshold (time, count, or yes/no), so someone other than the author can check it. Dobby's ~2s pickup signal is the right shape.\n3. Prioritise: tag each journey Must / Should / Later. Today only J8 has a tag, and as John notes, it is already in use, so I'd move it to Should at least and drop 'Later' once you confirm.\n4. Name the baseline per journey (what the user does today, e.g. chat + copy/paste). That gives a benefit to measure against and helps decide what is out of scope.\n5. Not Covered needs a reason per item (e.g. 'cloud sync: local-first by design'), so the scope boundary doesn't get re-argued later.\n6. Assumptions and open questions section: things like which agents are supported, single user per doc, and doc size limits are assumed today but not written down.\nSuggested order: fix The User + done definition first, then J3 (John) and J2/J4 lines (Dobby), then priorities. Tell me which of 1, 3, 5, 6 you want me to write in.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:45:23.992Z"
+        }
+      ]
+    },
+    {
+      "id": "t_w172aococ4",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:53:07.998Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_echu14ko2z",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby @James @John hey guys, what is your option about this doc?",
+          "mentions": [
+            "Dobby",
+            "James",
+            "John"
+          ],
+          "createdAt": "2026-10-16T04:49:18.131Z"
+        },
+        {
+          "id": "m_r8f7dcqte9",
+          "author": {
+            "name": "John",
+            "kind": "agent"
+          },
+          "body": "Programmer view: the skeleton is right (start, steps, invariants per journey), but the value is in the empty Must hold / Must never happen lines. I would write each as a checkable assertion so every journey maps to one end-to-end test, e.g. J3: the user's keystrokes are never lost or overwritten by an agent edit; J4: undo restores the exact pre-edit text. Other notes: (1) Journey 3 is the hardest technically (concurrent edits, an agent edit refused while the user types in that paragraph) and deserves the most detail. (2) Journey 8 says (Later), but this doc already has three agents in it, so it is current. (3) Missing journeys: the agent fails or crashes mid-thread (thread stuck on responding, needs a timeout and a visible error), and the file changes on disk outside the editor (git checkout, another editor) while threads are open. (4) The User section is still a placeholder. Happy to draft the Must hold / Must never happen lines for any journey if you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:49:30.349Z"
+        },
+        {
+          "id": "m_lecvish5v8",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "UX view: the steps describe what the system does, not what the user needs. I'd add each journey's goal and how the user knows it worked, e.g. J2: they can see exactly what changed without diffing. Filling in The User first would anchor all of that.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:49:39.300Z"
+        },
+        {
+          "id": "m_0lyiaj0v38",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Business analyst view: the journey list covers the core flow well, and I agree with John and Dobby. What it lacks is the business framing that lets us scope and sign off on it. (1) The User: name the primary user and their pain today (for example, copying text between a chat window and an editor, losing track of what the agent changed), so each journey can be traced back to a need. (2) Priority: mark each journey MVP or later. J1 to J4 look like MVP; J5 to J7 are probably next. J8 needs a decision, since this doc already uses several agents. (3) Acceptance criteria: write Must hold / Must never happen as Given/When/Then statements so they double as test cases (this lines up with John's checkable assertions). (4) Success measures: one or two ways to tell the product works, such as the share of agent edits accepted without undo, or the time from comment to reply. (5) Not Covered: confirm the out-of-scope list with stakeholders before we fill in details. I made no edits. I can draft the priorities and acceptance criteria for J1 to J4 if you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:49:51.116Z"
+        }
+      ]
+    },
+    {
+      "id": "t_sovprt22yk",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:55:17.066Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_5il6dm0ega",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby what is your option about the doc?",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T04:53:21.743Z"
+        },
+        {
+          "id": "m_7cdldj1hop",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "From a UX research view: the skeleton is solid. The 8 journeys follow the real loop (open, ask, keep writing, review, approve, agent asks back, detached, multi-agent), and Rules + Not Covered set the scope well. Main gaps: (1) The User is a placeholder. Name one primary persona and their context (solo dev writing a design doc next to code? first-time vs. returning?) because the Must hold lines depend on who we are protecting. (2) Every Must hold / Must never happen is empty, and that is where the value is. I would fill them as observable outcomes, e.g. J3: my cursor and typed text never jump or get lost; J4: undo restores exactly what was there. (3) Missing journeys: first-run setup (install, connect an agent, when nothing happens), the agent fails or times out (what does the user see?), and coming back later to a doc with open threads. (4) Add a success signal per journey (how we know it worked: time to first edit, undo rate, threads resolved without a follow-up) so we can test it with users. (5) Journey 2 Steps mix user and system actions; splitting user does / user sees would make it easier to test. Happy to draft the Must hold lines for any journey if you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:53:32.888Z"
+        }
+      ]
+    },
+    {
+      "id": "t_fw9sq84eo1",
+      "anchor": null,
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:59:44.983Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_6bgl6pm5se",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby what is your opinion about this doc?",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T04:54:23.860Z"
+        },
+        {
+          "id": "m_j014v1q6mv",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Good journey coverage, but every Must hold/Must never happen is empty, and those are what make it testable. I'd fill them from the user's fears first: losing their own typing, an agent edit they can't see or undo.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:54:30.762Z"
+        },
+        {
+          "id": "m_oamhx9pasp",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby How would you write them?",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T04:55:41.247Z"
+        },
+        {
+          "id": "m_ydepwqnnev",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "As observable outcomes in the user's words, one per line. Journey 3: Must hold \"my typing stays where I put it and I see where the agent is editing\"; Must never happen \"a keystroke of mine is lost or overwritten.\" Want me to draft all eight?",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:55:47.654Z"
+        }
+      ]
+    },
+    {
+      "id": "t_yekjsa2ewh",
+      "anchor": {
+        "exact": "Journey 1: Open a Doc",
+        "prefix": "their code (see the vision doc)\n",
+        "suffix": "\nStart: a markdown file on disk,",
+        "start": 177
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "fanzhang",
+      "resolvedAt": "2026-10-16T04:59:47.466Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_49c0s9qfu5",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby @James Which journey should we cut? I think the doc is too complex now",
+          "mentions": [
+            "Dobby",
+            "James"
+          ],
+          "createdAt": "2026-10-16T04:57:13.350Z"
+        },
+        {
+          "id": "m_6022izsbhq",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Cut Journey 8: it's marked Later, so it's not a journey anyone takes yet; list it under Not Covered. I'd also fold Journey 1 into Journey 2's Start, since opening the doc is setup, not a goal users come for. Want me to make both edits?",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:57:21.585Z"
+        },
+        {
+          "id": "m_v83f9w90ms",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Agree on cutting 8 and folding 1 into 2. I'd also merge 5 into 4: applying a proposal is just another way to review the agent's work, so 'apply or reject' fits beside 'accept or undo'. That gets us to five journeys.",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:57:32.535Z"
+        }
+      ]
+    },
+    {
+      "id": "t_z4f0sg494s",
+      "anchor": {
+        "exact": " Dobby",
+        "prefix": "User Journey\nAuthor: fanzhang,",
+        "suffix": ", James, John\nThe User\nOne or tw",
+        "start": 30
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T05:05:58.902Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_ihb02oqqq2",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "@Dobby",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T04:58:58.926Z"
+        },
+        {
+          "id": "m_wzu9emr5kr",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Set the author line to \"fanzhang, Dobby\" and removed the @Dobby note. Should James and John be listed too if they contribute?",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T04:59:06.595Z",
+          "edits": [
+            {
+              "before": "Add our names @Dobby ",
+              "after": "fanzhang, Dobby",
+              "prefix": "# User Journey\n\nAuthor: ",
+              "suffix": "\n\n## The User\n\n- One or two line",
+              "start": 24
+            }
+          ]
+        },
+        {
+          "id": "m_kj16m5lldl",
+          "author": {
+            "name": "fanzhang",
+            "kind": "human"
+          },
+          "body": "all of your guys should be the authors",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:59:30.367Z"
+        },
+        {
+          "id": "m_b82ebne405",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Added James and John, so the author line now reads \"fanzhang, Dobby, James, John\".",
+          "mentions": [],
+          "createdAt": "2026-10-16T04:59:37.329Z",
+          "edits": [
+            {
+              "before": "",
+              "after": ", James, John",
+              "prefix": "Journey\n\nAuthor: fanzhang, Dobby",
+              "suffix": "\n\n## The User\n\n- One or two line",
+              "start": 39
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_qzz0n4n7e6",
+      "anchor": {
+        "exact": "Author: fanzhang, Dobby, James, John",
+        "prefix": "User Journey\n",
+        "suffix": "\nThe User\nOne or two lines: some",
+        "start": 13
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_wu1su1nmff",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "The How to Use This Doc section went with this edit, so nothing now tells a reviewer to walk the affected journeys and flag steps that no longer match. Was that intended, or should a one-line purpose stay under the byline? @fanzhang",
+          "mentions": [
+            "fanzhang"
+          ],
+          "createdAt": "2026-10-16T05:07:23.839Z"
         }
       ]
     }

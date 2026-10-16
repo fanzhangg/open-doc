@@ -1,10 +1,6 @@
 # User Journey
 
-## How to Use This Doc
-
-- The step-by-step experience open-doc should give, written so an agent can check the product against it
-- Each journey: where the user starts, what they do, what they see, and what must hold
-- When reviewing a change, walk the affected journeys and flag any step that no longer matches
+Author: fanzhang, Dobby, James, John
 
 ## The User
 
