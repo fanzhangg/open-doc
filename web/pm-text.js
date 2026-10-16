@@ -17,6 +17,10 @@ export function projectDoc(doc) {
         for (let i = 0; i < child.text.length; i++) chars.push([child.text[i], start + i]);
       } else if (child.type.name === 'hardbreak' || child.type.name === 'hard_break') {
         chars.push([' ', start]);
+      } else if (child.type.name === 'html') {
+        // Raw HTML counts as written (SPEC §3.1); the editor keeps it as one
+        // atom, so all of its characters sit at the atom's position.
+        for (const ch of child.attrs.value ?? '') chars.push([ch, start]);
       }
     });
     const line = node.type.spec.code ? chars : collapse(chars);
@@ -58,8 +62,9 @@ export function textRange(projection, from, to) {
   let start = positions.findIndex((p) => p >= from);
   if (start === -1) return null;
   // A line break sits at the position of the next line's first character: a
-  // range starting there starts with that character, not the break.
-  if (positions[start + 1] === positions[start]) start++;
+  // range starting there starts with that character, not the break. (The
+  // characters of a raw HTML atom share one position too, but are not breaks.)
+  if (projection.text[start] === '\n' && positions[start + 1] === positions[start]) start++;
   let end = start;
   while (end < positions.length && positions[end] < to) end++;
   return end > start ? { start, end } : null;

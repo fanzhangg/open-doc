@@ -245,13 +245,24 @@ than once MUST be refused unless the caller picks an occurrence.
 
 ### 3.3 Re-finding an anchor
 
-When the doc changes, a tool re-finds each anchor in the new rendered text:
+When the doc changes, a tool re-finds each anchor in the new rendered text.
+A candidate range from step 1 or step 3 is **acceptable** only if all of
+these hold, where quote similarity is `sim(exact, candidate)` and context
+similarity is the mean of prefix and suffix similarity (§3.4):
 
-1. **Exact.** Find every occurrence of `exact` and pick the one with the best
-   score (§3.4). When `exact` is shorter than 8 characters, an occurrence
-   counts only if its context similarity (the mean of prefix and suffix
-   similarity) is at least 0.5, so a short quote that was deleted does not
-   jump to an unrelated copy elsewhere.
+- its quote similarity is at least 0.5;
+- when its quote similarity is below 0.8, its context similarity is at
+  least 0.5;
+- when `exact` is shorter than 8 characters, its context similarity is at
+  least 0.5, whatever its quote similarity, so a short quote that was
+  deleted does not jump to an unrelated copy elsewhere (an exact copy is
+  also a perfect fuzzy match, so this applies in step 3 too).
+
+Step 2's candidates have their full `prefix` and `suffix` exactly, so they
+need no such check. The steps, in order:
+
+1. **Exact.** Find every occurrence of `exact`; among the acceptable ones,
+   pick the one with the best score (§3.4).
 2. **Context bracket.** If `prefix` and `suffix` are each at least 8
    characters long, find places where `prefix` occurs exactly and is followed
    by an exact `suffix` after a gap of between `ceil(len(exact) / 2)` and
@@ -261,10 +272,9 @@ When the doc changes, a tool re-finds each anchor in the new rendered text:
    "extra load" becoming "extra peak load".
 3. **Fuzzy.** Search for approximate matches of `exact` allowing up to
    `floor(len(exact) / 2)` edits (insertions, deletions, substitutions),
-   first in a window around `start`, then in the whole text. Pick the best
-   score. Accept it only if its quote similarity is at least 0.5 and, when the
-   quote similarity is below 0.8, its context similarity is at least 0.5.
-   Quotes shorter than 4 characters are never fuzzy-matched.
+   first in a window around `start`, then in the whole text; among the
+   acceptable matches, pick the best score. Quotes shorter than 4 characters
+   are never fuzzy-matched.
 4. **Detach.** Otherwise set `detached: true` and keep the anchor unchanged.
 
 A re-found anchor is rewritten from the new range (§3.2) and `detached` is set

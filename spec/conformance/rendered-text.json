@@ -1,0 +1,26 @@
+{
+  "description": "Rendered text (SPEC.md §3.1) that every implementation must produce for each markdown input. One case per rule, plus the syntax most likely to drift between a markdown parser and an editor's document model.",
+  "cases": [
+    { "name": "paragraphs and headings", "markdown": "# Title\n\nFirst paragraph.\n\n## Sub\n\nSecond.", "text": "Title\nFirst paragraph.\nSub\nSecond." },
+    { "name": "soft line breaks and whitespace runs collapse", "markdown": "one\ntwo   three\n  four", "text": "one two three four" },
+    { "name": "emphasis, strong and strikethrough keep their text", "markdown": "a *b* **c** ~~d~~ ***e***", "text": "a b c d e" },
+    { "name": "links and autolinks keep their text", "markdown": "see [the doc](./a.md) and <https://x.dev> or https://y.dev", "text": "see the doc and https://x.dev or https://y.dev" },
+    { "name": "reference links keep their text, definitions contribute nothing", "markdown": "see [the doc][d]\n\n[d]: ./a.md", "text": "see the doc" },
+    { "name": "inline code contributes its content", "markdown": "run `npm  test` now", "text": "run npm test now" },
+    { "name": "escapes and entities are decoded", "markdown": "a \\*b\\* &amp; &copy; &#35;", "text": "a *b* & © #" },
+    { "name": "hard break (backslash) is one space", "markdown": "line one\\\nline two", "text": "line one line two" },
+    { "name": "hard break (two spaces) is one space", "markdown": "line one  \nline two", "text": "line one line two" },
+    { "name": "inline raw HTML counts as written", "markdown": "Press <kbd>Ctrl</kbd> + C to copy", "text": "Press <kbd>Ctrl</kbd> + C to copy" },
+    { "name": "inline HTML comment counts as written", "markdown": "before <!-- note --> after", "text": "before <!-- note --> after" },
+    { "name": "raw HTML block is a text block", "markdown": "<div>\nblock  html\n</div>\n\nafter", "text": "<div> block html </div>\nafter" },
+    { "name": "image with a title contributes nothing", "markdown": "look ![alt text](a.png \"Title\") here", "text": "look here" },
+    { "name": "image without a title contributes nothing", "markdown": "look ![alt text](a.png) here", "text": "look here" },
+    { "name": "footnote reference contributes nothing, its definition is a block", "markdown": "claim[^1] here\n\n[^1]: the source", "text": "claim here\nthe source" },
+    { "name": "table cells are text blocks, pipes contribute nothing", "markdown": "| a | b |\n|---|---|\n| one | two |", "text": "a\nb\none\ntwo" },
+    { "name": "task list markers contribute nothing", "markdown": "- [ ] todo\n- [x] done", "text": "todo\ndone" },
+    { "name": "nested lists and block quotes contribute their blocks", "markdown": "- outer\n  - inner\n\n> quoted\n> more", "text": "outer\ninner\nquoted more" },
+    { "name": "code block content is kept as written", "markdown": "```js\nconst  a = 1;\n  indented\n```", "text": "const  a = 1;\n  indented" },
+    { "name": "thematic break has no text", "markdown": "above\n\n---\n\nbelow", "text": "above\nbelow" },
+    { "name": "CJK-friendly emphasis", "markdown": "**熟悉：**直接上手", "text": "熟悉：直接上手" }
+  ]
+}

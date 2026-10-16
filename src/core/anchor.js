@@ -70,12 +70,9 @@ export function findQuote(text, quote, { occurrence } = {}) {
 export function locate(text, anchor) {
   const { exact } = anchor;
 
-  const exactCandidates = occurrences(text, exact).map((start) =>
-    evaluate(text, anchor, start, start + exact.length, 0),
-  );
-  const exactAccepted = exactCandidates.filter(
-    (c) => exact.length >= SHORT_QUOTE_LENGTH || c.contextSim >= 0.5,
-  );
+  const exactAccepted = occurrences(text, exact)
+    .map((start) => evaluate(text, anchor, start, start + exact.length, 0))
+    .filter((c) => acceptable(c, anchor));
   if (exactAccepted.length > 0) return pick(exactAccepted, 'exact');
 
   const bracketed = bracket(text, anchor);
@@ -92,7 +89,7 @@ export function locate(text, anchor) {
   for (const [from, to] of ranges) {
     const accepted = search(text.slice(from, to), exact, maxErrors)
       .map((m) => evaluate(text, anchor, from + m.start, from + m.end, m.errors))
-      .filter((c) => c.quoteSim >= 0.5 && (c.quoteSim >= 0.8 || c.contextSim >= 0.5));
+      .filter((c) => acceptable(c, anchor));
     if (accepted.length > 0) return pick(accepted, 'fuzzy');
   }
   return null;
@@ -149,6 +146,17 @@ function bracket(text, anchor) {
     if (!best || distance < best.distance) best = { start, end, distance };
   }
   return best && { start: best.start, end: best.end, method: 'bracket', score: 0 };
+}
+
+// The one acceptance rule for exact and fuzzy candidates (SPEC.md §3.3). A
+// short quote always needs its context: an exact copy elsewhere is also a
+// perfect fuzzy match, so checking it only in the exact step lets it through.
+function acceptable(candidate, anchor) {
+  const { quoteSim, contextSim } = candidate;
+  if (quoteSim < 0.5) return false;
+  if (quoteSim < 0.8 && contextSim < 0.5) return false;
+  if (anchor.exact.length < SHORT_QUOTE_LENGTH && contextSim < 0.5) return false;
+  return true;
 }
 
 function evaluate(text, anchor, start, end, errors) {
