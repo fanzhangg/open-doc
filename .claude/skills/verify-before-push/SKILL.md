@@ -42,10 +42,25 @@ say so and show the output instead of working around it.
 
 ## 3. Ship through a pull request
 
-Push a branch and open a PR against main rather than pushing to main directly.
-The PR runs the same smoke test on Windows and macOS, so a build that only
-breaks on one of them shows up before merge. Merge once it is green, unit
-tests included; the nightly is rebuilt from main.
+main is protected: every change goes through a PR, and GitHub refuses a
+direct push or force push, for agents and the owner alike. Ship like this:
+
+```bash
+git switch -c <short-branch-name> origin/main   # or start in a fresh worktree
+# commit your change
+git push -u origin HEAD
+gh pr create --base main --fill
+gh pr merge --auto --squash
+```
+
+`--auto` merges the PR on its own once the required checks, `package (windows)`
+and `package (macos)` (lint, installers, smoke test), pass. Merging rebuilds the
+nightly from main. The `test` job does not block the merge, so look at it
+before you walk away: if your change broke a unit test, fix it in the same PR
+(`gh pr merge --disable-auto` first if it needs more than a quick push).
+
+If `git push` to main is refused, that is the protection working: open a PR.
+Never ask for the rule to be lifted to get a change in.
 
 ## Windows notes
 
