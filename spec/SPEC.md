@@ -90,16 +90,24 @@ The sidecar is a UTF-8 JSON object. The JSON Schema is
 | `resolvedAt` | string or null | RFC 3339 UTC timestamp. |
 | `working` | array or null | Who is responding right now: a list of `{ "by": <name>, "since": <timestamp> }`, one per participant, since several agents may answer one thread at once. `null` when no one is; tools write `null` rather than an empty list. Tools MUST ignore an entry older than 5 minutes, and MUST read a single object (as sidecars written before the list) as a list of one. |
 | `passed` | array of strings, optional | Participants who looked at the thread's open ask (§5) and left it to others. Absent means empty. |
+| `failed` | array, optional | `{ "name": <participant>, "error": <string>, "at": <timestamp> }` for each agent whose run on the thread's ask failed: what went wrong, for the human to retry or cancel. Absent means empty. |
+| `cancelled` | array of strings, optional | Agents a human took the thread's ask back from. Absent means empty. |
 | `messages` | array | At least one message, oldest first. |
 
-Only a participant with `kind: "human"` may resolve or reopen a thread;
+Only a participant with `kind: "human"` may resolve or reopen a thread, or
+retry or cancel an agent's request;
 tools MUST refuse a resolve or reopen made as an agent. An agent answers by
 replying, and the human decides whether the thread is done. (Sidecars
 written before this rule may have threads resolved by an agent; they stay
 valid as they are.) Reopening sets `resolvedBy` and `resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
 message from a participant takes their entry out of `working`; resolving
 clears `working`. Passing takes the entry of the participant who passes out of `working`,
-and a new message from a human that is not a notice (§5) empties `passed`.
+and a new message from a human that is not a notice (§5) empties `passed`,
+`failed` and `cancelled`. A failure takes the entry of the agent that failed
+out of `working`. Retrying removes the agent from `failed`; cancelling
+removes it from `failed`, takes its entry out of `working`, and adds it to
+`cancelled`. Tools MUST NOT retry a failed ask without a human: it waits in
+`failed` until a human retries it, cancels it, or asks again.
 
 ### 2.3 Message
 
@@ -353,6 +361,7 @@ A thread is in participant `P`'s inbox when all of these hold:
 - the ask is addressed to `P`, or to no one (an **open ask**) and `P` is not
   in `passed`;
 - no message after the ask (other than notices) is from `P`;
+- `P` is in neither `failed` nor `cancelled`;
 - `working` has no entry for `P` (a stale one does not count).
 
 A comment addressed only to someone else does not wake `P`, and undoing an

@@ -10,6 +10,8 @@ import { Floor } from '../src/server/agents/dispatcher.js';
 import { CODEX_DENIED_GLOBS, DENIED_READS, SKILL_PATH, agentEnv, buildPrompt, claudeAdapter, codexAdapter, codexPermissions, customAdapter, findCodex, privateWorkdir, rulePath, splitCommand, userCodexConfig } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
+import { inbox } from '../src/core/inbox.js';
+import { request } from 'node:http';
 
 import { sidecarPath } from '../src/store/files.js';
 import { SAMPLE, tempDoc } from './helpers.js';
@@ -34,6 +36,7 @@ async function withAgent(mode, fn, limits = {}, { editMode = 'auto', workdir = n
   try {
     await fn({
       docPath,
+      server,
       dispatcher,
       statuses,
       runs: async () => (await log()).filter((entry) => entry.threads),
@@ -58,6 +61,27 @@ async function until(check, { timeout = 10_000, what = 'condition' } = {}) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const inboxOf = (sidecar, name) => inbox(sidecar, name);
+
+// A browser operation, as the page sends it.
+function post(server, op) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ op });
+    const req = request({
+      host: '127.0.0.1',
+      port: server.port,
+      method: 'POST',
+      path: '/api/ops',
+      headers: { host: `127.0.0.1:${server.port}`, 'x-opendoc-token': server.token, 'content-type': 'application/json' },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
 const replies = (thread) => thread.messages.filter((m) => m.author.name === 'claude');
 
 test('an @mention launches a run that replies, as the agent, in the doc folder', { timeout: 30_000 }, async () => {
@@ -217,12 +241,55 @@ test('a failing run clears working, reports the error, and does not loop', { tim
     await until(() => dispatcher.status().state === 'error', { what: 'error state' });
     assert.match(dispatcher.status().error, /exited with code 1: fake agent: something went wrong/);
     assert.equal((await sidecar()).threads[0].working, null);
+    const [failure] = (await sidecar()).threads[0].failed;
+    assert.equal(failure.name, 'claude');
+    assert.match(failure.error, /exited with code 1: fake agent: something went wrong/, 'the comment says what went wrong');
     await sleep(1200);
     assert.equal((await runs()).length, 1, 'no automatic relaunch');
 
     // A new human message is a reason to try again.
     await reply((await sidecar()).threads[0].id, '@claude try again');
     await until(async () => (await runs()).length === 2, { what: 'second run' });
+  });
+});
+
+test('a failed comment is not retried on its own, even after another run works; Cancel takes it back', { timeout: 30_000 }, async () => {
+  await withAgent('boom', async ({ server, dispatcher, runs, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@claude boom');
+    await until(async () => (await sidecar()).threads[0].failed?.length === 1, { what: 'a failure' });
+    await comment('--quote', 'extra load', '@claude this one works');
+    await until(async () => replies((await sidecar()).threads[1]).length === 1, { what: 'a reply' });
+    await until(() => dispatcher.status().state === 'ready', { what: 'ready' });
+    await sleep(1200);
+    assert.equal((await runs()).length, 2);
+    assert.equal((await sidecar()).threads[0].failed.length, 1, 'still failed after a run that worked');
+
+    // The failure is kept in the sidecar, so a restart does not retry it either.
+    assert.equal(inboxOf(await sidecar(), 'claude').length, 0);
+
+    // Cancel takes the request back for good.
+    const threadId = (await sidecar()).threads[0].id;
+    const cancelled = await post(server, { type: 'cancel', threadId, name: 'claude', by: 'fzhan' });
+    assert.equal(cancelled.status, 200);
+    assert.deepEqual(cancelled.body.sidecar.threads[0].cancelled, ['claude']);
+    assert.deepEqual(cancelled.body.sidecar.threads[0].failed, []);
+    assert.equal((await post(server, { type: 'retry', threadId: 't_missing', name: 'claude', by: 'fzhan' })).status, 400);
+    assert.equal((await post(server, { type: 'retry', threadId, name: '@bad', by: 'fzhan' })).status, 400);
+  });
+});
+
+test('Retry on a failed comment runs it again, once', { timeout: 30_000 }, async () => {
+  await withAgent('fail', async ({ server, dispatcher, runs, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@claude quantify this');
+    await until(async () => (await sidecar()).threads[0].failed?.length === 1, { what: 'a failure' });
+    await until(() => dispatcher.status().state === 'error', { what: 'error state' });
+    const threadId = (await sidecar()).threads[0].id;
+    const retried = await post(server, { type: 'retry', threadId, name: 'claude', by: 'fzhan' });
+    assert.equal(retried.status, 200);
+    await until(async () => (await runs()).length === 2, { what: 'second run' });
+    await until(async () => (await sidecar()).threads[0].failed?.length === 1, { what: 'failed again' });
+    await sleep(1200);
+    assert.equal((await runs()).length, 2, 'fails again, and stops there');
   });
 });
 

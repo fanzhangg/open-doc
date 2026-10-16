@@ -6,8 +6,9 @@
 // waits before replying), propose, picky (passes on an open comment, one that mentions no one,
 // unless it names the agent), handoff (replies as the human's latest message
 // says for it: `<name> hands to <other>` hands the thread to <other> with
-// --to, `<name> mentions <other>` only @mentions <other>), fail, hang, silent
-// (exits 0 without replying). It calls `opendoc` through a shell to prove the dispatcher's
+// --to, `<name> mentions <other>` only @mentions <other>), fail, boom (fails
+// when a comment says "boom", else replies), hang, silent (exits 0 without
+// replying). It calls `opendoc` through a shell to prove the dispatcher's
 // PATH shim works. Each run logs when it starts and ends, the asks it was
 // handed, and the persona in its prompt (when given the prompt file).
 
@@ -19,7 +20,8 @@ const { doc, threads } = JSON.parse(readFileSync(threadsFile, 'utf8'));
 const persona = promptFile ? readFileSync(promptFile, 'utf8').match(/<persona>\n([\s\S]*?)\n<\/persona>/)?.[1] ?? null : undefined;
 appendFileSync(runLog, JSON.stringify({ threads: threads.map((t) => t.id), asks: threads.map((t) => t.messages.findLast((m) => m.author.kind === 'human')?.body ?? null), as: process.env.OPENDOC_AS, cwd: process.cwd(), doc, persona, start: Date.now() }) + '\n');
 
-if (mode === 'fail') {
+const boom = mode === 'boom' && threads.some((t) => t.messages.findLast((m) => m.author.kind === 'human').body.includes('boom'));
+if (mode === 'fail' || boom) {
   console.error('fake agent: something went wrong');
   process.exit(1);
 }

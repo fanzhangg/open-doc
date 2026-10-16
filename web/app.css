@@ -495,6 +495,11 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-ai { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: var(--agent); background: var(--agent-soft); border-radius: 4px; padding: 0 4px; line-height: 1.6; }
 .od-time { color: var(--text-faint); font-size: 12px; font-weight: 400; }
 .od-body { margin-top: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; color: var(--text); }
+/* an agent's request that failed, or that it cannot start: its apology in red, with Retry and Cancel beside its name */
+.od-msg + .od-msg-failed, .od-quote + .od-msg-failed { margin-top: 14px; }
+.od-msg-actions { display: flex; gap: 2px; margin-left: auto; }
+.od-msg-failed .od-body { color: var(--danger); }
+.od-request-cancelled { margin: 10px 0 0; }
 .od-body-folded { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .od-card:not(.od-card-active) .od-body-folded { -webkit-line-clamp: 3; }
 /* Show more / less and folded replies: quiet text with a chevron that flips; the comment text stays the focus */
