@@ -210,7 +210,10 @@ export class Dispatcher {
   async start() {
     if (this.join) await update(this.docPath, (s) => applyOp(s, { type: 'join', participant: this.participant ?? { name: this.name, kind: 'agent' } }));
     this.shimDir = await makeShim();
-    await this.#preflight();
+    // Not awaited: checking the program (`claude auth status`) takes a second
+    // or more, and opening a doc should not wait for it. The agent stays
+    // `starting` until then; `checked` is for whoever needs to wait.
+    this.checked = this.#preflight();
   }
 
   /** Call on every sidecar change; batches bursts. */
@@ -257,7 +260,12 @@ export class Dispatcher {
   }
 
   async #preflight() {
-    const result = await this.adapter.preflight();
+    let result;
+    try {
+      result = await this.adapter.preflight();
+    } catch (error) {
+      result = { ok: false, error: error.message };
+    }
     if (result.ok) {
       this.#setState('ready');
       this.notify();

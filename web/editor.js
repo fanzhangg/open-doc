@@ -16,7 +16,7 @@ import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, callCommand, getMarkdown, replaceAll } from '@milkdown/kit/utils';
+import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
 import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
@@ -33,6 +33,32 @@ const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
 const mentionKey = new PluginKey('opendoc-mentions');
+
+// A ProseMirror doc never changes, so its projection and where each anchor is
+// in it are worked out once per doc, however often the highlights, the
+// margin or an agent's caret ask. Comment and agent events that leave the
+// text alone then cost next to nothing.
+const projections = new WeakMap();
+const anchorRanges = new WeakMap();
+
+function projectionOf(doc) {
+  let projection = projections.get(doc);
+  if (!projection) projections.set(doc, (projection = projectDoc(doc)));
+  return projection;
+}
+
+/** The doc range `anchor` is at in `doc` ({ from, to }), or null. */
+function rangeOf(doc, anchor) {
+  let ranges = anchorRanges.get(doc);
+  if (!ranges) anchorRanges.set(doc, (ranges = new Map()));
+  const key = JSON.stringify(anchor);
+  if (!ranges.has(key)) {
+    const projection = projectionOf(doc);
+    const found = locate(projection.text, anchor);
+    ranges.set(key, found ? docRange(projection, found.start, found.end) : null);
+  }
+  return ranges.get(key);
+}
 
 // Decorations replaced wholesale through a meta, mapped through other edits.
 const decorationPlugin = (key) => $prose(() => new Plugin({
@@ -137,9 +163,10 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc.
 export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
-  // Markdown as last loaded or applied; an update that serializes to the same
-  // text is an echo of that, not a local edit (markdownUpdated is debounced).
-  let baseline = null;
+  // The doc as last loaded or applied; an update back to it is an echo, not a
+  // local edit. Compared as a doc: serializing the whole doc on every change
+  // costs a long doc tens of milliseconds each time.
+  let baselineDoc = null;
   let onDocUpdated = () => {};
   const uiListeners = new Set();
   let keyHandler = () => false;
@@ -161,11 +188,11 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options, bullet: '-', emphasis: '*', strong: '*', rule: '-', fences: true, listItemIndent: 'one',
       }));
-      ctx.get(listenerCtx)
-        .markdownUpdated((_ctx, next) => {
-          if (next !== baseline && !replayer.active()) onChange();
-        })
-        .updated(() => onDocUpdated());
+      // `updated` is debounced (200 ms) and fires only when the doc changed.
+      ctx.get(listenerCtx).updated((_ctx, doc) => {
+        onDocUpdated();
+        if (!replayer.active() && !doc.eq(baselineDoc)) onChange();
+      });
     })
     .use(markdownPlugins).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(mentionPlugin).use(uiPlugin(hooks))
@@ -173,9 +200,25 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
-  const parse = (md) => editor.ctx.get(parserCtx)(md);
-  const serialize = (doc) => editor.ctx.get(serializerCtx)(doc);
-  baseline = editor.action(getMarkdown());
+  // Parsing or serializing a long doc takes tens of milliseconds, and a sync
+  // from disk or a save asks for the same ones more than once: each doc is
+  // serialized once, and the last few parses are kept.
+  const serialized = new WeakMap();
+  let parsed = []; // [markdown, doc], newest first
+  const parse = (md) => {
+    const hit = parsed.find(([text]) => text === md);
+    if (hit) return hit[1];
+    const doc = editor.ctx.get(parserCtx)(md);
+    parsed = [[md, doc], ...parsed].slice(0, 4);
+    return doc;
+  };
+  const serialize = (doc) => {
+    let md = serialized.get(doc);
+    if (md === undefined) serialized.set(doc, (md = editor.ctx.get(serializerCtx)(doc)));
+    return md;
+  };
+  const currentMarkdown = () => serialize(view().state.doc);
+  baselineDoc = view().state.doc;
   let threads = [];
   let activeId = null;
   let preview = { items: [], replay: 0 }; // see web/review.js; replay > 0 animates it once
@@ -183,17 +226,20 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   let draft = null; // anchor-like hint of the selection being commented on
   const layoutListeners = new Set();
 
+  // What was last painted, so a repaint that would draw the same is skipped.
+  let paintedDoc = null;
+  let painted = '';
+
   function paintHighlights() {
     const v = view();
-    const projection = projectDoc(v.state.doc);
     const decorations = [];
-    const find = (anchor) => {
-      const found = locate(projection.text, anchor);
-      return found && docRange(projection, found.start, found.end);
-    };
+    const drawn = [];
+    const find = (anchor) => rangeOf(v.state.doc, anchor);
     const add = (anchor, id, classes) => {
       const range = find(anchor);
-      if (range) decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': id }));
+      if (!range) return;
+      decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': id }));
+      drawn.push(range.from, range.to, id, classes);
     };
     const now = Date.now();
     for (const thread of threads) {
@@ -214,12 +260,19 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       const range = find(anchor);
       if (!range) return;
       if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), 'data-replay': String(replay) }));
+      drawn.push(range.from, range.to, mark, replay);
       if (!widget) return;
       const before = widget.side === 'before';
+      const key = `change-${replay}-${i}-${widget.kind}-${widget.text}`;
       decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
-        side: before ? -1 : 1, key: `change-${replay}-${i}-${widget.kind}-${widget.text}`,
+        side: before ? -1 : 1, key,
       }));
+      drawn.push(key, widget.side);
     });
+    const signature = JSON.stringify(drawn);
+    if (v.state.doc === paintedDoc && signature === painted) return;
+    paintedDoc = v.state.doc;
+    painted = signature;
     v.dispatch(v.state.tr.setMeta(highlightKey, DecorationSet.create(v.state.doc, decorations)).setMeta('addToHistory', false));
     for (const listener of layoutListeners) listener();
   }
@@ -240,7 +293,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
 
   function selectionHint() {
     const v = view();
-    const projection = projectDoc(v.state.doc);
+    const projection = projectionOf(v.state.doc);
     const { from, to } = selectionSpan(v.state.selection);
     const range = textRange(projection, from, to);
     if (!range) return null;
@@ -259,7 +312,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const v = view();
     const { $from } = v.state.selection;
     if ($from.depth === 0) return null;
-    const projection = projectDoc(v.state.doc);
+    const projection = projectionOf(v.state.doc);
     const range = textRange(projection, $from.before(1), $from.after(1));
     if (!range || range.start === range.end) return null;
     const { text } = projection;
@@ -471,7 +524,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     if (empty || !v.hasFocus()) return null;
     const start = v.coordsAtPos(from);
     const end = v.coordsAtPos(to);
-    return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right), commentable: textRange(projectDoc(v.state.doc), from, to) !== null };
+    return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right), commentable: textRange(projectionOf(v.state.doc), from, to) !== null };
   }
 
   // ---- changes from disk ----
@@ -494,7 +547,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     }
     const hunks = diffBlocks(current, target);
     if (hunks.length === 0) {
-      baseline = editor.action(getMarkdown());
+      baselineDoc = v.state.doc;
       return;
     }
     const tr = v.state.tr;
@@ -505,7 +558,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     }
     tr.setMeta('addToHistory', false);
     v.dispatch(tr);
-    baseline = editor.action(getMarkdown());
+    baselineDoc = v.state.doc;
     flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by);
     paintHighlights();
   }
@@ -514,12 +567,15 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   // the comments (clearReview), and typing that happened meanwhile is now
   // reported as the human's edit.
   function onReplayEnd({ ranges }) {
-    baseline = serialize(parse(replayTarget));
+    // Once per replay, so comparing the markdown is affordable here.
+    const target = parse(replayTarget);
+    const typedMeanwhile = currentMarkdown() !== serialize(target);
+    baselineDoc = typedMeanwhile ? target : view().state.doc;
     replayTarget = null;
     const decorations = ranges.map((r) => Decoration.inline(r.from, r.to, { class: 'od-review' }, { review: true }));
     if (decorations.length > 0) updateFlashes((set, doc) => set.add(doc, decorations));
     paintHighlights();
-    if (editor.action(getMarkdown()) !== baseline) onChange();
+    if (typedMeanwhile) onChange();
   }
 
   function clearReview() {
@@ -549,9 +605,15 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   }
 
   return {
-    getMarkdown: () => editor.action(getMarkdown()),
+    getMarkdown: currentMarkdown,
     /** Markdown as this editor would write it, for comparing with its own output. */
-    normalize: (md) => serialize(parse(md)),
+    normalize: (md) => {
+      const doc = parse(md);
+      const normal = serialize(doc);
+      // The normal text is usually what gets applied next: same doc.
+      if (normal !== md) parsed = [[normal, doc], ...parsed].slice(0, 4);
+      return normal;
+    },
     applyMarkdown,
     /** Whether a change is being replayed; the doc is then between versions. */
     replaying: () => replayer.active(),
@@ -570,11 +632,11 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         replayer.hide();
         return;
       }
-      const projection = projectDoc(view().state.doc);
+      const { doc } = view().state;
       for (const anchor of anchors) {
-        const found = anchor && locate(projection.text, anchor);
-        if (found) {
-          replayer.look(docRange(projection, found.start, found.end).from, name);
+        const range = anchor && rangeOf(doc, anchor);
+        if (range) {
+          replayer.look(range.from, name);
           return;
         }
       }
@@ -585,7 +647,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     setMarkdown(next) {
       replayer.finish();
       editor.action(replaceAll(next, true));
-      baseline = editor.action(getMarkdown());
+      baselineDoc = view().state.doc;
       paintHighlights();
     },
     setThreads(next) {
@@ -612,10 +674,9 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       paintHighlights();
       if (!replay || items.length === 0) return;
       const v = view();
-      const found = locate(projectDoc(v.state.doc).text, items[0].anchor);
-      if (!found) return;
-      const { from } = docRange(projectDoc(v.state.doc), found.start, found.end);
-      const { node } = v.domAtPos(from);
+      const range = rangeOf(v.state.doc, items[0].anchor);
+      if (!range) return;
+      const { node } = v.domAtPos(range.from);
       (node.nodeType === 1 ? node : node.parentElement)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     },
     setDraft(hint) {
@@ -657,12 +718,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     /** Viewport top of each anchor (or of the draft), by thread id. */
     anchorTops(items) {
       const v = view();
-      const projection = projectDoc(v.state.doc);
       const tops = new Map();
       for (const { id, anchor } of items) {
-        const found = anchor && locate(projection.text, anchor);
-        if (!found) continue;
-        tops.set(id, v.coordsAtPos(docRange(projection, found.start, found.end).from).top);
+        const range = anchor && rangeOf(v.state.doc, anchor);
+        if (range) tops.set(id, v.coordsAtPos(range.from).top);
       }
       return tops;
     },

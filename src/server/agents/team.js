@@ -67,7 +67,7 @@ export class Team {
       started.push(dispatcher);
     }
     if (changed || started.length > 0) this.onChange();
-    await Promise.all(started.map((d) => d.start())); // each checks its program, which can take seconds
+    await Promise.all(started.map((d) => d.start())); // each checks its program in the background
   }
 
   /** Every agent's status, in the order they joined. */

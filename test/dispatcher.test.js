@@ -756,6 +756,8 @@ test('an unavailable agent does not launch and says why', { timeout: 30_000 }, a
   const adapter = claudeAdapter({ bin: join(tmpdir(), 'definitely-not-claude.exe') });
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
   try {
+    assert.equal(server.team.get('claude').status().state, 'starting', 'the server does not wait for the check');
+    await server.team.get('claude').checked;
     assert.equal(server.team.get('claude').status().state, 'unavailable');
     assert.match(server.team.get('claude').status().error, /could not run/);
   } finally {

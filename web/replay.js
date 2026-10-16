@@ -23,6 +23,7 @@ const MAX_MS = 10_000; // a longer replay speeds up to fit
 const FADE_MS = 30_000; // the caret fades this long after the agent stops
 const FOLLOW_IDLE_MS = 3000; // the view follows the caret unless the human typed this recently
 const FRAME_MS = 16;
+const FOLLOW_MS = 150;
 const TEXT_TYPES = new Set(['paragraph', 'heading']);
 
 // ---- planning ----
@@ -641,8 +642,14 @@ export function createReplayer({ getView, stage, onEnd }) {
   }
 
   // Keep the caret in view, unless the human is typing: then point at it.
+  // Measuring the caret makes the browser lay out the whole doc after each
+  // step, so it is done a few times a second rather than every frame.
+  let lastMeasure = 0;
   function follow() {
     if (!caret) return;
+    const now = performance.now();
+    if (now - lastMeasure < FOLLOW_MS) return;
+    lastMeasure = now;
     const view = getView();
     let rect;
     try {
