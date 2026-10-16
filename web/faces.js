@@ -36,14 +36,14 @@ export const agentFace = (seed) => seed.trim().toLowerCase() === 'clippy' ? clip
 /** @param {string} seed */
 export const personFace = (seed) => face(seed, true);
 
-// Follow the original sketch: a wide warm yellow coil, eyes on either side and
+// Follow the original sketch: a wide silver coil, eyes on either side and
 // asymmetric brows. Rounded arcs and a soft gaze gently refine its expression.
 export function clippyFace() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
   const id = `od-clippy-${++ids}`;
   const defs = node('defs', {});
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  for (const [offset, color] of [[0, '#ffe9a3'], [0.55, '#ffd05b'], [1, '#edac38']]) {
+  for (const [offset, color] of [[0, '#efeeed'], [0.55, '#c5c4c8'], [1, '#96959e']]) {
     gradient.append(node('stop', { offset, 'stop-color': color }));
   }
   defs.append(gradient);
@@ -69,7 +69,23 @@ export function clippyFace() {
 
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
-// A large warm yellow coil overlaps the folded page, following the original sketch.
+// A rounded-square desktop tile; the in-document avatar stays transparent.
+export function applicationIcon() {
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
+  const id = `od-app-tile-${++ids}`;
+  const defs = node('defs', {});
+  const gradient = node('linearGradient', { id, x1: '0', y1: '0', x2: '1', y2: '1' });
+  gradient.append(node('stop', { offset: '0', 'stop-color': '#667083' }), node('stop', { offset: '1', 'stop-color': '#343b4d' }));
+  defs.append(gradient);
+  svg.append(defs, node('rect', { x: '4', y: '4', width: '92', height: '92', rx: '22', fill: `url(#${id})` }));
+  svg.append(node('rect', { x: '4.5', y: '4.5', width: '91', height: '91', rx: '21.5', fill: 'none', stroke: '#fff', 'stroke-opacity': '0.16', 'stroke-width': '0.7' }));
+  const avatar = clippyFace();
+  for (const [key, value] of Object.entries({ x: '9', y: '8', width: '82', height: '82', 'aria-hidden': 'true' })) avatar.setAttribute(key, value);
+  svg.append(avatar);
+  return svg;
+}
+
+// A large silver coil overlaps the folded page, following the original sketch.
 export function documentIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(

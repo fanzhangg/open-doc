@@ -9,10 +9,11 @@ app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
   await window.loadURL('data:text/html,<html></html>');
   const renderer = readFileSync(join(__dirname, '..', 'web', 'faces.js'), 'utf8').replace(/^export /gm, '');
-  const svg = await window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn clippyFace().outerHTML; })()`);
+  const avatarSvg = await window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn clippyFace().outerHTML; })()`);
+  const svg = await window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn applicationIcon().outerHTML; })()`);
   writeFileSync(join(build, 'icon.svg'), svg + '\n');
   // Share the actual avatar mark with the wordmark, so they cannot drift apart.
-  const mark = svg.replace('<svg ', '<svg x="0" y="0" width="80" height="80" ');
+  const mark = avatarSvg.replace('<svg ', '<svg x="0" y="0" width="80" height="80" ');
   const logo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" width="280" height="80" role="img" aria-label="OpenDoc">
     <style>text{fill:#1f1d24;font:600 38px Inter,"Segoe UI",sans-serif;letter-spacing:-1px}@media(prefers-color-scheme:dark){text{fill:#f4f2ec}}</style>
     ${mark}<text x="88" y="54">OpenDoc</text>
