@@ -664,7 +664,6 @@ label.od-setting { cursor: pointer; }
 .od-plus { color: var(--ins); }
 .od-minus { color: var(--del); }
 
-@media (max-width: 1240px) {
 /* ---- folder sidebar: a desktop window opened on a folder lists its docs ---- */
 
 :root { --files-w: 248px; }
@@ -691,6 +690,7 @@ label.od-setting { cursor: pointer; }
 .od-header .od-files-toggle { margin-left: -6px; }
 .od-files-toggle[aria-pressed="true"] { color: var(--text); }
 
+@media (max-width: 1240px) {
   .od-outline { display: none; }
 }
 @media (max-width: 1180px) {
