@@ -40,7 +40,8 @@
 // (Claude Code), 'codex' (OpenAI Codex CLI) or 'custom' (any command line).
 //
 // An agent's face (web/faces.js) is drawn from its `face`, a seed: null
-// draws it from the name. Renaming one keeps the face it had.
+// draws it from the name. Renaming one keeps the face it had. Clippy ships
+// with a seed that draws a yellow swirl; the app's icons use it too.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 import { newId } from './ops.js';
@@ -130,7 +131,7 @@ export const DEFAULT_AGENT_ID = 'a_default_clippy';
  * no job titles; who does what is up to the personas people write, Clippy's too.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: DEFAULT_AGENT_ID, name: 'Clippy', persona: 'A general writing assistant that helps draft and edit docs', starred: true, editMode: 'auto', autoComment: true },
+  { id: DEFAULT_AGENT_ID, name: 'Clippy', face: '64t1cdnh', persona: 'A general writing assistant that helps draft and edit docs', starred: true, editMode: 'auto', autoComment: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -164,6 +165,8 @@ export function resolveAgent(saved) {
     if (Object.hasOwn(stored, key) && AGENT_RULES[key](stored[key])) out[key] = stored[key];
   }
   if (!Object.hasOwn(stored, 'autoComment') && (stored.autoPilot === true || stored.role === 'pilot')) out.autoComment = true;
+  // One of the agents the app comes with, saved before it shipped a face, takes that face.
+  if (out.face === null) out.face = DEFAULT_AGENTS.find((a) => a.id === out.id)?.face ?? null;
   if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
   if (!out.doc) out.starred = true; // in no doc: the user's
   if (out.starred) out.doc = null;
