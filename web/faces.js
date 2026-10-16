@@ -67,6 +67,27 @@ export function clippyFace() {
   return svg;
 }
 
+// The app icon: Clippy on a paper tile, the shape and size of Apple's icon grid
+// (824 of 1024). macOS 26 shrinks an icon that does not fill this shape onto a
+// grey plate, which is how the bare coil showed in the Dock and Finder.
+export function appIcon() {
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
+  const defs = node('defs', {});
+  const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
+  gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
+  defs.append(gradient);
+  // A faint ink edge keeps the tile apart from white backgrounds (Windows, browser tabs).
+  svg.append(defs, node('rect', {
+    x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
+    fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
+  }));
+  const avatar = clippyFace();
+  const mark = node('g', { transform: 'translate(50 50.5) scale(0.64) translate(-50 -51)' });
+  mark.append(...avatar.childNodes);
+  svg.append(mark);
+  return svg;
+}
+
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
 // A large warm yellow coil overlaps the folded page, following the original sketch.
