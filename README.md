@@ -73,8 +73,9 @@ Who answers what:
   takes the new words. Mentions in code do not count.
 - A reply that mentions no one continues with the agent that answered last in
   that thread. A comment that mentions several agents waits on each of them.
-- Agents take turns: only one runs at a time in a doc, so their edits never
-  collide and each one's changes are recorded on its own reply.
+- Agents work at the same time: a comment that mentions several agents gets
+  all of them answering at once. Only their edits to the doc take turns, so
+  they never collide and each one's changes are recorded on its own reply.
 - Every run starts fresh. An agent remembers nothing between runs except what
   is in the doc and its threads, so anything worth keeping is written where
   you can see it.

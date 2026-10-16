@@ -33,8 +33,7 @@ export function inbox(sidecar, name, now = Date.now(), { mentionsOnly = false } 
     const to = addressees(said, at);
     if (to.length > 0 ? !to.some((m) => sameName(m, name)) : mentionsOnly || passed(thread, name)) return false;
     if (since.some((m) => sameName(m.author.name, name))) return false;
-    const working = activeWorking(thread, now);
-    return !(working && sameName(working.by, name));
+    return !activeWorking(thread, now).some((w) => sameName(w.by, name));
   });
 }
 

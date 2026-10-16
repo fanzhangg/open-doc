@@ -35,11 +35,15 @@ export const DENIED_READS = [
 ];
 
 /**
- * The PreToolUse hook that runs `opendoc guard` (on the run's PATH) before
- * each Edit: is the human typing there?
+ * The hooks that run `opendoc guard` (on the run's PATH) around each Edit.
+ * Before it: is the human typing there, and is another agent writing the
+ * doc (then it waits its turn, up to 15 s)? After it: the
+ * agent is done writing, and the next one may. The time limits leave the
+ * guard room to answer before the hook gives up.
  */
 export function guardSettings() {
-  return { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout: 10 }] }] } };
+  const hook = (timeout) => [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout }] }];
+  return { hooks: { PreToolUse: hook(30), PostToolUse: hook(10) } };
 }
 
 /**
@@ -112,7 +116,7 @@ export function buildPrompt({
     ].join('\n\n')] : []),
     ...(asked ? [calls] : []),
     ...(watching ? [watch] : []),
-    ...(others.length > 0 ? [`Other agents in this doc: ${others.map((o) => `@${o}`).join(', ')}. Earlier replies in a thread may be theirs; answer as yourself, and leave their part of a comment to them.`] : []),
+    ...(others.length > 0 ? [`Other agents in this doc: ${others.map((o) => `@${o}`).join(', ')}. Earlier replies in a thread may be theirs, and they may be answering the same thread at the same time as you: answer from your own role without waiting on them, and leave their part of a comment to them.${editMode === 'auto' ? ' They may also edit the doc while you work: if an edit fails because the file changed, read it again and retry.' : ''}`] : []),
     asked
       ? `The comment threads waiting on you are given as JSON (on stdin, or in the threads file). ${handle} Never resolve a thread: the human decides when it is done.`
       : 'No comment waits on you this time; what you are given (as JSON, on stdin or in the threads file) is the changes to the doc. Never resolve a thread: the human decides when it is done.',
@@ -151,6 +155,9 @@ export function claudeAdapter({ bin, agentName = '', model, maxTurns = 30, maxBu
   return {
     name: 'claude',
     program: executable,
+    // Every edit of the doc goes through the guard's hooks (an Edit, the only
+    // tool allowed to write it), so a run takes the floor only while it edits.
+    guardsEdits: true,
     workdir(docPath) {
       return fileAccess ? null : privateWorkdir(docPath, agentName);
     },

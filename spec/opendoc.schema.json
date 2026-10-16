@@ -58,6 +58,14 @@
         "start": { "type": "integer", "minimum": 0 }
       }
     },
+    "working": {
+      "type": "object",
+      "required": ["by", "since"],
+      "properties": {
+        "by": { "$ref": "#/$defs/name" },
+        "since": { "$ref": "#/$defs/timestamp" }
+      }
+    },
     "thread": {
       "type": "object",
       "required": ["id", "anchor", "detached", "status", "resolvedBy", "resolvedAt", "working", "messages"],
@@ -77,13 +85,10 @@
         "working": {
           "oneOf": [
             {
-              "type": "object",
-              "required": ["by", "since"],
-              "properties": {
-                "by": { "$ref": "#/$defs/name" },
-                "since": { "$ref": "#/$defs/timestamp" }
-              }
+              "type": "array",
+              "items": { "$ref": "#/$defs/working" }
             },
+            { "$ref": "#/$defs/working" },
             { "type": "null" }
           ]
         },

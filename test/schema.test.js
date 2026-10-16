@@ -35,6 +35,20 @@ test('unknown fields and x- sections are allowed', () => {
   assert.ok(validate(sidecar));
 });
 
+test('working: a list of agents, the single object of older sidecars, or null', () => {
+  const since = '2026-10-14T18:00:00.000Z';
+  for (const working of [[{ by: 'claude', since }, { by: 'muse', since }], { by: 'claude', since }, null]) {
+    const sidecar = clone(example);
+    sidecar.threads[0].working = working;
+    assert.ok(validate(sidecar), JSON.stringify(validate.errors));
+  }
+  for (const working of [[{ by: 'claude' }], [{ by: '@bad', since }], 'claude']) {
+    const sidecar = clone(example);
+    sidecar.threads[0].working = working;
+    assert.ok(!validate(sidecar), JSON.stringify(working));
+  }
+});
+
 test('invalid sidecars are rejected', () => {
   const cases = {
     'unknown major version': (s) => { s.opendoc = 2; },

@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -168,8 +168,9 @@ export async function startServer(docPath, {
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'not_found', 'not found');
     if (req.method === 'POST' && url.pathname === '/api/guard') {
       checkWriteRequest(req, actualPort);
-      if (!guardedAgent(req.headers['x-opendoc-guard'])) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
-      return sendJson(res, 200, await guard(await readJson(req)));
+      const agent = guardedAgent(req.headers['x-opendoc-guard']);
+      if (!agent) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
+      return sendJson(res, 200, await guard(agent, await readJson(req)));
     }
     if (!tokenMatches(req.headers['x-opendoc-token'] ?? url.searchParams.get('t'), token)) {
       throw new HttpError(403, 'forbidden', 'missing or wrong token');
@@ -242,7 +243,7 @@ export async function startServer(docPath, {
       case 'POST /api/agent/overwritten': {
         const body = await readJson(req);
         const changes = validChanges(body?.changes);
-        const member = typeof body.name === 'string' ? team.get(body.name) : team.running() ?? team.lastToRun();
+        const member = typeof body.name === 'string' ? team.get(body.name) : team.editing() ?? team.lastToRun();
         if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
         const offered = await serial(() => member.overwritten(changes));
         return sendJson(res, 200, { offered });
@@ -579,11 +580,12 @@ export async function startServer(docPath, {
     return chronicle;
   }
 
-  // The doc on disk changed and not by this server's hand: the running
-  // agent's edit (only one runs at a time), otherwise a change made outside OpenDoc.
+  // The doc on disk changed and not by this server's hand: the edit of the
+  // agent holding the floor (only one writes at a time), otherwise a change
+  // made outside OpenDoc.
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
-    const agentNow = team.running()?.status();
+    const agentNow = team.editing()?.status();
     const author = agentNow ? { name: agentNow.name, kind: 'agent' } : null;
     tellAgents(doc.markdown, author);
     return noteVersion(doc.markdown, agentNow
@@ -731,18 +733,36 @@ export async function startServer(docPath, {
     req.on('close', () => clients.delete(res));
   }
 
-  // An edit a run is about to make (from `opendoc guard`): refused while it
-  // would change the paragraph the human typed in during the last
-  // `typingMs`; otherwise the page is told where it is about to land.
-  async function guard(body) {
+  // An edit `agent`'s run is about to make (from `opendoc guard`): it waits
+  // while another agent writes the doc, and takes the floor until the edit
+  // is done (`event: 'post'`, from the hook after it). Refused when the
+  // floor stays taken, or while it would change the paragraph the human
+  // typed in during the last `typingMs`; otherwise the page is told where it
+  // is about to land.
+  async function guard(agent, body) {
+    if (body?.event === 'post') {
+      await agent.endEdit();
+      return {};
+    }
     const old = typeof body?.oldString === 'string' ? body.oldString.replace(/\r\n/g, '\n') : '';
-    if (!old) return { allow: true };
+    if (!old || !(await aboutDoc(body))) return { allow: true };
+    if (!(await agent.startEdit())) {
+      const by = team.editing();
+      return {
+        allow: false,
+        reason: `${by ? `@${by.name} is` : 'Another agent is'} editing the doc right now. Do the rest of your work first and try this edit again after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
+      };
+    }
     const markdown = (await readDoc(docPath)).markdown.replace(/\r\n/g, '\n');
     const at = markdown.indexOf(old);
-    if (at === -1) return { allow: true }; // the edit fails on its own
+    if (at === -1) {
+      await agent.endEdit();
+      return { allow: true }; // the edit fails on its own
+    }
     const human = typingIn(markdown);
     if (human && at < human.end && human.start < at + old.length) {
-      team.running()?.avoided();
+      agent.avoided();
+      await agent.endEdit();
       return {
         allow: false,
         reason: `The human is typing in the paragraph that starts "${human.quote}" right now. Edit other parts first. If you still need to change this paragraph, try once more after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
@@ -750,6 +770,16 @@ export async function startServer(docPath, {
     }
     broadcast('agentTarget', { quote: project(old).text.trim().slice(0, 300) });
     return { allow: true };
+  }
+
+  // Whether the edit the guard is asked about is to the doc (a run that may
+  // read other files can also be refused edits to them). A request that does
+  // not say is taken to be.
+  async function aboutDoc({ filePath, cwd }) {
+    if (typeof filePath !== 'string' || !filePath) return true;
+    const real = (path) => realpath(path).catch(() => path);
+    const [edited, doc] = await Promise.all([real(resolve(typeof cwd === 'string' ? cwd : dirname(docPath), filePath)), real(resolve(docPath))]);
+    return process.platform === 'linux' ? edited === doc : edited.toLowerCase() === doc.toLowerCase();
   }
 
   // The whole lines of `markdown` the human typed in during the last

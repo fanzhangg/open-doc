@@ -19,6 +19,7 @@ export {
   emptySidecar,
   findThread,
   newId,
+  workingList,
 } from './ops.js';
 export { inbox, openAsk } from './inbox.js';
 export { FormatError, parseSidecar, serializeSidecar } from './format.js';

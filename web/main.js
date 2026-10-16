@@ -454,8 +454,8 @@ function showAgentCaret(before, after) {
 function editorName(nextSidecar) {
   const agent = people.running();
   if (agent) return agent.name;
-  const working = nextSidecar.threads.map((t) => activeWorking(t)).find(Boolean);
-  return working?.by ?? ON_DISK;
+  const working = nextSidecar.threads.flatMap((t) => activeWorking(t));
+  return working[0]?.by ?? ON_DISK;
 }
 
 function showConflict(by) {

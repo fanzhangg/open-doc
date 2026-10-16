@@ -1,5 +1,5 @@
-// The agents working on one doc: a dispatcher for each, sharing one turn
-// (Floor) so they run one at a time. The server says which agents should be
+// The agents working on one doc: a dispatcher for each. Their runs go on at
+// the same time; they share a Floor so they write the doc one at a time. The server says which agents should be
 // here (`sync`): the ones started with `serve` flags, and the user's agents
 // invited into the doc. The team starts, restarts and stops dispatchers to
 // match, and finds the one a change on disk belongs to.
@@ -17,7 +17,7 @@ export class Team {
     this.docPath = docPath;
     this.options = options;
     this.onChange = onChange;
-    this.floor = new Floor();
+    this.floor = new Floor(() => this.members.map((m) => m.dispatcher));
     this.members = []; // [{ key, dispatcher }]
     this.changes = Promise.resolve();
   }
@@ -80,9 +80,10 @@ export class Team {
     return this.members.find((m) => sameName(m.dispatcher.name, name))?.dispatcher ?? null;
   }
 
-  /** The agent whose run is in progress, if any (only one runs at a time). */
-  running() {
-    return this.members.find((m) => m.dispatcher.run)?.dispatcher ?? null;
+  /** The agent writing the doc right now (it holds the floor), if any. */
+  editing() {
+    const holder = this.floor.holder;
+    return holder && this.members.some((m) => m.dispatcher === holder) ? holder : null;
   }
 
   /** The agent whose run ended last, if any. */
@@ -112,9 +113,9 @@ export class Team {
     for (const m of this.members) m.dispatcher.docChanged(before, after, author);
   }
 
-  /** The human saved the doc from `before` to `after`: not the running agent's edit. */
+  /** The human saved the doc from `before` to `after`: not any running agent's edit. */
   humanEdited(before, after) {
-    this.running()?.humanEdited(before, after);
+    this.floor.humanEdited(before, after);
   }
 
   /** Stop every agent (ending a run in progress) and forget them. */

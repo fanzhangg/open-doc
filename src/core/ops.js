@@ -40,7 +40,7 @@ export function newId(prefix) {
  *   { type: 'addMessage', threadId, message }
  *   { type: 'resolve', threadId, by, kind?, at }   // humans only
  *   { type: 'reopen', threadId, by, kind? }        // humans only
- *   { type: 'setWorking', threadId, by, since }   // since: null clears
+ *   { type: 'setWorking', threadId, by, since }   // since: null clears `by`'s
  *   { type: 'pass', threadId, by }                 // `by` leaves an open ask to others
  *   { type: 'attachEdits', threadId, messageId, edits }
  *
@@ -73,10 +73,10 @@ export function applyOp(sidecar, op) {
       return updateThread(sidecar, op.threadId, (t) =>
         t.status === 'open' ? t : { ...t, status: 'open', resolvedBy: null, resolvedAt: null });
     case 'setWorking':
-      return updateThread(sidecar, op.threadId, (t) => ({
-        ...t,
-        working: op.since ? { by: op.by, since: op.since } : null,
-      }));
+      return updateThread(sidecar, op.threadId, (t) => {
+        const others = workingList(t).filter((w) => !sameName(w.by, op.by));
+        return { ...t, working: listOrNull(op.since ? [...others, { by: op.by, since: op.since }] : others) };
+      });
     case 'pass':
       return pass(sidecar, op);
     case 'attachEdits':
@@ -93,7 +93,7 @@ function pass(sidecar, { threadId, by }) {
   if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
   return updateThread(sidecar, threadId, (t) => {
     const passed = t.passed ?? [];
-    const working = t.working && sameName(t.working.by, by) ? null : t.working;
+    const working = stopWorking(t, by);
     if (passed.some((n) => sameName(n, by))) return working === t.working ? t : { ...t, working };
     return { ...t, working, passed: [...passed, canonicalName(sidecar, by)] };
   });
@@ -136,7 +136,10 @@ function leave(sidecar, name) {
   return {
     ...sidecar,
     participants: sidecar.participants.filter((p) => !sameName(p.name, name)),
-    threads: sidecar.threads.map((t) => (t.working && sameName(t.working.by, name) ? { ...t, working: null } : t)),
+    threads: sidecar.threads.map((t) => {
+      const working = stopWorking(t, name);
+      return working === t.working ? t : { ...t, working };
+    }),
   };
 }
 
@@ -167,7 +170,7 @@ function addMessage(sidecar, { threadId, message }) {
     resolvedBy: null,
     resolvedAt: null,
     // The agent's reply ends its "responding…" state.
-    working: t.working && sameName(t.working.by, message.author.name) ? null : t.working,
+    working: stopWorking(t, message.author.name),
     // A new ask from a human is open to every agent again.
     ...(t.passed?.length && message.author.kind === 'human' && !message.undoes && !message.applies ? { passed: [] } : {}),
     messages: [...t.messages, buildMessage(joined, message)],
@@ -265,9 +268,28 @@ function validateParticipant(participant) {
   }
 }
 
-/** `working` as seen at `now`: values older than 5 minutes count as null. */
-export function activeWorking(thread, now = Date.now()) {
+/**
+ * Who is working on the thread: `working` as a list of { by, since }. A
+ * sidecar written before several could work at once holds a single object.
+ */
+export function workingList(thread) {
   const w = thread.working;
-  if (!w) return null;
-  return now - Date.parse(w.since) < WORKING_TTL_MS ? w : null;
+  if (!w) return [];
+  return (Array.isArray(w) ? w : [w]).filter((e) => e && typeof e.by === 'string');
 }
+
+/** Who is working on the thread as seen at `now`: entries older than 5 minutes do not count. */
+export function activeWorking(thread, now = Date.now()) {
+  return workingList(thread).filter((w) => now - Date.parse(w.since) < WORKING_TTL_MS);
+}
+
+// `working` without `name`'s entry (the same value when it had none).
+function stopWorking(thread, name) {
+  const list = workingList(thread);
+  const rest = list.filter((w) => !sameName(w.by, name));
+  return rest.length === list.length ? thread.working : listOrNull(rest);
+}
+
+// No one working is written as null, which tools that knew only a single
+// object also read as no one.
+const listOrNull = (list) => (list.length > 0 ? list : null);

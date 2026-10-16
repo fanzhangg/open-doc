@@ -197,7 +197,7 @@ test('end to end: a blocked wait wakes on a human comment and marks it working',
   assert.equal(code, 0);
   const { threads } = JSON.parse(stdout);
   assert.equal(threads.length, 1);
-  assert.equal(threads[0].working.by, 'claude');
+  assert.deepEqual(threads[0].working.map((w) => w.by), ['claude']);
   assert.equal(threads[0].line, 8);
   assert.ok(latency < 1500, `wait woke after ${latency} ms`);
   console.log(`  wait woke ${latency} ms after the comment was posted (includes process exit)`);

@@ -99,7 +99,10 @@ Agents are light, and belong to the doc unless you star them:
   agent's change too, so agents with Doc Watcher can play off each other (a
   scorer scoring a player's move), but after 6 runs in a row set off by
   agents alone they wait until you change the doc.
-- Agents take turns: one runs at a time per doc.
+- Agents work at the same time: a comment that mentions three agents gets
+  all three working on it at once, each shown typing in the thread. Only
+  their edits to the doc take turns, so each agent's changes are recorded on
+  its own reply and undo on their own.
 - Nothing is remembered in private. Every run starts a fresh session that
   reads the doc and its threads; anything worth keeping is written there.
 

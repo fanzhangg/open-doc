@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, emptySidecar, newId, OpError } from '../src/core/ops.js';
+import { activeWorking, applyOp, emptySidecar, newId, OpError, workingList } from '../src/core/ops.js';
 import { parseMentions } from '../src/core/mentions.js';
 import { addedMentions, carry, changedRanges, textMentions } from '../src/core/text-mentions.js';
 import { inbox } from '../src/core/inbox.js';
@@ -49,7 +49,7 @@ test('operations are idempotent by id', () => {
 test('a reply reopens a resolved thread; the agent reply clears its working flag', () => {
   let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude?') });
   s = applyOp(s, { type: 'setWorking', threadId: 't_aaaaaa', by: 'claude', since: new Date().toISOString() });
-  assert.equal(s.threads[0].working.by, 'claude');
+  assert.deepEqual(s.threads[0].working.map((w) => w.by), ['claude']);
   s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(claude, 'Done.') });
   assert.equal(s.threads[0].working, null);
   s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at });
@@ -169,6 +169,32 @@ test('inbox with several agents: each one mentioned answers once; an open commen
   assert.deepEqual(waiting('muse'), ['t_both01']);
   assert.deepEqual(waiting('claude'), []);
   assert.deepEqual(inbox(s, 'muse', Date.now(), { mentionsOnly: true }).map((t) => t.id), ['t_both01'], 'also for a co-pilot');
+});
+
+test('working: several agents at once, each cleared by its own reply; an old single-object value still reads', () => {
+  const muse = { name: 'muse', kind: 'agent' };
+  const now = Date.now();
+  const since = new Date(now).toISOString();
+  let s = withAgents(claude, muse);
+  s = applyOp(s, { type: 'addThread', id: 't_both01', anchor: null, message: msg(human, '@claude @muse thoughts?') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_both01', by: 'claude', since });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_both01', by: 'muse', since });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_both01', by: 'Claude', since });
+  assert.deepEqual(activeWorking(s.threads[0], now).map((w) => w.by), ['muse', 'Claude'], 'one entry per agent');
+  assert.deepEqual(inbox(s, 'claude', now), []);
+  s = applyOp(s, { type: 'addMessage', threadId: 't_both01', message: msg(muse, 'A poem.') });
+  assert.deepEqual(s.threads[0].working.map((w) => w.by), ['Claude'], 'a reply ends only its author\'s');
+  s = applyOp(s, { type: 'setWorking', threadId: 't_both01', by: 'claude', since: null });
+  assert.equal(s.threads[0].working, null, 'no one working is null');
+
+  // A sidecar from before the list: a single object.
+  const old = { ...s, threads: [{ ...s.threads[0], working: { by: 'muse', since } }] };
+  assert.deepEqual(workingList(old.threads[0]).map((w) => w.by), ['muse']);
+  assert.deepEqual(inbox(old, 'muse', now), []);
+  const added = applyOp(old, { type: 'setWorking', threadId: 't_both01', by: 'claude', since });
+  assert.deepEqual(added.threads[0].working.map((w) => w.by), ['muse', 'claude']);
+  assert.equal(applyOp(old, { type: 'addMessage', threadId: 't_both01', message: msg(muse, 'Done.') }).threads[0].working, null);
+  assert.deepEqual(activeWorking({ working: null }), []);
 });
 
 test('pass: an agent leaves an open ask to others, and stops working on it', () => {

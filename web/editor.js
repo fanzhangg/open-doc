@@ -200,7 +200,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       if (!thread.anchor || thread.detached || thread.status !== 'open') continue;
       let classes = 'od-hl';
       if (thread.id === activeId) classes += ' od-hl-active';
-      if (activeWorking(thread, now)) classes += ' od-hl-working';
+      if (activeWorking(thread, now).length > 0) classes += ' od-hl-working';
       add(thread.anchor, thread.id, classes);
     }
     if (draft) add(draft, 'draft', 'od-hl od-hl-active');

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
+import { Floor } from '../src/server/agents/dispatcher.js';
 import { CODEX_DENIED_GLOBS, DENIED_READS, SKILL_PATH, agentEnv, buildPrompt, claudeAdapter, codexAdapter, codexPermissions, customAdapter, findCodex, privateWorkdir, rulePath, splitCommand, userCodexConfig } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
@@ -302,6 +303,145 @@ test('a chat session waiting at the same time never double-answers', { timeout: 
   });
 });
 
+// Several agents in one doc, all in its crew so they start with it. `guarded`
+// makes their program one whose every edit passes the guard's hooks, as
+// Claude Code's does.
+async function withTeam(names, mode, fn, { editMode = 'auto', guarded = false } = {}) {
+  const docPath = await tempDoc();
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const runLog = join(settingsDir, 'runs.log');
+  await writeFile(runLog, '');
+  const command = `"${process.execPath}" "${FAKE}" {threadsFile} ${mode} "${runLog}"`;
+  const agents = names.map((name, i) => ({ id: `a_team0${i}`, name, starred: true, crew: true, runtime: 'custom', command, editMode, autoComment: false }));
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agents }));
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
+  const log = async () => (await readFile(runLog, 'utf8')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  try {
+    await until(() => names.every((n) => server.team.get(n)?.state === 'ready'), { what: 'the agents' });
+    for (const n of names) server.team.get(n).adapter.guardsEdits = guarded;
+    await fn({
+      docPath,
+      server,
+      log,
+      runs: async () => (await log()).filter((e) => e.threads),
+      sidecar: async () => JSON.parse(await readFile(sidecarPath(docPath), 'utf8')),
+      comment: (...args) => main(['comment', docPath, ...args, ...human], quiet),
+    });
+  } finally {
+    await server.close();
+  }
+}
+
+// Each agent's run, from start to end, in order of start.
+async function spans(log) {
+  const entries = await log();
+  return entries.filter((e) => e.threads).map((run) => ({ as: run.as, start: run.start, end: entries.find((e) => e.end && e.as === run.as && e.end >= run.start)?.end }))
+    .sort((a, b) => a.start - b.start);
+}
+
+test('a comment that @mentions three agents starts all three runs at once, and each answers', { timeout: 30_000 }, async () => {
+  for (const options of [{ guarded: true }, { editMode: 'approve' }, { editMode: 'none' }]) {
+    await withTeam(['ann', 'bob', 'cat'], 'slow', async ({ log, sidecar, comment, server }) => {
+      await comment('--quote', 'extra load', '@ann @bob @cat what do you make of this?');
+      // While they work, the thread shows all three.
+      const working = await until(async () => {
+        const list = (await sidecar()).threads[0].working;
+        return list?.length === 3 && list;
+      }, { what: 'three at work' });
+      assert.deepEqual(working.map((w) => w.by).sort(), ['ann', 'bob', 'cat']);
+      assert.deepEqual(server.team.statuses().map((a) => a.state), ['running', 'running', 'running']);
+
+      const s = await until(async () => {
+        const current = await sidecar();
+        return current.threads[0].messages.length === 4 && current;
+      }, { what: 'three answers' });
+      assert.deepEqual(s.threads[0].messages.slice(1).map((m) => m.author.name).sort(), ['ann', 'bob', 'cat']);
+      await until(async () => (await spans(log)).every((r) => r.end), { what: 'the runs to end' });
+      const runs = await spans(log);
+      assert.equal(runs.length, 3);
+      // Each run sleeps 1.5 s before it replies: in turn, the last would
+      // start 3 s after the first.
+      assert.ok(runs[2].start < runs[0].end, `all three ran at once (${JSON.stringify(options)})`);
+      assert.equal((await sidecar()).threads[0].working, null, 'their replies cleared it');
+    }, options);
+  }
+});
+
+test('agents that may edit without the guard still take turns', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'slow', async ({ log, sidecar, comment, server }) => {
+    await comment('@ann @bob thoughts?');
+    await until(async () => server.team.statuses().some((a) => a.state === 'queued'), { what: 'one waiting its turn' });
+    await until(async () => (await sidecar()).threads[0].messages.length === 3, { what: 'both answers' });
+    await until(async () => (await spans(log)).every((r) => r.end), { what: 'the runs to end' });
+    const [first, second] = await spans(log);
+    assert.ok(first.end <= second.start, 'the second run started after the first ended');
+  });
+});
+
+test('two agents editing the doc at once each get only their own edits on their reply, and each undo works', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'guarded-edit', async ({ docPath, log, sidecar, comment }) => {
+    await comment('--quote', 'six features', '@ann @bob fix both. ann: "ship all six features" -> "ship all seven features" bob: "extra load" -> "extra peak load"');
+    const s = await until(async () => {
+      const current = await sidecar();
+      const answers = current.threads[0].messages.slice(1);
+      return answers.length === 2 && answers.every((m) => m.edits) && current;
+    }, { what: 'both answers with their edits' });
+    const markdown = await readFile(docPath, 'utf8');
+    assert.match(markdown, /ship all seven features[\s\S]*extra peak load/);
+    const reply = (name) => s.threads[0].messages.find((m) => m.author.name === name);
+    assert.deepEqual(reply('ann').edits.map((e) => [e.before, e.after]), [['six', 'seven']]);
+    assert.deepEqual(reply('bob').edits.map((e) => [e.before, e.after]), [['', 'peak ']]);
+    assert.equal(revertEdits(markdown, reply('ann').edits), markdown.replace('seven features', 'six features'));
+    assert.equal(revertEdits(markdown, reply('bob').edits), markdown.replace('extra peak load', 'extra load'));
+    assert.equal(revertEdits(revertEdits(markdown, reply('ann').edits), reply('bob').edits), SAMPLE);
+
+    // They ran at once, and their edits took turns.
+    const edits = (await log()).filter((e) => e.edit);
+    assert.equal(edits.length, 2);
+    assert.ok(edits.every((e) => !e.refused));
+    const runs = await spans(log);
+    assert.ok(runs[1].start < runs[0].end, 'the runs overlapped');
+  }, { guarded: true });
+});
+
+test('the guard holds an edit while another agent writes the doc, and refuses it if that goes on', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'hang', async ({ server, comment, runs }) => {
+    await comment('@ann @bob hold on');
+    await until(async () => (await runs()).length === 2, { what: 'both runs' });
+    const ann = server.team.get('ann');
+    const bob = server.team.get('bob');
+    assert.equal(await ann.startEdit(0), true, 'ann takes the floor');
+    assert.equal(server.team.editing(), ann);
+    const waited = Date.now();
+    assert.equal(await bob.startEdit(300), false, 'bob is refused once ann keeps it too long');
+    assert.ok(Date.now() - waited >= 280);
+    const bobTurn = bob.startEdit(5000);
+    await ann.endEdit();
+    assert.equal(await bobTurn, true, 'bob goes once ann is done');
+    assert.equal(server.team.editing(), bob);
+    await bob.endEdit();
+    assert.equal(server.team.editing(), null);
+  }, { guarded: true });
+});
+
+test('the floor: a holder may take it again; it is free after the last release, and its change goes into the others\' bases', async () => {
+  const seen = [];
+  const a = { othersEdited: () => seen.push('a') };
+  const b = { othersEdited: (before, after) => seen.push(['b', before, after]) };
+  const floor = new Floor(() => [a, b]);
+  assert.equal(await floor.acquire(a, 0), true);
+  floor.before = 'one';
+  assert.equal(await floor.acquire(a, 0), true, 'again, while it holds it');
+  assert.equal(await floor.acquire(b, 0), false);
+  floor.release(a, 'two');
+  assert.equal(floor.holder, a, 'still held once');
+  const waiting = floor.acquire(b, 1000);
+  floor.release(a, 'two');
+  assert.equal(await waiting, true);
+  assert.deepEqual(seen, [['b', 'one', 'two']], 'only the other run takes in the change');
+});
+
 test('agent runs do not inherit a host Claude Code session', () => {
   const host = { PATH: 'p', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'x', CLAUDE_AGENT_SDK_VERSION: 'y', CLAUDE_PID: '9', ANTHROPIC_BASE_URL: 'http://127.0.0.1:1', ANTHROPIC_API_KEY: 'k', CLAUDE_CONFIG_DIR: 'c' };
   assert.deepEqual(agentEnv(host), { PATH: 'p', ANTHROPIC_API_KEY: 'k', CLAUDE_CONFIG_DIR: 'c' });
@@ -530,11 +670,18 @@ test('the guard: a hook on Edit when the run may edit, and the prompt names the 
   const docPath = join(tmpdir(), 'plan.md');
   const args = (options) => claudeAdapter({ bin: 'claude' }).command({ prompt: 'PROMPT', docFile: 'plan.md', docPath, ...options }).args;
   const settings = (list) => (list.includes('--settings') ? JSON.parse(list[list.indexOf('--settings') + 1]) : null);
-  assert.deepEqual(settings(args({ guard: true })), { hooks: { PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout: 10 }] }] } });
+  assert.deepEqual(settings(args({ guard: true })), { hooks: {
+    PreToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout: 30 }] }],
+    PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'opendoc guard', timeout: 10 }] }],
+  } });
   assert.equal(settings(args({ guard: true, editMode: 'approve' })), null, 'nothing to guard when the run cannot edit');
   assert.equal(settings(args({})), null);
 
   assert.match(buildPrompt({ name: 'claude', docFile: 'plan.md', typing: 'The main risk is' }), /typing in the paragraph that starts "The main risk is"/);
+  const withOthers = buildPrompt({ name: 'claude', docFile: 'plan.md', others: ['muse', 'checker'] });
+  assert.match(withOthers, /Other agents in this doc: @muse, @checker\. .*answering the same thread at the same time as you: answer from your own role without waiting on them/);
+  assert.match(withOthers, /if an edit fails because the file changed, read it again and retry/);
+  assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md', others: ['muse'], editMode: 'none' }), /edit fails because the file changed/);
   assert.doesNotMatch(buildPrompt({ name: 'claude', docFile: 'plan.md' }), /typing in the paragraph/);
 });
 

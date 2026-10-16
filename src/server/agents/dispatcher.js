@@ -3,8 +3,9 @@
 // agent working on it) and start one headless agent run for the batch. The
 // edit mode decides whether the run edits the doc or only proposes changes.
 // At most one run per agent at a time; a failed run never loops. The agents
-// of one doc take turns (a Floor): only one runs at a time, so each run's
-// edits are its own and two agents never edit the doc at once.
+// of one doc run at the same time, but write the doc one at a time (a
+// Floor), so each run's edits are its own and two agents never edit the doc
+// at once.
 //
 // A Doc Watcher also runs when others change the doc's text: once they pause,
 // it is handed what changed since it last looked and who changed it, and acts
@@ -17,11 +18,11 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { activeWorking, applyOp, createAnchor, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange } from '../../core/index.js';
+import { activeWorking, applyOp, createAnchor, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange, workingList } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
-import { load, update } from '../../store/files.js';
+import { load, readDoc, update } from '../../store/files.js';
 import { agentEnv, buildPrompt } from './adapters.js';
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'bin', 'opendoc.js');
@@ -33,36 +34,97 @@ const LOG_LINES = 40;
 export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
 export const WATCH_SETTLE_MS = 5_000; // a Doc Watcher looks once the doc has not changed for this long
 export const MAX_RELAYS = 6; // watch runs in a row that only agents' changes may start
+export const EDIT_LEASE_MS = 5_000; // a guarded edit holds the floor at most this long without saying it is done
+export const GUARD_WAIT_MS = 15_000; // how long the guard waits for the floor before refusing an edit
 
 /**
- * The turn to run, shared by the agents of one doc. An agent that finds
- * comments waiting while another runs waits for its turn ('queued'); when
- * the turn is released, every waiting agent looks again. `relays` counts
- * the watch runs in a row that agents' changes alone started; anyone else
- * changing the doc sets it back to 0.
+ * The right to write the doc, shared by the agents of one doc. Their runs go
+ * on at the same time; only the writing is one at a time, so each run's
+ * edits stay its own. A run whose every edit passes the guard (a Claude Code
+ * run) takes the floor for one edit at a time (`acquire`, from the guard
+ * before the edit to the hook after it). A run that may edit the doc
+ * otherwise holds it for the whole run (`take`); an agent that finds
+ * comments waiting while another holds it waits for its turn ('queued'), and
+ * looks again once the floor is released.
+ *
+ * The holder may take the floor again while it holds it (a run ending
+ * while one of its edits waits); each `acquire` is matched by a `release`,
+ * and the floor is free after the last. `before` is the doc as the holder
+ * found it (with what the human saved since). Once free, the holder's
+ * change, `before` to the doc then, goes into the base of every other run
+ * (`dispatchers()`), so no other run counts it as its own. `relays` counts the watch runs in a row that agents'
+ * changes alone started; anyone else changing the doc sets it back to 0.
  */
 export class Floor {
   holder = null;
+  before = null;
   relays = 0;
-  #waiting = new Set();
+  #holds = 0;
+  #queued = new Set();
+  #waiters = new Set();
 
+  constructor(dispatchers = () => []) {
+    this.dispatchers = dispatchers;
+  }
+
+  /** Take the floor now, or be told when it is free (`notify`). */
   take(dispatcher) {
     if (this.holder && this.holder !== dispatcher) {
-      this.#waiting.add(dispatcher);
+      this.#queued.add(dispatcher);
       return false;
     }
+    if (this.holder !== dispatcher) this.#holds = 1;
     this.holder = dispatcher;
-    this.#waiting.delete(dispatcher);
+    this.#queued.delete(dispatcher);
     return true;
   }
 
-  release(dispatcher) {
-    this.#waiting.delete(dispatcher);
-    if (this.holder !== dispatcher) return;
+  /** Take the floor, waiting up to `waitMs` for it; false if it stayed taken. */
+  async acquire(dispatcher, waitMs = Infinity) {
+    const deadline = Date.now() + waitMs;
+    while (this.holder && this.holder !== dispatcher) {
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await new Promise((resolve) => {
+        const done = () => {
+          clearTimeout(timer);
+          this.#waiters.delete(done);
+          resolve();
+        };
+        const timer = Number.isFinite(left) ? setTimeout(done, left) : null;
+        this.#waiters.add(done);
+      });
+    }
+    this.#holds = this.holder === dispatcher ? this.#holds + 1 : 1;
+    this.holder = dispatcher;
+    return true;
+  }
+
+  /**
+   * Give the floor back. `after` is the doc now, read just before: what the
+   * holder changed since `before` goes into the other runs' bases.
+   */
+  release(dispatcher, after = null) {
+    this.#queued.delete(dispatcher);
+    if (this.holder !== dispatcher || --this.#holds > 0) return;
+    const before = this.before;
     this.holder = null;
-    const next = [...this.#waiting];
-    this.#waiting.clear();
-    for (const waiting of next) waiting.notify();
+    this.before = null;
+    if (before !== null && after !== null && before !== after) {
+      for (const other of this.dispatchers()) if (other !== dispatcher) other.othersEdited(before, after);
+    }
+    const waiters = [...this.#waiters];
+    this.#waiters.clear();
+    for (const done of waiters) done();
+    const queued = [...this.#queued];
+    this.#queued.clear();
+    for (const waiting of queued) waiting.notify();
+  }
+
+  /** The human saved the doc from `before` to `after`: not any run's change. */
+  humanEdited(before, after) {
+    if (this.before !== null && before !== after) this.before = merge3(before, after, this.before, { prefer: 'ours' }).text;
+    for (const dispatcher of this.dispatchers()) dispatcher.othersEdited(before, after);
   }
 }
 
@@ -81,7 +143,7 @@ export class Dispatcher {
    * human is typing there (`opendoc guard`); `typingIn()` resolves to the
    * start of the paragraph the human is typing in, or null.
    * `persona` is the agent's role in the human's words; `others()` names the
-   * other agents of the doc; `floor` is the turn they share. `join` adds
+   * other agents of the doc; `floor` is how they take turns writing it. `join` adds
    * the agent to the doc's participants when it starts (an agent from flags;
    * one from the roster is there because it was invited). `profile`
    * ({ webAccess, fileAccess }) is shown with the status and told to
@@ -92,14 +154,14 @@ export class Dispatcher {
    */
   constructor({
     docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', watch = false, warning = null,
-    onStatus = () => {}, settleMs = 300, watchSettleMs = WATCH_SETTLE_MS, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = new Floor(), others = () => [], join = true, source = 'flags', participant = null,
+    onStatus = () => {}, settleMs = 300, watchSettleMs = WATCH_SETTLE_MS, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = null, others = () => [], join = true, source = 'flags', participant = null,
   }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
     this.name = name;
     this.id = id;
     this.persona = persona;
-    this.floor = floor;
+    this.floor = floor ?? new Floor(() => [this]);
     this.others = others;
     this.profile = profile;
     this.join = join;
@@ -125,6 +187,7 @@ export class Dispatcher {
     this.lastRun = null;
     this.failed = new Set(); // "threadId:lastMessageId" of a failed run's threads
     this.runStarts = [];
+    this.leased = false; // whether an edit the guard let through holds the floor
     // For a Doc Watcher: the changes to the doc since it last looked, in
     // order, one per author in a row ({ author, before, after }), and whether
     // the doc has been still for `watchSettleMs` since the last one.
@@ -229,6 +292,7 @@ export class Dispatcher {
     clearTimeout(this.settleTimer);
     clearTimeout(this.limitTimer);
     clearTimeout(this.watchTimer);
+    clearTimeout(this.leaseTimer);
     if (this.run) {
       const done = this.run.done;
       killTree(this.run.child);
@@ -263,7 +327,9 @@ export class Dispatcher {
         return;
       }
       if (this.#rateLimited()) return;
-      if (!this.floor.take(this)) {
+      // A run that may edit the doc without the guard knowing holds the floor
+      // throughout; others run whenever they like.
+      if (this.#wholeRun() && !this.floor.take(this)) {
         if (this.state !== 'queued') this.#setState('queued');
         return;
       }
@@ -278,6 +344,7 @@ export class Dispatcher {
         claimed = this.#waiting(s);
         return claimed.reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since }), s);
       });
+      if (this.#wholeRun()) this.floor.before = markdown;
       const changes = this.#takeChanges();
       if (claimed.length > 0 || changes.length > 0) await this.#launch(claimed, markdown, changes);
       else this.#yield('ready');
@@ -292,13 +359,31 @@ export class Dispatcher {
     }
   }
 
-  // Threads for this agent, except ones another participant is answering
-  // right now (they come back if that one ends without a reply) and ones
-  // whose ask the human is still rewriting.
+  // Threads for this agent, except ones whose ask the human is still
+  // rewriting, and open asks another participant is answering right now
+  // (they come back if that one ends without a reply), so it can see whether
+  // that reply already does what the ask wants. An ask addressed to several
+  // agents is answered by all of them at once.
   #waiting(sidecar) {
     const now = Date.now();
     return inbox(sidecar, this.name, now, { mentionsOnly: this.presence === 'dnd' })
-      .filter((t) => !this.failed.has(failureKey(t)) && !activeWorking(t, now) && !this.held(t.id));
+      .filter((t) => !this.failed.has(failureKey(t)) && !this.held(t.id) && !(openAsk(t) && activeWorking(t, now).length > 0));
+  }
+
+  // Whether its runs may change the doc.
+  #writes() {
+    return this.editMode === 'auto';
+  }
+
+  // Whether the guard sees each edit of its runs before and after, so a run
+  // needs the floor only while it edits.
+  #guarded() {
+    return this.#writes() && Boolean(this.guard && this.adapter.guardsEdits);
+  }
+
+  // Whether a run of it holds the floor from start to end.
+  #wholeRun() {
+    return this.#writes() && !this.#guarded();
   }
 
   // Whether others changed the doc since this Doc Watcher last looked and the
@@ -417,12 +502,14 @@ export class Dispatcher {
 
     let finish;
     const done = new Promise((resolve) => { finish = resolve; });
-    // `base` is the doc as it would be without this run: the doc it started
-    // from, plus every change the human saved meanwhile (humanEdited).
+    // `base` is the doc as it would be without this run: the doc when it
+    // first took the floor (at the start for a whole-run holder, at its first
+    // edit for a guarded run; null until then), plus every change the human
+    // or another run made since (othersEdited).
     // `overwritten` holds changes to offer back once the run has replied.
     // `avoided` counts the edits the guard refused because the human was typing there.
     // `open` holds the open asks it may leave to others.
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: markdown, overwritten: [], avoided: 0, open, watched: changes.length > 0 };
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: this.#wholeRun() ? markdown : null, overwritten: [], avoided: 0, open, watched: changes.length > 0 };
     this.run = run;
     this.#setState('running');
 
@@ -430,6 +517,7 @@ export class Dispatcher {
     const ended = (code) => {
       if (over) return;
       over = true;
+      run.ending = true;
       clearTimeout(timer);
       this.#finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }).finally(finish);
     };
@@ -441,14 +529,55 @@ export class Dispatcher {
   }
 
   /**
-   * The human saved the doc from `before` to `after` while a run was going:
-   * keep that change out of what the run is said to have edited. Where it
-   * overlaps a change of the run, the human's text stands and the run's
-   * change there is not recorded.
+   * The human, or another agent's run, changed the doc from `before` to
+   * `after` while a run was going: keep that change out of what the run is
+   * said to have edited. Where it overlaps a change of the run, their text
+   * stands and the run's change there is not recorded.
    */
-  humanEdited(before, after) {
-    if (!this.run || before === after) return;
+  othersEdited(before, after) {
+    if (!this.run || this.run.base === null || before === after) return;
     this.run.base = merge3(before, after, this.run.base, { prefer: 'ours' }).text;
+  }
+
+  /**
+   * The guard is about to let an edit of the run through: take the floor
+   * for it, waiting up to `waitMs` while another run writes the doc. The doc
+   * at the run's first edit is its base. The floor comes back once the edit
+   * is done (`endEdit`), or after EDIT_LEASE_MS. False when the floor stayed
+   * taken, or the run is ending.
+   */
+  async startEdit(waitMs = GUARD_WAIT_MS) {
+    const run = this.run;
+    if (!run || !this.#guarded()) return true; // a whole-run holder has the floor already
+    if (run.ending) return false;
+    clearTimeout(this.leaseTimer);
+    if (!this.leased) {
+      if (!(await this.floor.acquire(this, waitMs))) return false;
+      if (run.ending) {
+        this.floor.release(this); // the run ended while it waited
+        return false;
+      }
+      this.leased = true;
+    }
+    this.leaseTimer = setTimeout(() => this.endEdit(), EDIT_LEASE_MS);
+    if (this.floor.before === null) {
+      const markdown = await readDoc(this.docPath).then((d) => d.markdown, () => null);
+      if (markdown === null) return true; // the doc is gone; the edit fails on its own
+      if (this.floor.holder !== this) return true; // the run ended meanwhile and gave the floor back
+      this.floor.before ??= markdown;
+      run.base ??= markdown;
+    }
+    return true;
+  }
+
+  /** The edit the guard let through is done, or given up on: the floor goes back. */
+  async endEdit() {
+    clearTimeout(this.leaseTimer);
+    if (!this.leased) return;
+    this.leased = false;
+    await this.catchUp().catch(() => {}); // so the change is seen as this run's while it holds the floor
+    const after = await readDoc(this.docPath).then((d) => d.markdown, () => null);
+    this.floor.release(this, after);
   }
 
   /**
@@ -526,6 +655,17 @@ export class Dispatcher {
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }
       : this.adapter.parse({ stdout, stderr, code });
     await this.catchUp().catch(() => {}); // the file watcher may not have seen the last edit yet
+    // A run that edited records its edits holding the floor, so no other
+    // run's edit lands in between.
+    const edited = run.base !== null;
+    if (edited && this.#guarded()) {
+      await this.floor.acquire(this);
+      if (this.leased) { // an edit still holds it: this hold takes over
+        clearTimeout(this.leaseTimer);
+        this.leased = false;
+        this.floor.release(this);
+      }
+    }
 
     // Record what the run changed in the doc on the agent's replies; threads
     // the agent did not answer go back to the inbox.
@@ -538,15 +678,19 @@ export class Dispatcher {
         // Threads it started or replied in during the run, besides the ones it was given.
         const ours = (t) => !ids.has(t.id) && t.messages.some((m) => sameName(m.author.name, this.name) && Date.parse(m.createdAt) >= startedAt.getTime());
         let next = s;
-        if (run.watched && threads.length === 0 && !s.threads.some(ours)) next = this.#reportEdits(s, run.base, doc.markdown);
+        if (edited && run.watched && threads.length === 0 && !s.threads.some(ours)) next = this.#reportEdits(s, run.base, doc.markdown);
         started = run.watched ? next.threads.filter(ours) : [];
-        const recorded = this.#recordEdits(next, [...threads, ...started.map((t) => ({ ...t, messages: [] }))], run.base, doc.markdown);
+        const recorded = edited ? this.#recordEdits(next, [...threads, ...started.map((t) => ({ ...t, messages: [] }))], run.base, doc.markdown) : next;
         return recorded.threads
-          .filter((t) => ids.has(t.id) && t.working && sameName(t.working.by, this.name))
+          .filter((t) => ids.has(t.id) && workingList(t).some((w) => sameName(w.by, this.name)))
           .reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since: null }), recorded);
       });
     } catch {
       // the doc may be gone; nothing to record or clear
+    }
+    if (this.floor.holder === this) {
+      const after = await readDoc(this.docPath).then((d) => d.markdown, () => null);
+      this.floor.release(this, after);
     }
     // A run must end every thread addressed to it with a reply. One that did
     // not would be handed the same threads again at once, so it counts as
@@ -580,7 +724,7 @@ export class Dispatcher {
     };
     this.run = null;
     await rm(runDir, { recursive: true, force: true });
-    if (this.state === 'stopped') return this.floor.release(this);
+    if (this.state === 'stopped') return;
 
     if (result.ok) {
       this.failed.clear();
@@ -589,7 +733,6 @@ export class Dispatcher {
     }
     const fine = result.ok || run.restarted;
     this.#setState(fine ? 'ready' : 'error', fine ? null : result.error);
-    this.floor.release(this); // after the state, so the next agent's run starts after this one is seen to end
     this.notify();
   }
 

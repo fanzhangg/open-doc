@@ -96,16 +96,24 @@ same core library, so any of them can work without the others.
   permissions (never taken from the doc). The **crew** (starred agents with
   `crew`) joins a doc the first time it is opened with no agents in it; the
   desktop start window edits it through the preload API.
-- **Team** (`agents/team.js`): one dispatcher per agent in the open doc. They
-  share a `Floor`, so only one runs at a time. This keeps each run's file
-  changes attributable to it (recorded edits, undo, version history).
+- **Team** (`agents/team.js`): one dispatcher per agent in the open doc.
+  Their runs go on at the same time; they share a `Floor` so only one writes
+  the doc at a time. A run that cannot edit never takes it. A Claude Code run
+  takes it for one edit at a time: the guard's hook before an Edit waits for
+  it (up to 15 s, then refuses the edit and says why), the hook after the
+  Edit gives it back. A run of another program that may edit holds it from
+  start to end, and others that may edit wait their turn. Each run's base
+  (the doc as it would be without the run) takes in every change made by the
+  human or by another run when that run gives the floor back, so the diff
+  from base to the doc at the end is the run's own (recorded edits, undo,
+  version history).
 - **Dispatcher** (`agents/dispatcher.js`): watches the inbox, claims threads
-  (`working`), runs the agent with the threads and a prompt (task, persona and instructions as one block,
+  (an entry in `working`; several agents can work in one thread), runs the agent with the threads and a prompt (task, persona and instructions as one block,
   other agents, rules), records the run's edits on its reply, and handles
   failures, limits and restarts when settings change. A Doc Watcher's
   dispatcher also hears every change to the doc's text with its author (the
-  server attributes human saves, the running agent's edits and outside
-  changes); once the doc is still for 5 s it runs with those changes, and the
+  server attributes human saves, the edits of the agent holding the floor
+  and outside changes); once the doc is still for 5 s it runs with those changes, and the
   run's edits go on the comment it wrote (or a new one). The Floor counts
   watch runs set off by agents alone and stops them after 6 in a row, until
   anyone else changes the doc.

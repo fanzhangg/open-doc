@@ -194,9 +194,11 @@ const COMMANDS = {
       applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
   },
 
-  // A Claude Code PreToolUse hook the server sets up for its runs
-  // (OPENDOC_GUARD_URL and _TOKEN). On Edit: asks the server whether the edit
-  // lands where the human is typing, and refuses it if so; anything
+  // The Claude Code hooks the server sets up for its runs (OPENDOC_GUARD_URL
+  // and _TOKEN). Before an Edit: asks the server whether the edit lands where
+  // the human is typing, and refuses it if so; the server also holds it while
+  // another agent writes the doc, and refuses it if that goes on too long.
+  // After an Edit: tells the server the agent is done writing. Anything
   // unexpected lets the edit through, since the editor still merges it
   // safely.
   async guard(_args, _values, { out, env, stdin }) {
@@ -213,13 +215,17 @@ const COMMANDS = {
     }
     const decide = (decision, reason) => out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: decision, permissionDecisionReason: reason } }));
     if (input?.tool_name !== 'Edit') return;
+    const post = input.hook_event_name === 'PostToolUse';
     try {
       const response = await fetch(`${url}/api/guard`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-opendoc-guard': token },
-        body: JSON.stringify({ tool: 'Edit', oldString: input.tool_input?.old_string ?? '' }),
-        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify(post ? { event: 'post' } : {
+          tool: 'Edit', oldString: input.tool_input?.old_string ?? '', filePath: input.tool_input?.file_path, cwd: input.cwd,
+        }),
+        signal: AbortSignal.timeout(post ? 8000 : 25_000),
       });
+      if (post) return;
       const verdict = await response.json();
       if (verdict.allow === false) decide('deny', verdict.reason);
     } catch {
@@ -426,7 +432,7 @@ function formatThread(thread, line) {
     for (const c of m.proposal ?? []) lines.push(`    proposes: "${truncate(c.before, 40)}" -> "${truncate(c.after, 40)}"`);
   }
   if (thread.status === 'resolved') lines.push(`  resolved by ${thread.resolvedBy}`);
-  if (working) lines.push(`  ${working.by} is responding…`);
+  for (const w of working) lines.push(`  ${w.by} is responding…`);
   return lines.join('\n');
 }
 

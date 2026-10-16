@@ -85,9 +85,9 @@ export function createCommentMargin(margin, handlers) {
     const card = el('article', 'od-card');
     card.dataset.thread = thread.id;
     const active = thread.id === activeId;
-    const working = thread.status === 'open' ? activeWorking(thread, Date.now()) : null;
+    const working = thread.status === 'open' ? activeWorking(thread, Date.now()) : [];
     card.classList.toggle('od-card-active', active);
-    card.classList.toggle('od-card-working', Boolean(working));
+    card.classList.toggle('od-card-working', working.length > 0);
     card.classList.toggle('od-card-resolved', thread.status === 'resolved');
     card.addEventListener('click', (event) => {
       if (!event.target.closest('textarea, button, a')) handlers.onSelect(thread.id);
@@ -111,10 +111,11 @@ export function createCommentMargin(margin, handlers) {
       card.append(row);
     });
 
-    if (working) {
+    // Typing dots for each agent working on it; several can at once.
+    for (const w of working) {
       const row = el('div', 'od-typing');
-      row.title = `${working.by} is working on it`;
-      row.append(avatar(working.by, 'agent', true), dots());
+      row.title = `${w.by} is working on it`;
+      row.append(avatar(w.by, 'agent', true), dots());
       card.append(row);
     }
     if (thread.status === 'resolved') {
