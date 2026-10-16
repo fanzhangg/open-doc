@@ -314,6 +314,48 @@ function firstSentence(text) {
   return intro ? intro[0].toUpperCase() + intro.slice(1) : '';
 }
 
+/** What each runtime is called in the agents list, short. */
+export const RUNTIME_LABELS = Object.freeze({ claude: 'Claude', codex: 'Codex', custom: 'Command' });
+
+/** The model names Claude Code itself takes besides a full `claude-…` ID; the first three are suggested. */
+export const CLAUDE_MODEL_ALIASES = Object.freeze(['haiku', 'sonnet', 'opus', 'default', 'opusplan', 'sonnet[1m]', 'opus[1m]']);
+
+/**
+ * The patch that moves `agent` to `runtime`, and the note to show, or ''.
+ * A model names one program's model (sonnet means nothing to Codex), so the
+ * model goes back to the new runtime's default in the same save.
+ */
+export function runtimePatch(agent, runtime) {
+  const note = agent.model && agent.runtime !== runtime ? `Model reset to default (was ${agent.model}).` : '';
+  return { patch: { runtime, model: null }, note };
+}
+
+/**
+ * The Model field's suggestions and placeholder for `runtime`, given the
+ * model it runs on when none is set (`defaultModel`: Claude Code's, or the
+ * one in the user's Codex config, or null).
+ */
+export function modelChoices(runtime, defaultModel = null) {
+  if (runtime === 'claude') {
+    return { suggestions: CLAUDE_MODEL_ALIASES.slice(0, 3), placeholder: defaultModel ? `${defaultModel} (default)` : 'Default' };
+  }
+  if (runtime === 'codex') {
+    // Codex's model names change often: suggest only the one the user set.
+    return { suggestions: defaultModel ? [defaultModel] : [], placeholder: defaultModel ? `${defaultModel} (your Codex default)` : 'Your Codex default' };
+  }
+  return { suggestions: [], placeholder: '' };
+}
+
+/**
+ * A warning for a model that `runtime` may not run, or ''. Only a guess from
+ * the name: asking the program would cost a run.
+ */
+export function modelWarning(runtime, model) {
+  if (runtime !== 'claude' || !model) return '';
+  const name = model.toLowerCase();
+  return CLAUDE_MODEL_ALIASES.includes(name) || name.startsWith('claude-') ? '' : 'Claude Code may not recognize this model.';
+}
+
 /** The labels of the permissions `agent` has: ['Editor', 'Web Searcher']. */
 export function permissionLabels(agent) {
   const has = permissionsOf(agent);

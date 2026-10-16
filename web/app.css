@@ -746,6 +746,7 @@ label.od-setting { cursor: pointer; }
 .od-agents-who { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .od-agents-name { font-weight: 500; }
 .od-agents-sub { overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.od-agents-runtime { flex: none; color: var(--text-faint); font-size: 11.5px; }
 .od-agents-flag { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center; }
 .od-agents-empty { margin: 8px 10px; color: var(--text-soft); font-size: 12.5px; }
 .od-agents-programs { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: none; color: var(--text-soft); font-size: 13px; text-align: left; }
@@ -773,6 +774,15 @@ label.od-setting { cursor: pointer; }
 .od-agent-block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
 .od-agent-block h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
 .od-agent-block-hint { margin: 2px 0 10px; color: var(--text-soft); font-size: 12.5px; }
+/* Runs on leads its block, whose border it shares; the status line and the
+   notes under it sit close to it. */
+.od-agent-runs > .od-setting:first-child { padding-top: 0; border-top: 0; }
+.od-agent-program { margin: -2px 0 10px; }
+.od-program-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.od-runtime-note { margin: 0 0 10px; }
+.od-model-warning { margin: -4px 0 10px; }
+#od-agent-model { width: 260px; } /* fits "gpt-… (your Codex default)" */
+.od-runtime-flag { display: inline-block; width: 14px; height: 14px; margin-left: 5px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; vertical-align: 1px; }
 .od-agent-perms { display: flex; flex-direction: column; }
 .od-perm-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; cursor: pointer; }
 .od-perm-row + .od-perm-row { border-top: 1px solid var(--border); }

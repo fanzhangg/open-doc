@@ -1,12 +1,15 @@
 // The Agents panel: the user's agents, for every doc, in a dialog of their
 // own. On the left, the list (those with Auto Commenter first, a green dot
-// on each); on the right, the one picked, top to bottom in the order people
-// change things: who it is (name, persona), what it can do (the
-// permission switches, the same as on its card), its instructions, and, folded
-// away, how it runs. A problem shows above the rest only when there is one.
+// on each, and what each runs on); on the right, the one picked, top to
+// bottom in the order people change things: who it is (name, persona), what
+// it runs on (whether that program works, and its model or command), what it
+// can do (the permission switches, the same as on its card), its
+// instructions, and, folded away, effort and limits. A problem shows above
+// the rest only when there is one.
 // "Programs" at the foot of the list holds where Claude Code and Codex are,
-// and whether each works: found, runs, signed in. It is checked when the page
-// first opens or a path changes, and again only when the user clicks Check.
+// and whether each works: found, runs, signed in. It is checked when the
+// panel first needs it or a path changes, and again only when the user
+// clicks Check, there or under Runs on.
 //
 // Changes save through the server as they are made. An agent's program (a
 // custom command, or where Claude Code is) is set through the desktop app,
@@ -16,7 +19,7 @@
 import { api } from './api.js';
 import { avatar } from './threads.js';
 import { confirmAccess } from './agent.js';
-import { PERMISSIONS, availableIn, checkAgentPatch, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { PERMISSIONS, RUNTIME_LABELS, availableIn, checkAgentPatch, introOf, modelChoices, modelWarning, permissionPatch, permissionsOf, runtimePatch } from '../src/core/agents.js';
 
 const PROBLEMS = {
   error: 'Its last run failed',
@@ -48,6 +51,11 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   const risk = form.querySelector('.od-agent-risk');
   const reads = form.querySelector('.od-agent-reads');
   const hooks = form.querySelector('.od-agent-hooks');
+  const runtimeLine = form.querySelector('.od-agent-program');
+  const runtimeNote = form.querySelector('.od-runtime-note');
+  const model = form.querySelector('[data-agent="model"]');
+  const models = form.querySelector('#od-agent-models');
+  const modelWarn = form.querySelector('.od-model-warning');
   perms.replaceChildren(...PERMISSIONS.map(permissionRow));
   let statuses = [];
   let programStatus = {}; // what the server found for each program: { claude, codex }
@@ -55,6 +63,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   const checking = new Set(); // programs being checked
   let selected = null; // the id of the agent shown
   let programs = false; // the Programs page is shown instead
+  let note = null; // { id, text }: what the last switch of runtime changed, for that agent
 
   form.querySelector('.od-program-note').hidden = Boolean(desktop);
   for (const button of dialog.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
@@ -101,16 +110,33 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     for (const bin of dialog.querySelectorAll('[data-program]')) {
       if (document.activeElement !== bin) bin.value = store.get()[bin.dataset.program] ?? '';
     }
+    const agent = programs ? null : current();
+    if (programs || (agent && agent.runtime !== 'custom')) loadProgramsOnce();
     if (programs) paintPrograms();
 
-    const agent = programs ? null : current();
     form.hidden = !agent;
     if (!agent) return;
     form.dataset.kind = agent.runtime;
     headAvatar.replaceChildren(avatar(agent.name, 'agent'));
     for (const button of form.querySelectorAll('[data-agent-runtime]')) {
-      button.setAttribute('aria-checked', String(button.dataset.agentRuntime === agent.runtime));
+      const kind = button.dataset.agentRuntime;
+      button.setAttribute('aria-checked', String(kind === agent.runtime));
+      // A program that does not work is marked on its option, before it is picked.
+      const broken = programStatus[kind] && !programStatus[kind].ok;
+      const flag = button.querySelector('.od-runtime-flag');
+      if (flag) flag.hidden = !broken;
+      button.title = broken ? `${programStatus[kind].label}: ${programStatus[kind].error}` : '';
     }
+    if (agent.runtime !== 'custom') paintProgramLine(runtimeLine, agent.runtime, true);
+    runtimeNote.textContent = note?.id === agent.id ? note.text : '';
+    runtimeNote.hidden = !runtimeNote.textContent;
+    const { suggestions, placeholder } = modelChoices(agent.runtime, programStatus[agent.runtime]?.defaultModel ?? null);
+    model.placeholder = placeholder;
+    if (models.dataset.names !== suggestions.join(' ')) {
+      models.dataset.names = suggestions.join(' '); // replaced only when it changes, not under an open list
+      models.replaceChildren(...suggestions.map((name) => Object.assign(document.createElement('option'), { value: name })));
+    }
+    paintModelWarning(agent.runtime, document.activeElement === model ? model.value.trim() : agent.model);
     for (const button of form.querySelectorAll('[data-agent-effort]')) {
       button.setAttribute('aria-checked', String(button.dataset.agentEffort === agent.effort));
     }
@@ -151,7 +177,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     if (agent.autoComment) face.title = 'Auto Commenter';
     const who = el('span', 'od-agents-who');
     who.append(el('span', 'od-agents-name', agent.name), el('span', 'od-agents-sub', introOf(agent)));
-    row.append(face, who);
+    row.append(face, who, el('span', 'od-agents-runtime', RUNTIME_LABELS[agent.runtime] ?? ''));
     if (PROBLEMS[statusOf(agent)?.state]) row.append(el('span', 'od-agents-flag', '!'));
     return row;
   }
@@ -176,29 +202,53 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   // Each program's line: what runs and that it is signed in, or what is
   // wrong and how to fix it. An empty path shows what it finds.
   function paintPrograms() {
-    const paths = JSON.stringify([store.get().claudeBin, store.get().codexBin]);
-    if (paths !== checkedFor) {
-      checkedFor = paths;
-      programStatus = {}; // a new path's check takes a few seconds: say so meanwhile
-      loadPrograms();
-    }
     for (const line of programsPage.querySelectorAll('.od-program-status')) {
       const kind = line.dataset.programKind;
       const status = programStatus[kind];
-      const busy = checking.has(kind) || !status;
       const bin = programsPage.querySelector(`[data-program="${kind}Bin"]`);
       bin.placeholder = status ? (status.found ?? 'Not found automatically') : 'Found automatically';
       bin.title = bin.value || (status?.found ?? ''); // a long path does not fit
-      line.dataset.state = busy ? 'checking' : status.ok ? 'ok' : 'error';
-      line.querySelector('[data-action="check-program"]').disabled = busy;
-      const text = line.querySelector('.od-program-status-text');
-      if (busy) text.replaceChildren('Checking…');
-      else if (status.ok) {
-        const how = status.apiKey ? 'uses CODEX_API_KEY' : 'signed in';
-        text.replaceChildren(el('span', 'od-program-mark', '✓ '), `${status.label}${status.version ? ` ${status.version}` : ''} · ${how}`);
-      } else text.replaceChildren(el('span', 'od-program-mark', '✗ '), `${status.error}: ${status.fix}`);
-      text.title = status?.path ?? '';
+      paintProgramLine(line, kind);
     }
+  }
+
+  // One program's status line, on the Programs page or under Runs on, where
+  // `named` says which program it is (the page shows that above the line).
+  function paintProgramLine(line, kind, named = false) {
+    const status = programStatus[kind];
+    const busy = checking.has(kind) || !status;
+    line.dataset.state = busy ? 'checking' : status.ok ? 'ok' : 'error';
+    const recheck = line.querySelector('[data-action="check-program"]');
+    recheck.dataset.programKind = kind;
+    recheck.disabled = busy;
+    // A missing or wrong path is fixed on the Programs page; a sign-in, in a terminal.
+    const fix = line.querySelector('[data-action="open-programs"]');
+    if (fix) fix.hidden = busy || status.ok || status.error === 'Not signed in';
+    const text = line.querySelector('.od-program-status-text');
+    if (busy) text.replaceChildren('Checking…');
+    else if (status.ok) {
+      const how = status.apiKey ? 'uses CODEX_API_KEY' : 'signed in';
+      text.replaceChildren(el('span', 'od-program-mark', '✓ '), `${status.label}${status.version ? ` ${status.version}` : ''} · ${how}`);
+    } else if (named && status.error === 'Not signed in') {
+      text.replaceChildren(el('span', 'od-program-mark', '✗ '), `${status.label} isn't signed in: ${status.fix}`);
+    } else text.replaceChildren(el('span', 'od-program-mark', '✗ '), `${named ? `${status.label}: ` : ''}${status.error}: ${status.fix}`);
+    text.title = status?.path ?? '';
+  }
+
+  // Ask the server once per set of paths: it keeps each check, so a program
+  // runs only the first time, or after its path changed. Only while the panel
+  // is open, never in the background.
+  function loadProgramsOnce() {
+    const paths = JSON.stringify([store.get().claudeBin, store.get().codexBin]);
+    if (!dialog.open || paths === checkedFor) return;
+    checkedFor = paths;
+    programStatus = {}; // a new path's check takes a few seconds: say so meanwhile
+    loadPrograms();
+  }
+
+  function paintModelWarning(runtime, value) {
+    modelWarn.textContent = modelWarning(runtime, value);
+    modelWarn.hidden = !modelWarn.textContent;
   }
 
   let loads = 0;
@@ -232,6 +282,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
 
   function show(id) {
     programs = false;
+    if (id && id !== selected) note = null;
     if (id) selected = id;
     nameError.hidden = true;
     paint();
@@ -243,10 +294,10 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     if (!button) return;
     if (button.dataset.agentId) show(button.dataset.agentId);
     else if (button.dataset.action === 'close') dialog.close();
-    else if (button.dataset.action === 'programs') {
+    else if (button.dataset.action === 'programs' || button.dataset.action === 'open-programs') {
       programs = true;
       paint();
-    } else if (button.dataset.agentRuntime) save({ runtime: button.dataset.agentRuntime });
+    } else if (button.dataset.agentRuntime) setRuntime(button.dataset.agentRuntime);
     else if (button.dataset.agentEffort) save({ effort: button.dataset.agentEffort });
     else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
     else if (button.dataset.action === 'check-program') checkProgram(button.dataset.programKind);
@@ -318,12 +369,28 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     }
     input.removeAttribute('aria-invalid');
     nameError.hidden = true;
+    if (key === 'model') note = null; // the reset it told of is past
     save({ [key]: value });
+  });
+  // A model warns as it is typed; it saves when the field is left.
+  form.addEventListener('input', (event) => {
+    if (event.target === model) paintModelWarning(current()?.runtime, model.value.trim());
   });
   form.addEventListener('focusout', (event) => {
     if (event.target.matches?.('[aria-invalid="true"]')) paint(); // an invalid value is not kept
   });
   for (const bin of dialog.querySelectorAll('[data-program]')) bin.addEventListener('change', (event) => setProgram(event.target, bin.dataset.program));
+
+  // Another runtime starts on its own default model, saved with the runtime
+  // in one change; a line under Runs on says what model it had.
+  async function setRuntime(runtime) {
+    const agent = current();
+    if (!agent || agent.runtime === runtime) return;
+    const { patch, note: text } = runtimePatch(agent, runtime);
+    if (!(await save(patch))) return;
+    note = text ? { id: agent.id, text } : null;
+    paint();
+  }
 
   async function setProgram(input, key, id = null) {
     const before = () => (key === 'command' ? current()?.command : store.get()[key]) ?? '';
@@ -342,8 +409,8 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   }
 
   function open(id) {
+    if (!dialog.open) dialog.showModal(); // first: programs are checked only while it is open
     show(id);
-    if (!dialog.open) dialog.showModal();
     list.querySelector('[aria-selected="true"]')?.focus();
   }
 
