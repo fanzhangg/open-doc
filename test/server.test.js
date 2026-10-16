@@ -10,7 +10,7 @@ import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
 import { main } from '../src/cli/main.js';
 import { sidecarPath } from '../src/store/files.js';
-import { SAMPLE, tempDoc } from './helpers.js';
+import { SAMPLE, tempDoc, withFakeProgram } from './helpers.js';
 import { applyProposal } from '../src/core/diff.js';
 
 async function withServer(fn, content = SAMPLE) {
@@ -996,5 +996,43 @@ test('a doc opened from a folder tells the page which folder its agents may read
   }
   await withServer(async ({ server: single }) => {
     assert.equal((await call(single, 'GET', '/api/state')).body.folder, null);
+  });
+});
+
+test('Agents > Programs: whether each program works, checked again only by Check, which retries the agents that could not start', { timeout: 30_000 }, async () => {
+  await withFakeProgram(false, async ({ program, set }) => {
+    const docPath = await tempDoc(SAMPLE);
+    const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+    const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+    const missing = join(tmpdir(), 'no-such-folder', 'codex.exe');
+    await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({
+      name: 'fzhan', claudeBin: program, codexBin: missing, agents: [{ id: 'a_test00', name: 'Pilot', runtime: 'claude', autoComment: true }],
+    }));
+    await writeFile(sidecarPath(docPath), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [], participants: [{ name: 'Pilot', kind: 'agent' }] }));
+    const server = await startServer(docPath, { assetsDir, settingsDir, agentFromSettings: true });
+    const pilot = () => server.team.get('Pilot')?.status();
+    try {
+      assert.ok(await waitUntil(() => pilot()?.state === 'unavailable'));
+      assert.match(pilot().error, /^Claude Code is not signed in/);
+      const { programs } = (await call(server, 'GET', '/api/programs')).body;
+      assert.deepEqual([programs.claude.ok, programs.claude.path, programs.claude.source, programs.claude.error], [false, program, 'settings', 'Not signed in']);
+      assert.equal(programs.codex.error, `Nothing at ${missing}`);
+
+      // Signing in changes nothing until the user clicks Check.
+      set(true);
+      assert.equal((await call(server, 'GET', '/api/programs')).body.programs.claude.error, 'Not signed in');
+      assert.equal(pilot().state, 'unavailable');
+
+      assert.equal((await call(server, 'POST', '/api/programs/check', { body: { kind: 'gemini' } })).status, 400);
+      const checked = await call(server, 'POST', '/api/programs/check', { body: { kind: 'claude' } });
+      assert.equal(checked.status, 200);
+      assert.equal(checked.body.programs.claude.ok, true);
+      assert.equal(checked.body.programs.claude.version, process.versions.node);
+      assert.equal(checked.body.programs.codex.error, `Nothing at ${missing}`);
+      assert.equal(checked.body.agents.find((a) => a.name === 'Pilot').state, 'ready');
+      assert.equal((await call(server, 'GET', '/api/programs')).body.programs.claude.ok, true);
+    } finally {
+      await server.close();
+    }
   });
 });

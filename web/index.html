@@ -257,18 +257,27 @@
       <section class="od-agents-programs-page" hidden>
         <h2>Programs</h2>
         <p class="od-agent-block-hint">Where the programs that run your agents are, for every agent. Empty finds them automatically.</p>
-        <div class="od-setting">
+        <p class="od-agent-block-hint od-programs-note" hidden>Paths are changed in the OpenDoc desktop app.</p>
+        <div class="od-setting od-setting-stacked">
           <span class="od-setting-text"><label for="od-claude-bin">Claude Code</label></span>
           <div class="od-setting-row">
-            <input id="od-claude-bin" class="od-input" type="text" data-program="claudeBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
+            <input id="od-claude-bin" class="od-input od-input-full" type="text" data-program="claudeBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
             <button type="button" class="od-secondary" data-action="choose-program" data-program-key="claudeBin">Choose…</button>
           </div>
+          <div class="od-program-status" data-program-kind="claude">
+            <span class="od-program-status-text" aria-live="polite"></span>
+            <button type="button" class="od-secondary" data-action="check-program" data-program-kind="claude">Check</button>
+          </div>
         </div>
-        <div class="od-setting">
+        <div class="od-setting od-setting-stacked">
           <span class="od-setting-text"><label for="od-codex-bin">Codex</label></span>
           <div class="od-setting-row">
-            <input id="od-codex-bin" class="od-input" type="text" data-program="codexBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
+            <input id="od-codex-bin" class="od-input od-input-full" type="text" data-program="codexBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
             <button type="button" class="od-secondary" data-action="choose-program" data-program-key="codexBin">Choose…</button>
+          </div>
+          <div class="od-program-status" data-program-kind="codex">
+            <span class="od-program-status-text" aria-live="polite"></span>
+            <button type="button" class="od-secondary" data-action="check-program" data-program-kind="codex">Check</button>
           </div>
         </div>
       </section>

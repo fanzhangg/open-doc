@@ -5,6 +5,8 @@ import { apology } from '../web/apology.js';
 test('an agent apologizes in a few words that name what went wrong', () => {
   assert.equal(apology('could not run C:/nope/claude.exe: spawn C:/nope/claude.exe ENOENT', 'claude'), "Sorry, I can't find Claude Code.");
   assert.equal(apology('Codex was not found; install it', 'codex'), "Sorry, I can't find Codex.");
+  assert.equal(apology('Claude Code is not at C:/nope/claude.exe; clear its path in Agents > Programs to find it automatically, or choose another', 'claude'), "Sorry, I can't find Claude Code.");
+  assert.equal(apology('Codex at C:/npm/codex.cmd is a launcher OpenDoc could not run; choose the .exe in Agents > Programs', 'codex'), "Sorry, I can't find Codex.");
   assert.equal(apology('could not start the agent: spawn mybot ENOENT', 'custom'), "Sorry, I can't find my program.");
   assert.equal(apology('Claude Code is not signed in; run "claude" once', 'claude'), "Sorry, I'm not signed in to Claude Code.");
   assert.equal(apology('timed out after 10 min', 'claude'), 'Sorry, I timed out after 10 min.');
