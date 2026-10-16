@@ -166,18 +166,17 @@ test('browser operations: always human, validated, persisted', async () => {
   });
 });
 
-test('browser operations: resolve and reopen as the human; an agent name is refused', async () => {
+test('browser operations: resolve and reopen as the human, whatever name the page sends', async () => {
   await withServer(async ({ server, docPath }) => {
     await main(['comment', docPath, '@claude look', '--as', 'fzhan', '--kind', 'human'], { stdout: { write() {} }, stderr: { write() {} }, env: {} });
     await main(['reply', docPath, (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].id, 'Done.', '--as', 'claude'], { stdout: { write() {} }, stderr: { write() {} }, env: {} });
     const threadId = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0].id;
     const op = (body) => call(server, 'POST', '/api/ops', { body: { op: body } });
-    assert.equal((await op({ type: 'resolve', threadId, by: 'claude' })).status, 400, 'claude is an agent');
-    const resolved = await op({ type: 'resolve', threadId, by: 'fzhan' });
+    const resolved = await op({ type: 'resolve', threadId, by: 'claude' });
     assert.equal(resolved.body.sidecar.threads[0].status, 'resolved');
-    assert.equal((await op({ type: 'reopen', threadId })).status, 400, 'reopen says who');
-    assert.equal((await op({ type: 'reopen', threadId, by: 'claude' })).status, 400);
-    assert.equal((await op({ type: 'reopen', threadId, by: 'fzhan' })).body.sidecar.threads[0].status, 'open');
+    const { settings, defaultName } = (await call(server, 'GET', '/api/state')).body;
+    assert.equal(resolved.body.sidecar.threads[0].resolvedBy, settings.name ?? defaultName, 'the human, not the name the page sent');
+    assert.equal((await op({ type: 'reopen', threadId })).body.sidecar.threads[0].status, 'open');
   });
 });
 
@@ -573,7 +572,7 @@ test('an @mention typed in the doc is sent as the human\'s comment once they are
     assert.equal(await server.team.get('helper').typingIn(), null, 'the paragraph of the ask is free for the agent to edit');
     let [thread] = await threads();
     assert.equal(thread.anchor.exact, '@helper add the risks here.');
-    assert.deepEqual([thread.messages[0].author, thread.messages[0].mentions], [{ name: 'fzhan', kind: 'human' }, ['helper']]);
+    assert.deepEqual([thread.messages[0].author, thread.messages[0].mentions], [{ name: 'fzhan', kind: 'human', id: thread.messages[0].author.id }, ['helper']]);
     assert.ok((await state()).sidecar.participants.some((p) => p.name === 'helper' && p.kind === 'agent'), 'the mention brought it in');
     assert.ok(await waitUntil(async () => (await threads())[0].messages.length === 2), 'helper answered');
     assert.equal((await threads())[0].messages[1].author.name, 'helper');
@@ -943,6 +942,33 @@ test('the guard refuses an agent edit where the human is typing, until they stop
     await new Promise((resolve) => setTimeout(resolve, 1600));
     assert.equal(await guard('cannot handle the extra load'), null);
     assert.equal(await server.team.get('claude').typingIn(), null);
+  } finally {
+    await server.close();
+  }
+});
+
+test('a rename keeps the human one person in the doc: their comments follow the new name', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  await writeFile(join(assetsDir, 'index.html'), '<!doctype html><title>opendoc</title>');
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  // Comments from before ids, under the name they had before renaming to Frank (kept as their face's seed).
+  await main(['comment', docPath, 'first thoughts', '--as', 'fanzhang', '--kind', 'human'], { stdout: { write() {} }, stderr: { write() {} }, env: {} });
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'Frank', face: 'fanzhang' }));
+  const server = await startServer(docPath, { assetsDir, settingsDir });
+  try {
+    const humans = async () => (await call(server, 'GET', '/api/state')).body.sidecar.participants.filter((p) => p.kind === 'human');
+    const [frank] = await humans();
+    assert.equal(frank.name, 'Frank');
+    assert.match(frank.id, /^u_/);
+    assert.equal((await humans()).length, 1, 'one person, not two');
+
+    assert.equal((await call(server, 'PUT', '/api/settings', { body: { id: 'u_someone' } })).status, 400, 'the id stays');
+    await call(server, 'PUT', '/api/settings', { body: { name: 'Fan' } });
+    for (let i = 0; i < 50 && (await humans())[0].name !== 'Fan'; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual(await humans(), [{ name: 'Fan', kind: 'human', id: frank.id }]);
+    const thread = (await call(server, 'GET', '/api/state')).body.sidecar.threads[0];
+    assert.deepEqual(thread.messages[0].author, { name: 'Fan', kind: 'human', id: frank.id });
   } finally {
     await server.close();
   }

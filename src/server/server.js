@@ -15,7 +15,7 @@ import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, availableIn, createA
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, editAgents, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Team } from './agents/team.js';
@@ -194,6 +194,7 @@ export async function startServer(docPath, {
       case 'PUT /api/settings': {
         const patch = await readJson(req);
         if (patch && Object.hasOwn(patch, 'agents')) throw new HttpError(400, 'bad_input', 'agents are changed through /api/roster');
+        if (patch && Object.hasOwn(patch, 'id')) throw new HttpError(400, 'bad_input', 'your id cannot be changed');
         await checkProgram(PROGRAM_KEYS, patch, (await readSettings(settingsDir)).settings);
         return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
       }
@@ -582,8 +583,26 @@ export async function startServer(docPath, {
       : { kind: 'external', author: null });
   }
 
+  // The human, by the id that keeps them one person in the doc whatever
+  // their name (src/core/ops.js identify). `aka`: names they went by before
+  // the doc knew their id: the suggested one, and their face's seed, which
+  // keeps the name they had before their first rename.
+  async function me() {
+    const settings = await settingsWithId(settingsDir);
+    const aka = [defaultName(), settings.face].filter((n, i, all) => typeof n === 'string' && NAME_PATTERN.test(n) && all.indexOf(n) === i);
+    return { author: { name: settings.name ?? defaultName(), kind: 'human', id: settings.id }, aka };
+  }
+
   async function human() {
-    return { name: (await readSettings(settingsDir)).settings.name ?? defaultName(), kind: 'human' };
+    return (await me()).author;
+  }
+
+  const asHuman = (s, { author, aka }) => applyOp(s, { type: 'identify', participant: author, aka });
+
+  // The doc calls the human by the name in their settings.
+  async function renameHuman() {
+    const who = await me();
+    await serial(() => update(docPath, (s) => asHuman(s, who)));
   }
 
   // 'retry' an agent that is offline.
@@ -621,13 +640,14 @@ export async function startServer(docPath, {
 
   async function sendTextAsk({ name, text, start, end }) {
     const roster = useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
-    const author = await human();
+    const who = await me();
+    const { author } = who;
     const threadId = newId('t');
     const messageId = newId('m');
     let sent = false;
     let joined = false;
     await update(docPath, (s) => {
-      let next = s;
+      let next = asHuman(s, who);
       if (!next.participants.some((p) => sameName(p.name, name))) {
         const agent = roster.find((a) => sameName(a.name, name));
         if (!agent) return s;
@@ -685,12 +705,13 @@ export async function startServer(docPath, {
   // brings it in first, as mentioning a person in Docs shares the doc with
   // them; then the mention counts, and that agent answers.
   async function applyBrowserOp(body) {
-    const op = validateOp(body?.op);
+    const who = await me();
+    const op = validateOp(body?.op, who.author);
     const message = op.message;
     const roster = message && useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
     let joined = false;
     const sidecar = await update(docPath, (s) => {
-      let next = s;
+      let next = asHuman(s, who);
       for (const name of parseMentions(message?.body ?? '', roster)) {
         if (next.participants.some((p) => sameName(p.name, name))) continue;
         next = applyOp(next, { type: 'join', participant: asParticipant(roster.find((a) => sameName(a.name, name))) });
@@ -830,6 +851,7 @@ export async function startServer(docPath, {
       lastSettings = json;
       broadcast('settings', settings);
       syncAgents();
+      await renameHuman();
     } catch (error) {
       console.error(error);
     }
@@ -866,6 +888,7 @@ export async function startServer(docPath, {
   // a doc with none yet starts with the crew.
   await adoptDocAgents().catch((error) => console.error('Could not set up the doc\'s agents:', error));
   await joinCrew().catch((error) => console.error('Could not bring in the crew:', error));
+  await renameHuman().catch((error) => console.error('Could not put your name in the doc:', error));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
@@ -933,19 +956,15 @@ function tokenMatches(given, token) {
   return timingSafeEqual(Buffer.from(given), Buffer.from(token));
 }
 
-// The browser speaks for a human. Timestamps come from the server clock. A
+// The browser speaks for the human `me`, whatever name it sends. Timestamps come from the server clock. A
 // message may carry `edits` and `undoes` (undoing an edit) or `applies`
 // (applying a proposal); the core validates their shape.
-function validateOp(op) {
+function validateOp(op, me) {
   if (!op || !BROWSER_OPS.has(op.type)) throw new HttpError(400, 'bad_input', `operation not allowed: ${op?.type}`);
   const now = new Date().toISOString();
-  const human = (who) => {
-    if (!who || !NAME_PATTERN.test(who.name ?? '')) throw new HttpError(400, 'bad_input', 'invalid name');
-    return { name: who.name, kind: 'human' };
-  };
   const message = (m) => {
     if (!m || !ID.m.test(m.id ?? '') || typeof m.body !== 'string') throw new HttpError(400, 'bad_input', 'invalid message');
-    const out = { id: m.id, author: human(m.author), body: m.body, createdAt: now };
+    const out = { id: m.id, author: me, body: m.body, createdAt: now };
     for (const key of ['undoes', 'applies']) {
       if (m[key] === undefined) continue;
       if (!ID.m.test(m[key] ?? '')) throw new HttpError(400, 'bad_input', `invalid ${key}`);
@@ -960,15 +979,15 @@ function validateOp(op) {
   };
   switch (op.type) {
     case 'join':
-      return { type: 'join', participant: human(op.participant) };
+      return { type: 'join', participant: me };
     case 'addThread':
       return { type: 'addThread', id: threadId(op.id), anchor: validAnchor(op.anchor), message: message(op.message) };
     case 'addMessage':
       return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
     case 'resolve':
-      return { type: 'resolve', threadId: threadId(op.threadId), by: human({ name: op.by }).name, kind: 'human', at: now };
+      return { type: 'resolve', threadId: threadId(op.threadId), by: me.name, kind: 'human', at: now };
     default:
-      return { type: 'reopen', threadId: threadId(op.threadId), by: human({ name: op.by }).name, kind: 'human' };
+      return { type: 'reopen', threadId: threadId(op.threadId), by: me.name, kind: 'human' };
   }
 }
 

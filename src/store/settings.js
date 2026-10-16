@@ -6,7 +6,8 @@
 import { mkdir, readFile, rename } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { SETTINGS_VERSION, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
+import { SETTINGS_VERSION, USER_ID, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
+import { newId } from '../core/ops.js';
 import { lockFile, writeAtomic } from './files.js';
 import { watchFiles } from './watch.js';
 
@@ -30,7 +31,20 @@ export const settingsPath = (dir = configDir()) => join(dir, SETTINGS_FILE);
  */
 export async function readSettings(dir = configDir()) {
   const stored = await readStored(dir);
-  return { settings: resolveSettings(stored), saved: stored !== null };
+  // A file that only holds the user's id was not changed by them.
+  const saved = stored !== null && Object.keys(stored).some((key) => key !== 'id' && key !== 'version');
+  return { settings: resolveSettings(stored), saved };
+}
+
+/**
+ * The settings, with the user's id made and saved if they had none yet:
+ * under the lock, so two windows asking at once get the same id.
+ * @returns {Promise<object>} the complete settings
+ */
+export async function settingsWithId(dir = configDir()) {
+  const { settings } = await readSettings(dir);
+  if (settings.id) return settings;
+  return change((stored) => (USER_ID.test(stored.id ?? '') ? {} : { id: newId('u') }), dir);
 }
 
 /**

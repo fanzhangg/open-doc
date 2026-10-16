@@ -10,7 +10,9 @@ export { EDIT_MODES } from './agents.js';
 export const SETTINGS_VERSION = 1;
 
 /**
- * `name: null` means "not chosen yet": the server suggests one. `face` is
+ * `id` is who the user is in every doc's comments, whatever their name
+ * (`u_…`, made once by the server; null until then). `name: null` means
+ * "not chosen yet": the server suggests one. `face` is
  * the seed the human's face is drawn from (web/faces.js); null draws it from
  * the name, until the name first changes. `agents` is
  * the user's roster of agents (src/core/agents.js), the default one until
@@ -20,6 +22,7 @@ export const SETTINGS_VERSION = 1;
  * automatically).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
+  id: null,
   name: null,
   face: null,
   theme: 'system',
@@ -40,7 +43,10 @@ const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
 const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= max && !/[\0\r\n]/.test(v);
 
+export const USER_ID = /^u_[A-Za-z0-9_-]{6,40}$/;
+
 const RULES = {
+  id: (v) => v === null || (typeof v === 'string' && USER_ID.test(v)),
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
   face: (v) => v === null || FACE_RULE(v),
   theme: oneOf('system', 'light', 'dark'),

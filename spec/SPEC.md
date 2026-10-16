@@ -106,7 +106,7 @@ and a new message from a human that is not a notice (§5) empties `passed`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | string | Unique in the sidecar, `m_` + at least 6 characters from `[A-Za-z0-9_-]`. |
-| `author` | object | `{ "name": <participant name>, "kind": "human" \| "agent" }` |
+| `author` | object | `{ "name": <participant name>, "kind": "human" \| "agent" }`, plus the participant's `id` when they have one (§2.4). |
 | `body` | string | Plain text. Tools MUST NOT interpret it as markup. |
 | `mentions` | array of strings | Participant names mentioned in `body` (§4). |
 | `createdAt` | string | RFC 3339 UTC timestamp. |
@@ -119,6 +119,16 @@ and a new message from a human that is not a notice (§5) empties `passed`.
 
 Each entry is `{ "name", "kind" }`. A name matches
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is unique, compared case-insensitively.
+An entry MAY carry an `id` (1–64 characters from `[A-Za-z0-9_-]`, unique in
+the sidecar) that stays the same when the participant changes their name, so
+a rename does not make them someone new. Their messages' `author` carries the
+same `id`. When a participant with an `id` goes by a new name, a tool renames
+them everywhere the sidecar names them: their entry, their messages'
+`author.name`, `mentions`, `resolvedBy`, `working.by` and `passed`. Message
+bodies stay as written. A name another participant has is not taken: the
+participant keeps their old one. An entry with no `id` (written before the
+participant had one) MAY be claimed by the participant who posted under that
+name: it takes their `id`, and two such entries for one person merge into one.
 An agent's entry MAY also say who the agent is, so the doc keeps its agents
 wherever it goes: `persona`, one line (at most 120 characters, no line
 breaks) that defines it, and `instructions`, the details and rules behind it

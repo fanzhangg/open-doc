@@ -146,6 +146,7 @@ async function start() {
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
+    getId: () => settings.get().id,
     setName,
     setFace: (face) => settings.set({ face }),
     docKey: () => docKey,

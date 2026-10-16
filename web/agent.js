@@ -31,12 +31,12 @@ const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a let
 const newFace = () => Math.random().toString(36).slice(2, 10);
 
 /**
- * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string,
+ * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
  *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void, onSidecar: (sidecar: object) => void,
  *           onSettings: (settings: object) => void, onError: (message: string) => void,
  *           onPeople?: () => void }} options   onPeople: who is here or what they are changed
  */
-export function createPeople({ root, invite, panel, me, getName, setName, setFace, docKey = () => null, openSettings, onSidecar, onSettings, onError, onPeople = () => {} }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, onSidecar, onSettings, onError, onPeople = () => {} }) {
   let statuses = []; // the agents running here (server)
   let participants = []; // the doc's participants: [{ name, kind }]
   let saved = []; // the user's agents, as the settings have them
@@ -171,6 +171,8 @@ export function createPeople({ root, invite, panel, me, getName, setName, setFac
 
   const agentShown = () => (showing?.startsWith('agent:') ? showing.slice(6) : null);
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  // You, in the doc's participants: by your id, or by name in a doc from before ids.
+  const isMe = (p, myName) => (p.id && getId() ? p.id === getId() : same(p.name, myName));
   const statusOf = (name) => statuses.find((s) => same(s.name, name)) ?? null;
   const profileOf = (name) => roster.find((a) => same(a.name, name)) ?? null;
   // Everything known about an agent: its profile, or else what its status says.
@@ -274,7 +276,7 @@ export function createPeople({ root, invite, panel, me, getName, setName, setFac
     }));
     const people = el('div', 'od-people-list');
     people.append(personRow(getName(), 'You'));
-    for (const p of participants.filter((p) => p.kind === 'human' && !same(p.name, getName()))) people.append(personRow(p.name, 'Commenter'));
+    for (const p of participants.filter((p) => p.kind === 'human' && !isMe(p, getName()))) people.append(personRow(p.name, 'Commenter'));
 
     // The agents in this doc, then a row to make a new one.
     const here = agentsHere();
@@ -679,7 +681,7 @@ export function createPeople({ root, invite, panel, me, getName, setName, setFac
     const inDoc = here.filter((n) => matches(n, introOf(infoOf(n)))).map((n) => agentChoice(n, 'Agents in this doc'));
     const bring = roster.filter((a) => !here.some((n) => same(n, a.name)) && matches(a.name, introOf(a)))
       .map((a) => agentChoice(a.name, 'Bring in'));
-    const people = participants.filter((p) => p.kind === 'human' && !same(p.name, myName) && matches(p.name))
+    const people = participants.filter((p) => p.kind === 'human' && !isMe(p, myName) && matches(p.name))
       .map((p) => ({ name: p.name, kind: 'human', group: 'People' }));
     return [...inDoc, ...bring, ...people].slice(0, 12);
   }

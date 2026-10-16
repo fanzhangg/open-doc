@@ -8,6 +8,7 @@ import { AGENT_RULES } from './agents.js'; // used only inside functions, so the
 export const FORMAT_VERSION = 1;
 export const WORKING_TTL_MS = 5 * 60 * 1000;
 const MESSAGE_ID = /^m_[A-Za-z0-9_-]{6,}$/;
+const PARTICIPANT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export class OpError extends Error {
   /** @param {'unknown_thread' | 'bad_input' | 'not_allowed'} code */
@@ -23,7 +24,7 @@ export function emptySidecar(docName) {
 
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 
-/** Random id such as `t_k3x9q2m7pa` (prefix `t` or `m`). */
+/** Random id such as `t_k3x9q2m7pa` (prefix `t`, `m`, or `u` for a person). */
 export function newId(prefix) {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(10));
   let id = '';
@@ -34,7 +35,8 @@ export function newId(prefix) {
 /**
  * Apply one operation.
  *
- *   { type: 'join', participant: { name, kind } }
+ *   { type: 'join', participant: { name, kind, id? } }
+ *   { type: 'identify', participant: { name, kind, id }, aka? } // the same person under a new name
  *   { type: 'leave', name }                        // out of the @mention directory
  *   { type: 'addThread', id, anchor | null, message: { id, author, body, createdAt } }
  *   { type: 'addMessage', threadId, message }
@@ -56,6 +58,8 @@ export function applyOp(sidecar, op) {
   switch (op.type) {
     case 'join':
       return join(sidecar, op.participant);
+    case 'identify':
+      return identify(sidecar, op.participant, op.aka);
     case 'describe':
       return describe(sidecar, op);
     case 'leave':
@@ -101,8 +105,51 @@ function pass(sidecar, { threadId, by }) {
 
 function join(sidecar, participant) {
   validateParticipant(participant);
-  if (sidecar.participants.some((p) => sameName(p.name, participant.name))) return sidecar;
-  return { ...sidecar, participants: [...sidecar.participants, { name: participant.name, kind: participant.kind, ...about(participant) }] };
+  const { id } = participant;
+  const known = id ? identify(sidecar, participant) : sidecar;
+  if (known.participants.some((p) => (id && p.id === id) || sameName(p.name, participant.name))) return known;
+  const entry = { name: participant.name, kind: participant.kind, ...(id ? { id } : {}), ...about(participant) };
+  return { ...known, participants: [...known.participants, entry] };
+}
+
+// A participant with an `id` is one person whatever they are called (SPEC
+// §2.4): under a new name, their entry and every place the doc names them
+// (authors, mentions, resolvedBy, working, passed) take it. Entries without
+// an id, from before the doc knew it, are theirs when named `name` or one
+// of `aka` (names they went by), and merge into one. Bodies stay as written.
+// A name another participant has is not taken: they keep their old one.
+// Someone not in the doc yet is not added.
+function identify(sidecar, participant, aka = []) {
+  validateParticipant(participant);
+  const { id, kind } = participant;
+  if (!id) throw new OpError('bad_input', 'identify needs a participant id');
+  if (!Array.isArray(aka) || !aka.every((n) => NAME_PATTERN.test(n))) throw new OpError('bad_input', 'invalid aka');
+  const names = [participant.name, ...aka];
+  const theirs = (p) => p.id === id || (p.id === undefined && p.kind === kind && names.some((n) => sameName(n, p.name)));
+  const claimed = sidecar.participants.filter(theirs);
+  if (claimed.length === 0) return sidecar;
+  const taken = sidecar.participants.some((p) => !theirs(p) && sameName(p.name, participant.name));
+  const name = taken ? (claimed.find((p) => p.id === id) ?? claimed[0]).name : participant.name;
+  const old = new Set(claimed.map((p) => p.name.toLowerCase()));
+  old.add(name.toLowerCase()); // their posts from before the id, under the name they keep
+  const was = (n) => typeof n === 'string' && old.has(n.toLowerCase());
+  const rename = (n) => (was(n) ? name : n);
+  const once = (n, i, all) => all.findIndex((m) => sameName(m, n)) === i;
+
+  const entry = { ...claimed[0], name, id };
+  const participants = sidecar.participants.flatMap((p) => (p === claimed[0] ? [entry] : claimed.includes(p) ? [] : [p]));
+  const threads = sidecar.threads.map((t) => ({
+    ...t,
+    resolvedBy: rename(t.resolvedBy),
+    ...(t.working ? { working: { ...t.working, by: rename(t.working.by) } } : {}),
+    ...(t.passed ? { passed: t.passed.map(rename).filter(once) } : {}),
+    messages: t.messages.map((m) => {
+      const mine = m.author.id === id || (m.author.id === undefined && m.author.kind === kind && was(m.author.name));
+      return { ...m, ...(mine ? { author: { ...m.author, name, id } } : {}), mentions: m.mentions.map(rename).filter(once) };
+    }),
+  }));
+  const next = { ...sidecar, participants, threads };
+  return JSON.stringify(next) === JSON.stringify(sidecar) ? sidecar : next;
 }
 
 // An agent in the doc carries who it is (SPEC §2.4): its persona and
@@ -181,7 +228,7 @@ function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, pro
   if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
   const message = {
     id,
-    author: { name: canonicalName(sidecar, author.name), kind: author.kind },
+    author: authorIn(sidecar, author),
     body,
     mentions: parseMentions(body, sidecar.participants),
     createdAt,
@@ -255,6 +302,12 @@ export function findThread(sidecar, threadId) {
   return thread;
 }
 
+// An author with an id goes by their entry's name (identify may have kept an old one).
+function authorIn(sidecar, { name, kind, id }) {
+  if (!id) return { name: canonicalName(sidecar, name), kind };
+  return { name: sidecar.participants.find((p) => p.id === id)?.name ?? name, kind, id };
+}
+
 function canonicalName(sidecar, name) {
   return sidecar.participants.find((p) => sameName(p.name, name))?.name ?? name;
 }
@@ -265,6 +318,9 @@ function validateParticipant(participant) {
   }
   if (participant.kind !== 'human' && participant.kind !== 'agent') {
     throw new OpError('bad_input', `invalid participant kind: ${participant.kind}`);
+  }
+  if (participant.id !== undefined && !PARTICIPANT_ID.test(participant.id)) {
+    throw new OpError('bad_input', `invalid participant id: ${participant.id}`);
   }
 }
 

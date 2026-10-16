@@ -294,3 +294,40 @@ test('changedRanges and carry: what a change moved, and what it touched', () => 
   assert.equal(carry(changedRanges('ab @x', 'ab @x!'), 3, 5), 3, 'before a change: stays');
   assert.equal(carry(changedRanges('ab @x', 'ab @y'), 3, 5), null, 'touched');
 });
+
+test('identify: a person with an id keeps one entry when they change their name', () => {
+  const old = { name: 'fanzhang', kind: 'human' };
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(old, '@claude look', 'm_old001') });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(claude, 'ask @fanzhang', 'm_old002') });
+  s = applyOp(s, { type: 'pass', threadId: 't_aaaaaa', by: 'claude' });
+  s = applyOp(s, { type: 'resolve', threadId: 't_aaaaaa', by: 'fanzhang', at });
+
+  // Before ids: their entry is claimed by an aka, and everything that names them follows the new name.
+  const me = { name: 'Frank', kind: 'human', id: 'u_abc123' };
+  const renamed = applyOp(s, { type: 'identify', participant: me, aka: ['fanzhang'] });
+  assert.deepEqual(renamed.participants, [claude, { name: 'Frank', kind: 'human', id: 'u_abc123' }]);
+  const thread = renamed.threads[0];
+  assert.deepEqual(thread.messages[0].author, { name: 'Frank', kind: 'human', id: 'u_abc123' });
+  assert.deepEqual(thread.messages[1].author, claude, "others' messages stay theirs");
+  assert.deepEqual(thread.messages[1].mentions, ['Frank']);
+  assert.equal(thread.messages[1].body, 'ask @fanzhang', 'bodies stay as written');
+  assert.equal(thread.resolvedBy, 'Frank');
+  assert.equal(applyOp(renamed, { type: 'identify', participant: me, aka: ['fanzhang'] }), renamed, 'idempotent');
+
+  // Later renames find them by id; their new comments carry it.
+  const later = applyOp(renamed, { type: 'addMessage', threadId: 't_aaaaaa', message: msg({ ...me, name: 'Fan' }, 'done', 'm_new001') });
+  assert.deepEqual(later.participants.map((p) => p.name), ['claude', 'Fan']);
+  assert.deepEqual(later.threads[0].messages.map((m) => m.author.name), ['Fan', 'claude', 'Fan']);
+});
+
+test('identify: someone not in the doc is not added; a taken name is not taken', () => {
+  const s = withAgents(claude);
+  assert.equal(applyOp(s, { type: 'identify', participant: { name: 'Frank', kind: 'human', id: 'u_abc123' } }), s);
+  const two = applyOp(applyOp(s, { type: 'join', participant: { name: 'fanzhang', kind: 'human', id: 'u_abc123' } }), { type: 'join', participant: { name: 'Frank', kind: 'human', id: 'u_other1' } });
+  const blocked = applyOp(two, { type: 'identify', participant: { name: 'frank', kind: 'human', id: 'u_abc123' } });
+  assert.equal(blocked, two, 'keeps their old name');
+  const posted = applyOp(blocked, { type: 'addThread', id: 't_bbbbbb', anchor: null, message: msg({ name: 'frank', kind: 'human', id: 'u_abc123' }, 'hi') });
+  assert.deepEqual(posted.threads[0].messages[0].author, { name: 'fanzhang', kind: 'human', id: 'u_abc123' });
+  assert.throws(() => applyOp(s, { type: 'identify', participant: { name: 'Frank', kind: 'human' } }), (e) => e.code === 'bad_input');
+  assert.throws(() => applyOp(s, { type: 'join', participant: { name: 'Frank', kind: 'human', id: 'bad id' } }), (e) => e.code === 'bad_input');
+});

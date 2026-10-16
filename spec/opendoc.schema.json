@@ -44,6 +44,7 @@
       "properties": {
         "name": { "$ref": "#/$defs/name" },
         "kind": { "$ref": "#/$defs/kind" },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$", "description": "Optional. Who the participant is, whatever their name (SPEC.md §2.4)." },
         "persona": { "type": "string", "maxLength": 120, "pattern": "^[^\\r\\n]*$", "description": "Agents only: one line that defines the agent." },
         "instructions": { "type": "string", "maxLength": 4000, "description": "Agents only: the details and rules behind the persona." }
       }
