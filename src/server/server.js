@@ -917,6 +917,11 @@ export async function startServer(docPath, {
     team,
     docPath: () => docPath,
     moveTo,
+    async setFolder(next) {
+      folder = next;
+      broadcast('folder', { folder: folder && basename(folder) });
+      await syncAgents(); // they restart with the folder to read
+    },
     async close() {
       clearInterval(heartbeat);
       textAsks.stop();
@@ -936,11 +941,6 @@ const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
   'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
-    async setFolder(next) {
-      folder = next;
-      broadcast('folder', { folder: folder && basename(folder) });
-      await syncAgents(); // they restart with the folder to read
-    },
 };
 
 // DNS rebinding: only answer requests addressed to the loopback name we serve.

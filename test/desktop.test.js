@@ -165,7 +165,7 @@ test('listDocs: the docs in a folder and its subfolders, subfolders first, hidde
     await mkdir(dirname(join(dir, file)), { recursive: true });
     await writeFile(join(dir, file), '');
   }
-  await symlink(join(dir, 'guides'), join(dir, 'linked'));
+  await symlink(join(dir, 'guides'), join(dir, 'linked'), 'junction'); // a junction on Windows, which needs no admin rights
   const { docs, truncated } = await listDocs(dir);
   assert.deepEqual(docs, ['guides/deep/more.md', 'guides/intro.md', 'a 2.md', 'a 10.md', 'b.markdown', 'README.md']);
   assert.equal(truncated, false);
