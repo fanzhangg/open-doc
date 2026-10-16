@@ -7,8 +7,9 @@
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
-import { avatar, createCommentMargin } from './threads.js';
+import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
+import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
@@ -39,6 +40,7 @@ let people;
 let history;
 let settings;
 let defaultName;
+let docKey; // the doc's full path: which of your unstarred agents are its own
 let me;
 let sidecar;
 let baseHash;
@@ -69,6 +71,7 @@ async function start() {
   baseHash = initial.docHash;
   disk = initial.markdown;
   defaultName = initial.defaultName;
+  docKey = initial.docKey;
   settings = createSettings(initial.settings, {
     save: api.saveSettings,
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
@@ -105,6 +108,7 @@ async function start() {
   synced = editor.getMarkdown();
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
+    docKey: () => docKey,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
 
@@ -126,6 +130,7 @@ async function start() {
     anchorTops: (items) => editor.anchorTops(items),
     mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
     replyHint: (body, thread) => people?.replyHint(body, thread) ?? '',
+    mentionable: () => people?.mentionable() ?? [],
   });
   editor.onLayout(() => margin.layout());
 
@@ -135,10 +140,19 @@ async function start() {
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
+    docKey: () => docKey,
     openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
     onSidecar: applySidecar,
     onSettings: (next) => settings.receive(next),
     onError: (message) => setStatus(message, 'error'),
+    onPeople: () => editor.setMentionNames(people.mentionable()),
+  });
+  const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
+  createNameCards({
+    card: document.querySelector('.od-panel'),
+    peek: (chip) => people.peek(...who(chip)),
+    pin: (chip) => people.pin(...who(chip)),
+    unpeek: () => people.unpeek(),
   });
   people.render({ agents: initial.agents, roster: settings.get().agents });
   settings.subscribe((next) => people.render({ roster: next.agents }));
@@ -193,7 +207,12 @@ async function start() {
   });
   events.addEventListener('agents', (event) => showAgents(JSON.parse(event.data)));
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
-  events.addEventListener('renamed', (event) => showDocName(JSON.parse(event.data).doc));
+  events.addEventListener('renamed', (event) => {
+    const data = JSON.parse(event.data);
+    showDocName(data.doc);
+    docKey = data.docKey ?? docKey; // its own agents moved with it
+    people?.render({ roster: settings.get().agents });
+  });
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
   events.addEventListener('hello', (event) => {
@@ -719,7 +738,10 @@ function offerRename() {
 }
 
 function paintNameChip() {
-  document.querySelector('.od-me').replaceChildren(avatar(me, 'human'));
+  const button = document.querySelector('.od-me');
+  button.replaceChildren(avatar(me, 'human'));
+  namecardFor(button, me, 'human', 'instant');
+  button.setAttribute('aria-label', `You (${me})`);
 }
 
 /** Rename the human in comments, in every doc; false when the name is not allowed. */

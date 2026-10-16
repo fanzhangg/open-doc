@@ -14,7 +14,7 @@
 import { api } from './api.js';
 import { avatar } from './threads.js';
 import { confirmAccess } from './agent.js';
-import { PERMISSIONS, checkAgentPatch, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { PERMISSIONS, availableIn, checkAgentPatch, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
 
 const PROBLEMS = {
   error: 'Its last run failed',
@@ -25,7 +25,7 @@ const PROBLEMS = {
 /**
  * @param {{ store: object, onResult: (result: { settings?, sidecar?, agents? }) => void }} options
  */
-export function createAgentsPanel({ store, onResult }) {
+export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   const dialog = document.querySelector('.od-agents-dialog');
   const desktop = window.opendocDesktop;
   const list = dialog.querySelector('.od-agents-list');
@@ -50,7 +50,8 @@ export function createAgentsPanel({ store, onResult }) {
   for (const button of dialog.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
   for (const input of dialog.querySelectorAll('[data-agent-program], [data-program]')) input.readOnly = !desktop;
 
-  const agents = () => store.get().agents;
+  // Your starred agents, and this doc's own; other docs' own stay with them.
+  const agents = () => store.get().agents.filter((a) => availableIn(a, docKey()));
   const current = () => agents().find((a) => a.id === selected) ?? null;
   const statusOf = (agent) => statuses.find((s) => (s.id ? s.id === agent.id : s.name.toLowerCase() === agent.name.toLowerCase())) ?? null;
   const valid = (patch) => {

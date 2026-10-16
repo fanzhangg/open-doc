@@ -24,6 +24,7 @@ import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
+import { MENTION_TOKEN } from '../src/core/mentions.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { createReplayer, diffBlocks } from './replay.js';
 
@@ -31,6 +32,7 @@ const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
+const mentionKey = new PluginKey('opendoc-mentions');
 
 // CommonMark does not close `**熟悉：**直接` (a run after full-width
 // punctuation, before a CJK letter); this reads and writes it as bold, the
@@ -69,6 +71,50 @@ const linkPlugin = $prose(() => new Plugin({
     },
   },
 }));
+
+// @name in the text, for someone who can be mentioned here: drawn as a chip
+// that shows its name card on hover. The names come through a meta, as a Map
+// of lower-cased name → { name, kind }; code is left alone.
+const mentionPlugin = $prose(() => new Plugin({
+  key: mentionKey,
+  state: {
+    init: () => ({ names: new Map(), set: DecorationSet.empty }),
+    apply(tr, value, _old, state) {
+      const names = tr.getMeta(mentionKey) ?? value.names;
+      if (names === value.names && !tr.docChanged) return value;
+      return { names, set: mentionDecorations(state.doc, names) };
+    },
+  },
+  props: { decorations: (state) => mentionKey.getState(state).set },
+}));
+
+function mentionDecorations(doc, names) {
+  if (names.size === 0) return DecorationSet.empty;
+  const decorations = [];
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true;
+    if (node.type.spec.code || !node.textContent.includes('@')) return false;
+    // One character per position: code and inline nodes become blanks.
+    let text = '';
+    node.forEach((child) => {
+      const code = child.isText && child.marks.some((m) => m.type.spec.code);
+      text += child.isText && !code ? child.text : '\uFFFC'.repeat(child.nodeSize);
+    });
+    for (const match of text.matchAll(MENTION_TOKEN)) {
+      let token = match[2];
+      // Sentence punctuation after a name ("@claude.") is not part of it.
+      while (!names.has(token.toLowerCase()) && token.endsWith('.')) token = token.slice(0, -1);
+      const who = names.get(token.toLowerCase());
+      if (!who) continue;
+      const from = pos + 1 + match.index + match[1].length;
+      decorations.push(Decoration.inline(from, from + 1 + token.length, {
+        class: `od-at od-at-${who.kind}`, 'data-mention': who.name, 'data-mention-kind': who.kind,
+      }));
+    }
+    return false;
+  });
+  return DecorationSet.create(doc, decorations);
+}
 
 // Reports every view update and lets the page take keys first (for the "/"
 // menu), and marks the top-level block holding the caret (for focus mode).
@@ -127,7 +173,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         .updated(() => onDocUpdated());
     })
     .use(commonmark).use(gfm).use(cjkFriendly).use(history).use(clipboard).use(listener)
-    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
+    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(mentionPlugin).use(uiPlugin(hooks))
     .use($prose(() => replayer.plugin))
     .create();
 
@@ -526,6 +572,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     setThreads(next) {
       threads = next;
       paintHighlights();
+    },
+    /** Who can be @mentioned: [{ name, kind }]. Their @names in the text show as chips. */
+    setMentionNames(list) {
+      const names = new Map(list.map((p) => [p.name.toLowerCase(), p]));
+      const current = mentionKey.getState(view().state).names;
+      if (names.size === current.size && [...names].every(([k, p]) => current.get(k)?.name === p.name && current.get(k)?.kind === p.kind)) return;
+      view().dispatch(view().state.tr.setMeta(mentionKey, names).setMeta('addToHistory', false));
     },
     setActive(id) {
       activeId = id;

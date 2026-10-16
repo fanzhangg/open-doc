@@ -8,11 +8,11 @@
 import { activeWorking } from '../src/core/ops.js';
 import { appliedBy } from './review.js';
 import { icon } from './icons.js';
-import { agentFace } from './faces.js';
+import { agentFace, personFace } from './faces.js';
+import { MENTION_TOKEN } from '../src/core/mentions.js';
 
 const GAP = 10;
 const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
-const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83', '#5f6368'];
 
 /**
  * @param {HTMLElement} margin
@@ -26,7 +26,8 @@ const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
- *           replyHint?: (body: string, thread: object | null) => string }} handlers
+ *           replyHint?: (body: string, thread: object | null) => string,
+ *           mentionable?: () => { name: string, kind: string }[] }} handlers
  */
 export function createCommentMargin(margin, handlers) {
   let sidecar = { participants: [], threads: [] };
@@ -136,10 +137,13 @@ export function createCommentMargin(margin, handlers) {
     const name = el('span', 'od-name', message.author.name === me ? `${me} (you)` : message.author.name);
     if (message.author.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
     who.append(name, el('time', 'od-time', relativeTime(message.createdAt)));
-    head.append(avatar(message.author.name, message.author.kind), who);
+    const author = message.author;
+    namecardFor(name, author.name, author.kind, 'click');
+    head.append(namecardFor(avatar(author.name, author.kind), author.name, author.kind, 'click'), who);
     if (action) head.append(action);
     const open = unfolded.has(message.id);
-    const body = el('div', `od-body${open ? '' : ' od-body-folded'}`, message.body);
+    const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
+    body.append(...withMentions(message.body, handlers.mentionable?.() ?? []));
     row.append(head, body, foldButton(message.id, open));
     return row;
   }
@@ -558,30 +562,53 @@ function patchCard(card, fresh) {
 
 const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start });
 
-export function avatar(name, kind, small = false) {
-  const agent = kind === 'agent';
-  const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`, agent ? undefined : initials(name));
-  // People are initials on a circle; each agent is a face of its own (faces.js),
-  // so several in one doc are told apart at a glance.
-  if (agent) node.append(agentFace(name));
-  else node.style.background = colorFor(name);
-  node.title = name;
+/**
+ * `text` as nodes, each @name of someone in `people` ([{ name, kind }]) a
+ * chip that shows their name card on hover.
+ */
+export function withMentions(text, people) {
+  const byLower = new Map(people.map((p) => [p.name.toLowerCase(), p]));
+  const nodes = [];
+  let at = 0;
+  for (const match of text.matchAll(MENTION_TOKEN)) {
+    let token = match[2];
+    // Sentence punctuation after a name ("@claude.") is not part of it.
+    while (!byLower.has(token.toLowerCase()) && token.endsWith('.')) token = token.slice(0, -1);
+    const who = byLower.get(token.toLowerCase());
+    if (!who) continue;
+    const start = match.index + match[1].length;
+    if (start > at) nodes.push(document.createTextNode(text.slice(at, start)));
+    const chip = el('span', `od-at od-at-${who.kind}`, `@${token}`);
+    chip.dataset.mention = who.name;
+    chip.dataset.mentionKind = who.kind;
+    nodes.push(chip);
+    at = start + 1 + token.length;
+  }
+  if (at < text.length) nodes.push(document.createTextNode(text.slice(at)));
+  return nodes;
+}
+
+/**
+ * Makes `node` show the name card of `name` (`kind` 'agent' or 'human'; see
+ * namecard.js), `how`: 'instant' or 'click'. The card says who it is, so the
+ * browser's own tooltip goes.
+ */
+export function namecardFor(node, name, kind, how) {
+  node.dataset.mention = name;
+  node.dataset.mentionKind = kind;
+  node.dataset.namecard = how;
+  for (const titled of [node, ...node.querySelectorAll('[title]')]) titled.removeAttribute('title');
   return node;
 }
 
-function initials(name) {
-  const parts = name.split(/[._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
-}
-
-function hash(name) {
-  let value = 0;
-  for (const ch of name.toLowerCase()) value = (value * 31 + ch.charCodeAt(0)) >>> 0;
-  return value;
-}
-
-function colorFor(name) {
-  return PALETTE[hash(name) % PALETTE.length];
+export function avatar(name, kind, small = false) {
+  const agent = kind === 'agent';
+  const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`);
+  // Everyone is a face of their own (faces.js): people round, agents a soft
+  // blob, so several in one doc are told apart at a glance.
+  node.append(agent ? agentFace(name) : personFace(name));
+  node.title = name;
+  return node;
 }
 
 function dots() {

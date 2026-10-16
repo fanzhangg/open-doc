@@ -1,8 +1,8 @@
-// Agent avatars: a soft blob with a face, drawn from the agent's name. Every
-// agent gets its own shape, colour and expression, a little personality, and
-// keeps it wherever it shows up (the header, threads, history) and on every
-// machine, since nothing is stored. The blob stays close to a circle so it
-// still reads as an avatar beside people's.
+// Avatars: a face drawn from the name. Everyone gets their own colour and
+// expression, a little personality, and keeps it wherever they show up (the
+// header, threads, history) and on every machine, since nothing is stored.
+// People are round; agents are soft blobs that stay close to a circle, so
+// they still read as avatars but are told apart from people at a glance.
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
 // legible down to the 18px faces in a thread's footer.
@@ -30,10 +30,17 @@ const COLORS = [
 let ids = 0; // gradient ids, unique per page
 
 /** @param {string} name */
-export function agentFace(name) {
+export const agentFace = (name) => face(name, false);
+
+/** @param {string} name */
+export const personFace = (name) => face(name, true);
+
+const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
+
+function face(name, round) {
   const rand = random(seed(name));
   const [hue, sat, light] = pick(rand, COLORS);
-  const body = bodyShape(rand);
+  const body = round ? CIRCLE : bodyShape(rand);
 
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
   const id = `od-face-${++ids}`;

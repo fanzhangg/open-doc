@@ -40,13 +40,13 @@ export function keyLabel(keys) {
  *           getName: () => string, setName: (name: string) => boolean,
  *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
 
   const settings = setupSettings({ store, getName, setName });
-  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult });
+  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
