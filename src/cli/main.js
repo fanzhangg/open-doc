@@ -58,7 +58,8 @@ not answered it yet, or mentions no one and no one has answered it yet.
 wait blocks until a thread is waiting on <name>, marks it as being answered,
 prints it and exits 0; it exits 3 on timeout (default ${DEFAULT_WAIT_SECONDS}s, 0 = none).
 propose replies with changes instead of making them; each "before" must appear exactly
-once in the doc's markdown source. Only humans resolve and reopen threads.
+once in the doc's markdown source. An agent's comment, reply or proposal text is at most
+280 characters. Only humans resolve and reopen threads.
 Exit codes: 0 ok, 1 error, 2 bad input, 3 wait timed out, 4 sidecar busy.`;
 
 class UsageError extends Error {}
@@ -165,7 +166,7 @@ const COMMANDS = {
   async comment([docArg, ...bodyParts], values, { out, env }) {
     const docPath = requireDoc(docArg);
     const me = identity(values, env);
-    const body = requireBody(bodyParts);
+    const body = fitBody(me, requireBody(bodyParts));
     const occurrence = values.occurrence === undefined ? undefined : Number(values.occurrence) - 1;
     if (occurrence !== undefined && !(Number.isInteger(occurrence) && occurrence >= 0)) {
       throw new UsageError('--occurrence must be 1 or more');
@@ -189,7 +190,7 @@ const COMMANDS = {
     const docPath = requireDoc(docArg);
     const me = identity(values, env);
     requireThreadId(threadId);
-    const body = requireBody(bodyParts);
+    const body = fitBody(me, requireBody(bodyParts));
     return writeAndPrint(docPath, values, out, threadId, (s) =>
       applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
   },
@@ -238,6 +239,7 @@ const COMMANDS = {
     const me = identity(values, env);
     requireThreadId(threadId);
     const { body, changes } = await readProposal(stdin);
+    fitBody(me, body);
     return writeAndPrint(docPath, values, out, threadId, (s, doc) => applyOp(s, {
       type: 'addMessage', threadId, message: { ...message(me, body), proposal: proposeChanges(doc.markdown, changes) },
     }));
@@ -453,6 +455,17 @@ function requireThreadId(threadId) {
 function requireBody(parts) {
   const body = parts.join(' ').trim();
   if (!body) throw new UsageError('missing comment text');
+  return body;
+}
+
+// An agent comments the way a person does in a doc review: a point or two,
+// no longer than a tweet. A longer one is refused so the agent shortens it.
+export const MAX_AGENT_COMMENT = 280;
+
+function fitBody(author, body) {
+  if (author.kind === 'agent' && body.length > MAX_AGENT_COMMENT) {
+    throw new UsageError(`too long: an agent's comment is at most ${MAX_AGENT_COMMENT} characters, and this one is ${body.length}. Make the one point that matters most in a sentence or two, with no list or preamble, and post it again.`);
+  }
   return body;
 }
 

@@ -209,3 +209,17 @@ test('end to end: a blocked wait wakes on a human comment and marks it working',
   assert.equal(replied.threads[0].working, null);
   assert.equal((await json('inbox', doc, ...asClaude)).threads.length, 0);
 });
+
+test('an agent comment is refused past 280 characters; a human one is not', async () => {
+  const doc = await tempDoc();
+  const long = 'x'.repeat(281);
+  const [thread] = (await json('comment', doc, long, ...asHuman)).threads;
+  const refused = await run('reply', doc, thread.id, long, ...asClaude);
+  assert.equal(refused.code, EXIT.badInput);
+  assert.match(refused.stderr, /at most 280 characters, and this one is 281/);
+  assert.equal((await run('comment', doc, long, ...asClaude)).code, EXIT.badInput);
+  const proposal = { body: long, changes: [{ before: 'ship', after: 'launch' }] };
+  assert.equal((await runWith(proposal, 'propose', doc, thread.id, ...asClaude)).code, EXIT.badInput);
+  const replied = await json('reply', doc, thread.id, 'x'.repeat(280), ...asClaude);
+  assert.equal(replied.threads[0].messages.length, 2);
+});

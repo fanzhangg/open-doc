@@ -78,7 +78,12 @@ Repeat until the human says they are done.
    edit was trivial:
    `opendoc reply /abs/path/X.md <thread-id> "<what you changed, or your answer>" --as claude`
    (or a proposal with `opendoc propose`, which is your reply). Say what you
-   did in a sentence or two; the edit itself is visible in the doc. Replying
+   did in a sentence or two; the edit itself is visible in the doc. Write
+   like a person commenting in a doc review: at most 280 characters (a
+   tweet), one or two plain sentences on the point that matters most, no
+   lists, headings or preamble, even when asked for a review. With several
+   points, make the most important one, or start a separate comment on the
+   text each is about. `opendoc` refuses a longer comment. Replying
    hands the turn back to the human: the editor shows the thread as waiting
    for them, and they resolve it, undo your edit, apply your proposal, or
    reply again. Do not resolve the thread. (`reply` and `propose`

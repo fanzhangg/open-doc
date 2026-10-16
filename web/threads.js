@@ -97,8 +97,10 @@ export function createCommentMargin(margin, handlers) {
     if (thread.anchor && (showResolved || thread.detached)) card.append(el('blockquote', 'od-quote', truncate(thread.anchor.exact, 120)));
     if (!thread.anchor) card.append(el('div', 'od-card-note', 'On the whole document'));
 
+    // A long thread folds its middle replies until the human opens them or
+    // selects the card (setActive); Hide folds them again either way.
     const messages = thread.messages;
-    const long = !active && messages.length > 3;
+    const long = messages.length > 3;
     const collapse = long && !expanded.has(thread.id);
     messages.forEach((message, i) => {
       if (long && i === 1) card.append(moreButton(thread.id, messages.slice(1, -1), !collapse));
@@ -135,8 +137,7 @@ export function createCommentMargin(margin, handlers) {
     const row = el('div', 'od-msg');
     const head = el('div', 'od-msg-head');
     const who = el('div', 'od-who');
-    const name = el('span', 'od-name', message.author.name === me ? `${me} (you)` : message.author.name);
-    if (message.author.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
+    const name = el('span', 'od-name', message.author.name);
     who.append(name, el('time', 'od-time', relativeTime(message.createdAt)));
     const author = message.author;
     namecardFor(name, author.name, author.kind, 'click');
@@ -149,20 +150,20 @@ export function createCommentMargin(margin, handlers) {
     return row;
   }
 
-  // The replies folded out of a long thread: who wrote them, how many, and a
-  // chevron, so it reads as something to open. It opens and closes in place.
+  // The replies folded out of a long thread: who wrote them and how many,
+  // in the link color, opening and closing them in place.
   function moreButton(threadId, hidden, open) {
     const button = el('button', 'od-more');
     button.type = 'button';
     button.setAttribute('aria-expanded', String(open));
-    const n = `${hidden.length} ${hidden.length === 1 ? 'reply' : 'replies'}`;
     if (!open) {
       const faces = el('span', 'od-more-faces');
       const authors = new Map(hidden.map((m) => [m.author.name, m.author.kind]));
       for (const [name, kind] of [...authors].slice(0, 3)) faces.append(avatar(name, kind, true));
       button.append(faces);
     }
-    button.append(el('span', '', open ? `Hide ${n}` : `Show ${hidden.length} more ${hidden.length === 1 ? 'reply' : 'replies'}`), icon('chevron'));
+    const n = hidden.length;
+    button.append(el('span', '', open ? 'Hide replies' : `${n} more ${n === 1 ? 'reply' : 'replies'}`), icon('chevron'));
     button.addEventListener('click', () => {
       if (open) expanded.delete(threadId);
       else expanded.add(threadId);
@@ -506,6 +507,11 @@ export function createCommentMargin(margin, handlers) {
     },
     /** Make `id` the active card; `focus: false` leaves the caret where it is (e.g. in the doc). */
     setActive(id, { focus = true } = {}) {
+      // Selecting a card shows its folded replies; leaving it folds them again.
+      if (id !== activeId) {
+        expanded.delete(activeId);
+        if (id) expanded.add(id);
+      }
       activeId = id;
       render();
       if (narrow.matches) margin.querySelector(`[data-thread="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
