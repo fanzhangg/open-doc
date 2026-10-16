@@ -4,7 +4,7 @@
 
 import { $remark } from '@milkdown/kit/utils';
 import { commonmark, imageSchema } from '@milkdown/kit/preset/commonmark';
-import { gfm } from '@milkdown/kit/preset/gfm';
+import { gfm, extendListItemSchemaForTask } from '@milkdown/kit/preset/gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
 
 // CommonMark does not close `**熟悉：**直接` (a run after full-width
@@ -27,6 +27,18 @@ const image = imageSchema.extendSchema((schema) => (ctx) => {
   };
 });
 
-const swapped = new Map([[imageSchema.ctx, image.ctx], [imageSchema.node, image.node]]);
+// A list item made in the editor ("- ", the toolbar, the "/" menu) is tight,
+// as people write lists; Milkdown's default would save it with a blank line
+// after every item. Items split from one keep its spacing, and items read
+// from the file keep theirs.
+const listItem = extendListItemSchemaForTask.extendSchema((schema) => (ctx) => {
+  const base = schema(ctx);
+  return { ...base, attrs: { ...base.attrs, spread: { default: false, validate: 'boolean' } } };
+});
 
-export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly].flat();
+const swapped = new Map([
+  [imageSchema.ctx, image.ctx], [imageSchema.node, image.node],
+  [extendListItemSchemaForTask.ctx, listItem.ctx], [extendListItemSchemaForTask.node, listItem.node],
+]);
+
+export const markdownPlugins = [commonmark, gfm].flat().map((plugin) => swapped.get(plugin) ?? plugin).concat(cjkFriendly);

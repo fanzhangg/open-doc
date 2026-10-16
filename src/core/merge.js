@@ -12,11 +12,12 @@ import { project } from './project.js';
  * With `prefer: 'ours'`, a conflict keeps our side and reports theirs as
  * dropped instead of failing: each entry is one region where their change
  * was not kept, with its base, our and their lines, and where our lines are
- * in the result (`at`, a line index, and `count` lines).
+ * in the result (`at`, a line index, and `count` lines). `prefer: 'theirs'`
+ * is the same the other way round: `at` and `count` are where their lines are.
  * @param {string} base the text both sides started from
  * @param {string} ours
  * @param {string} theirs
- * @param {{ prefer?: 'ours' }} [options]
+ * @param {{ prefer?: 'ours' | 'theirs' }} [options]
  * @returns {{ text: string, conflict: false, dropped: { at: number, count: number, base: string, ours: string, theirs: string }[] } | { text: null, conflict: true }}
  */
 export function merge3(base, ours, theirs, { prefer } = {}) {
@@ -28,7 +29,9 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
   const mo = matches(b, o);
   const mt = matches(b, t);
   if (!mo || !mt) {
-    return prefer === 'ours' ? { text: ours, conflict: false, dropped: [{ at: 0, count: o.length, base, ours, theirs }] } : { text: null, conflict: true };
+    if (prefer === 'ours') return { text: ours, conflict: false, dropped: [{ at: 0, count: o.length, base, ours, theirs }] };
+    if (prefer === 'theirs') return { text: theirs, conflict: false, dropped: [{ at: 0, count: t.length, base, ours, theirs }] };
+    return { text: null, conflict: true };
   }
 
   const out = [];
@@ -54,15 +57,24 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
     const theirChunk = t.slice(ti, tEnd);
     if (same(ourChunk, baseChunk)) out.push(...theirChunk);
     else if (same(theirChunk, baseChunk) || same(ourChunk, theirChunk)) out.push(...ourChunk);
-    else {
-      const line = baseChunk.length === 1 && ourChunk.length === 1 && theirChunk.length === 1
-        ? mergeMarkdownLine(baseChunk[0], ourChunk[0], theirChunk[0])
-        : null;
-      if (line !== null) out.push(line);
-      else if (prefer === 'ours') {
-        dropped.push({ at: out.length, count: ourChunk.length, base: baseChunk.join('\n'), ours: ourChunk.join('\n'), theirs: theirChunk.join('\n') });
-        out.push(...ourChunk);
-      } else return { text: null, conflict: true };
+    else if (baseChunk.length === ourChunk.length && baseChunk.length === theirChunk.length) {
+      // As many lines on each side (rows of a table, items of a list, a
+      // paragraph): line by line, so an edit next to the other side's stays.
+      for (let k = 0; k < baseChunk.length; k++) {
+        const [bl, ol, tl] = [baseChunk[k], ourChunk[k], theirChunk[k]];
+        const line = ol === bl ? tl : tl === bl || ol === tl ? ol : mergeMarkdownLine(bl, ol, tl);
+        if (line !== null) out.push(line);
+        else if (prefer) {
+          dropped.push({ at: out.length, count: 1, base: bl, ours: ol, theirs: tl });
+          out.push(prefer === 'ours' ? ol : tl);
+        } else return { text: null, conflict: true };
+      }
+    } else if (prefer) {
+      const kept = prefer === 'ours' ? ourChunk : theirChunk;
+      dropped.push({ at: out.length, count: kept.length, base: baseChunk.join('\n'), ours: ourChunk.join('\n'), theirs: theirChunk.join('\n') });
+      out.push(...kept);
+    } else {
+      return { text: null, conflict: true };
     }
     i = j;
     oi = oEnd;

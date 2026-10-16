@@ -70,6 +70,9 @@ let shownSidecar = ''; // the sidecar on screen, as JSON
 // markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
+// A change from disk that overlaps the human's, waiting for them to choose:
+// { items }, their version of each overlap as a suggestion in the text.
+let conflict = null;
 let files; // the folder sidebar (desktop folder windows)
 
 // The desktop app swaps one doc's page for another without a blank frame: it
@@ -413,9 +416,10 @@ async function doSync() {
   const fromAgent = people.statuses().some((a) => a.name === by);
   const merged = merge3(synced, mine, theirs, fromAgent ? { prefer: 'ours' } : {});
   if (merged.conflict) {
-    showConflict(by);
+    showConflict(by, mine, theirs);
     return;
   }
+  endConflict(); // a later change no longer overlaps the human's
   keepOverwritten(merged, by);
   // The agent's changes are typed in; anything else just appears.
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
@@ -549,42 +553,62 @@ function editorName(nextSidecar) {
   return working[0]?.by ?? ON_DISK;
 }
 
-function showConflict(by) {
+// `by` changed text the human changed too (`mine` and `theirs`, both since
+// `synced`). Saving waits for a choice; meanwhile their side of each overlap
+// shows in the text as a suggestion on the human's, and the banner says how
+// many there are.
+function showConflict(by, mine, theirs) {
   clearTimeout(saveTimer);
-  setStatus('Needs your choice', 'conflict');
-  banner.querySelector('.od-banner-text').textContent = by === ON_DISK
-    ? 'The file changed on disk in a paragraph you are editing.'
-    : `${by} edited a paragraph you are editing.`;
+  const { dropped } = merge3(synced, mine, theirs, { prefer: 'ours' });
+  const changes = [];
+  for (const { ours, theirs: after } of dropped) {
+    const start = ours.trim() ? mine.indexOf(ours) : -1;
+    if (start === -1) continue; // ours removed the text: nothing to mark
+    const end = start + ours.length;
+    changes.push({ before: ours, after, prefix: mine.slice(Math.max(0, start - 32), start), suffix: mine.slice(end, end + 32), start });
+  }
+  conflict = { items: previewItems(mine, changes) };
+  setStatus('Not saved: choose a version', 'conflict');
+  const where = dropped.length > 1 ? `${dropped.length} paragraphs` : 'a paragraph';
+  const what = by === ON_DISK ? `The file changed on disk in ${where} you are also editing.` : `${by} edited ${where} you are also editing.`;
+  const shown = conflict.items.length > 0 ? ' Their version is marked in the text.' : '';
+  banner.querySelector('.od-banner-text').textContent = `${what}${shown} Everything else is merged either way.`;
   banner.hidden = false;
+  refreshPreview({ replay: true });
 }
 
-banner.querySelector('[data-action="reload"]').addEventListener('click', async () => {
-  const fresh = await api.state();
+function endConflict() {
+  if (!conflict) return;
+  conflict = null;
   banner.hidden = true;
-  dirty = false;
-  editor.applyMarkdown(fresh.markdown, editorName(fresh.sidecar));
-  synced = editor.normalize(fresh.markdown);
-  baseHash = fresh.docHash;
-  disk = fresh.markdown;
-  applySidecar(fresh.sidecar);
-  setStatus('Saved');
-});
-// Keep the human's text where both changed it, and the other side's
-// changes everywhere else.
-banner.querySelector('[data-action="keep"]').addEventListener('click', async () => {
+  refreshPreview();
+}
+
+// Settle the conflict: `prefer` says whose text stays where both changed it;
+// both sides' other changes are kept. Taking theirs can be undone (Ctrl+Z),
+// so the human's text is never lost to one click.
+async function resolveConflict(prefer) {
   const fresh = await api.state();
   const theirs = editor.normalize(fresh.markdown);
-  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
-  editor.applyMarkdown(merged.text, editorName(fresh.sidecar));
+  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer });
+  endConflict();
+  editor.applyMarkdown(merged.text, editorName(fresh.sidecar), { undoable: prefer === 'theirs' });
   baseHash = fresh.docHash;
   synced = theirs;
   disk = fresh.markdown;
   applySidecar(fresh.sidecar);
-  banner.hidden = true;
+  if (merged.text === theirs) {
+    dirty = false;
+    setStatus('Saved');
+    return;
+  }
   dirty = true;
   version++;
   await save();
-});
+}
+
+banner.querySelector('[data-action="reload"]').addEventListener('click', () => resolveConflict('theirs'));
+banner.querySelector('[data-action="keep"]').addEventListener('click', () => resolveConflict('ours'));
 
 // ---- the doc moved or deleted outside the app ----
 
@@ -699,6 +723,10 @@ function setDisk(markdown) {
 // While a thread is selected, the text shows the change clicked in its card,
 // or else its open proposal, as a suggestion.
 function refreshPreview({ replay = false } = {}) {
+  if (conflict) {
+    editor.setPreview(conflict.items, { replay });
+    return;
+  }
   const thread = sidecar?.threads.find((t) => t.id === activeId);
   const clicked = thread?.messages.find((m) => m.id === reviewing);
   if (reviewing && !clicked) reviewing = null;
@@ -913,6 +941,11 @@ function renameMe(next) {
 // it speaks up only when a save fails, the server is unreachable or a
 // conflict needs a choice.
 function setStatus(text, state = 'saved') {
+  // Typing while a conflict waits is not saved: say so, not "Saving…".
+  if (conflict && (state === 'saving' || state === 'saved')) {
+    text = 'Not saved: choose a version';
+    state = 'conflict';
+  }
   const problem = state === 'error' || state === 'offline' || state === 'conflict';
   status.hidden = !problem;
   status.dataset.state = state;
