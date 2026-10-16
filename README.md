@@ -1,4 +1,4 @@
-# opendoc
+# <img src="build/logo.svg" alt="OpenDoc" width="280" height="80">
 
 Co-author plain markdown with AI agents. Comments live in a sidecar file next
 to the doc (`plan.md` → `plan.md.opendoc.json`), anchored to the text so they
@@ -283,7 +283,7 @@ npm run smoke:desktop   # launch the built app (or this checkout's) and check it
 The installer is not signed yet, so Windows SmartScreen warns before running
 it. On Windows it adds OpenDoc to "Open with" for `.md` and `.markdown` and a
 New > Markdown Document entry in Explorer, without making itself the default
-app. `node_modules/.bin/electron scripts/make-icon.cjs` renders
-`build/icon.svg` to the `build/icon.png` the installers use.
+app. `npm run icon:desktop` generates
+the shared Clippy avatar, application logo, and separate document icons from `web/faces.js` into `build/`.
 
 Requires Node 20 or later.
