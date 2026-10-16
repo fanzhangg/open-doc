@@ -1,11 +1,15 @@
-# Builds the desktop installers from every push to main and posts them to
-# the "nightly" pre-release (https://github.com/fanzhangg/open-doc/releases/tag/nightly).
+# Checks every pull request and push to main on Windows and macOS: lint, the
+# tests, then the installers, and a smoke test that opens a doc in the
+# packaged app. Pushes to main that pass all of it replace the "nightly"
+# pre-release (https://github.com/fanzhangg/open-doc/releases/tag/nightly),
+# so a broken build never replaces a working one.
 
 name: Desktop builds
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -20,9 +24,12 @@ jobs:
         include:
           - os: macos-latest
             args: --mac --arm64 --x64
+            app: release/mac-arm64/OpenDoc.app/Contents/MacOS/OpenDoc
           - os: windows-latest
             args: --win --x64
+            app: release/win-unpacked/OpenDoc.exe
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,8 +37,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run build
+      - run: npm test
+        timeout-minutes: 15
       - run: npx electron-builder ${{ matrix.args }} --publish never
+      - name: Smoke test the packaged app
+        run: node scripts/smoke-desktop.js ${{ matrix.app }}
+        timeout-minutes: 5
       - uses: actions/upload-artifact@v4
         with:
           name: opendoc-${{ runner.os }}
@@ -42,6 +55,7 @@ jobs:
 
   release:
     needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
