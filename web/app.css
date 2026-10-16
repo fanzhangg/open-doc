@@ -698,8 +698,8 @@ label.od-setting { cursor: pointer; }
 }
 @media (max-width: 900px) {
   :root { --page-pad: 20px; }
-  :root[data-files] body { padding-left: 0; }
-  .od-files, .od-files-toggle { display: none !important; }
+  /* the sidebar floats over the page, under the toggle that opens it */
+  .od-files { top: 50px; bottom: 12px; left: 8px; z-index: 25; width: min(var(--files-w), calc(100vw - 16px)); border: 0; border-radius: 12px; background: var(--bg); box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; }
   .od-stage { grid-template-columns: minmax(0, 1fr); padding: 0 0 80px; }
   .od-page { padding-top: 28px; padding-bottom: 48px; min-height: 0; }
   .od-margin { padding: 0 16px; height: auto !important; }

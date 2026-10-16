@@ -22,6 +22,13 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   if (!desktop?.folder) return { ready: Promise.resolve(), state: () => ({}) };
   let view = null;
   let first = true;
+  // In a narrow window the sidebar floats over the page instead of beside
+  // it: closed until the toggle opens it, closed again by the toggle, Escape
+  // or a click outside it. Opening it there leaves the wide window's choice
+  // (`docked`, which the app keeps) alone.
+  const narrow = window.matchMedia('(max-width: 900px)');
+  let docked = false;
+  let floating = false;
 
   async function refresh() {
     try {
@@ -53,8 +60,14 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   }
 
   function show(open) {
+    docked = open;
+    draw();
+  }
+
+  function draw() {
+    const open = narrow.matches ? floating : docked;
     aside.hidden = !open;
-    document.documentElement.toggleAttribute('data-files', open);
+    document.documentElement.toggleAttribute('data-files', docked && !narrow.matches);
     toggle.setAttribute('aria-pressed', String(open));
     toggle.dataset.tip = open ? 'Hide docs' : 'Show docs';
     window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
@@ -108,9 +121,29 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   }
 
   toggle.addEventListener('click', () => {
-    const open = aside.hidden;
-    show(open);
-    desktop.showSidebar(open).catch(() => {});
+    if (narrow.matches) {
+      floating = aside.hidden;
+      draw();
+      return;
+    }
+    show(aside.hidden);
+    desktop.showSidebar(docked).catch(() => {});
+  });
+  const closeFloating = () => {
+    floating = false;
+    draw();
+  };
+  narrow.addEventListener('change', () => {
+    floating = false;
+    if (view) draw();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !floating || event.defaultPrevented) return;
+    closeFloating();
+    toggle.focus();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (floating && !aside.contains(event.target) && !toggle.contains(event.target)) closeFloating();
   });
   desktop.onFolderChanged(refresh);
   return { ready: refresh(), state: () => ({ sidebarScroll: tree.scrollTop }) };
