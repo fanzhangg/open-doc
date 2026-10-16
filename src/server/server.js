@@ -15,7 +15,7 @@ import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, av
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, editAgents, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, editAgents, readSettings, settingsPath, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
 import { splice } from './splice.js';
 import { Team } from './agents/team.js';
@@ -366,6 +366,7 @@ export async function startServer(docPath, {
       agents: team.statuses(),
       docKey: docKey(), // which of the user's unstarred agents are this doc's own
       folder: folder && basename(folder), // the folder the agents may read, if any
+      settingsFile: settingsPath(settingsDir), // where a browser tab says to set an agent's command
     };
   }
 
@@ -454,7 +455,8 @@ export async function startServer(docPath, {
   }
 
   // New agent for the user's roster, from the page: any fields but its
-  // program. With `invite`, it joins this doc at once.
+  // program. With `invite`, it joins this doc at once. A name asked for is
+  // kept or refused as taken; none gets a free one ("agent", "agent-2", …).
   async function rosterCreate(body) {
     const { id: _id, ...fields } = body?.agent ?? {};
     await checkProgram(AGENT_PROGRAM_KEYS, fields, {});
@@ -468,7 +470,7 @@ export async function startServer(docPath, {
     let created;
     const settings = await editAgents((agents) => {
       const lead = participants ? { autoComment: leaderless(agents.filter(here)) } : {};
-      created = createAgent(agents, { ...fields, ...lead }, [me]);
+      created = createAgent(agents, { ...fields, ...lead }, [me], { exact: Object.hasOwn(fields, 'name') });
       return [...agents, created];
     }, settingsDir).catch(agentError);
     const joined = body?.invite === true ? await invite(created.id) : {};

@@ -158,7 +158,7 @@
         <header class="od-agent-head">
           <span class="od-agent-head-avatar"></span>
           <div class="od-agent-head-fields">
-            <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name">
+            <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name" placeholder="Name, as you @mention it">
             <input class="od-agent-intro" type="text" data-agent="persona" maxlength="120" aria-label="Persona" placeholder="Persona: who it is, in one line">
             <div class="od-input-error" role="alert" hidden></div>
           </div>
@@ -212,7 +212,18 @@
               <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code> (the task, with the persona), <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
             </span>
             <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" spellcheck="false">
-            <p class="od-agent-note od-program-note" hidden>A command can be set in the desktop app, or in settings.json.</p>
+            <div class="od-agent-note od-program-note" hidden>
+              <p class="od-program-note-draft">Once it is created, its command can be set in settings.json.</p>
+              <div class="od-program-note-saved">
+                <p>Set its command in settings.json, or in the desktop app:</p>
+                <code class="od-settings-file"></code>
+                <p>Under "agents", find <code class="od-agent-id"></code> and set its command:</p>
+                <div class="od-snippet">
+                  <code class="od-command-snippet"></code>
+                  <button type="button" class="od-secondary" data-action="copy-command">Copy</button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -264,6 +275,10 @@
 
         <footer class="od-agent-foot">
           <button type="button" class="od-link-button od-danger" data-action="delete-agent">Delete agent</button>
+          <span class="od-agent-draft-actions">
+            <button type="button" class="od-secondary" data-action="discard-draft">Cancel</button>
+            <button type="button" class="od-primary" data-action="create-agent" disabled>Create</button>
+          </span>
         </footer>
       </form>
 

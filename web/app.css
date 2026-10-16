@@ -156,9 +156,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 @keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
 [data-state="queued"] .od-face-body { animation: od-fade-pulse 1.6s ease-in-out infinite; }
 @keyframes od-spin { to { transform: rotate(360deg); } }
-/* a new agent pops in */
-.od-agent-new .od-agent-face { animation: od-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
-@keyframes od-pop-in { from { transform: scale(0.2); opacity: 0; } }
 
 /* profile cards under the header avatars */
 .od-panel { position: fixed; top: 50px; right: 12px; z-index: 30; width: 320px; padding: 16px; background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; font-size: 13px; }
@@ -796,3 +793,15 @@ label.od-setting { cursor: pointer; }
 .od-agent-advanced[open] > summary::before { transform: rotate(90deg); }
 .od-agent-advanced[open] > summary { margin-bottom: 8px; }
 .od-agent-foot { display: flex; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
+
+/* a new agent's draft: Create and Cancel in place of Delete, kept in view */
+.od-agent-draft-actions { display: none; gap: 8px; }
+.od-agent-editor[data-draft] .od-agent-draft-actions { display: flex; }
+.od-agent-editor[data-draft] [data-action="delete-agent"] { display: none; }
+.od-agent-editor[data-draft] .od-agent-foot { position: sticky; bottom: -28px; margin-bottom: -28px; padding-bottom: 28px; background: var(--bg); }
+
+/* in a browser tab: where a Command agent's command goes in settings.json */
+.od-program-note p { margin: 0 0 6px; }
+.od-settings-file { display: block; margin: 0 0 8px; overflow-wrap: anywhere; user-select: all; }
+.od-snippet { display: flex; align-items: center; gap: 8px; }
+.od-command-snippet { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 6px; background: var(--bg-soft); color: var(--text); overflow-wrap: anywhere; }

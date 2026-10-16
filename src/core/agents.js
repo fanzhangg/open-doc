@@ -224,17 +224,55 @@ export function resolveRoster(stored) {
 /**
  * A new agent for `roster`: `fields` over the defaults, with a fresh id and
  * a name no other agent and no `taken` name (the human's) has: "agent",
- * "agent-2", …
+ * "agent-2", … With `exact`, the name in `fields` is kept or refused: the
+ * user typed it, and a different one would surprise them.
  */
-export function createAgent(roster, fields = {}, taken = []) {
+export function createAgent(roster, fields = {}, taken = [], { exact = false } = {}) {
   checkAgentPatch({ ...fields, id: 'a_check' });
   if (roster.length >= MAX_AGENTS) throw new AgentError(`at most ${MAX_AGENTS} agents`);
   const draft = { ...AGENT_DEFAULTS, ...fields, id: newId('a') };
   const base = fields.name ?? 'agent';
   let name = base;
   const used = (n) => taken.some((t) => sameName(t, n)) || roster.some((a) => clash(a, { ...draft, name: n }));
+  if (exact && used(name)) throw new AgentError(`the name ${name} is taken`);
   for (let n = 2; used(name); n++) name = `${base.slice(0, 60)}-${n}`;
   return { ...draft, name };
+}
+
+/**
+ * A new agent in the Agents panel before it is created: the defaults, with
+ * `fields` over them, no id and no name yet. `face` keeps its face from
+ * changing with each letter of the name typed.
+ */
+export function draftAgent(fields = {}) {
+  return { ...AGENT_DEFAULTS, id: null, name: '', ...fields };
+}
+
+/**
+ * What creating `draft` sends: its name, trimmed, and the fields changed from
+ * the defaults; or null while the name is not valid. Left out: the fields the
+ * server sets (the doc) and the program (set by the desktop app, which asks
+ * first). An unchanged Auto Commenter is left for the server, which gives it
+ * to the first agent in a doc.
+ */
+export function createFields(draft) {
+  const name = (draft.name ?? '').trim();
+  if (!AGENT_RULES.name(name)) return null;
+  const fields = { name };
+  for (const [key, value] of Object.entries(draft)) {
+    if (!Object.hasOwn(AGENT_DEFAULTS, key) || AGENT_SERVER_KEYS.includes(key) || AGENT_PROGRAM_KEYS.includes(key)) continue;
+    if (value !== AGENT_DEFAULTS[key]) fields[key] = value;
+  }
+  return checkAgentPatch(fields);
+}
+
+/**
+ * The line that gives an agent `command` in settings.json, where the page
+ * cannot set one (it goes in the agent's entry, in place of `"command": null`).
+ * No command yet: an example to edit.
+ */
+export function commandSnippet(command) {
+  return `"command": ${JSON.stringify(command || 'mybot --prompt-file {promptFile}')}`;
 }
 
 /** `roster` with agent `id` changed by `patch` (validated; the id cannot change). */

@@ -314,6 +314,7 @@ test('settings: defaults until saved, then shared through the user file', async 
     assert.equal(first.body.settings.font, 'sans');
     assert.equal(first.body.settings.name, null);
     assert.equal(first.body.settingsSaved, false);
+    assert.equal(first.body.settingsFile, join(settingsDir, 'settings.json'), 'where a browser tab says to set a command');
 
     const saved = await call(server, 'PUT', '/api/settings', { body: { font: 'serif', name: 'fzhan' } });
     assert.equal(saved.status, 200);
@@ -775,7 +776,10 @@ test('agents are created from the page, added at once, and deleted', { timeout: 
     assert.equal(agent.autoComment, false, 'with Pilot leading the doc, a new agent answers when @mentioned');
     assert.equal(agent.editMode, 'auto', 'a new agent edits directly');
     assert.ok(created.body.sidecar.participants.some((p) => p.name === 'grammar'));
-    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar' } } })).body.agent.name, 'grammar-2', 'a free name');
+    const taken = await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar' }, invite: true } });
+    assert.deepEqual([taken.status, taken.body.error], [400, 'the name grammar is taken'], 'a name asked for is refused, not changed');
+    assert.equal((await state()).settings.agents.filter((a) => a.name.startsWith('grammar')).length, 1, 'nothing saved');
+    assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar-2' } } })).body.agent.name, 'grammar-2');
     assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { maxTurns: 0 } } })).status, 400);
 
     const deleted = await call(server, 'POST', '/api/roster/delete', { body: { id: agent.id } });

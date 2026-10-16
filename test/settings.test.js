@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, commandSnippet, createAgent, createFields, deleteAgent, draftAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -140,6 +140,37 @@ test('agents: a new one edits directly, and the first among its peers leads', ()
   assert.equal(leaderless([]), true, 'no one yet: the next one leads');
   assert.equal(leaderless([{ autoComment: false }, { autoComment: false }]), true);
   assert.equal(leaderless([{ autoComment: false }, { autoComment: true }]), false);
+});
+
+test('agents: a new one is a draft until created, and Create sends only what changed', () => {
+  const draft = draftAgent({ face: 'seed1234' });
+  assert.deepEqual([draft.id, draft.name, draft.runtime, draft.face], [null, '', 'claude', 'seed1234'], 'the defaults, no id or name yet');
+  assert.equal(createFields(draft), null, 'no name: nothing to create');
+  assert.equal(createFields({ ...draft, name: '  ' }), null);
+  assert.equal(createFields({ ...draft, name: 'bad name' }), null, 'a name it could not be @mentioned by');
+  assert.deepEqual(createFields({ ...draft, name: ' critic ' }), { name: 'critic', face: 'seed1234' }, 'the name trimmed, and the face it was drawn with');
+  const set = { ...draft, name: 'critic', persona: 'A tough reader', runtime: 'codex', webAccess: true, maxTurns: 40 };
+  assert.deepEqual(createFields(set), { name: 'critic', face: 'seed1234', persona: 'A tough reader', runtime: 'codex', webAccess: true, maxTurns: 40 });
+  // The doc is the server's to set and the program the desktop app's; Auto
+  // Commenter left unchanged is the server's to give to a doc's first agent.
+  const fields = createFields({ ...draft, name: 'bot', runtime: 'custom', command: 'mybot {promptFile}', doc: '/x.md', autoComment: false });
+  assert.deepEqual(fields, { name: 'bot', face: 'seed1234', runtime: 'custom' });
+  assert.equal(createFields({ ...draft, name: 'lead', autoComment: true }).autoComment, true, 'a choice made in the draft is kept');
+});
+
+test('agents: a name asked for is kept or refused; none asked for gets a free one', () => {
+  const roster = [createAgent([], { name: 'critic' })];
+  assert.equal(createAgent(roster, { name: 'critic' }).name, 'critic-2');
+  assert.throws(() => createAgent(roster, { name: 'Critic' }, [], { exact: true }), (error) => error instanceof AgentError && error.message === 'the name Critic is taken');
+  assert.throws(() => createAgent([], { name: 'fzhan' }, ['fzhan'], { exact: true }), /the name fzhan is taken/, "not the human's name either");
+  assert.equal(createAgent(roster, { name: 'muse' }, [], { exact: true }).name, 'muse');
+});
+
+test('agents: the settings.json line for a command, where the page cannot set it', () => {
+  assert.equal(commandSnippet('mybot --prompt-file {promptFile}'), '"command": "mybot --prompt-file {promptFile}"');
+  assert.equal(commandSnippet('"C:\\bots\\run.exe" {doc}'), String.raw`"command": "\"C:\\bots\\run.exe\" {doc}"`, 'escaped as JSON');
+  assert.equal(commandSnippet(null), '"command": "mybot --prompt-file {promptFile}"', 'none yet: an example to edit');
+  assert.deepEqual(JSON.parse(`{${commandSnippet('a "b"')}}`), { command: 'a "b"' }, 'valid JSON in an object');
 });
 
 test('agents: each permission is a switch, and Auto Editor needs Editor', () => {
