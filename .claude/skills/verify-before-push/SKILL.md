@@ -6,8 +6,9 @@ description: Checks to run in the opendoc repo before committing or pushing a ch
 # Verify before you push
 
 A push to main rebuilds the nightly installers. CI (`.github/workflows/desktop.yml`)
-now refuses to publish a build that fails these checks, but a red main still
-blocks everyone, so run them yourself first.
+publishes them only when lint passes and the packaged app opens a doc on
+Windows and macOS. It runs the unit tests once, on Linux, but a failure there
+does not hold back the nightly, so run them yourself first.
 
 ## 1. Read your own diff
 
@@ -42,8 +43,9 @@ say so and show the output instead of working around it.
 ## 3. Ship through a pull request
 
 Push a branch and open a PR against main rather than pushing to main directly.
-The PR runs the same checks on Windows and macOS, so platform-only failures
-show up before merge. Merge once it is green; the nightly is rebuilt from main.
+The PR runs the same smoke test on Windows and macOS, so a build that only
+breaks on one of them shows up before merge. Merge once it is green, unit
+tests included; the nightly is rebuilt from main.
 
 ## Windows notes
 

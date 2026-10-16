@@ -1,8 +1,9 @@
-# Checks every pull request and push to main on Windows and macOS: lint, the
-# tests, then the installers, and a smoke test that opens a doc in the
-# packaged app. Pushes to main that pass all of it replace the "nightly"
-# pre-release (https://github.com/fanzhangg/open-doc/releases/tag/nightly),
-# so a broken build never replaces a working one.
+# Checks every pull request and push to main. The gate, on Windows and macOS:
+# lint, the installers, and a smoke test that opens a doc in the packaged
+# app. Pushes to main that pass it replace the "nightly" pre-release
+# (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
+# that cannot open a doc never replaces a working one. The unit tests run
+# once, on Linux, and report without holding back the nightly.
 
 name: Desktop builds
 
@@ -39,8 +40,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - run: npm test
-        timeout-minutes: 15
       - run: npx electron-builder ${{ matrix.args }} --publish never
       - name: Smoke test the packaged app
         run: node scripts/smoke-desktop.js ${{ matrix.app }}
@@ -53,8 +52,21 @@ jobs:
             release/*.exe
           if-no-files-found: error
 
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
   release:
-    needs: build
+    needs: build # not test: failing unit tests show on the PR but do not hold back the nightly
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
