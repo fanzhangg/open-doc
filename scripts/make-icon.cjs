@@ -46,7 +46,10 @@ app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
   await window.loadURL('data:text/html,<html></html>');
   const renderer = readFileSync(join(__dirname, '..', 'web', 'faces.js'), 'utf8').replace(/^export /gm, '');
-  const draw = (fn) => window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn ${fn}().outerHTML; })()`);
+  // Clippy's face, the agent the app comes with, from the seed it ships with.
+  const { DEFAULT_AGENTS } = await import('../src/core/agents.js');
+  const face = JSON.stringify(DEFAULT_AGENTS[0].face);
+  const draw = (fn) => window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn ${fn}(${face}).outerHTML; })()`);
   // One mark everywhere: the app icon is also the favicon and the wordmark's mark.
   const svg = await draw('appIcon');
   writeFileSync(join(build, 'icon.svg'), svg + '\n');
