@@ -16,7 +16,7 @@ export function apology(error, kind = null) {
   if (/not signed in/.test(e)) return `Sorry, I'm not signed in to ${program}.`;
   if (/anthropic_api_key/.test(e)) return 'Sorry, isolated runs need an ANTHROPIC_API_KEY.';
   if (/no command is set/.test(e)) return 'Sorry, no command is set for me.';
-  if (/was not found|enoent|could not run|could not start the agent/.test(e)) return `Sorry, I can't find ${program}.`;
+  if (/was not found|is not at|launcher|enoent|could not run|could not start the agent/.test(e)) return `Sorry, I can't find ${program}.`;
   const minutes = e.match(/timed out after (\d+) min/);
   if (minutes) return `Sorry, I timed out after ${minutes[1]} min.`;
   if (/finished without replying/.test(e)) return 'Sorry, I finished without replying.';

@@ -4,7 +4,9 @@
 // change things: who it is (name, persona), what it can do (the
 // permission switches, the same as on its card), its instructions, and, folded
 // away, how it runs. A problem shows above the rest only when there is one.
-// "Programs" at the foot of the list holds where Claude Code and Codex are.
+// "Programs" at the foot of the list holds where Claude Code and Codex are,
+// and whether each works: found, runs, signed in. It is checked when the page
+// first opens or a path changes, and again only when the user clicks Check.
 //
 // Changes save through the server as they are made. An agent's program (a
 // custom command, or where Claude Code is) is set through the desktop app,
@@ -48,12 +50,16 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   const hooks = form.querySelector('.od-agent-hooks');
   perms.replaceChildren(...PERMISSIONS.map(permissionRow));
   let statuses = [];
+  let programStatus = {}; // what the server found for each program: { claude, codex }
+  let checkedFor = null; // the paths that check was for
+  const checking = new Set(); // programs being checked
   let selected = null; // the id of the agent shown
   let programs = false; // the Programs page is shown instead
 
   form.querySelector('.od-program-note').hidden = Boolean(desktop);
   for (const button of dialog.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
   for (const input of dialog.querySelectorAll('[data-agent-program], [data-program]')) input.readOnly = !desktop;
+  programsPage.querySelector('.od-programs-note').hidden = Boolean(desktop);
 
   // Your starred agents, and this doc's own; other docs' own stay with them.
   const agents = () => store.get().agents.filter((a) => availableIn(a, docKey()));
@@ -95,6 +101,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     for (const bin of dialog.querySelectorAll('[data-program]')) {
       if (document.activeElement !== bin) bin.value = store.get()[bin.dataset.program] ?? '';
     }
+    if (programs) paintPrograms();
 
     const agent = programs ? null : current();
     form.hidden = !agent;
@@ -166,6 +173,63 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     hooks.hidden = !status?.warning;
   }
 
+  // Each program's line: what runs and that it is signed in, or what is
+  // wrong and how to fix it. An empty path shows what it finds.
+  function paintPrograms() {
+    const paths = JSON.stringify([store.get().claudeBin, store.get().codexBin]);
+    if (paths !== checkedFor) {
+      checkedFor = paths;
+      programStatus = {}; // a new path's check takes a few seconds: say so meanwhile
+      loadPrograms();
+    }
+    for (const line of programsPage.querySelectorAll('.od-program-status')) {
+      const kind = line.dataset.programKind;
+      const status = programStatus[kind];
+      const busy = checking.has(kind) || !status;
+      const bin = programsPage.querySelector(`[data-program="${kind}Bin"]`);
+      bin.placeholder = status ? (status.found ?? 'Not found automatically') : 'Found automatically';
+      bin.title = bin.value || (status?.found ?? ''); // a long path does not fit
+      line.dataset.state = busy ? 'checking' : status.ok ? 'ok' : 'error';
+      line.querySelector('[data-action="check-program"]').disabled = busy;
+      const text = line.querySelector('.od-program-status-text');
+      if (busy) text.replaceChildren('Checking…');
+      else if (status.ok) {
+        const how = status.apiKey ? 'uses CODEX_API_KEY' : 'signed in';
+        text.replaceChildren(el('span', 'od-program-mark', '✓ '), `${status.label}${status.version ? ` ${status.version}` : ''} · ${how}`);
+      } else text.replaceChildren(el('span', 'od-program-mark', '✗ '), `${status.error}: ${status.fix}`);
+      text.title = status?.path ?? '';
+    }
+  }
+
+  let loads = 0;
+  async function loadPrograms() {
+    const load = ++loads;
+    let next = {};
+    try {
+      next = await api.programs();
+    } catch {
+      // the server is gone; nothing to show
+    }
+    if (load !== loads) return; // the paths changed again meanwhile
+    programStatus = next;
+    paint();
+  }
+
+  async function checkProgram(kind) {
+    checking.add(kind);
+    paint();
+    try {
+      const result = await api.checkProgram(kind);
+      programStatus = result.programs;
+      onResult({ agents: result.agents });
+    } catch {
+      // the server is gone; the line keeps what it last knew
+    } finally {
+      checking.delete(kind);
+      paint();
+    }
+  }
+
   function show(id) {
     programs = false;
     if (id) selected = id;
@@ -185,6 +249,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     } else if (button.dataset.agentRuntime) save({ runtime: button.dataset.agentRuntime });
     else if (button.dataset.agentEffort) save({ effort: button.dataset.agentEffort });
     else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
+    else if (button.dataset.action === 'check-program') checkProgram(button.dataset.programKind);
     else if (button.dataset.action === 'new-agent') {
       try {
         const result = await api.createAgent({ name: 'agent' });

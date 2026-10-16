@@ -160,19 +160,13 @@ export function claudeAdapter({ bin, agentName = '', model = CLAUDE_DEFAULT_MODE
       return fileAccess ? null : privateWorkdir(docPath, agentName);
     },
     async preflight() {
-      if (!executable) return { ok: false, error: 'Claude Code was not found; set its path in Agents > Programs (or pass --agent-bin)' };
       if (isolated && !process.env.ANTHROPIC_API_KEY) {
         return { ok: false, error: 'Isolated runs need ANTHROPIC_API_KEY (bare mode does not use the normal sign-in)' };
       }
-      if (isolated) return { ok: true };
-      const { stdout, error } = await run(executable, ['auth', 'status']);
-      if (error && !stdout) return { ok: false, error: `could not run ${executable}: ${error.message}` };
-      try {
-        if (JSON.parse(stdout).loggedIn === true) return { ok: true };
-      } catch {
-        // fall through
-      }
-      return { ok: false, error: 'Claude Code is not signed in; run "claude" once in a terminal to sign in' };
+      const status = await programStatus('claude', bin ?? null);
+      // Bare mode signs in with the key, so only the program has to run.
+      if (status.ok || (isolated && status.signedIn === false)) return { ok: true };
+      return { ok: false, error: status.message };
     },
     command({ prompt, docFile, docPath, editMode = 'auto', guard = false }) {
       const args = [
@@ -256,14 +250,8 @@ export function codexAdapter({ bin, agentName = '', model, webAccess = false, fo
       ].join('\n'));
     },
     async preflight() {
-      if (!executable) return { ok: false, error: 'Codex was not found; install it ("npm install -g @openai/codex") so codex is on PATH' };
-      // `codex login status` exits 0 when signed in, 1 when not; it prints to stderr.
-      const { error } = await run(executable, ['login', 'status']);
-      if (!error) return { ok: true };
-      if (typeof error.code !== 'number') return { ok: false, error: `could not run ${executable}: ${error.message}` };
-      // `codex exec` also takes a key from the environment instead of a sign-in.
-      if (process.env.CODEX_API_KEY) return { ok: true };
-      return { ok: false, error: 'Codex is not signed in; run "codex login" once in a terminal to sign in' };
+      const status = await programStatus('codex', bin ?? null);
+      return status.ok ? { ok: true } : { ok: false, error: status.message };
     },
     command({ prompt, docPath }) {
       const user = userCodexConfig(codexHome);
@@ -412,6 +400,97 @@ export function findCodex() {
   return null;
 }
 
+const PROGRAMS = {
+  claude: {
+    label: 'Claude Code',
+    find: findClaude,
+    install: 'install Claude Code, or Choose… where it is',
+    missingMessage: 'Claude Code was not found; install it, or set where it is in Agents > Programs (or pass --agent-bin)',
+    signIn: 'run claude in a terminal to sign in',
+    signInMessage: 'Claude Code is not signed in; run "claude" once in a terminal to sign in',
+  },
+  codex: {
+    label: 'Codex',
+    find: findCodex,
+    install: 'install it with npm install -g @openai/codex, or Choose… where it is',
+    missingMessage: 'Codex was not found; install it ("npm install -g @openai/codex") so codex is on PATH, or set where it is in Agents > Programs',
+    signIn: 'run codex login in a terminal',
+    signInMessage: 'Codex is not signed in; run "codex login" once in a terminal to sign in',
+  },
+};
+
+/**
+ * Whether Claude Code or Codex (`kind`) works: the program at `bin` (its path
+ * in settings) or, when that is empty, the one found automatically. It runs
+ * only `--version` and the program's sign-in status, which cost nothing. Both
+ * an agent's preflight and Agents > Programs use it, so they always agree.
+ *
+ * Returns `path` (what runs, or null), `source` ('settings' or 'found'),
+ * `found` (what an empty path would find), `version`, `signedIn` (null when
+ * the program could not run), `apiKey` (Codex signs in with CODEX_API_KEY)
+ * and `ok`. On failure, `error` and `fix` are short, for the Programs page,
+ * and `message` is one line for an agent that cannot start.
+ */
+export async function programStatus(kind, bin = null) {
+  const program = PROGRAMS[kind];
+  if (!program) throw new Error(`unknown program: ${kind}`);
+  const { label } = program;
+  const found = program.find();
+  const path = bin || found;
+  const status = { kind, label, path, source: bin ? 'settings' : found ? 'found' : null, found, version: null, signedIn: null, apiKey: false, ok: false, error: null, fix: null, message: null };
+  const fail = (error, fix, message) => ({ ...status, error, fix, message });
+
+  if (!path) return fail('Not found', program.install, program.missingMessage);
+  // A path that is not there would fail as a bare "spawn ... ENOENT".
+  if (isAbsolute(path) && !existsSync(path)) {
+    return fail(`Nothing at ${path}`, 'clear the path to find it automatically, or Choose… another',
+      `${label} is not at ${path}; clear its path in Agents > Programs to find it automatically, or choose another`);
+  }
+  // Node starts a .cmd or .bat only through a shell, which agents never use.
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(path)) {
+    return fail(`${basename(path)} is a launcher, not the program`, 'Choose… the .exe instead',
+      `${label} at ${path} is a launcher OpenDoc could not run; choose the .exe in Agents > Programs`);
+  }
+
+  const [version, auth] = await Promise.all([
+    run(path, ['--version']),
+    run(path, kind === 'claude' ? ['auth', 'status'] : ['login', 'status']),
+  ]);
+  // A number is the program's own exit code; anything else means it never started.
+  if (version.error && typeof version.error.code !== 'number') {
+    const why = version.error.code ?? version.error.message;
+    const other = 'Choose… another, or clear the path to find it automatically';
+    if (['EFTYPE', 'EACCES', 'ENOEXEC', 'EISDIR'].includes(why) || isDirectory(path)) {
+      return fail(`${basename(path)} is not a program`, other, `could not run ${label} at ${path}: it is not a program; choose another in Agents > Programs`);
+    }
+    return fail(`Could not start it (${why})`, other, `could not run ${label} at ${path} (${why}); choose another in Agents > Programs`);
+  }
+  status.version = version.stdout.match(/\d+\.\d+(\.\d+)?/)?.[0] ?? null;
+
+  if (kind === 'claude') {
+    try {
+      status.signedIn = JSON.parse(auth.stdout).loggedIn === true;
+    } catch {
+      status.signedIn = false;
+    }
+  } else {
+    // `codex login status` exits 0 when signed in, 1 when not. `codex exec`
+    // also takes a key from the environment instead of a sign-in.
+    status.signedIn = !auth.error;
+    if (!status.signedIn && process.env.CODEX_API_KEY) status.signedIn = status.apiKey = true;
+  }
+  if (!status.signedIn) return fail('Not signed in', program.signIn, program.signInMessage);
+  return { ...status, ok: true };
+}
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // Secrets a Codex run may not read in the folders above the doc's (Codex
 // expands these globs when a run starts, so unlike Claude Code's DENIED_READS
 // they cannot cover the whole disk).
@@ -540,11 +619,16 @@ const tail = (text) => {
 // Starting a program blocks the thread that starts it until Windows has
 // loaded it: most of a second for claude.exe. A worker starts it, so the
 // server (in the desktop app, the whole main process) does not wait.
+// A file that is not a program (EFTYPE on Windows) makes execFile throw
+// instead of calling back; either way the error goes back with its code.
 const RUN_IN_WORKER = `
 const { parentPort, workerData: { command, args, options } } = require('node:worker_threads');
-require('node:child_process').execFile(command, args, options, (error, stdout) => {
-  parentPort.postMessage({ error: error && { message: error.message, code: error.code }, stdout: String(stdout ?? '') });
-});`;
+const reply = (error, stdout) => parentPort.postMessage({ error: error && { message: error.message, code: error.code }, stdout: String(stdout ?? '') });
+try {
+  require('node:child_process').execFile(command, args, options, reply);
+} catch (error) {
+  reply(error, '');
+}`;
 
 function run(command, args) {
   return new Promise((resolve) => {

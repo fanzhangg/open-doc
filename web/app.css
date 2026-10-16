@@ -754,6 +754,10 @@ label.od-setting { cursor: pointer; }
 .od-agents-main { position: relative; overflow-y: auto; padding: 24px 32px 28px; }
 .od-agents-close { position: absolute; top: 12px; right: 12px; }
 .od-agents-programs-page h2 { margin: 2px 0 6px; font-size: 16px; font-weight: 600; }
+.od-program-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-soft); font-size: 12.5px; }
+.od-program-status-text { min-width: 0; overflow-wrap: anywhere; }
+.od-program-status[data-state="ok"] .od-program-mark { color: var(--success); }
+.od-program-status[data-state="error"] .od-program-status-text { color: var(--danger); }
 .od-agent-head { display: flex; align-items: flex-start; gap: 14px; padding-right: 32px; }
 .od-agent-head .od-avatar { --size: 48px; }
 .od-agent-head-fields { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }

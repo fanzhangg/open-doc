@@ -7,14 +7,14 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { Floor } from '../src/server/agents/dispatcher.js';
-import { CODEX_DENIED_GLOBS, DENIED_READS, SKILL_PATH, agentEnv, buildPrompt, claudeAdapter, codexAdapter, codexPermissions, customAdapter, findCodex, privateWorkdir, rulePath, splitCommand, userCodexConfig } from '../src/server/agents/adapters.js';
+import { CODEX_DENIED_GLOBS, DENIED_READS, SKILL_PATH, agentEnv, buildPrompt, claudeAdapter, codexAdapter, codexPermissions, customAdapter, findCodex, privateWorkdir, programStatus, rulePath, splitCommand, userCodexConfig } from '../src/server/agents/adapters.js';
 import { main, waitForInbox } from '../src/cli/main.js';
 import { revertEdits } from '../src/core/diff.js';
 import { inbox } from '../src/core/inbox.js';
 import { request } from 'node:http';
 
 import { sidecarPath } from '../src/store/files.js';
-import { SAMPLE, tempDoc } from './helpers.js';
+import { SAMPLE, tempDoc, withFakeProgram } from './helpers.js';
 
 const FAKE = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-agent.js');
 const quiet = { stdout: { write() {} }, stderr: { write() {} }, env: {} };
@@ -811,7 +811,7 @@ test('Codex preflight: says why when Codex is missing, cannot run or is signed o
     assert.match(missing.error, /Codex was not found; install it/);
     process.env.PATH = saved.PATH;
     const broken = await codexAdapter({ bin: join(tmpdir(), 'definitely-not-codex.exe') }).preflight();
-    assert.match(broken.error, /could not run/);
+    assert.match(broken.error, /^Codex is not at .*definitely-not-codex\.exe; clear its path in Agents > Programs/);
     // Exiting 1 for `login status` (node finds no "login" script) is how a signed-out Codex answers.
     const signedOut = await codexAdapter({ bin: process.execPath }).preflight();
     assert.equal(signedOut.ok, false);
@@ -825,16 +825,80 @@ test('Codex preflight: says why when Codex is missing, cannot run or is signed o
   }
 });
 
+test('programStatus: the path, its version, and whether it is signed in', async () => {
+  await withFakeProgram(true, async ({ program, set }) => {
+    for (const kind of ['claude', 'codex']) {
+      const status = await programStatus(kind, program);
+      assert.equal(status.ok, true);
+      assert.equal(status.path, program);
+      assert.equal(status.source, 'settings');
+      assert.equal(status.version, process.versions.node);
+      assert.equal(status.signedIn, true);
+      assert.equal(status.error, null);
+    }
+    set(false);
+    const claude = await programStatus('claude', program);
+    assert.equal(claude.ok, false);
+    assert.equal(claude.signedIn, false);
+    assert.equal(claude.version, process.versions.node, 'it runs, it is only signed out');
+    assert.deepEqual([claude.error, claude.fix], ['Not signed in', 'run claude in a terminal to sign in']);
+    assert.match(claude.message, /^Claude Code is not signed in; run "claude"/);
+    const codex = await programStatus('codex', program);
+    assert.deepEqual([codex.ok, codex.error, codex.fix], [false, 'Not signed in', 'run codex login in a terminal']);
+    // The agents say the same as the page.
+    assert.equal((await claudeAdapter({ bin: program }).preflight()).error, claude.message);
+    assert.equal((await codexAdapter({ bin: program }).preflight()).error, codex.message);
+    // Bare mode signs in with a key, so a signed-out Claude Code still runs.
+    const key = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    try {
+      assert.equal((await claudeAdapter({ bin: program, isolated: true }).preflight()).ok, true);
+    } finally {
+      if (key === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = key;
+    }
+  });
+});
+
+test('programStatus: a path that is not there, or not a program, says how to fix it', async () => {
+  const missing = join(tmpdir(), 'no-such-folder', 'claude.exe');
+  const gone = await programStatus('claude', missing);
+  assert.equal(gone.ok, false);
+  assert.equal(gone.path, missing);
+  assert.equal(gone.signedIn, null);
+  assert.equal(gone.error, `Nothing at ${missing}`);
+  assert.equal(gone.fix, 'clear the path to find it automatically, or Choose… another');
+  assert.equal(gone.message, `Claude Code is not at ${missing}; clear its path in Agents > Programs to find it automatically, or choose another`);
+  // A file that exists but is not a program (this test's own source).
+  const notProgram = await programStatus('codex', fileURLToPath(import.meta.url));
+  assert.equal(notProgram.ok, false);
+  assert.equal(notProgram.error, 'dispatcher.test.js is not a program');
+  assert.match(notProgram.message, /^could not run Codex at .*: it is not a program; choose another in Agents > Programs$/);
+  await assert.rejects(programStatus('gemini', null), /unknown program/);
+});
+
 test('an unavailable agent does not launch and says why', { timeout: 30_000 }, async () => {
   const docPath = await tempDoc(SAMPLE);
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const adapter = claudeAdapter({ bin: join(tmpdir(), 'definitely-not-claude.exe') });
   const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
   try {
-    assert.equal(server.team.get('claude').status().state, 'starting', 'the server does not wait for the check');
     await server.team.get('claude').checked;
     assert.equal(server.team.get('claude').status().state, 'unavailable');
-    assert.match(server.team.get('claude').status().error, /could not run/);
+    assert.match(server.team.get('claude').status().error, /^Claude Code is not at /);
+  } finally {
+    await server.close();
+  }
+});
+
+test('opening a doc does not wait for an agent program check', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const adapter = customAdapter(`"${process.execPath}" -e "0"`);
+  adapter.preflight = () => new Promise(() => {}); // a check that never ends
+  const server = await startServer(docPath, { assetsDir, agent: { name: 'claude', adapter } });
+  try {
+    assert.equal(server.team.get('claude').status().state, 'starting');
   } finally {
     await server.close();
   }

@@ -21,6 +21,7 @@ import { splice } from './splice.js';
 import { Team } from './agents/team.js';
 import { TextAsks } from './text-asks.js';
 import { agentSpec } from './agents/config.js';
+import { programStatus } from './agents/adapters.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -215,6 +216,12 @@ export async function startServer(docPath, {
       }
       case 'POST /api/agent':
         return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
+      case 'GET /api/programs':
+        return sendJson(res, 200, { programs: await programs() });
+      case 'POST /api/programs/check': {
+        const body = await readJson(req);
+        return sendJson(res, 200, await recheckProgram(body?.kind));
+      }
       case 'POST /api/agents/invite': {
         const body = await readJson(req);
         return sendJson(res, 200, await invite(body?.id));
@@ -620,6 +627,32 @@ export async function startServer(docPath, {
   }
 
   // 'retry' an agent that is offline.
+  // ---- Agents > Programs ----
+
+  // The last check of each program, for the path it checked: opening the
+  // page again does not run the programs again; a new path, or Check, does.
+  const programChecks = {};
+  async function programs(recheck = null) {
+    const settings = await currentSettings();
+    const kinds = ['claude', 'codex'];
+    for (const kind of kinds) {
+      const bin = settings[`${kind}Bin`] ?? null;
+      const last = programChecks[kind];
+      if (!last || last.bin !== bin || recheck === kind) programChecks[kind] = { bin, status: programStatus(kind, bin) };
+    }
+    return Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await programChecks[kind].status])));
+  }
+
+  // Check: run the program's checks again, then retry this doc's agents that
+  // could not start on it. Nothing else re-checks an agent's program.
+  async function recheckProgram(kind) {
+    if (kind !== 'claude' && kind !== 'codex') throw new HttpError(400, 'bad_input', 'kind must be claude or codex');
+    const result = await programs(kind);
+    const stuck = team.statuses().filter((s) => s.kind === kind && s.state === 'unavailable');
+    await Promise.all(stuck.map((s) => team.get(s.name)?.retry()));
+    return { programs: result, agents: team.statuses() };
+  }
+
   async function agentAction(body) {
     const member = team.get(typeof body?.name === 'string' ? body.name : '');
     if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
