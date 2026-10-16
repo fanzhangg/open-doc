@@ -47,6 +47,7 @@ import { newId } from './ops.js';
 
 export const RUNTIMES = Object.freeze(['claude', 'codex', 'custom']);
 export const EDIT_MODES = Object.freeze(['none', 'approve', 'auto']);
+export const EFFORTS = Object.freeze(['low', 'medium', 'high']);
 export const MAX_PERSONA = 120;
 export const MAX_INSTRUCTIONS = 4000;
 export const MAX_AGENTS = 500;
@@ -56,8 +57,10 @@ export const MAX_AGENTS = 500;
  * `command` (a custom runtime's command line) decides what program runs.
  * A Claude agent sees only the doc unless `webAccess` or `fileAccess`. A Codex
  * agent runs under a Codex permission profile (in the doc's folder it sees
- * only the doc and its sidecar); `webAccess` turns on its web search. `model` applies to both; `maxTurns`,
- * `maxBudgetUsd`, `isolated` and `fileAccess` only to Claude.
+ * only the doc and its sidecar); `webAccess` turns on its web search. `model` applies to both; `effort`, `maxTurns`,
+ * `maxBudgetUsd`, `isolated` and `fileAccess` only to Claude. A Claude agent
+ * with no `model` runs on a fast one (see claudeAdapter), at low `effort`:
+ * most comments ask for small changes.
  */
 export const AGENT_DEFAULTS = Object.freeze({
   face: null,
@@ -70,6 +73,7 @@ export const AGENT_DEFAULTS = Object.freeze({
   editMode: 'auto',
   autoComment: false,
   model: null,
+  effort: 'low',
   maxTurns: 30,
   runTimeoutMinutes: 10,
   runsPerHour: 20,
@@ -107,6 +111,7 @@ export const AGENT_RULES = Object.freeze({
   editMode: oneOf(...EDIT_MODES),
   autoComment: boolean,
   model: orNull((v) => typeof v === 'string' && /^[A-Za-z0-9._:[\]-]{1,100}$/.test(v)),
+  effort: oneOf(...EFFORTS),
   maxTurns: integer(1, 500),
   runTimeoutMinutes: integer(1, 240),
   runsPerHour: integer(1, 1000),

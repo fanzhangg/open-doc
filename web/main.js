@@ -167,6 +167,8 @@ async function start() {
     onReply: (threadId, body) => sendOp({ type: 'addMessage', threadId, message: newMessage(body) }),
     onResolve: (threadId) => sendOp({ type: 'resolve', threadId, by: me }),
     onReopen: (threadId) => sendOp({ type: 'reopen', threadId, by: me }),
+    onRetry: (threadId, name) => sendOp({ type: 'retry', threadId, name }),
+    onCancelRequest: (threadId, name) => sendOp({ type: 'cancel', threadId, name }),
     onUndo: undoEdit,
     onApply: applyProposalEdit,
     canApply: (message) => canApply(disk, message),
@@ -205,6 +207,7 @@ async function start() {
   people.render({ agents: initial.agents, roster: settings.get().agents });
   settings.subscribe((next) => people.render({ roster: next.agents }));
   chrome.agentStatus(initial.agents);
+  margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applySidecar(initial.sidecar);
   setStatus('Saved');
@@ -512,6 +515,7 @@ function showAgents(next) {
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   people.render({ agents: next });
   chrome.agentStatus(next);
+  margin.setAgents(next);
 }
 
 // What an agent request (invite, remove, change an agent) answers with.

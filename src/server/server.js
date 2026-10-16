@@ -34,7 +34,7 @@ const ASSETS = {
   '/assets/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
-const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);
+const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen', 'retry', 'cancel']);
 const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
 
 class HttpError extends Error {
@@ -195,7 +195,7 @@ export async function startServer(docPath, {
       }
       case 'POST /api/ops': {
         const body = await readJson(req);
-        return sendJson(res, 200, await serial(() => applyBrowserOp(body)));
+        return sendJson(res, 200, await applyBrowserOp(body));
       }
       case 'GET /api/events':
         return openEvents(req, res);
@@ -638,7 +638,7 @@ export async function startServer(docPath, {
     settleMs: mentionSettleMs,
     mentionable: () => mentionableAgents(),
     text: async () => project((await readDoc(docPath)).markdown).text,
-    send: (ask) => serial(() => sendTextAsk(ask)),
+    send: (ask) => sendTextAsk(ask),
     open: async (threadId, messageId) => {
       try {
         const thread = (await readSidecar(docPath)).threads.find((t) => t.id === threadId);
@@ -660,7 +660,9 @@ export async function startServer(docPath, {
     const messageId = newId('m');
     let sent = false;
     let joined = false;
-    await update(docPath, (s) => {
+    // Only the write holds the lock: bringing an agent in (syncAgents) can
+    // wait on another agent's run, and saves must not wait with it.
+    await serial(() => update(docPath, (s) => {
       let next = asHuman(s, who);
       if (!next.participants.some((p) => sameName(p.name, name))) {
         const agent = roster.find((a) => sameName(a.name, name));
@@ -671,7 +673,7 @@ export async function startServer(docPath, {
       sent = true;
       const message = { id: messageId, author, body: text.slice(start, end), createdAt: new Date().toISOString() };
       return applyOp(next, { type: 'addThread', id: threadId, anchor: createAnchor(text, start, end), message });
-    });
+    }));
     freeParagraph(text, start);
     if (joined) await syncAgents();
     return sent ? { threadId, messageId } : null;
@@ -724,7 +726,8 @@ export async function startServer(docPath, {
     const message = op.message;
     const roster = message && useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
     let joined = false;
-    const sidecar = await update(docPath, (s) => {
+    // Only the write holds the lock (see sendTextAsk).
+    const sidecar = await serial(() => update(docPath, (s) => {
       let next = asHuman(s, who);
       for (const name of parseMentions(message?.body ?? '', roster)) {
         if (next.participants.some((p) => sameName(p.name, name))) continue;
@@ -732,9 +735,12 @@ export async function startServer(docPath, {
         joined = true;
       }
       return applyOp(next, op);
-    });
+    }));
     if (joined) await syncAgents();
-    return { sidecar, ...(joined ? { agents: team.statuses() } : {}) };
+    // Retrying an agent that cannot start checks its program again first.
+    const retried = op.type === 'retry' ? team.get(op.name) : null;
+    if (retried?.status().state === 'unavailable') await retried.retry();
+    return { sidecar, ...(joined || retried ? { agents: team.statuses() } : {}) };
   }
 
   function openEvents(req, res) {
@@ -1008,6 +1014,10 @@ function validateOp(op, me) {
       return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
     case 'resolve':
       return { type: 'resolve', threadId: threadId(op.threadId), by: me.name, kind: 'human', at: now };
+    case 'retry':
+    case 'cancel':
+      if (!NAME_PATTERN.test(op.name ?? '')) throw new HttpError(400, 'bad_input', 'invalid agent name');
+      return { type: op.type, threadId: threadId(op.threadId), name: op.name, by: me.name, kind: 'human' };
     default:
       return { type: 'reopen', threadId: threadId(op.threadId), by: me.name, kind: 'human' };
   }

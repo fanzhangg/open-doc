@@ -210,6 +210,50 @@ test('pass: an agent leaves an open ask to others, and stops working on it', () 
   assert.throws(() => applyOp(s, { type: 'pass', threadId: 't_missing', by: 'muse' }), (e) => e.code === 'unknown_thread');
 });
 
+test('fail: the ask leaves the agent\'s inbox until a human retries it or asks again', () => {
+  let s = withAgents(claude);
+  s = applyOp(s, { type: 'addThread', id: 't_failed1', anchor: null, message: msg(human, '@claude look') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_failed1', by: 'claude', since: new Date().toISOString() });
+  s = applyOp(s, { type: 'fail', threadId: 't_failed1', by: 'Claude', error: 'timed out after 10 min', at });
+  assert.equal(s.threads[0].working, null);
+  assert.deepEqual(s.threads[0].failed, [{ name: 'claude', error: 'timed out after 10 min', at }]);
+  assert.deepEqual(inbox(s, 'claude'), [], 'a failure is not tried again on its own');
+  // Failing again replaces the failure.
+  const again = applyOp(s, { type: 'fail', threadId: 't_failed1', by: 'claude', error: 'exited with code 1', at });
+  assert.deepEqual(again.threads[0].failed.map((f) => f.error), ['exited with code 1']);
+  assert.throws(() => applyOp(s, { type: 'fail', threadId: 't_failed1', by: 'claude', error: ' ', at }), (e) => e.code === 'bad_input');
+
+  // Only a human retries.
+  assert.throws(() => applyOp(s, { type: 'retry', threadId: 't_failed1', name: 'claude', by: 'claude' }), (e) => e.code === 'not_allowed');
+  const retried = applyOp(s, { type: 'retry', threadId: 't_failed1', name: 'claude', by: 'fzhan', kind: 'human' });
+  assert.deepEqual(retried.threads[0].failed, []);
+  assert.deepEqual(inbox(retried, 'claude').map((t) => t.id), ['t_failed1']);
+
+  // A new ask from the human is a reason to try again too.
+  const asked = applyOp(s, { type: 'addMessage', threadId: 't_failed1', message: msg(human, '@claude again') });
+  assert.deepEqual(asked.threads[0].failed, []);
+  assert.deepEqual(inbox(asked, 'claude').map((t) => t.id), ['t_failed1']);
+});
+
+test('cancel: a human takes the ask back from an agent until they ask again', () => {
+  let s = withAgents(claude);
+  s = applyOp(s, { type: 'addThread', id: 't_cancel1', anchor: null, message: msg(human, '@claude look') });
+  s = applyOp(s, { type: 'fail', threadId: 't_cancel1', by: 'claude', error: 'exited with code 1', at });
+  assert.throws(() => applyOp(s, { type: 'cancel', threadId: 't_cancel1', name: 'claude', by: 'claude' }), (e) => e.code === 'not_allowed');
+  const cancelled = applyOp(s, { type: 'cancel', threadId: 't_cancel1', name: 'CLAUDE', by: 'fzhan' });
+  assert.deepEqual(cancelled.threads[0].failed, []);
+  assert.deepEqual(cancelled.threads[0].cancelled, ['claude']);
+  assert.deepEqual(inbox(cancelled, 'claude'), []);
+  assert.deepEqual(applyOp(cancelled, { type: 'cancel', threadId: 't_cancel1', name: 'claude', by: 'fzhan' }).threads[0].cancelled, ['claude'], 'once');
+  // An agent that never ran (it could not start) can be cancelled too.
+  const fresh = applyOp(withAgents(claude), { type: 'addThread', id: 't_cancel2', anchor: null, message: msg(human, '@claude look') });
+  assert.deepEqual(inbox(applyOp(fresh, { type: 'cancel', threadId: 't_cancel2', name: 'claude', by: 'fzhan' }), 'claude'), []);
+
+  const asked = applyOp(cancelled, { type: 'addMessage', threadId: 't_cancel1', message: msg(human, '@claude now?') });
+  assert.deepEqual(asked.threads[0].cancelled, []);
+  assert.deepEqual(inbox(asked, 'claude').map((t) => t.id), ['t_cancel1']);
+});
+
 test('leave: an agent removed from the doc is no longer a participant or working; its messages stay', () => {
   let s = withAgents(claude);
   s = applyOp(s, { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude look') });
