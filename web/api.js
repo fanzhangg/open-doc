@@ -30,7 +30,7 @@ export const api = {
   /** 'retry' agent `name`, or set its 'presence' ({ presence: 'online' | 'dnd' }); resolves to its status. */
   agentAction: async (name, action, extra = {}) => (await request('POST', '/api/agent', { name, action, ...extra })).data.status,
   /** Agent `name`'s status and last run log. */
-  /** Whether Claude Code and Codex work: { claude, codex }, each from programStatus. */
+  /** Whether Claude Code and Codex work: { claude, codex }, each from programStatus, with the `defaultModel` an agent with none runs on. */
   programs: async () => (await request('GET', '/api/programs')).data.programs,
   /** Check one program again; this doc's agents that could not start on it try again. */
   checkProgram: async (kind) => (await request('POST', '/api/programs/check', { kind })).data,

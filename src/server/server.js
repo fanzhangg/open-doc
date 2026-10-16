@@ -21,7 +21,7 @@ import { splice } from './splice.js';
 import { Team } from './agents/team.js';
 import { TextAsks } from './text-asks.js';
 import { agentSpec } from './agents/config.js';
-import { programStatus } from './agents/adapters.js';
+import { CLAUDE_DEFAULT_MODEL, programStatus, userCodexConfig } from './agents/adapters.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -640,7 +640,10 @@ export async function startServer(docPath, {
       const last = programChecks[kind];
       if (!last || last.bin !== bin || recheck === kind) programChecks[kind] = { bin, status: programStatus(kind, bin) };
     }
-    return Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, await programChecks[kind].status])));
+    // What an agent with no model runs on, for the Model field. The Codex
+    // config is read each time: the user may change it without OpenDoc.
+    const defaultModel = { claude: CLAUDE_DEFAULT_MODEL, codex: userCodexConfig().model ?? null };
+    return Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, { ...(await programChecks[kind].status), defaultModel: defaultModel[kind] }])));
   }
 
   // Check: run the program's checks again, then retry this doc's agents that

@@ -176,6 +176,46 @@
           <input type="checkbox" class="od-switch" data-agent="starred">
         </label>
 
+        <section class="od-agent-block od-agent-runs">
+          <div class="od-setting">
+            <span class="od-setting-text">
+              <h3>Runs on</h3>
+              <span class="od-setting-hint">The program that does its work. The persona works the same on any of them.</span>
+            </span>
+            <div class="od-segmented" role="radiogroup" aria-label="Runs on">
+              <button type="button" role="radio" data-agent-runtime="claude">Claude Code<span class="od-runtime-flag" hidden>!</span></button>
+              <button type="button" role="radio" data-agent-runtime="codex">Codex<span class="od-runtime-flag" hidden>!</span></button>
+              <button type="button" role="radio" data-agent-runtime="custom">Command</button>
+            </div>
+          </div>
+          <div class="od-program-status od-agent-program" data-for="claude codex">
+            <span class="od-program-status-text" aria-live="polite"></span>
+            <span class="od-program-actions">
+              <button type="button" class="od-link-button" data-action="open-programs" hidden>Programs</button>
+              <button type="button" class="od-secondary" data-action="check-program">Check</button>
+            </span>
+          </div>
+          <p class="od-agent-note od-runtime-note" role="status" hidden></p>
+          <div class="od-setting" data-for="claude codex">
+            <span class="od-setting-text">
+              <label for="od-agent-model">Model</label>
+              <span class="od-setting-hint" data-for="claude">Haiku is fast. Try sonnet or opus for harder work, or type a full model ID.</span>
+              <span class="od-setting-hint" data-for="codex">Empty uses the model in your Codex config.</span>
+            </span>
+            <input id="od-agent-model" class="od-input" type="text" data-agent="model" list="od-agent-models" placeholder="Default" spellcheck="false">
+            <datalist id="od-agent-models"></datalist>
+          </div>
+          <p class="od-agent-note od-agent-warning od-model-warning" data-for="claude" hidden></p>
+          <div class="od-setting od-setting-stacked" data-for="custom">
+            <span class="od-setting-text">
+              <label for="od-agent-command">Command</label>
+              <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code> (the task, with the persona), <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
+            </span>
+            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" spellcheck="false">
+            <p class="od-agent-note od-program-note" hidden>A command can be set in the desktop app, or in settings.json.</p>
+          </div>
+        </section>
+
         <section class="od-agent-block">
           <h3>What it can do</h3>
           <p class="od-agent-block-hint od-agent-reads">Every agent reads the doc it works on.</p>
@@ -192,25 +232,6 @@
         <details class="od-agent-block od-agent-advanced">
           <summary>Advanced</summary>
           <p class="od-agent-note od-agent-warning od-agent-hooks" hidden></p>
-          <div class="od-setting">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Runs on</span>
-              <span class="od-setting-hint">The program that does its work. The persona works the same on any of them.</span>
-            </span>
-            <div class="od-segmented" role="radiogroup" aria-label="Runs on">
-              <button type="button" role="radio" data-agent-runtime="claude">Claude Code</button>
-              <button type="button" role="radio" data-agent-runtime="codex">Codex</button>
-              <button type="button" role="radio" data-agent-runtime="custom">Command</button>
-            </div>
-          </div>
-          <div class="od-setting" data-for="claude codex">
-            <span class="od-setting-text">
-              <label for="od-agent-model">Model</label>
-              <span class="od-setting-hint" data-for="claude">Empty uses haiku, which is fast. Try sonnet or opus for harder work.</span>
-              <span class="od-setting-hint" data-for="codex">A model name Codex accepts. Empty uses your Codex default.</span>
-            </span>
-            <input id="od-agent-model" class="od-input" type="text" data-agent="model" placeholder="Default" spellcheck="false">
-          </div>
           <div class="od-setting" data-for="claude">
             <span class="od-setting-text">
               <span class="od-setting-label">Effort</span>
@@ -221,14 +242,6 @@
               <button type="button" role="radio" data-agent-effort="medium">Medium</button>
               <button type="button" role="radio" data-agent-effort="high">High</button>
             </div>
-          </div>
-          <div class="od-setting od-setting-stacked" data-for="custom">
-            <span class="od-setting-text">
-              <label for="od-agent-command">Command</label>
-              <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code> (the task, with the persona), <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
-            </span>
-            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" spellcheck="false">
-            <p class="od-agent-note od-program-note" hidden>A command can be set in the desktop app, or in settings.json.</p>
           </div>
           <p class="od-agent-note" data-for="codex">Codex works in its own sandbox, without your Codex settings or MCP servers. In the doc's folder it reads only the doc and its comments, and edits the doc only with Auto Editor. Elsewhere it can read files on this computer, except keys and secrets. Sign in once with <code>codex login</code> in a terminal.</p>
           <div class="od-setting od-setting-stacked">

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, leaderless, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -156,6 +156,24 @@ test('agents: each permission is a switch, and Auto Editor needs Editor', () => 
   assert.deepEqual(permissionPatch(agent, 'files', true), { fileAccess: true });
   assert.equal(permissionPatch(agent, 'reader', false), null, 'reading the doc is not a switch');
   assert.deepEqual(permissionLabels(agent), []);
+});
+
+test('agents: another runtime starts on its default model, and the Model field says which', () => {
+  const sonnet = { ...AGENT_DEFAULTS, model: 'sonnet' };
+  assert.deepEqual(runtimePatch(sonnet, 'codex'), { patch: { runtime: 'codex', model: null }, note: 'Model reset to default (was sonnet).' });
+  assert.deepEqual(runtimePatch(AGENT_DEFAULTS, 'codex'), { patch: { runtime: 'codex', model: null }, note: '' }, 'nothing to say with no model');
+  assert.doesNotThrow(() => checkAgentPatch(runtimePatch(sonnet, 'custom').patch), 'saved in one change');
+
+  assert.deepEqual(modelChoices('claude', 'haiku'), { suggestions: ['haiku', 'sonnet', 'opus'], placeholder: 'haiku (default)' });
+  assert.deepEqual(modelChoices('codex', 'gpt-test'), { suggestions: ['gpt-test'], placeholder: 'gpt-test (your Codex default)' });
+  assert.deepEqual(modelChoices('codex', null), { suggestions: [], placeholder: 'Your Codex default' }, 'no Codex model names of its own');
+
+  assert.equal(modelWarning('claude', 'Opus'), '');
+  assert.equal(modelWarning('claude', 'claude-sonnet-4-5'), '');
+  assert.equal(modelWarning('claude', null), '');
+  assert.equal(modelWarning('claude', 'gpt-5'), 'Claude Code may not recognize this model.');
+  assert.equal(modelWarning('codex', 'gpt-5'), '', 'only Claude names are known');
+  assert.deepEqual(RUNTIMES.map((r) => RUNTIME_LABELS[r]), ['Claude', 'Codex', 'Command']);
 });
 
 test('agents: each field checked; any number of agents with Auto Commenter', () => {

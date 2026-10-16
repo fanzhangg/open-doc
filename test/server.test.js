@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
+import { runtimePatch } from '../src/core/agents.js';
 import { main } from '../src/cli/main.js';
 import { sidecarPath } from '../src/store/files.js';
 import { SAMPLE, tempDoc, withFakeProgram } from './helpers.js';
@@ -1035,4 +1036,36 @@ test('Agents > Programs: whether each program works, checked again only by Check
       await server.close();
     }
   });
+});
+
+test('Agents > Programs: the model an agent with none runs on; switching runtime clears the model', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const codexHome = await mkdtemp(join(tmpdir(), 'opendoc-codex-'));
+  const missing = join(tmpdir(), 'no-such-folder', 'program.exe'); // nothing runs
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({
+    name: 'fzhan', claudeBin: missing, codexBin: missing, agents: [{ id: 'a_test00', name: 'Pilot', runtime: 'claude', model: 'sonnet' }],
+  }));
+  const saved = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const server = await startServer(docPath, { assetsDir, settingsDir });
+  const defaults = async () => {
+    const { programs } = (await call(server, 'GET', '/api/programs')).body;
+    return [programs.claude.defaultModel, programs.codex.defaultModel];
+  };
+  try {
+    assert.deepEqual(await defaults(), ['haiku', null], 'no Codex config: no Codex default');
+    await writeFile(join(codexHome, 'config.toml'), 'model = "gpt-test"\n');
+    assert.deepEqual(await defaults(), ['haiku', 'gpt-test'], 'read again each time, without a Check');
+
+    const { patch } = runtimePatch({ runtime: 'claude', model: 'sonnet' }, 'codex');
+    assert.equal((await call(server, 'PUT', '/api/roster', { body: { id: 'a_test00', patch } })).status, 200);
+    const [pilot] = JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).agents;
+    assert.deepEqual([pilot.runtime, pilot.model], ['codex', null], 'sonnet does not carry over to Codex');
+  } finally {
+    await server.close();
+    if (saved === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = saved;
+  }
 });
