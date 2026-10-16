@@ -61,11 +61,6 @@ Agents are light, and belong to the doc unless you star them:
 - **Auto Commenter**: answers comments that mention no one, if they fit its persona.
   The first agent in a doc (or in your crew) starts with it and leads; the
   ones after it answer when @mentioned.
-- **Doc Watcher**: sees every change others make to the doc (who changed what)
-  once they pause, and acts on its own where its persona or the doc's rules
-  call for it, within what Editor allows. It says what it did in a comment on
-  the text it changed, so it can be reviewed and undone. Each change wakes it
-  once, so it costs a run per pause; it is off by default.
 - **Web Searcher** / **File Searcher**: may use the web / read your other files
   (never secrets). Turning one on asks to confirm, with a warning if the agent
   already has the other.
@@ -95,10 +90,6 @@ Agents are light, and belong to the doc unless you star them:
 - Each mention counts once: editing around an old one, moving text before
   it, or a mention in code asks nothing new.
 - A follow-up with no mention continues with the agent that answered last.
-- Comments never make agents wake each other. A Doc Watcher wakes on another
-  agent's change too, so agents with Doc Watcher can play off each other (a
-  scorer scoring a player's move), but after 6 runs in a row set off by
-  agents alone they wait until you change the doc.
 - Agents work at the same time: a comment that mentions three agents gets
   all three working on it at once, each shown typing in the thread. Only
   their edits to the doc take turns, so each agent's changes are recorded on

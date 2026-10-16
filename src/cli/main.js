@@ -49,8 +49,6 @@ it or no one):
   --agent-web                    let Claude search and fetch the web (off by default)
   --agent-read-files             let Claude read files other than the doc (off by default)
                                  A web page or file could trick it into leaking what it read.
-  --agent-watch                  Doc Watcher: the agent also sees every change made to the doc
-                                 and acts on its own when its persona calls for it
 
 Identity: --as <name> (or OPENDOC_AS), --kind agent|human (or OPENDOC_KIND; default agent).
 A thread waits on <name> when its latest message from a human mentions @<name> and <name> has
@@ -80,7 +78,6 @@ const OPTIONS = {
   'agent-isolated': { type: 'boolean' },
   'agent-web': { type: 'boolean' },
   'agent-read-files': { type: 'boolean' },
-  'agent-watch': { type: 'boolean' },
   model: { type: 'string' },
   'max-turns': { type: 'string' },
   'run-timeout': { type: 'string' },
@@ -124,7 +121,7 @@ const COMMANDS = {
       if (status.warning) out(`opendoc: warning: ${status.warning}`);
       out(status.state === 'unavailable'
         ? `opendoc: agent ${status.name} is unavailable: ${status.error}`
-        : `opendoc: ${status.name} ${status.presence === 'dnd' ? `answers comments that mention @${status.name}` : 'answers comments that mention it or no one'}${status.watch ? ' and watches the doc' : ''}, ${EDIT_MODE_TEXT[status.editMode]}`);
+        : `opendoc: ${status.name} ${status.presence === 'dnd' ? `answers comments that mention @${status.name}` : 'answers comments that mention it or no one'}, ${EDIT_MODE_TEXT[status.editMode]}`);
     }
     out('Press Ctrl+C to stop.');
     if (!values['no-open']) openBrowser(server.url);
@@ -338,7 +335,6 @@ function agentOptions(values, docPath) {
     if (values['agent-cmd']) throw new UsageError('--agent-cmd needs --agent <name>');
     if (values['edit-mode']) throw new UsageError('--edit-mode needs --agent <name>');
     if (values.persona) throw new UsageError('--persona needs --agent <name>');
-    if (values['agent-watch']) throw new UsageError('--agent-watch needs --agent <name>');
     return undefined;
   }
   const editMode = values['edit-mode'] ?? 'auto';
@@ -373,7 +369,7 @@ function agentOptions(values, docPath) {
   const warning = hooksWarning(adapter, values['agent-isolated'] === true, docPath);
   const persona = values.persona ?? '';
   if (persona.length > MAX_INSTRUCTIONS) throw new UsageError(`--persona must be at most ${MAX_INSTRUCTIONS} characters`);
-  return { name: values.agent, persona, adapter, limits, editMode, watch: values['agent-watch'] === true, warning };
+  return { name: values.agent, persona, adapter, limits, editMode, warning };
 }
 
 function openBrowser(url) {

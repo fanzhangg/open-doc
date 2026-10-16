@@ -110,13 +110,7 @@ same core library, so any of them can work without the others.
 - **Dispatcher** (`agents/dispatcher.js`): watches the inbox, claims threads
   (an entry in `working`; several agents can work in one thread), runs the agent with the threads and a prompt (task, persona and instructions as one block,
   other agents, rules), records the run's edits on its reply, and handles
-  failures, limits and restarts when settings change. A Doc Watcher's
-  dispatcher also hears every change to the doc's text with its author (the
-  server attributes human saves, the edits of the agent holding the floor
-  and outside changes); once the doc is still for 5 s it runs with those changes, and the
-  run's edits go on the comment it wrote (or a new one). The Floor counts
-  watch runs set off by agents alone and stops them after 6 in a row, until
-  anyone else changes the doc.
+  failures, limits and restarts when settings change.
 - **Runtimes** (`agents/config.js`, `adapters.js`): an adapter per program
   (Claude Code, Codex, custom command) that checks the program, builds the
   command line, prepares an empty private working folder per agent per doc,

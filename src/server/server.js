@@ -59,14 +59,13 @@ class HttpError extends Error {
  * An @mention typed in the doc is sent once its paragraph has been still for
  * `mentionIdleMs` (default `typingMs`), or `mentionSettleMs` (default 3 s)
  * when it ends a sentence, or at once when the human moves on from it.
- * `watchSettleMs` is how long the doc must be still before a Doc Watcher looks.
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
  * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = typingMs, watchSettleMs,
+  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = typingMs,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -86,7 +85,6 @@ export async function startServer(docPath, {
       humanName: async () => (await human()).name,
       catchUp: () => onFilesChanged(),
       held: (threadId) => textAsks.held(threadId),
-      ...(watchSettleMs === undefined ? {} : { watchSettleMs }),
     }),
   });
   let actualPort = port;
@@ -279,9 +277,7 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(body.markdown));
         await writeAtomic(docPath, body.markdown);
         await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
-        const author = await human();
-        tellAgents(body.markdown, author);
-        await noteVersion(body.markdown, { kind: 'edit', author });
+        await noteVersion(body.markdown, { kind: 'edit', author: await human() });
         return [res, 200, { docHash: lastWritten, markdown: body.markdown }];
       }
       if (current.hash !== body.baseHash) {
@@ -294,10 +290,8 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
         team.humanEdited(current.markdown, next); // not the agent's edit
-        const author = await human();
-        tellAgents(next, author);
         await update(docPath, (s) => s); // refresh anchors against the saved doc
-        await noteVersion(next, { kind: 'edit', author });
+        await noteVersion(next, { kind: 'edit', author: await human() });
         textAsks.humanSaved(current.markdown, next);
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
@@ -321,10 +315,8 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
         team.humanEdited(current.markdown, next);
-        const author = await human();
-        tellAgents(next, author);
         await update(docPath, (s) => s);
-        await noteVersion(next, { kind: 'restore', author, restoredFrom: id });
+        await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
@@ -365,8 +357,7 @@ export async function startServer(docPath, {
   // doc's own, or starred ones brought in by an @mention or added), except
   // one being removed. Another doc's own agents never work here; this doc's own come
   // before a starred agent of the same name. A restart is due whenever an
-  // agent's `key` changes; switching Auto Commenter only changes whom it
-  // answers, and Doc Watcher whether it looks at changes to the doc.
+  // agent's `key` changes; switching Auto Commenter only changes whom it answers.
   const leaving = new Set();
   async function wantedAgents() {
     const specs = [];
@@ -385,7 +376,7 @@ export async function startServer(docPath, {
       if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, watchDoc: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
+      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
       specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: false, participant: asParticipant(agent) });
     }
     return specs;
@@ -586,20 +577,9 @@ export async function startServer(docPath, {
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
     const agentNow = team.editing()?.status();
-    const author = agentNow ? { name: agentNow.name, kind: 'agent' } : null;
-    tellAgents(doc.markdown, author);
     return noteVersion(doc.markdown, agentNow
-      ? { kind: 'edit', author, threadIds: agentNow.threadIds }
+      ? { kind: 'edit', author: { name: agentNow.name, kind: 'agent' }, threadIds: agentNow.threadIds }
       : { kind: 'external', author: null });
-  }
-
-  // Tell the agents the doc now reads `markdown`, changed by `author` (null:
-  // outside OpenDoc), so a Doc Watcher knows who changed what.
-  // `toldText` is the doc as they were last told it.
-  let toldText = null;
-  function tellAgents(markdown, author) {
-    if (toldText !== null && markdown !== toldText) team.docChanged(toldText, markdown, author);
-    toldText = markdown;
   }
 
   async function human() {

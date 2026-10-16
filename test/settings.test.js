@@ -144,7 +144,7 @@ test('agents: a new one edits directly, and the first among its peers leads', ()
 
 test('agents: each permission is a switch, and Auto Editor needs Editor', () => {
   const agent = { ...AGENT_DEFAULTS, editMode: 'none' };
-  assert.deepEqual(permissionsOf(agent), { editor: false, autoEditor: false, autoComment: false, watch: false, web: false, files: false });
+  assert.deepEqual(permissionsOf(agent), { editor: false, autoEditor: false, autoComment: false, web: false, files: false });
   assert.deepEqual(permissionPatch(agent, 'editor', true), { editMode: 'approve' });
   assert.deepEqual(permissionPatch(agent, 'autoEditor', true), { editMode: 'auto' }, 'Auto Editor turns Editor on');
   const auto = { ...agent, editMode: 'auto' };
@@ -152,8 +152,6 @@ test('agents: each permission is a switch, and Auto Editor needs Editor', () => 
   assert.deepEqual(permissionPatch(auto, 'editor', false), { editMode: 'none' }, 'Editor off turns Auto Editor off');
   assert.deepEqual(permissionPatch({ ...agent, editMode: 'approve' }, 'editor', true), { editMode: 'approve' });
   assert.deepEqual(permissionPatch(agent, 'autoComment', true), { autoComment: true });
-  assert.deepEqual(permissionPatch(agent, 'watch', true), { watchDoc: true });
-  assert.deepEqual(permissionLabels({ ...agent, watchDoc: true }), ['Doc Watcher']);
   assert.deepEqual(permissionPatch(agent, 'web', true), { webAccess: true });
   assert.deepEqual(permissionPatch(agent, 'files', true), { fileAccess: true });
   assert.equal(permissionPatch(agent, 'reader', false), null, 'reading the doc is not a switch');

@@ -6,19 +6,13 @@
 // of one doc run at the same time, but write the doc one at a time (a
 // Floor), so each run's edits are its own and two agents never edit the doc
 // at once.
-//
-// A Doc Watcher also runs when others change the doc's text: once they pause,
-// it is handed what changed since it last looked and who changed it, and acts
-// only where its persona calls for it. Agents can set one another off this
-// way, so after MAX_RELAYS runs in a row started by agents' changes alone,
-// they wait for someone else to change the doc.
 
 import { spawn } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { activeWorking, applyOp, createAnchor, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange, workingList } from '../../core/index.js';
+import { activeWorking, applyOp, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange, workingList } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
@@ -32,8 +26,6 @@ const MAX_STDERR = 64 * 1024;
 const LOG_LINES = 40;
 
 export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
-export const WATCH_SETTLE_MS = 5_000; // a Doc Watcher looks once the doc has not changed for this long
-export const MAX_RELAYS = 6; // watch runs in a row that only agents' changes may start
 export const EDIT_LEASE_MS = 5_000; // a guarded edit holds the floor at most this long without saying it is done
 export const GUARD_WAIT_MS = 15_000; // how long the guard waits for the floor before refusing an edit
 
@@ -52,13 +44,11 @@ export const GUARD_WAIT_MS = 15_000; // how long the guard waits for the floor b
  * and the floor is free after the last. `before` is the doc as the holder
  * found it (with what the human saved since). Once free, the holder's
  * change, `before` to the doc then, goes into the base of every other run
- * (`dispatchers()`), so no other run counts it as its own. `relays` counts the watch runs in a row that agents'
- * changes alone started; anyone else changing the doc sets it back to 0.
+ * (`dispatchers()`), so no other run counts it as its own.
  */
 export class Floor {
   holder = null;
   before = null;
-  relays = 0;
   #holds = 0;
   #queued = new Set();
   #waiters = new Set();
@@ -147,14 +137,14 @@ export class Dispatcher {
    * the agent to the doc's participants when it starts (an agent from flags;
    * one from the roster is there because it was invited). `profile`
    * ({ webAccess, fileAccess }) is shown with the status and told to
-   * its runs. `watch` makes it a Doc Watcher; `humanName()` resolves to the
-   * human's name, for the prompt. `catchUp()` has the server take in the doc
-   * as it is on disk, run when a run ends and before it counts as over, so
-   * the run's last edits are known to be its own.
+   * its runs. `humanName()` resolves to the human's name, for the prompt.
+   * `catchUp()` has the server take in the doc as it is on disk, run when a
+   * run ends and before it counts as over, so the run's last edits are known
+   * to be its own.
    */
   constructor({
-    docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', watch = false, warning = null,
-    onStatus = () => {}, settleMs = 300, watchSettleMs = WATCH_SETTLE_MS, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = null, others = () => [], join = true, source = 'flags', participant = null,
+    docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
+    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = null, others = () => [], join = true, source = 'flags', participant = null,
   }) {
     this.docPath = docPath;
     this.docFile = basename(docPath);
@@ -171,11 +161,9 @@ export class Dispatcher {
     this.limits = { ...DEFAULT_LIMITS, ...limits };
     this.editMode = editMode;
     this.presence = presence;
-    this.watch = watch;
     this.warning = warning;
     this.onStatus = onStatus;
     this.settleMs = settleMs;
-    this.watchSettleMs = watchSettleMs;
     this.guard = guard;
     this.typingIn = typingIn;
     this.humanName = humanName;
@@ -188,11 +176,6 @@ export class Dispatcher {
     this.failed = new Set(); // "threadId:lastMessageId" of a failed run's threads
     this.runStarts = [];
     this.leased = false; // whether an edit the guard let through holds the floor
-    // For a Doc Watcher: the changes to the doc since it last looked, in
-    // order, one per author in a row ({ author, before, after }), and whether
-    // the doc has been still for `watchSettleMs` since the last one.
-    this.changes = [];
-    this.settled = false;
   }
 
   status() {
@@ -201,7 +184,6 @@ export class Dispatcher {
       id: this.id,
       source: this.source,
       autoComment: this.presence === 'online',
-      watch: this.watch,
       webAccess: Boolean(this.profile.webAccess),
       fileAccess: Boolean(this.profile.fileAccess),
       persona: this.persona,
@@ -244,35 +226,6 @@ export class Dispatcher {
     this.notify();
   }
 
-  /** Switch Doc Watcher on or off. A run in progress finishes either way. */
-  setWatch(watch) {
-    if (watch === this.watch) return;
-    this.watch = watch;
-    this.changes = [];
-    this.settled = false;
-    clearTimeout(this.watchTimer);
-    this.onStatus(this.status());
-  }
-
-  /**
-   * The doc's text went from `before` to `after` by `author` ({ name, kind },
-   * or null). A Doc Watcher notes it and looks once the doc is still; its own
-   * changes are noted (so the next ones line up) but never wake it.
-   */
-  docChanged(before, after, author) {
-    if (!this.watch || this.state === 'stopped') return;
-    const last = this.changes.at(-1);
-    if (last && sameAuthor(last.author, author) && last.after === before) last.after = after;
-    else this.changes.push({ author, before, after });
-    if (this.#mine(author)) return;
-    this.settled = false;
-    clearTimeout(this.watchTimer);
-    this.watchTimer = setTimeout(() => {
-      this.settled = true;
-      this.notify();
-    }, this.watchSettleMs);
-  }
-
   async retry() {
     this.failed.clear();
     if (this.state === 'unavailable') await this.#preflight();
@@ -291,7 +244,6 @@ export class Dispatcher {
     this.state = 'stopped';
     clearTimeout(this.settleTimer);
     clearTimeout(this.limitTimer);
-    clearTimeout(this.watchTimer);
     clearTimeout(this.leaseTimer);
     if (this.run) {
       const done = this.run.done;
@@ -321,7 +273,7 @@ export class Dispatcher {
     try {
       if (this.run || this.draining || !['ready', 'error', 'limited', 'queued'].includes(this.state)) return;
       const { sidecar } = await load(this.docPath);
-      if (this.#waiting(sidecar).length === 0 && !this.#watchDue()) {
+      if (this.#waiting(sidecar).length === 0) {
         this.floor.release(this);
         if (this.state === 'limited' || this.state === 'queued') this.#setState('ready');
         return;
@@ -345,8 +297,7 @@ export class Dispatcher {
         return claimed.reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since }), s);
       });
       if (this.#wholeRun()) this.floor.before = markdown;
-      const changes = this.#takeChanges();
-      if (claimed.length > 0 || changes.length > 0) await this.#launch(claimed, markdown, changes);
+      if (claimed.length > 0) await this.#launch(claimed, markdown);
       else this.#yield('ready');
     } catch (error) {
       this.#yield('error', `could not start a run: ${error.message}`);
@@ -386,36 +337,6 @@ export class Dispatcher {
     return this.#writes() && !this.#guarded();
   }
 
-  // Whether others changed the doc since this Doc Watcher last looked and the
-  // doc is still now, unless agents alone made those changes and have
-  // already set one another off MAX_RELAYS times in a row.
-  #watchDue() {
-    if (!this.watch || !this.settled) return false;
-    const theirs = this.changes.filter((c) => !this.#mine(c.author));
-    if (theirs.length === 0) return false;
-    return !(theirs.every((c) => c.author?.kind === 'agent') && this.floor.relays >= MAX_RELAYS);
-  }
-
-  // The changes others made, for a watch run: [{ by, kind, edits: [{ before, after }] }]
-  // in order ('outside OpenDoc' for a program's). Empty unless one is due;
-  // once taken, they are not handed out again, even if the run fails.
-  #takeChanges() {
-    if (!this.#watchDue()) return [];
-    const theirs = this.changes.filter((c) => !this.#mine(c.author));
-    if (theirs.every((c) => c.author?.kind === 'agent')) this.floor.relays++;
-    this.changes = [];
-    this.settled = false;
-    return theirs.map((c) => ({
-      by: c.author?.name ?? 'outside OpenDoc',
-      kind: c.author?.kind ?? 'external',
-      edits: diffEdits(c.before, c.after).map(({ edit }) => ({ before: edit.before, after: edit.after })),
-    })).filter((c) => c.edits.length > 0);
-  }
-
-  #mine(author) {
-    return author?.kind === 'agent' && sameName(author.name, this.name);
-  }
-
   // Give the turn back without running.
   #yield(state, error = null) {
     this.floor.release(this);
@@ -436,8 +357,7 @@ export class Dispatcher {
     return true;
   }
 
-  // `changes` (from #takeChanges) makes it a watch run as well.
-  async #launch(threads, markdown, changes = []) {
+  async #launch(threads, markdown) {
     const runDir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
     const lines = threadLines(markdown, threads);
     // A run kept to the doc starts in a folder of its own, so it names the
@@ -452,15 +372,11 @@ export class Dispatcher {
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
     // With Auto Commenter, an open ask is the agent's to take or leave (`open`).
     const open = new Set(this.presence === 'online' ? threads.filter(openAsk).map((t) => t.id) : []);
-    const payload = {
-      doc: docRef,
-      threads: threads.map((t, i) => ({ ...t, line: lines[i], ...(open.has(t.id) ? { open: true } : {}) })),
-      ...(changes.length > 0 ? { changes } : {}),
-    };
+    const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i], ...(open.has(t.id) ? { open: true } : {}) })) };
     const typing = this.editMode === 'auto' ? await this.typingIn().catch(() => null) : null;
     const prompt = buildPrompt({
       name: this.name, docFile: docRef, editMode: this.editMode, typing, persona: this.persona, autoComment: this.presence === 'online', others: this.others(),
-      human: await this.humanName().catch(() => null), asked: threads.length > 0, watching: changes.length > 0,
+      human: await this.humanName().catch(() => null),
       webAccess: Boolean(this.profile.webAccess), fileAccess: Boolean(this.profile.fileAccess), docFolder: dirname(this.docPath),
     });
     const threadsFile = join(runDir, 'threads.json');
@@ -509,7 +425,7 @@ export class Dispatcher {
     // `overwritten` holds changes to offer back once the run has replied.
     // `avoided` counts the edits the guard refused because the human was typing there.
     // `open` holds the open asks it may leave to others.
-    const run = { child, threadIds: threads.map((t) => t.id), done, base: this.#wholeRun() ? markdown : null, overwritten: [], avoided: 0, open, watched: changes.length > 0 };
+    const run = { child, threadIds: threads.map((t) => t.id), done, base: this.#wholeRun() ? markdown : null, overwritten: [], avoided: 0, open };
     this.run = run;
     this.#setState('running');
 
@@ -670,17 +586,9 @@ export class Dispatcher {
     // Record what the run changed in the doc on the agent's replies; threads
     // the agent did not answer go back to the inbox.
     const ids = new Set(threads.map((t) => t.id));
-    // A watch run reports what it did in comments of its own: its edits go
-    // on those, or on a new one when it wrote none.
-    let started = [];
     try {
       await update(this.docPath, (s, doc) => {
-        // Threads it started or replied in during the run, besides the ones it was given.
-        const ours = (t) => !ids.has(t.id) && t.messages.some((m) => sameName(m.author.name, this.name) && Date.parse(m.createdAt) >= startedAt.getTime());
-        let next = s;
-        if (edited && run.watched && threads.length === 0 && !s.threads.some(ours)) next = this.#reportEdits(s, run.base, doc.markdown);
-        started = run.watched ? next.threads.filter(ours) : [];
-        const recorded = edited ? this.#recordEdits(next, [...threads, ...started.map((t) => ({ ...t, messages: [] }))], run.base, doc.markdown) : next;
+        const recorded = edited ? this.#recordEdits(s, threads, run.base, doc.markdown) : s;
         return recorded.threads
           .filter((t) => ids.has(t.id) && workingList(t).some((w) => sameName(w.by, this.name)))
           .reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since: null }), recorded);
@@ -704,9 +612,8 @@ export class Dispatcher {
       const missed = silent.length - passing.length;
       if (missed > 0) result = { ...result, ok: false, error: `finished without replying to ${missed === 1 ? 'a comment' : `${missed} comments`}` };
     }
-    const own = [...threads, ...started];
-    if (own.length > 0) this.lastThreads = own;
-    if (run.overwritten.length > 0 && own.length > 0) await this.#offer(own, run.overwritten).catch(() => {});
+    this.lastThreads = threads;
+    if (run.overwritten.length > 0) await this.#offer(threads, run.overwritten).catch(() => {});
 
     this.lastRun = {
       startedAt: startedAt.toISOString(),
@@ -757,21 +664,6 @@ export class Dispatcher {
       next = applyOp(next, { type: 'addMessage', threadId: thread.id, message });
     }
     return next;
-  }
-
-  // A watch run that changed the doc without saying so in a comment: start
-  // one on the first change, so the human can review and undo the run's
-  // changes like any other (#recordEdits attaches them).
-  #reportEdits(sidecar, before, after) {
-    const changes = diffEdits(before, after);
-    if (changes.length === 0) return sidecar;
-    const { edit } = changes[0];
-    const { text, offsets } = project(after);
-    const start = offsets.findIndex((o) => o >= edit.start);
-    const end = offsets.findIndex((o) => o >= edit.start + edit.after.length);
-    const anchor = start !== -1 && end > start ? createAnchor(text, start, end) : null;
-    const message = { id: newId('m'), author: { name: this.name, kind: 'agent' }, body: 'Edited the doc.', createdAt: new Date().toISOString() };
-    return applyOp(sidecar, { type: 'addThread', id: newId('t'), anchor, message });
   }
 
   // The run's threads still open with no new message from the agent.
@@ -843,8 +735,6 @@ function threadAt(threads, markdown, change) {
   }
   return threads.length === 1 ? threads[0].id : null;
 }
-
-const sameAuthor = (a, b) => (a === null || b === null ? a === b : a.kind === b.kind && sameName(a.name, b.name));
 
 // A thread is retried after a failure only once a human adds a new message.
 const failureKey = (thread) => `${thread.id}:${thread.messages.at(-1).id}`;

@@ -73,6 +73,14 @@ test('the prompt carries the persona and names the other agents, for any runtime
   assert.ok(prompt.indexOf('<persona>') < prompt.indexOf('Never resolve a thread'), 'the rules come after the persona');
 });
 
+test('the prompt names the human, so "I" and "me" mean them', () => {
+  const named = buildPrompt({ name: 'Scorer', docFile: 'plan.md', human: 'fzhan' });
+  assert.match(named, /with a human, fzhan,/);
+  assert.match(named, /"I", "me" or "my" .* is fzhan/);
+  assert.match(named, /Stop when every thread has a reply/);
+  assert.doesNotMatch(buildPrompt({ name: 'Scorer', docFile: 'plan.md' }), /with a human,/, 'no name, no claim');
+});
+
 test('hooksWarning names the project settings that define hooks, unless runs are isolated', async () => {
   const dir = await tempDir();
   const doc = join(dir, 'docs', 'plan.md');

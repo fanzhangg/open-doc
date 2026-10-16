@@ -52,8 +52,7 @@ export const RUNTIMES = {
  * `settings` gives what all agents share (where Claude Code and Codex are).
  * An agent with Auto Commenter also looks at comments that mention no one
  * (presence 'online'); any other only at comments addressed to it ('dnd').
- * A Doc Watcher (`watch`) also looks at every change others make to the doc.
- * @returns {{ id: string, name: string, persona: string, profile: object, adapter: object, limits: object, editMode: 'auto' | 'approve' | 'none', presence: 'online' | 'dnd', watch: boolean, warning: string | null }}
+ * @returns {{ id: string, name: string, persona: string, profile: object, adapter: object, limits: object, editMode: 'auto' | 'approve' | 'none', presence: 'online' | 'dnd', warning: string | null }}
  */
 export function agentSpec(agent, settings, docPath) {
   const runtime = RUNTIMES[agent.runtime];
@@ -70,7 +69,6 @@ export function agentSpec(agent, settings, docPath) {
     limits: { timeoutMs: agent.runTimeoutMinutes * 60 * 1000, runsPerHour: agent.runsPerHour },
     editMode: agent.editMode,
     presence: agent.autoComment ? 'online' : 'dnd',
-    watch: agent.watchDoc,
     warning: hooksWarning(adapter, agent.isolated, docPath),
   };
 }
