@@ -70,8 +70,10 @@ Agents are light and disposable:
 
 ## Seeing and steering agent work
 
-- **Presence.** People's avatars are circles, agents' are flowers, side by
-  side in the header. While an agent works its flower turns like a spinner
+- **Presence.** People's avatars are circles; each agent's is a soft blob
+  with a face, its shape, colour and expression drawn from its name, so it
+  looks the same everywhere. They sit side by side in the header. While an
+  agent works its body rolls under its face like a spinner
   and the comment card pulses; an agent that is not running, still starting
   or failing is greyed out.
   Its edits are typed into the page as a collaborator would, highlighted with

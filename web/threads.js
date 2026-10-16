@@ -8,11 +8,10 @@
 import { activeWorking } from '../src/core/ops.js';
 import { appliedBy } from './review.js';
 import { icon } from './icons.js';
+import { agentFace } from './faces.js';
 
 const GAP = 10;
 const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
-// Twelve hues, so agents in one doc usually land on different ones.
-const AGENT_HUES = [25, 50, 262, 165, 90, 345, 120, 190, 300, 210, 140, 325];
 const PALETTE = ['#1a73e8', '#188038', '#9334e6', '#e37400', '#d01884', '#007b83', '#5f6368'];
 
 /**
@@ -560,10 +559,11 @@ function patchCard(card, fresh) {
 const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start });
 
 export function avatar(name, kind, small = false) {
-  const node = el('span', `od-avatar${kind === 'agent' ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`, initials(name));
-  // Each agent its own hue, so several in one doc are told apart at a glance;
-  // its flower shape (app.css) tells agents from people.
-  if (kind === 'agent') node.style.setProperty('--agent-fill', agentColor(name));
+  const agent = kind === 'agent';
+  const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`, agent ? undefined : initials(name));
+  // People are initials on a circle; each agent is a face of its own (faces.js),
+  // so several in one doc are told apart at a glance.
+  if (agent) node.append(agentFace(name));
   else node.style.background = colorFor(name);
   node.title = name;
   return node;
@@ -572,11 +572,6 @@ export function avatar(name, kind, small = false) {
 function initials(name) {
   const parts = name.split(/[._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase();
-}
-
-function agentColor(name) {
-  const hue = AGENT_HUES[hash(name) % AGENT_HUES.length];
-  return `linear-gradient(135deg, hsl(${hue} 85% 70%), hsl(${hue} 70% 46%))`;
 }
 
 function hash(name) {

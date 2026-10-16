@@ -125,14 +125,14 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-people { display: flex; align-items: center; gap: 8px; }
 .od-me, .od-agent-face { border: 0; background: none; padding: 0; border-radius: 50%; display: flex; }
 .od-me:hover .od-avatar { box-shadow: 0 0 0 3px var(--hover); }
-.od-agent-face:hover .od-avatar-agent::before { filter: brightness(1.08); }
+.od-agent-face:hover .od-face-body { filter: brightness(1.06); }
 
 .od-avatar { --size: 30px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s; }
 .od-avatar-small { --size: 22px; }
-.od-avatar-agent { position: relative; isolation: isolate; border-radius: 0; background: none; }
-/* Agents are flowers, people are circles. The shape sits behind the initials so it can spin while the agent works. */
-.od-avatar-agent::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--agent-fill, linear-gradient(135deg, #9b7bff, #6d3fe0)); -webkit-mask: var(--flower) center / 100% 100% no-repeat; mask: var(--flower) center / 100% 100% no-repeat; transition: filter 0.15s; }
-:root { --flower: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M69.1 3.8L69.9 4.2L70.7 4.6L71.5 5.0L72.2 5.5L72.9 6.0L73.6 6.6L74.2 7.2L74.8 7.9L75.4 8.6L75.9 9.3L76.4 10.1L76.9 10.9L77.3 11.8L77.6 12.7L77.9 13.6L78.2 14.5L78.4 15.6L78.5 16.6L78.6 17.7L78.6 18.8L78.4 20.0L78.2 21.3L78.7 21.8L80.0 21.6L81.2 21.4L82.3 21.4L83.4 21.5L84.4 21.6L85.5 21.8L86.4 22.1L87.3 22.4L88.2 22.7L89.1 23.1L89.9 23.6L90.7 24.1L91.4 24.6L92.1 25.2L92.8 25.8L93.4 26.4L94.0 27.1L94.5 27.8L95.0 28.5L95.4 29.3L95.8 30.1L96.2 30.9L96.5 31.7L96.8 32.5L97.0 33.4L97.2 34.2L97.3 35.1L97.3 36.0L97.4 36.9L97.3 37.8L97.2 38.7L97.1 39.6L96.9 40.5L96.6 41.4L96.3 42.2L96.0 43.1L95.5 44.0L95.0 44.9L94.4 45.7L93.8 46.6L93.1 47.4L92.2 48.2L91.3 48.9L90.3 49.6L90.3 50.4L91.3 51.1L92.2 51.8L93.1 52.6L93.8 53.4L94.4 54.3L95.0 55.1L95.5 56.0L96.0 56.9L96.3 57.8L96.6 58.6L96.9 59.5L97.1 60.4L97.2 61.3L97.3 62.2L97.4 63.1L97.3 64.0L97.3 64.9L97.2 65.8L97.0 66.6L96.8 67.5L96.5 68.3L96.2 69.1L95.8 69.9L95.4 70.7L95.0 71.5L94.5 72.2L94.0 72.9L93.4 73.6L92.8 74.2L92.1 74.8L91.4 75.4L90.7 75.9L89.9 76.4L89.1 76.9L88.2 77.3L87.3 77.6L86.4 77.9L85.5 78.2L84.4 78.4L83.4 78.5L82.3 78.6L81.2 78.6L80.0 78.4L78.7 78.2L78.2 78.7L78.4 80.0L78.6 81.2L78.6 82.3L78.5 83.4L78.4 84.4L78.2 85.5L77.9 86.4L77.6 87.3L77.3 88.2L76.9 89.1L76.4 89.9L75.9 90.7L75.4 91.4L74.8 92.1L74.2 92.8L73.6 93.4L72.9 94.0L72.2 94.5L71.5 95.0L70.7 95.4L69.9 95.8L69.1 96.2L68.3 96.5L67.5 96.8L66.6 97.0L65.8 97.2L64.9 97.3L64.0 97.3L63.1 97.4L62.2 97.3L61.3 97.2L60.4 97.1L59.5 96.9L58.6 96.6L57.8 96.3L56.9 96.0L56.0 95.5L55.1 95.0L54.3 94.4L53.4 93.8L52.6 93.1L51.8 92.2L51.1 91.3L50.4 90.3L49.6 90.3L48.9 91.3L48.2 92.2L47.4 93.1L46.6 93.8L45.7 94.4L44.9 95.0L44.0 95.5L43.1 96.0L42.2 96.3L41.4 96.6L40.5 96.9L39.6 97.1L38.7 97.2L37.8 97.3L36.9 97.4L36.0 97.3L35.1 97.3L34.2 97.2L33.4 97.0L32.5 96.8L31.7 96.5L30.9 96.2L30.1 95.8L29.3 95.4L28.5 95.0L27.8 94.5L27.1 94.0L26.4 93.4L25.8 92.8L25.2 92.1L24.6 91.4L24.1 90.7L23.6 89.9L23.1 89.1L22.7 88.2L22.4 87.3L22.1 86.4L21.8 85.5L21.6 84.4L21.5 83.4L21.4 82.3L21.4 81.2L21.6 80.0L21.8 78.7L21.3 78.2L20.0 78.4L18.8 78.6L17.7 78.6L16.6 78.5L15.6 78.4L14.5 78.2L13.6 77.9L12.7 77.6L11.8 77.3L10.9 76.9L10.1 76.4L9.3 75.9L8.6 75.4L7.9 74.8L7.2 74.2L6.6 73.6L6.0 72.9L5.5 72.2L5.0 71.5L4.6 70.7L4.2 69.9L3.8 69.1L3.5 68.3L3.2 67.5L3.0 66.6L2.8 65.8L2.7 64.9L2.7 64.0L2.6 63.1L2.7 62.2L2.8 61.3L2.9 60.4L3.1 59.5L3.4 58.6L3.7 57.8L4.0 56.9L4.5 56.0L5.0 55.1L5.6 54.3L6.2 53.4L6.9 52.6L7.8 51.8L8.7 51.1L9.7 50.4L9.7 49.6L8.7 48.9L7.8 48.2L6.9 47.4L6.2 46.6L5.6 45.7L5.0 44.9L4.5 44.0L4.0 43.1L3.7 42.2L3.4 41.4L3.1 40.5L2.9 39.6L2.8 38.7L2.7 37.8L2.6 36.9L2.7 36.0L2.7 35.1L2.8 34.2L3.0 33.4L3.2 32.5L3.5 31.7L3.8 30.9L4.2 30.1L4.6 29.3L5.0 28.5L5.5 27.8L6.0 27.1L6.6 26.4L7.2 25.8L7.9 25.2L8.6 24.6L9.3 24.1L10.1 23.6L10.9 23.1L11.8 22.7L12.7 22.4L13.6 22.1L14.5 21.8L15.6 21.6L16.6 21.5L17.7 21.4L18.8 21.4L20.0 21.6L21.3 21.8L21.8 21.3L21.6 20.0L21.4 18.8L21.4 17.7L21.5 16.6L21.6 15.6L21.8 14.5L22.1 13.6L22.4 12.7L22.7 11.8L23.1 10.9L23.6 10.1L24.1 9.3L24.6 8.6L25.2 7.9L25.8 7.2L26.4 6.6L27.1 6.0L27.8 5.5L28.5 5.0L29.3 4.6L30.1 4.2L30.9 3.8L31.7 3.5L32.5 3.2L33.4 3.0L34.2 2.8L35.1 2.7L36.0 2.7L36.9 2.6L37.8 2.7L38.7 2.8L39.6 2.9L40.5 3.1L41.4 3.4L42.2 3.7L43.1 4.0L44.0 4.5L44.9 5.0L45.7 5.6L46.6 6.2L47.4 6.9L48.2 7.8L48.9 8.7L49.6 9.7L50.4 9.7L51.1 8.7L51.8 7.8L52.6 6.9L53.4 6.2L54.3 5.6L55.1 5.0L56.0 4.5L56.9 4.0L57.8 3.7L58.6 3.4L59.5 3.1L60.4 2.9L61.3 2.8L62.2 2.7L63.1 2.6L64.0 2.7L64.9 2.7L65.8 2.8L66.6 3.0L67.5 3.2L68.3 3.5Z'/%3E%3C/svg%3E"); }
+.od-avatar-agent { border-radius: 0; background: none; }
+/* People are circles; agents are faces (faces.js): a blob near a circle, drawn from the name. */
+.od-face { display: block; width: 100%; height: 100%; overflow: visible; }
+.od-face-body, .od-face-look { transform-box: view-box; transform-origin: 50% 50%; transition: filter 0.15s; }
 
 .od-agent { display: flex; align-items: center; gap: 8px; }
 .od-agent-face, .od-profile-face { position: relative; display: flex; }
@@ -150,9 +150,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 [data-presence="offline"] .od-avatar-agent, [data-presence="away"] .od-avatar-agent, [data-presence="connecting"] .od-avatar-agent { filter: grayscale(1); opacity: 0.5; }
 [data-presence="connecting"] .od-avatar-agent { animation: od-fade-pulse 1.2s ease-in-out infinite; }
 @keyframes od-fade-pulse { 50% { opacity: 0.35; } }
-/* working: the flower turns, like a loading spinner; waiting for its turn: it breathes */
-[data-presence="working"] .od-avatar-agent::before { animation: od-spin 2.4s linear infinite; }
-[data-state="queued"] .od-avatar-agent::before { animation: od-fade-pulse 1.6s ease-in-out infinite; }
+/* working: the body rolls under the face, which bobs along; waiting for its turn: it breathes */
+[data-presence="working"] .od-face-body { animation: od-spin 2.4s linear infinite; }
+[data-presence="working"] .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
+@keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
+[data-state="queued"] .od-face-body { animation: od-fade-pulse 1.6s ease-in-out infinite; }
 @keyframes od-spin { to { transform: rotate(360deg); } }
 /* a new agent pops in */
 .od-agent-new .od-agent-face { animation: od-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }

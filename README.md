@@ -67,8 +67,9 @@ Who answers what:
   you can see it.
 
 The header shows you and the doc's agents side by side (people are circles,
-agents are flowers; those with Auto Commenter first), then a round **People**
-button that opens a panel like a shared doc's, one line per person or agent:
+each agent a little face of its own; those with Auto Commenter first), then a
+round **People** button that opens a panel like a shared doc's, one line per
+person or agent:
 you, the agents here (× to remove one, except those with Auto Commenter), and
 the ones you can add (+). Click an agent for its card: name, persona,
 permission switches, a star, and a button for more settings; click the
@@ -76,7 +77,7 @@ name or the persona to edit it in place.
 A **grey** agent cannot answer here: it is not running, still starting, or
 something needs fixing, such as a failed run, Claude Code not signed in, or
 the hourly run limit; the card then says what is wrong and offers Try again.
-Leave a comment and the agent's flower turns while it works, and the comment
+Leave a comment and the agent's face wobbles while it works, and the comment
 card pulses; its edits appear in
 the page highlighted with its name, merged with anything you are typing
 elsewhere. Agents end with a reply in every thread addressed to them. Only you
