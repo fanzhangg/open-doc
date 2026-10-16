@@ -117,7 +117,7 @@ function mentionDecorations(doc, names) {
 }
 
 // Reports every view update and lets the page take keys first (for the "/"
-// menu), and marks the top-level block holding the caret (for focus mode).
+// and @ menus), and marks the top-level block holding the caret (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
   view: () => ({ update: (view) => hooks.onUpdate(view) }),
   props: {
@@ -414,6 +414,30 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     run(name);
   }
 
+  // ---- @ menu: the name typed after an @ at the caret ----
+
+  function mentionQuery() {
+    const v = view();
+    const { selection } = v.state;
+    if (!selection.empty || !v.hasFocus()) return null;
+    const { $from } = selection;
+    if ($from.parent.type.spec.code || !$from.parent.isTextblock) return null;
+    if ($from.marks().some((m) => m.type.spec.code)) return null;
+    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uFFFC');
+    const match = before.match(/(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]{0,64})$/);
+    if (!match) return null;
+    return { query: match[2], from: selection.from - match[2].length - 1, to: selection.from };
+  }
+
+  /** Replace the typed "@query" with "@name ". */
+  function insertMention(range, name) {
+    const v = view();
+    const text = `@${name} `;
+    const tr = v.state.tr.insertText(text, range.from, range.to);
+    v.dispatch(tr.setSelection(TextSelection.create(tr.doc, range.from + text.length)).scrollIntoView());
+    v.focus();
+  }
+
   // ---- outline and counts ----
 
   function headings() {
@@ -609,6 +633,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     formatState,
     slashQuery,
     runSlash,
+    mentionQuery,
+    insertMention,
     headings,
     scrollToHeading,
     counts,

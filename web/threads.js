@@ -367,32 +367,7 @@ export function createCommentMargin(margin, handlers) {
       paintHint();
       layout();
     };
-    const drawMenu = () => {
-      const items = [];
-      let group = null;
-      choices.forEach((choice, i) => {
-        if (choice.group !== group) {
-          group = choice.group;
-          items.push(el('li', 'od-mentions-group', group));
-        }
-        const item = el('li', `od-mention${i === selected ? ' od-selected' : ''}`);
-        item.setAttribute('role', 'option');
-        item.setAttribute('aria-selected', String(i === selected));
-        const who = el('span', 'od-mention-who');
-        const name = el('span', 'od-mention-name', choice.name);
-        if (choice.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
-        who.append(name);
-        if (choice.tagline) who.append(el('span', 'od-mention-sub', choice.tagline));
-        item.append(avatar(choice.name, choice.kind, true), who);
-        item.addEventListener('mousedown', (event) => {
-          event.preventDefault();
-          pick(choice.name);
-        });
-        items.push(item);
-      });
-      menu.replaceChildren(...items);
-      menu.hidden = choices.length === 0;
-    };
+    const drawMenu = () => fillMentionMenu(menu, choices, selected, (choice) => pick(choice.name));
     const pick = (name) => {
       const before = box.value.slice(0, box.selectionStart).replace(/@[A-Za-z0-9._-]*$/, `@${name} `);
       box.value = before + box.value.slice(box.selectionStart);
@@ -561,6 +536,40 @@ function patchCard(card, fresh) {
 }
 
 const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start });
+
+/**
+ * Fills `menu` (an `.od-mentions` list) with `choices` from mentionChoices,
+ * under their group headings, `selected` highlighted; `onPick(choice)` on a
+ * click. Hidden when there is nothing to offer. The comment box and the doc's
+ * text share it, so @ looks the same in both.
+ */
+export function fillMentionMenu(menu, choices, selected, onPick) {
+  const items = [];
+  let group = null;
+  choices.forEach((choice, i) => {
+    if (choice.group !== group) {
+      group = choice.group;
+      items.push(el('li', 'od-mentions-group', group));
+    }
+    const item = el('li', `od-mention${i === selected ? ' od-selected' : ''}`);
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(i === selected));
+    const who = el('span', 'od-mention-who');
+    const name = el('span', 'od-mention-name', choice.name);
+    if (choice.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
+    who.append(name);
+    if (choice.tagline) who.append(el('span', 'od-mention-sub', choice.tagline));
+    item.append(avatar(choice.name, choice.kind, true), who);
+    item.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      onPick(choice);
+    });
+    items.push(item);
+  });
+  menu.replaceChildren(...items);
+  menu.hidden = choices.length === 0;
+  menu.querySelector('.od-selected')?.scrollIntoView({ block: 'nearest' });
+}
 
 /**
  * `text` as nodes, each @name of someone in `people` ([{ name, kind }]) a

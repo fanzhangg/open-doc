@@ -109,6 +109,7 @@ async function start() {
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
+    mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
 

@@ -259,11 +259,13 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 
 /* the @ menu and who-will-reply line under a comment box */
 .od-mentions { position: absolute; left: 0; right: 0; top: 100%; z-index: 6; max-height: 320px; overflow-y: auto; list-style: none; margin: 4px 0 0; padding: 4px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); }
+/* the same menu after an @ in the doc's text, at the caret */
+.od-mentions-doc { right: auto; top: 0; z-index: 12; width: 300px; margin: 0; font-family: var(--ui-font); animation: od-pop 0.12s ease-out; }
 .od-mentions-group { padding: 6px 8px 2px; color: var(--text-faint); font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 /* an @name in the doc or a comment: a chip; hovering it shows the name card */
-.od-at { padding: 0 2px; border-radius: 4px; font-weight: 550; color: var(--accent); background: var(--accent-soft); box-decoration-break: clone; -webkit-box-decoration-break: clone; cursor: default; }
-.od-at-agent { color: var(--agent); background: var(--agent-soft); }
-.od-at:hover { background: color-mix(in srgb, currentColor 18%, transparent); }
+.od-at { margin: 0 1px; padding: 1px 6px; border-radius: 999px; font-weight: 600; color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent); box-decoration-break: clone; -webkit-box-decoration-break: clone; cursor: default; transition: background 0.12s, box-shadow 0.12s; }
+.od-at-agent { color: var(--agent); background: linear-gradient(120deg, var(--agent-soft), color-mix(in srgb, var(--agent) 4%, transparent)); }
+.od-at:hover { background: color-mix(in srgb, currentColor 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent); }
 [data-namecard="click"] { cursor: pointer; }
 /* a card opened by hovering a name: view only, a click away from editable */
 .od-panel[data-state="view"][data-editable] { cursor: pointer; }
