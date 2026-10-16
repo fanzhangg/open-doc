@@ -130,8 +130,13 @@ same core library, so any of them can work without the others.
 ## Desktop app
 
 - Electron, because the server, watcher and dispatcher are Node and run
-  unchanged in the main process. Each window loads its doc's local server, so
-  the app and `opendoc serve` share one page.
+  unchanged. Each window loads its doc's local server, so the app and
+  `opendoc serve` share one page.
+- The doc servers, agent runs included, run in one Electron utility process,
+  the doc host (`desktop/doc-host.js`), not in the main process, which pumps
+  every window's input: starting an agent's program blocks the thread that
+  calls it for most of a second on Windows. A host that stops is started
+  again, and its docs' windows reload from their new servers.
 - Single instance: a second launch hands its files to the running app. Paths
   are resolved to real paths, so one doc never opens twice.
 - Renderer is sandboxed with context isolation; the preload API accepts only

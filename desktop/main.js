@@ -2,19 +2,21 @@
 // instance for every launch, the menus, the Open / Open Folder / New Doc /
 // Rename dialogs, and the app state (recent docs and folders, last folder,
 // window bounds). Each doc window runs the same editor page and local server
-// as `opendoc serve`; settings are the user's settings.json, shared by every
-// window.
+// as `opendoc serve`, the servers in a process of their own (doc-host.js);
+// settings are the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session, shell } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
-import { basename, dirname, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { checkSettingsPatch } from '../src/core/settings.js';
 import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
 import { editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import {
-  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
+  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, withDocExtension,
 } from './files.js';
+import { createDocHost } from './doc-host-client.js';
 import { docInFolder, firstDoc, listDocs, relativeDoc } from './folder.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -22,6 +24,7 @@ import * as windows from './windows.js';
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
 const isMac = process.platform === 'darwin';
 const REVEAL_LABEL = isMac ? 'Reveal in Finder' : process.platform === 'win32' ? 'Show in File Explorer' : 'Show in Folder';
+const DOC_HOST = join(dirname(fileURLToPath(import.meta.url)), 'doc-host.js');
 
 app.setName('OpenDoc');
 app.enableSandbox();
@@ -69,6 +72,8 @@ watchSettings(async () => {
 let stateWrites = Promise.resolve();
 let pendingStateWrites = 0;
 let quitting = false;
+let docHost = null; // the process the doc servers run in, from start()
+let docHostDown = false;
 
 // ---- opening docs ----
 
@@ -246,7 +251,7 @@ async function renameDialog(win) {
   });
   if (canceled || !filePath || withDocExtension(filePath) === from) return;
   try {
-    const to = await windows.renameOpenDoc(entry, filePath, renameDoc);
+    const to = await windows.renameOpenDoc(entry, filePath);
     state.recent = renameRecent(state.recent, from, to);
     app.addRecentDocument(to);
     state.lastFolder = dirname(to);
@@ -586,11 +591,15 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) windows.showStartWindow();
 });
 
-// Let the last state write (window bounds, recent docs) finish first.
+// Let the last state write (window bounds, recent docs) finish first, and the
+// doc servers close (they stop their agents' runs).
 app.on('will-quit', (event) => {
-  if (pendingStateWrites === 0) return;
+  if (pendingStateWrites === 0 && (docHostDown || !docHost)) return;
   event.preventDefault();
-  stateWrites.then(() => app.quit());
+  Promise.all([stateWrites, docHost?.shutdown()]).then(() => {
+    docHostDown = true;
+    app.quit();
+  });
 });
 
 // Electron fires `ready` only once this module has finished loading, so
@@ -598,11 +607,15 @@ app.on('will-quit', (event) => {
 app.whenReady().then(start);
 
 async function start() {
+  // First, as loading the server takes a while: the doc host, in a process of
+  // its own so that what the servers do never holds up the windows.
+  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write');
   });
   windows.configure({
+    startDocServer: docHost.startDocServer,
     lastBounds: () => state.bounds,
     onBounds: (bounds) => {
       state.bounds = bounds;
