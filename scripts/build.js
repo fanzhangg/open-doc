@@ -18,6 +18,17 @@ await build({
   legalComments: 'linked',
   logLevel: 'info',
 });
+// The desktop start window (desktop/start.html loads it from here), with the editor's faces.
+await build({
+  entryPoints: [join(root, 'desktop', 'start.js')],
+  outfile: join(out, 'start.js'),
+  bundle: true,
+  format: 'iife',
+  target: 'es2022',
+  minify: true,
+  legalComments: 'linked',
+  logLevel: 'info',
+});
 await copyFile(join(root, 'web', 'index.html'), join(out, 'index.html'));
 await copyFile(join(root, 'web', 'app.css'), join(out, 'app.css'));
 await copyFile(join(root, 'build', 'icon.svg'), join(out, 'icon.svg'));

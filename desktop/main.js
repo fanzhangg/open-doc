@@ -8,7 +8,7 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'elect
 import { statSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
 import { checkSettingsPatch } from '../src/core/settings.js';
-import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
+import { checkAgentPatch, createAgent, updateAgent } from '../src/core/agents.js';
 import { editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
@@ -58,6 +58,7 @@ watchSettings(async () => {
   try {
     settings = (await readSettings()).settings;
     buildMenu();
+    windows.refreshCrew();
   } catch (error) {
     console.error('Could not read the settings:', error);
   }
@@ -423,6 +424,32 @@ function recentMenu() {
   ];
 }
 
+// ---- the crew (start window) ----
+
+// The user's starred agents, and which are in the crew: who every new doc
+// starts with.
+async function crewChoices() {
+  const { agents } = (await readSettings()).settings;
+  return agents.filter((a) => a.starred).map(({ id, name, persona, crew }) => ({ id, name, persona, crew }));
+}
+
+async function setCrew(arg) {
+  const id = String(arg?.id ?? '');
+  await editAgents((agents) => {
+    if (!agents.some((a) => a.id === id && a.starred)) throw new Error('no such agent');
+    return updateAgent(agents, id, { crew: arg?.on === true });
+  });
+  return crewChoices();
+}
+
+// A new agent straight into the crew: starred, so it can be in every doc.
+async function addCrew(arg) {
+  const name = String(arg?.name ?? '').trim();
+  const persona = String(arg?.persona ?? '').trim();
+  await editAgents((agents, current) => [...agents, createAgent(agents, { name, persona, starred: true, crew: true }, current.name ? [current.name] : [])]);
+  return crewChoices();
+}
+
 // ---- requests from pages (preload.cjs) ----
 
 ipcMain.handle('opendoc:action', async (event, action, arg) => {
@@ -442,6 +469,9 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
     for (const path of cleanPaths(arg, 20)) await openPath(path, { parent: win });
     return undefined;
   }
+  if (action === 'crew' && fromStart) return crewChoices();
+  if (action === 'setCrew' && fromStart) return setCrew(arg);
+  if (action === 'addCrew' && fromStart) return addCrew(arg);
   if (action === 'openRecent' && fromStart) {
     const path = recentDocs()[arg];
     if (path) await openPath(path, { parent: win });

@@ -117,7 +117,7 @@ export function showStartWindow() {
   }
   startWindow = new BrowserWindow({
     width: 560,
-    height: 600,
+    height: 700,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -140,6 +140,11 @@ export function showStartWindow() {
 /** Tell the start window its recent list changed. */
 export function refreshStartWindow() {
   startWindow?.webContents.send('opendoc:recent-changed');
+}
+
+/** Tell the start window the user's agents changed (the crew it shows). */
+export function refreshCrew() {
+  startWindow?.webContents.send('opendoc:crew-changed');
 }
 
 function closeStartWindow() {
