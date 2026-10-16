@@ -550,8 +550,11 @@ test('an @mention typed in the doc becomes the human\'s comment once they pause,
     // Typed in two saves: the comment waits for the whole ask.
     await save(`${SAMPLE}\nShip it. @helper\n`);
     await save(`${SAMPLE}\nShip it. @helper add the risks here\n`);
+    const typed = { exact: 'Ship it. @helper add the risks here', prefix: '', suffix: '', start: 0 };
+    assert.equal((await call(server, 'POST', '/api/editing', { body: { anchor: typed } })).status, 200);
     assert.equal((await state()).sidecar.threads.length, 0, 'not while typing');
     assert.ok(await waitUntil(async () => (await state()).sidecar.threads.length === 1), 'a comment after the pause');
+    assert.equal(await server.team.get('helper').typingIn(), null, 'the paragraph of the ask is free for the agent to edit');
     let [thread] = (await state()).sidecar.threads;
     assert.equal(thread.anchor.exact, '@helper add the risks here');
     assert.deepEqual([thread.messages[0].author, thread.messages[0].mentions], [{ name: 'fzhan', kind: 'human' }, ['helper']]);

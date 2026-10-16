@@ -615,6 +615,7 @@ export async function startServer(docPath, {
     }
     if (asks.length === 0) return;
     const roster = useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
+    const typed = editing;
     let joined = false;
     await update(docPath, (s) => {
       let next = s;
@@ -630,6 +631,10 @@ export async function startServer(docPath, {
       }
       return next;
     });
+    // The pause that made the ask means the human is done typing it: the
+    // agent may edit that paragraph to answer (a new keystroke there counts again).
+    const at = typed && editing === typed && locate(text, typed.anchor);
+    if (at && asks.some((a) => a.start <= at.end && at.start <= a.end)) editing = null;
     if (joined) await syncAgents();
   }
 
