@@ -7,8 +7,8 @@
 // doc's own: it shows only here and comes back with the doc. Starring it puts
 // it in your agents, for every doc; removing a doc's own agent deletes it.
 //
-// Agents with **Auto Commenter** are in every doc and answer the new comments that
-// fit their persona; the others answer only when @mentioned, and mentioning
+// Agents with **Auto Commenter** answer the new comments that fit their
+// persona in the docs they are in; the others answer only when @mentioned, and mentioning
 // one brings it into the doc. The People panel works like Docs' share
 // dialog: who is here, what each may do, Remove, and the agents you can bring
 // in. Clicking an avatar opens that agent's card: its name, introduction and
@@ -259,8 +259,8 @@ export function createPeople({ root, invite, panel, me, getName, docKey = () => 
     const here = agentsHere();
     const inDoc = el('div', 'od-people-list');
     for (const name of here) {
-      // A starred agent with Auto Commenter is in every doc; this doc's own can always go.
-      const removable = statusOf(name)?.source !== 'flags' && (!onAutoComment(name) || !profileOf(name)?.starred);
+      // Any agent can go, except one started with --agent.
+      const removable = statusOf(name)?.source !== 'flags';
       // One that cannot be removed keeps the slot, so the stars line up.
       const removal = removable ? iconButton('close', `Remove ${name} from this doc`, () => remove(name)) : el('span', 'od-tool-slot');
       removal.classList.add('od-on-hover');

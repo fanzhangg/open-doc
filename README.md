@@ -44,8 +44,8 @@ it holds from the agent's next run:
 | Permission | The agent… |
 | --- | --- |
 | **Editor** | changes the doc. Without Auto Editor it proposes each change: shown struck through and inserted in the text while the thread is selected, applied when you click Apply. Off, it only replies. |
-| **Auto Editor** | edits the doc directly and replies with what it changed, which you can undo. Needs Editor. |
-| **Auto Commenter** | looks at every new comment that @mentions no one, in the docs it is in, answering the ones that fit its persona. |
+| **Auto Editor** | edits the doc directly and replies with what it changed, which you can undo. Needs Editor. On for every new agent. |
+| **Auto Commenter** | looks at every new comment that @mentions no one, in the docs it is in, answering the ones that fit its persona. The first agent in a doc (or in your crew) starts with it, as the lead. |
 | **Web Searcher** | searches the web and opens web pages. |
 | **File Searcher** | reads your other files, never keys or `.env` files. |
 
@@ -57,7 +57,8 @@ Who answers what:
 
 - A comment that mentions no one goes to every agent with **Auto Commenter**. Each
   answers it only if it fits its persona, and leaves it otherwise. Out of
-  the box only Clippy has it. The line under the comment box says who may
+  the box only Clippy has it; an agent you add to a doc with no lead yet
+  gets it too. The line under the comment box says who may
   reply ("Clippy will reply if it fits").
 - An agent without Auto Commenter answers only when you @mention it. Type
   `@` in a comment: the menu lists the agents in the doc and the ones you can

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, checkAgentPatch, availableIn, createAgent, deleteAgent, docOnly, introOf, leaderless, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -134,9 +134,17 @@ test('agents: a persona is one line; instructions hold the rest; old agents are 
   assert.equal(Object.hasOwn(short, 'tagline'), false);
 });
 
+test('agents: a new one edits directly, and the first among its peers leads', () => {
+  assert.equal(createAgent([]).editMode, 'auto', 'Auto Editor, as a co-author');
+  assert.equal(createAgent([]).autoComment, false, 'Auto Commenter is the caller\'s choice');
+  assert.equal(leaderless([]), true, 'no one yet: the next one leads');
+  assert.equal(leaderless([{ autoComment: false }, { autoComment: false }]), true);
+  assert.equal(leaderless([{ autoComment: false }, { autoComment: true }]), false);
+});
+
 test('agents: each permission is a switch, and Auto Editor needs Editor', () => {
   const agent = { ...AGENT_DEFAULTS, editMode: 'none' };
-  assert.deepEqual(permissionsOf(agent), { editor: false, autoEditor: false, autoComment: false, web: false, files: false });
+  assert.deepEqual(permissionsOf(agent), { editor: false, autoEditor: false, autoComment: false, watch: false, web: false, files: false });
   assert.deepEqual(permissionPatch(agent, 'editor', true), { editMode: 'approve' });
   assert.deepEqual(permissionPatch(agent, 'autoEditor', true), { editMode: 'auto' }, 'Auto Editor turns Editor on');
   const auto = { ...agent, editMode: 'auto' };
@@ -144,6 +152,8 @@ test('agents: each permission is a switch, and Auto Editor needs Editor', () => 
   assert.deepEqual(permissionPatch(auto, 'editor', false), { editMode: 'none' }, 'Editor off turns Auto Editor off');
   assert.deepEqual(permissionPatch({ ...agent, editMode: 'approve' }, 'editor', true), { editMode: 'approve' });
   assert.deepEqual(permissionPatch(agent, 'autoComment', true), { autoComment: true });
+  assert.deepEqual(permissionPatch(agent, 'watch', true), { watchDoc: true });
+  assert.deepEqual(permissionLabels({ ...agent, watchDoc: true }), ['Doc Watcher']);
   assert.deepEqual(permissionPatch(agent, 'web', true), { webAccess: true });
   assert.deepEqual(permissionPatch(agent, 'files', true), { fileAccess: true });
   assert.equal(permissionPatch(agent, 'reader', false), null, 'reading the doc is not a switch');

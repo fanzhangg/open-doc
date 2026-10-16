@@ -25,7 +25,7 @@ export class Team {
   /**
    * Make the team the agents in `specs` (dispatcher options, each with a
    * `key` that changes whenever a restart is needed; a change of presence
-   * (Auto Commenter) applies without one). An agent no longer wanted is
+   * (Auto Commenter) or of Doc Watcher applies without one). An agent no longer wanted is
    * stopped at once, ending a run in progress; one whose settings changed
    * finishes its run first. Calls apply one at a time, in order.
    */
@@ -44,6 +44,7 @@ export class Team {
         const presence = spec.presence ?? 'online';
         if (presence !== member.presence) member.dispatcher.setPresence(presence);
         member.presence = presence;
+        member.dispatcher.setWatch(Boolean(spec.watch));
         keep.push(member);
         continue;
       }
@@ -94,6 +95,16 @@ export class Team {
   /** The sidecar changed: every agent looks for comments waiting on it. */
   notify() {
     for (const m of this.members) m.dispatcher.notify();
+  }
+
+  /**
+   * The doc's text went from `before` to `after` by `author` ({ name, kind },
+   * or null for a program outside OpenDoc): every Doc Watcher hears of it.
+   * Anyone but an agent changing the doc lets agents set one another off again.
+   */
+  docChanged(before, after, author) {
+    if (author?.kind !== 'agent') this.floor.relays = 0;
+    for (const m of this.members) m.dispatcher.docChanged(before, after, author);
   }
 
   /** The human saved the doc from `before` to `after`: not the running agent's edit. */

@@ -7,11 +7,17 @@
 // switch on the agent's card (PERMISSIONS):
 // - **Editor**: changes the doc. Without **Auto Editor** it proposes each
 //   change for the human to apply; with it, it edits directly. Neither: it
-//   only replies. Stored as `editMode`: 'none', 'approve' or 'auto'.
+//   only replies. Stored as `editMode`: 'none', 'approve' or 'auto'. A new
+//   agent edits directly, as a co-author would: every edit can be undone.
 // - **Auto Commenter** (`autoComment`): looks at every new comment that
 //   @mentions no one in the docs it is in, answering the ones that fit its
 //   persona. Without it, an agent answers only when @mentioned. Mentioning an
 //   agent brings it into the doc, as mentioning a person shares a doc with them.
+//   The first agent among those it works with leads them: it starts with
+//   Auto Commenter (`leaderless`); the others answer when @mentioned.
+// - **Doc Watcher** (`watchDoc`): sees every change others make to the doc's
+//   text, with who made it, once they pause, and acts on its own where its
+//   persona calls for it (within what Editor allows), reporting in a comment.
 // - **Web Searcher** (`webAccess`): searches and fetches the web.
 // - **File Searcher** (`fileAccess`): reads the user's other files.
 // Turning on web or files when the agent has the other asks to confirm: one
@@ -61,8 +67,9 @@ export const AGENT_DEFAULTS = Object.freeze({
   instructions: '',
   runtime: 'claude',
   command: null,
-  editMode: 'approve',
+  editMode: 'auto',
   autoComment: false,
+  watchDoc: false,
   model: null,
   maxTurns: 30,
   runTimeoutMinutes: 10,
@@ -97,6 +104,7 @@ export const AGENT_RULES = Object.freeze({
   command: orNull(text(2000)),
   editMode: oneOf(...EDIT_MODES),
   autoComment: boolean,
+  watchDoc: boolean,
   model: orNull((v) => typeof v === 'string' && /^[A-Za-z0-9._:[\]-]{1,100}$/.test(v)),
   maxTurns: integer(1, 500),
   runTimeoutMinutes: integer(1, 240),
@@ -172,6 +180,14 @@ function upgradePersona(stored) {
   return { ...rest, persona, instructions: old.trim() === persona ? '' : old.slice(0, MAX_INSTRUCTIONS) };
 }
 
+/**
+ * Whether none of `agents` has Auto Commenter: then a new agent joining them
+ * leads, taking the comments that @mention no one.
+ */
+export function leaderless(agents) {
+  return !agents.some((a) => a.autoComment);
+}
+
 /** Whether `agent` belongs to one doc only: not starred. */
 export function docOnly(agent) {
   return !agent.starred && agent.doc !== null;
@@ -239,16 +255,18 @@ export const PERMISSIONS = Object.freeze([
   { key: 'editor', label: 'Editor', hint: 'Changes the doc. Without Auto Editor, it proposes each change for you to apply.' },
   { key: 'autoEditor', label: 'Auto Editor', hint: 'Edits the doc directly, without asking you first. Every edit can be undone.' },
   { key: 'autoComment', label: 'Auto Commenter', hint: 'Answers new comments that fit its persona without being @mentioned, in the docs it is in.' },
+  { key: 'watch', label: 'Doc Watcher', hint: 'Sees every change made to the doc and acts on its own when its persona calls for it, without being @mentioned.' },
   { key: 'web', label: 'Web Searcher', hint: 'Searches the web and opens web pages.' },
   { key: 'files', label: 'File Searcher', hint: 'Reads your other files, except keys and .env files.' },
 ].map((p) => Object.freeze(p)));
 
-/** Which permissions `agent` has: { editor, autoEditor, autoComment, web, files }. */
+/** Which permissions `agent` has: { editor, autoEditor, autoComment, watch, web, files }. */
 export function permissionsOf(agent) {
   return {
     editor: agent.editMode === 'approve' || agent.editMode === 'auto',
     autoEditor: agent.editMode === 'auto',
     autoComment: Boolean(agent.autoComment),
+    watch: Boolean(agent.watchDoc),
     web: Boolean(agent.webAccess),
     files: Boolean(agent.fileAccess),
   };
@@ -268,6 +286,8 @@ export function permissionPatch(agent, key, on) {
       return { editMode: on ? 'auto' : edit.editor ? 'approve' : 'none' };
     case 'autoComment':
       return { autoComment: on };
+    case 'watch':
+      return { watchDoc: on };
     case 'web':
       return { webAccess: on };
     case 'files':

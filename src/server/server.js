@@ -11,7 +11,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp, createAnchor, locate, newId, project, sourceRange, textMentions } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, docOnly, updateAgent } from '../core/agents.js';
+import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
@@ -55,13 +55,14 @@ class HttpError extends Error {
  * `settingsDir` is the folder of the user's settings file (default: the
  * per-user config folder). `typingMs` is how long the human counts as typing
  * in a paragraph after their last keystroke there (default 15 s).
+ * `watchSettleMs` is how long the doc must be still before a Doc Watcher looks.
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
  * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
   port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false,
-  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS,
+  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, watchSettleMs,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -78,6 +79,9 @@ export async function startServer(docPath, {
       onStatus: broadcastAgents,
       guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken(spec.name) },
       typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
+      humanName: async () => (await human()).name,
+      catchUp: () => onFilesChanged(),
+      ...(watchSettleMs === undefined ? {} : { watchSettleMs }),
     }),
   });
   let actualPort = port;
@@ -260,7 +264,9 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(body.markdown));
         await writeAtomic(docPath, body.markdown);
         await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
-        await noteVersion(body.markdown, { kind: 'edit', author: await human() });
+        const author = await human();
+        tellAgents(body.markdown, author);
+        await noteVersion(body.markdown, { kind: 'edit', author });
         return [res, 200, { docHash: lastWritten, markdown: body.markdown }];
       }
       if (current.hash !== body.baseHash) {
@@ -273,8 +279,10 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
         team.humanEdited(current.markdown, next); // not the agent's edit
+        const author = await human();
+        tellAgents(next, author);
         await update(docPath, (s) => s); // refresh anchors against the saved doc
-        await noteVersion(next, { kind: 'edit', author: await human() });
+        await noteVersion(next, { kind: 'edit', author });
         await noteTextMentions(current.markdown, next);
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
@@ -298,8 +306,10 @@ export async function startServer(docPath, {
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
         team.humanEdited(current.markdown, next);
+        const author = await human();
+        tellAgents(next, author);
         await update(docPath, (s) => s);
-        await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
+        await noteVersion(next, { kind: 'restore', author, restoredFrom: id });
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
     }
@@ -340,7 +350,8 @@ export async function startServer(docPath, {
   // doc's own, or starred ones brought in by an @mention or added), except
   // one being removed. Another doc's own agents never work here; this doc's own come
   // before a starred agent of the same name. A restart is due whenever an
-  // agent's `key` changes; switching Auto Commenter only changes whom it answers.
+  // agent's `key` changes; switching Auto Commenter only changes whom it
+  // answers, and Doc Watcher whether it looks at changes to the doc.
   const leaving = new Set();
   async function wantedAgents() {
     const specs = [];
@@ -359,7 +370,7 @@ export async function startServer(docPath, {
       if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
+      const key = JSON.stringify({ ...agent, autoComment: undefined, watchDoc: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath });
       specs.push({ ...agentSpec(agent, settings, docPath), key, source: 'roster', join: false, participant: asParticipant(agent) });
     }
     return specs;
@@ -424,9 +435,13 @@ export async function startServer(docPath, {
     // Unless starred, it is this doc's own.
     fields.doc = fields.starred === true ? null : docKey();
     const me = (await human()).name;
+    // The first agent in the doc leads it: it starts with Auto Commenter.
+    const { participants } = Object.hasOwn(fields, 'autoComment') ? {} : await readSidecar(docPath);
+    const here = (a) => availableIn(a, docKey()) && participants.some((p) => p.kind === 'agent' && sameName(p.name, a.name));
     let created;
     const settings = await editAgents((agents) => {
-      created = createAgent(agents, fields, [me]);
+      const lead = participants ? { autoComment: leaderless(agents.filter(here)) } : {};
+      created = createAgent(agents, { ...fields, ...lead }, [me]);
       return [...agents, created];
     }, settingsDir).catch(agentError);
     const joined = body?.invite === true ? await serial(() => invite(created.id)) : {};
@@ -509,7 +524,8 @@ export async function startServer(docPath, {
   // A doc carries its agents (SPEC §2.4). One that is not set up here yet (a
   // cloned repo, another computer, or one unstarred elsewhere) is set up from
   // the doc as this doc's own, with the safest permissions: it proposes
-  // edits, answers only when @mentioned, and has no web or files. A doc's own
+  // edits (not the default for new agents: the doc's text can steer it),
+  // answers only when @mentioned, and has no web or files. A doc's own
   // agent follows what the doc says it is. Permissions never come from the doc.
   async function adoptDocAgents() {
     if (!useSettings) return false;
@@ -527,7 +543,7 @@ export async function startServer(docPath, {
         const persona = p.persona ?? '';
         const instructions = p.instructions ?? '';
         const mine = next.find((a) => sameName(a.name, p.name) && availableIn(a, docKey()));
-        if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey() }, [me])];
+        if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey(), editMode: 'approve', autoComment: false }, [me])];
         else if (docOnly(mine) && (mine.persona !== persona || mine.instructions !== instructions)) next = updateAgent(next, mine.id, { persona, instructions });
       }
       return next;
@@ -554,9 +570,20 @@ export async function startServer(docPath, {
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
     const agentNow = team.running()?.status();
+    const author = agentNow ? { name: agentNow.name, kind: 'agent' } : null;
+    tellAgents(doc.markdown, author);
     return noteVersion(doc.markdown, agentNow
-      ? { kind: 'edit', author: { name: agentNow.name, kind: 'agent' }, threadIds: agentNow.threadIds }
+      ? { kind: 'edit', author, threadIds: agentNow.threadIds }
       : { kind: 'external', author: null });
+  }
+
+  // Tell the agents the doc now reads `markdown`, changed by `author` (null:
+  // outside OpenDoc), so a Doc Watcher knows who changed what.
+  // `toldText` is the doc as they were last told it.
+  let toldText = null;
+  function tellAgents(markdown, author) {
+    if (toldText !== null && markdown !== toldText) team.docChanged(toldText, markdown, author);
+    toldText = markdown;
   }
 
   async function human() {

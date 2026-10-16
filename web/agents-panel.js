@@ -151,7 +151,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
       check.hidden = status.state === 'limited';
     }
     where.textContent = agent.autoComment
-      ? 'In every doc, answering new comments that fit its persona.'
+      ? status ? 'In this doc, answering new comments that fit its persona.' : `Not in this doc. @${agent.name} in a comment brings it in.`
       : status ? `In this doc. Answers when you @${agent.name}.` : `Not in this doc. @${agent.name} in a comment brings it in.`;
     hooks.textContent = status?.warning ? `Note: ${status.warning}.` : '';
     hooks.hidden = !status?.warning;

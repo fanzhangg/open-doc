@@ -675,7 +675,8 @@ test('agents are created from the page, added at once, and deleted', { timeout: 
     const { agent } = created.body;
     assert.match(agent.id, /^a_/);
     assert.equal(agent.runtime, 'claude');
-    assert.equal(agent.autoComment, false, 'a new agent answers when @mentioned');
+    assert.equal(agent.autoComment, false, 'with Pilot leading the doc, a new agent answers when @mentioned');
+    assert.equal(agent.editMode, 'auto', 'a new agent edits directly');
     assert.ok(created.body.sidecar.participants.some((p) => p.name === 'grammar'));
     assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { name: 'grammar' } } })).body.agent.name, 'grammar-2', 'a free name');
     assert.equal((await call(server, 'POST', '/api/roster', { body: { agent: { maxTurns: 0 } } })).status, 400);
@@ -684,6 +685,15 @@ test('agents are created from the page, added at once, and deleted', { timeout: 
     assert.equal(deleted.status, 200);
     assert.deepEqual(deleted.body.settings.agents.map((a) => a.name), ['Pilot', 'grammar-2']);
     assert.ok(!(await state()).sidecar.participants.some((p) => p.name === 'grammar'), 'it left this doc');
+
+    // With Pilot gone from the doc, it has no lead: the next new agent leads it.
+    assert.equal((await call(server, 'POST', '/api/agents/remove', { body: { name: 'Pilot' } })).status, 200);
+    const lead = (await call(server, 'POST', '/api/roster', { body: { agent: { name: 'lead' }, invite: true } })).body.agent;
+    assert.deepEqual([lead.autoComment, lead.editMode], [true, 'auto'], 'the first agent in a doc leads it');
+    const next = (await call(server, 'POST', '/api/roster', { body: { agent: { name: 'next' }, invite: true } })).body.agent;
+    assert.equal(next.autoComment, false, 'the ones after it answer when @mentioned');
+    const asked = (await call(server, 'POST', '/api/roster', { body: { agent: { name: 'asked', autoComment: true } } })).body.agent;
+    assert.equal(asked.autoComment, true, 'an explicit choice wins');
     assert.equal((await call(server, 'PUT', '/api/settings', { body: { agents: [] } })).status, 400, 'the roster changes only through /api/roster');
   });
 });

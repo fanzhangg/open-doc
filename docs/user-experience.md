@@ -57,7 +57,15 @@ Agents are light, and belong to the doc unless you star them:
 
 - **Editor**: may change the doc. Without Auto Editor it *proposes* each change.
 - **Auto Editor**: edits directly and replies with what it changed (undoable).
+  On for every new agent, as for a co-author; switch it off to review each change.
 - **Auto Commenter**: answers comments that mention no one, if they fit its persona.
+  The first agent in a doc (or in your crew) starts with it and leads; the
+  ones after it answer when @mentioned.
+- **Doc Watcher**: sees every change others make to the doc (who changed what)
+  once they pause, and acts on its own where its persona or the doc's rules
+  call for it, within what Editor allows. It says what it did in a comment on
+  the text it changed, so it can be reviewed and undone. Each change wakes it
+  once, so it costs a run per pause; it is off by default.
 - **Web Searcher** / **File Searcher**: may use the web / read your other files
   (never secrets). Turning one on asks to confirm, with a warning if the agent
   already has the other.
@@ -65,7 +73,8 @@ Agents are light, and belong to the doc unless you star them:
 **Who answers what:**
 
 - A comment that mentions no one goes to every agent with Auto Commenter
-  (by default Clippy). Each answers only if it fits its persona.
+  (by default the first one, Clippy for a new user). Each answers only if it
+  fits its persona.
 - `@name` calls a specific agent. Mentioning one that is not in the doc yet
   brings it in. The line under the comment box says who will reply.
 - `@name` in the doc's text works like a comment. Type
@@ -75,7 +84,11 @@ Agents are light, and belong to the doc unless you star them:
   proposes removing it). Mentions in code do not count, and editing around
   an old mention does not ask again.
 - A follow-up with no mention continues with the agent that answered last.
-- Agents never wake each other, and take turns: one runs at a time per doc.
+- Comments never make agents wake each other. A Doc Watcher wakes on another
+  agent's change too, so agents with Doc Watcher can play off each other (a
+  scorer scoring a player's move), but after 6 runs in a row set off by
+  agents alone they wait until you change the doc.
+- Agents take turns: one runs at a time per doc.
 - Nothing is remembered in private. Every run starts a fresh session that
   reads the doc and its threads; anything worth keeping is written there.
 

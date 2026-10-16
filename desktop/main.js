@@ -8,7 +8,7 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, session, shell } from 'elect
 import { statSync } from 'node:fs';
 import { basename, dirname, sep } from 'node:path';
 import { checkSettingsPatch } from '../src/core/settings.js';
-import { checkAgentPatch, createAgent, updateAgent } from '../src/core/agents.js';
+import { checkAgentPatch, createAgent, leaderless, updateAgent } from '../src/core/agents.js';
 import { editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, pathsFromArgs, renameDoc, withDocExtension,
@@ -443,10 +443,14 @@ async function setCrew(arg) {
 }
 
 // A new agent straight into the crew: starred, so it can be in every doc.
+// The first in the crew leads it, with Auto Commenter.
 async function addCrew(arg) {
   const name = String(arg?.name ?? '').trim();
   const persona = String(arg?.persona ?? '').trim();
-  await editAgents((agents, current) => [...agents, createAgent(agents, { name, persona, starred: true, crew: true }, current.name ? [current.name] : [])]);
+  await editAgents((agents, current) => {
+    const autoComment = leaderless(agents.filter((a) => a.starred && a.crew));
+    return [...agents, createAgent(agents, { name, persona, starred: true, crew: true, autoComment }, current.name ? [current.name] : [])];
+  });
   return crewChoices();
 }
 
