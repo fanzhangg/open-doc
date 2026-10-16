@@ -175,6 +175,11 @@ test('agents: each field checked; any number of agents with Auto Commenter', () 
   assert.throws(() => checkAgentPatch({ editMode: 'sometimes' }), /editMode/);
   assert.throws(() => checkAgentPatch({ autoComment: 'yes' }), /autoComment/);
   assert.doesNotThrow(() => checkAgentPatch({ editMode: 'none' }));
+  // Effort: low by default (fast), and only the levels the settings offer.
+  assert.equal(AGENT_DEFAULTS.effort, 'low');
+  assert.doesNotThrow(() => checkAgentPatch({ effort: 'high' }));
+  assert.throws(() => checkAgentPatch({ effort: 'max' }), /effort/);
+  assert.equal(resolveRoster([{ ...muse, effort: 'extreme' }])[0].effort, 'low', 'an unknown effort falls back to the default');
 
   // Stored rosters are repaired: broken entries dropped; the pilot of old keeps its job as Auto Commenter.
   assert.deepEqual(resolveRoster([{ ...muse, maxTurns: -1 }, { name: 'no-id' }]).map((a) => [a.name, a.maxTurns]), [['muse', 30]]);

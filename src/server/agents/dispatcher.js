@@ -403,6 +403,8 @@ export class Dispatcher {
         PATH: `${this.shimDir}${delimiter}${process.env.PATH ?? ''}`,
         OPENDOC_AS: this.name,
         OPENDOC_KIND: 'agent',
+        // No memory across runs: the doc and its threads are all an agent knows.
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
         ...(this.guard ? { OPENDOC_GUARD_URL: this.guard.url, OPENDOC_GUARD_TOKEN: this.guard.token } : {}),
       },
       stdio: ['pipe', 'pipe', 'pipe'],
