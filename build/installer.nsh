@@ -20,7 +20,7 @@
 !macro customInstall
   ; The file type OpenDoc opens docs as.
   WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}" "" "Markdown Document"
-  WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\DefaultIcon" "" "$appExe,0"
+  WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\DefaultIcon" "" '"$INSTDIR\resources\app\build\document.ico",0'
   WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\shell\open\command" "" '"$appExe" "%1"'
 
   ; The app itself, as Windows lists it in "Open with".

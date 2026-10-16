@@ -20,6 +20,8 @@ files:
   - skills/**
   - dist/web/**
   - build/icon.png
+  - build/icon.svg
+  - build/document.ico
 
 # No asar archive: agent runs read the skill file and run the bundled CLI
 # (`opendoc`) from these files directly, outside the app.
