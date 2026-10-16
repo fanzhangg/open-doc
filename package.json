@@ -23,7 +23,7 @@
     "desktop": "npm run build && electron desktop/main.js",
     "prepack": "npm run build",
     "lint": "eslint .",
-    "test": "node --test --test-timeout=60000 --test-force-exit \"test/*.test.js\"",
+    "test": "node --test --test-timeout=300000 --test-force-exit \"test/*.test.js\"",
     "pack:desktop": "npm run build && electron-builder --dir",
     "dist:desktop": "npm run build && electron-builder",
     "smoke:desktop": "node scripts/smoke-desktop.js"

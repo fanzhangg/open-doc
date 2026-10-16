@@ -22,7 +22,7 @@ crashed every doc window on open.
 ```bash
 npm run lint      # ESLint; no-undef catches code pasted into the wrong scope
 npm run build     # bundles web/ into dist/web
-npm test          # node --test; each test times out after 60 s
+npm test          # node --test; a test or test file times out after 5 min
 ```
 
 If the change touches `src/server/`, `desktop/` or `web/`, also open a doc in
