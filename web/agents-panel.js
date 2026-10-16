@@ -11,15 +11,19 @@
 // panel first needs it or a path changes, and again only when the user
 // clicks Check, there or under Runs on.
 //
-// Changes save through the server as they are made. An agent's program (a
-// custom command, or where Claude Code is) is set through the desktop app,
-// which asks the user to confirm it; in a browser tab those fields are
-// read-only.
+// Changes save through the server as they are made. A new agent is a draft
+// until Create: nothing is saved or invited before it has a name, so one
+// left half made (the panel closed, Esc, another agent picked) leaves no
+// trace. An agent's program (a custom command, or where Claude Code is) is
+// set through the desktop app, which asks the user to confirm it; in a
+// browser tab those fields are read-only, and a Command agent shows what to
+// put in settings.json instead.
 
 import { api } from './api.js';
 import { avatar } from './threads.js';
-import { confirmAccess } from './agent.js';
-import { PERMISSIONS, RUNTIME_LABELS, availableIn, checkAgentPatch, introOf, modelChoices, modelWarning, permissionPatch, permissionsOf, runtimePatch } from '../src/core/agents.js';
+import { NAME_RULE, confirmAccess } from './agent.js';
+import { agentFace } from './faces.js';
+import { PERMISSIONS, RUNTIME_LABELS, availableIn, checkAgentPatch, commandSnippet, createFields, draftAgent, introOf, modelChoices, modelWarning, permissionPatch, permissionsOf, runtimePatch } from '../src/core/agents.js';
 
 const PROBLEMS = {
   error: 'Its last run failed',
@@ -32,9 +36,9 @@ const PROBLEMS = {
  */
 /**
  * `folder()` names the folder the doc was opened from (whose files every
- * agent may read), or is null.
+ * agent may read), or is null. `settingsFile()` is the path of settings.json.
  */
-export function createAgentsPanel({ store, onResult, docKey = () => null, folder = () => null }) {
+export function createAgentsPanel({ store, onResult, docKey = () => null, folder = () => null, settingsFile = () => null }) {
   const dialog = document.querySelector('.od-agents-dialog');
   const desktop = window.opendocDesktop;
   const list = dialog.querySelector('.od-agents-list');
@@ -42,7 +46,11 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   const programsPage = dialog.querySelector('.od-agents-programs-page');
   const form = dialog.querySelector('.od-agent-editor');
   const headAvatar = form.querySelector('.od-agent-head-avatar');
+  const nameInput = form.querySelector('[data-agent="name"]');
   const nameError = form.querySelector('.od-input-error');
+  const createButton = form.querySelector('[data-action="create-agent"]');
+  const commandInput = form.querySelector('[data-agent-program="command"]');
+  const commandNote = form.querySelector('.od-program-note');
   const problem = form.querySelector('.od-agent-problem');
   const problemText = form.querySelector('.od-agent-problem-text');
   const check = form.querySelector('[data-action="agent-check"]');
@@ -64,6 +72,8 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   let selected = null; // the id of the agent shown
   let programs = false; // the Programs page is shown instead
   let note = null; // { id, text }: what the last switch of runtime changed, for that agent
+  let draft = null; // a new agent not created yet: { agent, invite }, `invite` to bring it into this doc
+  let creating = false;
 
   form.querySelector('.od-program-note').hidden = Boolean(desktop);
   for (const button of dialog.querySelectorAll('[data-action="choose-program"]')) button.hidden = !desktop;
@@ -72,7 +82,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
 
   // Your starred agents, and this doc's own; other docs' own stay with them.
   const agents = () => store.get().agents.filter((a) => availableIn(a, docKey()));
-  const current = () => agents().find((a) => a.id === selected) ?? null;
+  const current = () => draft?.agent ?? agents().find((a) => a.id === selected) ?? null;
   const statusOf = (agent) => statuses.find((s) => (s.id ? s.id === agent.id : s.name.toLowerCase() === agent.name.toLowerCase())) ?? null;
   const valid = (patch) => {
     try {
@@ -86,6 +96,12 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   async function save(patch) {
     const agent = current();
     if (!agent || !valid(patch)) return false;
+    if (draft) {
+      // Kept in the draft, and sent with the rest by Create.
+      draft.agent = { ...draft.agent, ...patch };
+      paint();
+      return true;
+    }
     try {
       onResult(await api.updateAgent(agent.id, patch));
       return true;
@@ -103,8 +119,8 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     const roster = [...agents()].sort((a, b) => Number(b.autoComment) - Number(a.autoComment));
     if (selected && !roster.some((a) => a.id === selected)) selected = null;
     if (!programs) selected ??= roster[0]?.id ?? null;
-    list.replaceChildren(...roster.map((agent) => listRow(agent)));
-    if (roster.length === 0) list.append(el('p', 'od-agents-empty', 'No agents yet. Make one with +.'));
+    list.replaceChildren(...(draft ? [draftRow()] : []), ...roster.map((agent) => listRow(agent)));
+    if (roster.length === 0 && !draft) list.append(el('p', 'od-agents-empty', 'No agents yet. Make one with +.'));
     programsButton.setAttribute('aria-pressed', String(programs));
     programsPage.hidden = !programs;
     for (const bin of dialog.querySelectorAll('[data-program]')) {
@@ -117,7 +133,9 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     form.hidden = !agent;
     if (!agent) return;
     form.dataset.kind = agent.runtime;
-    headAvatar.replaceChildren(avatar(agent.name, 'agent'));
+    form.toggleAttribute('data-draft', Boolean(draft));
+    headAvatar.replaceChildren(draft ? draftFace() : avatar(agent.name, 'agent'));
+    createButton.disabled = creating || !draft || !createFields(draft.agent);
     for (const button of form.querySelectorAll('[data-agent-runtime]')) {
       const kind = button.dataset.agentRuntime;
       button.setAttribute('aria-checked', String(kind === agent.runtime));
@@ -162,14 +180,47 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     }
     form.querySelector('[data-agent="isolated"]').checked = agent.isolated;
     form.querySelector('[data-agent="starred"]').checked = agent.starred;
+    if (!desktop) paintCommandNote(agent);
     paintStatus();
+  }
+
+  // The draft, first in the list and picked, under the name typed so far.
+  function draftRow() {
+    const row = el('div', 'od-agents-row');
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', 'true');
+    const face = el('span', 'od-profile-face');
+    face.append(draftFace(true));
+    const who = el('span', 'od-agents-who');
+    who.append(el('span', 'od-agents-name', draft.agent.name.trim() || 'New agent'), el('span', 'od-agents-sub', 'Not created yet'));
+    row.append(face, who);
+    return row;
+  }
+
+  // Its face is drawn from a seed of its own, so it does not change with
+  // every letter of the name.
+  function draftFace(small = false) {
+    const node = el('span', `od-avatar od-avatar-agent${small ? ' od-avatar-small' : ''}`);
+    node.append(agentFace(draft.agent.face));
+    return node;
+  }
+
+  // In a browser tab the page cannot set a command (the desktop app asks
+  // first), so it says where to set it by hand and what to write there.
+  function paintCommandNote(agent) {
+    commandNote.querySelector('.od-program-note-draft').hidden = !draft;
+    commandNote.querySelector('.od-program-note-saved').hidden = Boolean(draft);
+    if (draft) return;
+    commandNote.querySelector('.od-settings-file').textContent = settingsFile() ?? 'settings.json';
+    commandNote.querySelector('.od-agent-id').textContent = `"id": "${agent.id}"`;
+    commandNote.querySelector('.od-command-snippet').textContent = commandSnippet(agent.command);
   }
 
   function listRow(agent) {
     const row = el('button', 'od-agents-row');
     row.type = 'button';
     row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', String(!programs && agent.id === selected));
+    row.setAttribute('aria-selected', String(!programs && !draft && agent.id === selected));
     row.dataset.agentId = agent.id;
     const face = el('span', 'od-profile-face');
     face.dataset.presence = agent.autoComment ? 'autocomment' : 'idle';
@@ -186,6 +237,11 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   function paintStatus() {
     const agent = current();
     if (!agent) return;
+    if (draft) {
+      problem.hidden = hooks.hidden = true;
+      where.textContent = draft.invite ? 'Joins this doc when you create it.' : 'Not in this doc.';
+      return;
+    }
     const status = statusOf(agent);
     const trouble = status && PROBLEMS[status.state];
     problem.hidden = !trouble;
@@ -281,6 +337,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   }
 
   function show(id) {
+    draft = null; // another agent, or the panel opened again: a draft goes
     programs = false;
     if (id && id !== selected) note = null;
     if (id) selected = id;
@@ -295,24 +352,18 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     if (button.dataset.agentId) show(button.dataset.agentId);
     else if (button.dataset.action === 'close') dialog.close();
     else if (button.dataset.action === 'programs' || button.dataset.action === 'open-programs') {
+      draft = null;
       programs = true;
       paint();
     } else if (button.dataset.agentRuntime) setRuntime(button.dataset.agentRuntime);
     else if (button.dataset.agentEffort) save({ effort: button.dataset.agentEffort });
     else if (button.dataset.action === 'choose-program') desktop?.chooseProgram(button.dataset.programKey).catch(() => {});
     else if (button.dataset.action === 'check-program') checkProgram(button.dataset.programKind);
-    else if (button.dataset.action === 'new-agent') {
-      try {
-        const result = await api.createAgent({ name: 'agent' });
-        onResult(result);
-        show(result.agent.id);
-        const name = form.querySelector('[data-agent="name"]');
-        name.focus();
-        name.select();
-      } catch {
-        // at most MAX_AGENTS; the list shows what there is
-      }
-    } else if (button.dataset.action === 'delete-agent') {
+    else if (button.dataset.action === 'new-agent') newAgent();
+    else if (button.dataset.action === 'create-agent') create();
+    else if (button.dataset.action === 'discard-draft') show();
+    else if (button.dataset.action === 'copy-command') copyCommand(button);
+    else if (button.dataset.action === 'delete-agent') {
       const agent = current();
       if (!agent || !window.confirm(`Delete ${agent.name}?\n\nIt leaves this doc and stops answering in every doc. Its comments stay.`)) return;
       try {
@@ -337,10 +388,12 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
 
   form.addEventListener('submit', (event) => event.preventDefault());
   form.addEventListener('keydown', (event) => {
-    // Enter in a one-line field saves it, as leaving it does.
+    // Enter in a one-line field saves it, as leaving it does; in a draft's
+    // name, it creates the agent.
     if (event.key === 'Enter' && event.target.matches('input[type="text"], input[type="number"]')) {
       event.preventDefault();
-      event.target.blur();
+      if (draft && event.target === nameInput) create();
+      else event.target.blur();
     }
   });
   form.addEventListener('change', (event) => {
@@ -348,15 +401,20 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     if (input.dataset.permission) {
       const agent = current();
       if (!agent) return;
-      if (input.checked && !confirmAccess(agent, input.dataset.permission)) {
+      if (input.checked && !confirmAccess({ ...agent, name: agent.name.trim() || 'this agent' }, input.dataset.permission)) {
         input.checked = false;
         return;
       }
       return save(permissionPatch(agent, input.dataset.permission, input.checked));
     }
-    if (input.dataset.agentProgram) return setProgram(input, 'command', current()?.id);
+    if (input.dataset.agentProgram) {
+      // A draft's command waits for Create: the desktop app sets it then.
+      if (!draft) return setProgram(input, 'command', current()?.id);
+      draft.agent = { ...draft.agent, command: input.value.trim() || null };
+      return;
+    }
     const key = input.dataset.agent;
-    if (!key) return;
+    if (!key || (draft && key === 'name')) return; // a draft's name is taken as it is typed
     if (input.type === 'checkbox') return save({ [key]: input.checked });
     const raw = key === 'instructions' ? input.value : input.value.trim();
     if (key === 'name' && raw === '') return paint();
@@ -375,6 +433,14 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
   // A model warns as it is typed; it saves when the field is left.
   form.addEventListener('input', (event) => {
     if (event.target === model) paintModelWarning(current()?.runtime, model.value.trim());
+    if (draft && event.target === nameInput) {
+      draft.agent = { ...draft.agent, name: nameInput.value };
+      const bad = nameInput.value.trim() !== '' && !createFields(draft.agent);
+      nameInput.toggleAttribute('aria-invalid', bad);
+      nameError.textContent = bad ? NAME_RULE : '';
+      nameError.hidden = !bad;
+      paint();
+    }
   });
   form.addEventListener('focusout', (event) => {
     if (event.target.matches?.('[aria-invalid="true"]')) paint(); // an invalid value is not kept
@@ -403,6 +469,58 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     }
   }
 
+  // New agent: a draft in the editor, its name to type first. Nothing is
+  // saved until Create.
+  function newAgent({ invite = false } = {}) {
+    if (!dialog.open) dialog.showModal();
+    show();
+    draft = { agent: draftAgent({ face: Math.random().toString(36).slice(2, 10) }), invite };
+    note = null;
+    paint();
+    nameInput.focus();
+  }
+
+  // One request: the agent with everything set in the draft, brought into
+  // this doc when it came from there. Its command, if one was typed, goes
+  // to the desktop app after, which asks first.
+  async function create() {
+    const fields = draft && createFields(draft.agent);
+    if (!fields || creating) return;
+    const { invite, agent: { command } } = draft;
+    creating = true;
+    paint();
+    try {
+      const result = await api.createAgent(fields, { invite });
+      draft = null;
+      onResult(result);
+      show(result.agent.id);
+      if (command && desktop) {
+        commandInput.value = command;
+        setProgram(commandInput, 'command', result.agent.id);
+      }
+    } catch (error) {
+      // Its name is taken, or there are too many agents: the draft stays.
+      nameError.textContent = error.message;
+      nameError.hidden = false;
+      nameInput.focus();
+    } finally {
+      creating = false;
+      paint();
+    }
+  }
+
+  async function copyCommand(button) {
+    const snippet = commandNote.querySelector('.od-command-snippet');
+    try {
+      await navigator.clipboard.writeText(snippet.textContent);
+      button.textContent = 'Copied';
+      setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+    } catch {
+      // No clipboard here: select it, for Ctrl+C.
+      getSelection().selectAllChildren(snippet);
+    }
+  }
+
   function showStatus(next) {
     statuses = next ?? [];
     paint();
@@ -414,12 +532,19 @@ export function createAgentsPanel({ store, onResult, docKey = () => null, folder
     list.querySelector('[aria-selected="true"]')?.focus();
   }
 
+  // Closed, by Esc, the close button or the backdrop: a draft goes with it.
+  dialog.addEventListener('close', () => {
+    draft = null;
+  });
+
   store.subscribe(paint);
   paint();
   return {
     showStatus,
     /** Open the panel on agent `id` (or the one shown last). */
     open,
+    /** Open the panel on a new agent's draft; with `invite`, Create brings it into this doc. */
+    newAgent,
     /** Open the panel, or close it when it is open. */
     toggle() {
       if (dialog.open) dialog.close();

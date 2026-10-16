@@ -1,11 +1,12 @@
 // The people in the header, laid out like a shared doc's: avatars of the
 // doc's agents, a People button, then yours.
 //
-// Agents are light: New agent pops one into the doc and opens its card, where
-// a click on its name or its persona (one line) edits it in place; the Agents
-// panel holds the finer settings, such as instructions. A new agent is this
-// doc's own: it shows only here and comes back with the doc. Starring it puts
-// it in your agents, for every doc; removing a doc's own agent deletes it.
+// Agents are light: on an agent's card, a click on its name or its persona
+// (one line) edits it in place; the Agents panel holds the finer settings,
+// such as instructions. New agent opens a draft there, which joins the doc
+// once it is created. A new agent is this doc's own: it shows only here and
+// comes back with the doc. Starring it puts it in your agents, for every doc;
+// removing a doc's own agent deletes it.
 //
 // Agents with **Auto Commenter** answer the new comments that fit their
 // persona in the docs they are in; the others answer only when @mentioned, and mentioning
@@ -26,17 +27,18 @@ import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
 const ME = 'me'; // your card's id for its name field: no agent's (theirs start with a_)
-const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
+export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
 // A seed for a new face (web/faces.js).
 const newFace = () => Math.random().toString(36).slice(2, 10);
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void, onSidecar: (sidecar: object) => void,
+ *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void,
+ *           newAgent: () => void, onSidecar: (sidecar: object) => void,
  *           onSettings: (settings: object) => void, onError: (message: string) => void,
  *           onPeople?: () => void }} options   onPeople: who is here or what they are changed
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, onSidecar, onSettings, onError, onPeople = () => {} }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, newAgent, onSidecar, onSettings, onError, onPeople = () => {} }) {
   let statuses = []; // the agents running here (server)
   let participants = []; // the doc's participants: [{ name, kind }]
   let saved = []; // the user's agents, as the settings have them
@@ -54,8 +56,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let log = null; // the shown agent's last run log, fetched when its card opens
   let busy = false;
   let editing = null; // the field of the shown agent being edited in place: 'name' | 'persona'
-  let naming = null; // id of the agent just made: after its name, its persona
-  const fresh = new Set(); // names of agents just made, whose avatars pop in
 
   invite.addEventListener('click', () => toggle('people'));
   me.addEventListener('click', () => toggle('me'));
@@ -110,7 +110,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     hovered = false;
     anchor = null;
     editing = null;
-    naming = null;
     panel.hidden = true;
   }
 
@@ -193,7 +192,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     root.replaceChildren(...names.map((name) => {
       const status = statusOf(name);
       const mode = modeOf(status);
-      const wrap = el('span', `od-agent${fresh.has(name.toLowerCase()) ? ' od-agent-new' : ''}`);
+      const wrap = el('span', 'od-agent');
       wrap.dataset.presence = mode;
       wrap.dataset.state = status?.state ?? 'away';
       const face = el('button', 'od-agent-face');
@@ -294,7 +293,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const plus = el('span', 'od-people-new-face');
     plus.append(icon('plus'));
     create.append(plus, el('span', 'od-people-name', 'New agent'));
-    create.addEventListener('click', () => createBlank());
+    create.addEventListener('click', () => {
+      close();
+      newAgent();
+    });
     inDoc.append(create);
 
     // Your starred agents, to bring in. (This doc's own are always in it.)
@@ -471,17 +473,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   async function commit(agent, key, field) {
     const value = field.value.trim();
     if (agent.id === ME) return commitMyName(field, value);
-    const next = key === 'name' && naming === agent.id ? 'persona' : null; // a new agent: name, then persona
-    if (value === (key === 'name' ? agent.name : agent.persona)) return settle(next);
+    if (value === (key === 'name' ? agent.name : agent.persona)) return settle();
     if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, key);
-    // A new agent's persona field opens at once, while its name saves, so
-    // nothing typed right after Enter is lost.
-    if (next) settle(next);
     try {
       const result = await api.updateAgent(agent.id, { [key]: value });
       if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
       take(result);
-      if (!next) settle(null);
+      settle();
     } catch (failure) {
       fail(field, failure.message, key);
     }
@@ -489,18 +487,14 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   function commitMyName(field, value) {
     if (value !== getName() && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, 'name');
-    settle(null);
+    settle();
     setName(value);
   }
 
-  // The field is done: back to text, or on to the next one.
-  function settle(next) {
-    if (!next) naming = null;
-    editing = next;
+  // The field is done: back to text.
+  function settle() {
+    editing = null;
     paintCard();
-    if (!next) return;
-    const field = panel.querySelector('.od-inline-input');
-    field?.focus();
   }
 
   // Keep the field open, with what went wrong under the card's top.
@@ -580,23 +574,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   }
 
   const add = (id) => act(async () => take(await api.invite(id)), 'Could not add the agent');
-
-  // One click: the new agent pops into the doc, its card open for editing.
-  const createBlank = () => act(async () => {
-    const result = await api.createAgent({}, { invite: true });
-    const name = result.agent.name;
-    fresh.add(name.toLowerCase());
-    setTimeout(() => fresh.delete(name.toLowerCase()), 800);
-    take(result);
-    editing = 'name';
-    naming = result.agent.id;
-    showing = `agent:${name}`;
-    panel.hidden = false;
-    paintCard();
-    const field = panel.querySelector('.od-inline-input');
-    field?.focus();
-    field?.select();
-  }, 'Could not create the agent');
 
   // Unstarring an agent that is not in this doc takes it out of your agents
   // (docs that use it keep it), so that asks first.

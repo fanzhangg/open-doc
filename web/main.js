@@ -148,6 +148,7 @@ async function start() {
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
     folder: () => folderName,
+    settingsFile: () => initial.settingsFile ?? null,
     mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
@@ -192,6 +193,7 @@ async function start() {
     setFace: (face) => settings.set({ face }),
     docKey: () => docKey,
     openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
+    newAgent: () => chrome.newAgent({ invite: true }),
     onSidecar: applySidecar,
     onSettings: (next) => settings.receive(next),
     onError: (message) => setStatus(message, 'error'),

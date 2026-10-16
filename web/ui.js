@@ -30,7 +30,7 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
  *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void,
  *           mentionChoices?: (query: string) => { name, kind, group, tagline? }[] }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, folder = () => null, mentionChoices = () => [] }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, folder = () => null, settingsFile = () => null, mentionChoices = () => [] }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -44,8 +44,9 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       count.hidden = !next.wordCount;
       window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
     },
+    openAgents: () => agentsPanel.open(),
   });
-  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey, folder });
+  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey, folder, settingsFile });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -170,6 +171,10 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     /** Open the Agents panel on agent `id` (or the one shown last). */
     openAgent(id) {
       agentsPanel.open(id);
+    },
+    /** Open the Agents panel on a new agent's draft; with `invite`, Create brings it into this doc. */
+    newAgent(options) {
+      agentsPanel.newAgent(options);
     },
     /** A command from the desktop app's menu: 'settings', 'agent-settings' or 'shortcuts'. */
     command(name) {

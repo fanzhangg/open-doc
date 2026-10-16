@@ -2,7 +2,9 @@
 // show shortcuts, and how shortcuts are written: shared by the editor
 // (web/ui.js) and the desktop start window (desktop/start.js), so both look
 // and behave the same. Settings are saved for every doc and window (see
-// settings.js); a change made in another window shows up here too.
+// settings.js); a change made in another window shows up here too. In a doc,
+// Agents at the foot of the list opens the Agents panel: agents are set up
+// there, not twice.
 
 import { hydrateIcons } from './icons.js';
 
@@ -22,6 +24,7 @@ const DIALOG = `
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
+    <button type="button" class="od-settings-agents" data-action="agents" data-icon="users" hidden>Agents</button>
   </nav>
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
@@ -114,11 +117,11 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows.
+ * one page shows. With `openAgents`, the list has Agents, which opens that.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void }} options
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, openAgents?: () => void }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {} }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, openAgents = null }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   hydrateIcons(dialog);
@@ -128,6 +131,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {} }) {
   const nameError = dialog.querySelector('.od-input-error');
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
+  dialog.querySelector('[data-action="agents"]').hidden = !openAgents;
 
   function apply() {
     const settings = store.get();
@@ -180,7 +184,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {} }) {
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.action === 'close') dialog.close();
-    else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    else if (button.dataset.action === 'agents') {
+      dialog.close();
+      openAgents();
+    } else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
     else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
     else if (button.dataset.width) set({ width: button.dataset.width });
