@@ -283,7 +283,8 @@ npm run smoke:desktop   # launch the built app (or this checkout's) and check it
 The installer is not signed yet, so Windows SmartScreen warns before running
 it. On Windows it adds OpenDoc to "Open with" for `.md` and `.markdown` and a
 New > Markdown Document entry in Explorer, without making itself the default
-app. `npm run icon:desktop` generates
-the shared Clippy avatar, application logo, and separate document icons from `web/faces.js` into `build/`.
+app. `npm run icon:desktop` draws the app icon (Clippy on a paper tile, also
+the favicon and the logo's mark), the logo and the document icons from
+`web/faces.js` into `build/`, as SVG, PNG, ICO and ICNS.
 
 Requires Node 20 or later.

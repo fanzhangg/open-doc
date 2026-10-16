@@ -42,7 +42,8 @@ nsis:
 mac:
   target: dmg
   category: public.app-category.productivity
-  icon: build/icon.png
+  # A full tile, not a bare mark: macOS 26 puts a bare mark on a grey plate.
+  icon: build/icon.icns
   # Ad-hoc signature until there is a Developer ID. Without one the bundle's
   # signature is broken, and a downloaded copy shows as "damaged".
   identity: "-"
@@ -51,6 +52,7 @@ mac:
     - ext: [md, markdown]
       name: Markdown Document
       role: Editor
+      icon: document # build/document.icns; Linux has no document icons
 
 linux:
   target: AppImage
