@@ -90,6 +90,12 @@ Agents are light, and belong to the doc unless you star them:
 - Each mention counts once: editing around an old one, moving text before
   it, or a mention in code asks nothing new.
 - A follow-up with no mention continues with the agent that answered last.
+- Agents hand work to each other in the thread, so you never pass messages
+  between them. An agent that needs another to act next hands it the thread
+  (its reply starts with `@Scorer` and wakes Scorer); an agent that only
+  mentions another, such as a score reply to `@claude`, wakes no one. After
+  four handoffs in a row the thread waits for you, and your next message lets
+  them go on.
 - Agents work at the same time: a comment that mentions three agents gets
   all three working on it at once, each shown typing in the thread. Only
   their edits to the doc take turns, so each agent's changes are recorded on

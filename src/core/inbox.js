@@ -1,7 +1,7 @@
 // The inbox rule (SPEC.md §5).
 
 import { sameName } from './mentions.js';
-import { activeWorking } from './ops.js';
+import { MAX_HANDOFFS, activeWorking, handoffs } from './ops.js';
 
 /**
  * Threads waiting on participant `name`: open, and the latest message from a
@@ -16,7 +16,8 @@ import { activeWorking } from './ops.js';
  * everyone who takes open asks, until each answered or passed (`passed`):
  * an agent with Auto Commenter answers only the ones that fit its persona.
  * Notices are skipped: undoing an edit (`undoes`) or applying a proposal
- * (`applies`) asks nobody to act. A thread `name` is
+ * (`applies`) asks nobody to act. A thread an agent handed to `name` since
+ * (`handedTo`) waits on `name` too. A thread `name` is
  * already working on (and not stale) is left out, so a re-armed `wait` does
  * not hand back the thread the agent is in the middle of answering.
  *
@@ -26,15 +27,33 @@ import { activeWorking } from './ops.js';
 export function inbox(sidecar, name, now = Date.now(), { mentionsOnly = false } = {}) {
   return sidecar.threads.filter((thread) => {
     if (thread.status !== 'open') return false;
-    const said = thread.messages.filter((m) => !m.undoes && !m.applies);
-    const at = said.findLastIndex((m) => m.author.kind === 'human');
-    if (at === -1) return false;
-    const since = said.slice(at + 1);
-    const to = addressees(said, at);
-    if (to.length > 0 ? !to.some((m) => sameName(m, name)) : mentionsOnly || passed(thread, name)) return false;
-    if (since.some((m) => sameName(m.author.name, name))) return false;
+    if (!asked(thread, name, mentionsOnly) && !handedTo(thread, name)) return false;
     return !activeWorking(thread, now).some((w) => sameName(w.by, name));
   });
+}
+
+// Whether the thread's latest message from a human waits on `name`.
+function asked(thread, name, mentionsOnly) {
+  const said = thread.messages.filter((m) => !m.undoes && !m.applies);
+  const at = said.findLastIndex((m) => m.author.kind === 'human');
+  if (at === -1) return false;
+  const to = addressees(said, at);
+  if (to.length > 0 ? !to.some((m) => sameName(m, name)) : mentionsOnly || passed(thread, name)) return false;
+  return !said.slice(at + 1).some((m) => sameName(m.author.name, name));
+}
+
+/**
+ * Whether another agent handed the thread to `name` (a reply with `to`,
+ * `opendoc reply --to`) since its latest message from a human, and `name`
+ * has not answered since. An @mention in an agent's reply wakes no one, and
+ * after MAX_HANDOFFS handoffs in a row the thread waits on the human.
+ */
+export function handedTo(thread, name) {
+  const said = thread.messages.filter((m) => !m.undoes && !m.applies);
+  const human = said.findLastIndex((m) => m.author.kind === 'human');
+  const at = said.findLastIndex((m, i) => i > human && m.to && sameName(m.to, name));
+  if (at === -1 || handoffs(said.slice(0, at + 1)) > MAX_HANDOFFS) return false;
+  return !said.slice(at + 1).some((m) => sameName(m.author.name, name));
 }
 
 /** Whether the thread's ask is open: addressed to no one (see `addressees`). */

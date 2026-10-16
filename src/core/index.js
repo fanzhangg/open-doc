@@ -13,6 +13,7 @@ export { parseMentions } from './mentions.js';
 export { addedMentions, blockAt, carry, changedRanges, textMentions, tokenEnd } from './text-mentions.js';
 export {
   FORMAT_VERSION,
+  MAX_HANDOFFS,
   OpError,
   activeWorking,
   applyOp,
@@ -21,6 +22,6 @@ export {
   newId,
   workingList,
 } from './ops.js';
-export { inbox, openAsk } from './inbox.js';
+export { handedTo, inbox, openAsk } from './inbox.js';
 export { FormatError, parseSidecar, serializeSidecar } from './format.js';
 export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, leaderless, PERMISSIONS, createAgent, deleteAgent, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from './agents.js';

@@ -19,6 +19,7 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MAX_HANDOFFS } from '../../core/index.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const SKILL_PATH = join(ROOT, 'skills', 'opendoc', 'SKILL.md');
@@ -103,6 +104,9 @@ export function buildPrompt({
     ].join('\n\n')] : []),
     calls,
     ...(others.length > 0 ? [`Other agents in this doc: ${others.map((o) => `@${o}`).join(', ')}. Earlier replies in a thread may be theirs, and they may be answering the same thread at the same time as you: answer from your own role without waiting on them, and leave their part of a comment to them.${editMode === 'auto' ? ' They may also edit the doc while you work: if an edit fails because the file changed, read it again and retry.' : ''}`] : []),
+    // Handing off is explicit, so a reply that merely names another agent
+    // never wakes it and agents cannot loop on each other's mentions.
+    ...(others.length > 0 ? [`When a thread needs one of them to act next, hand it to them: add \`--to <name>\` to your reply (\`opendoc reply ${doc} <thread-id> "<text>" --as ${name} --to <name>\`), which wakes them. An @name in a reply without --to only mentions them and wakes no one. Hand off only when the next step is theirs, never just to thank or inform. After ${MAX_HANDOFFS} handoffs between agents in a row in one thread, --to is refused: reply without it and let the human decide.`] : []),
     `The comment threads waiting on you are given as JSON (on stdin, or in the threads file). ${handle} Never resolve a thread: the human decides when it is done.`,
     ...(webAccess ? ['You may search the web and open web pages.'] : []),
     ...(fileAccess ? [`You may read the human's other files${docFolder ? ` (the doc is in ${docFolder})` : ''}; read only what the comments need.`] : []),

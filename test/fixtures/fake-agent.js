@@ -4,8 +4,10 @@
 // guarded-edit (makes the edit the ask names for it, `<name>: "<before>" ->
 // "<after>"`, between the guard's hooks as a Claude Code run would, then
 // waits before replying), propose, picky (passes on an open comment, one that mentions no one,
-// unless it names the agent), fail, hang, silent (exits 0 without
-// replying). It calls `opendoc` through a shell to prove the dispatcher's
+// unless it names the agent), handoff (replies as the human's latest message
+// says for it: `<name> hands to <other>` hands the thread to <other> with
+// --to, `<name> mentions <other>` only @mentions <other>), fail, hang, silent
+// (exits 0 without replying). It calls `opendoc` through a shell to prove the dispatcher's
 // PATH shim works. Each run logs when it starts and ends, the asks it was
 // handed, and the persona in its prompt (when given the prompt file).
 
@@ -42,6 +44,23 @@ else if (mode !== 'silent') {
     if (mode === 'propose') {
       const input = JSON.stringify({ body: 'Suggest adding "peak".', changes: [{ before: 'extra load', after: 'extra peak load' }] });
       execSync(`opendoc propose "${doc}" ${thread.id}`, { input, stdio: ['pipe', 'inherit', 'inherit'] });
+      continue;
+    }
+    if (mode === 'handoff') {
+      const ask = thread.messages.findLast((m) => m.author.kind === 'human').body;
+      const hands = ask.match(new RegExp(`\\b${process.env.OPENDOC_AS} hands to (\\w+)`));
+      const mentions = ask.match(new RegExp(`\\b${process.env.OPENDOC_AS} mentions (\\w+)`));
+      // A refused handoff (too many in a row) is logged; the agent then replies without it.
+      let handed = false;
+      try {
+        if (hands) execSync(`opendoc reply "${doc}" ${thread.id} "Your turn" --to ${hands[1]}`, { stdio: 'pipe' });
+        handed = Boolean(hands);
+      } catch (error) {
+        appendFileSync(runLog, JSON.stringify({ handoffRefused: error.stderr.toString().trim(), as: process.env.OPENDOC_AS }) + '\n');
+      }
+      if (!handed) {
+        execSync(`opendoc reply "${doc}" ${thread.id} "${mentions ? `@${mentions[1]} 4 points` : 'Handled by fake agent'}"`, { stdio: 'inherit' });
+      }
       continue;
     }
     execSync(`opendoc reply "${doc}" ${thread.id} "Handled by fake agent"`, { stdio: 'inherit' });

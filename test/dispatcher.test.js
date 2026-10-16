@@ -329,6 +329,7 @@ async function withTeam(names, mode, fn, { editMode = 'auto', guarded = false } 
       runs: async () => (await log()).filter((e) => e.threads),
       sidecar: async () => JSON.parse(await readFile(sidecarPath(docPath), 'utf8')),
       comment: (...args) => main(['comment', docPath, ...args, ...human], quiet),
+      reply: (id, body) => main(['reply', docPath, id, body, ...human], quiet),
     });
   } finally {
     await server.close();
@@ -378,6 +379,74 @@ test('agents that may edit without the guard still take turns', { timeout: 30_00
     await until(async () => (await spans(log)).every((r) => r.end), { what: 'the runs to end' });
     const [first, second] = await spans(log);
     assert.ok(first.end <= second.start, 'the second run started after the first ended');
+  });
+});
+
+// In 'handoff' mode each agent replies as the human's latest message says for
+// it: `ann hands to bob` (opendoc reply --to bob) or `ann mentions bob`.
+test('an agent that hands a thread to another agent wakes it', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'handoff', async ({ log, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@ann ann hands to bob');
+    const s = await until(async () => {
+      const current = await sidecar();
+      return current.threads[0].messages.length === 3 && current;
+    }, { what: 'the handoff and the answer' });
+    const [, handoff, answer] = s.threads[0].messages;
+    assert.equal(handoff.author.name, 'ann');
+    assert.equal(handoff.to, 'bob');
+    assert.equal(handoff.body, '@bob Your turn', 'the reply names whom it went to');
+    assert.equal(answer.author.name, 'bob');
+    await until(async () => (await spans(log)).every((r) => r.end), { what: 'the runs to end' });
+    await sleep(800);
+    assert.deepEqual((await spans(log)).map((r) => r.as), ['ann', 'bob'], 'bob ran once, and ann was not woken by his answer');
+  });
+});
+
+test('an agent that only @mentions another agent does not wake it', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'handoff', async ({ log, sidecar, comment }) => {
+    await comment('--quote', 'extra load', '@ann ann mentions bob');
+    await until(async () => (await sidecar()).threads[0].messages.length === 2, { what: 'ann to answer' });
+    await sleep(1500);
+    const [, answer] = (await sidecar()).threads[0].messages;
+    assert.deepEqual(answer.mentions, ['bob']);
+    assert.equal(answer.to, undefined);
+    assert.equal((await sidecar()).threads[0].messages.length, 2);
+    assert.deepEqual((await spans(log)).map((r) => r.as), ['ann']);
+  });
+});
+
+// ann and bob hand the thread back and forth until the hop limit stops them.
+async function pingPong({ log, sidecar }, { messages, refused }) {
+  await until(async () => (await log()).filter((e) => e.handoffRefused).length === refused, { what: 'the hop limit' });
+  await until(async () => (await sidecar()).threads[0].messages.length === messages, { what: 'the last reply' });
+  await until(async () => (await spans(log)).every((r) => r.end), { what: 'the runs to end' });
+  await sleep(800);
+  return (await sidecar()).threads[0].messages;
+}
+
+test('agents handing a thread back and forth stop after four handoffs', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'handoff', async (team) => {
+    await team.comment('--quote', 'extra load', '@ann ann hands to bob, bob hands to ann');
+    const messages = await pingPong(team, { messages: 6, refused: 1 });
+    assert.deepEqual(messages.slice(1).map((m) => [m.author.name, m.to ?? null]),
+      [['ann', 'bob'], ['bob', 'ann'], ['ann', 'bob'], ['bob', 'ann'], ['ann', null]]);
+    assert.deepEqual((await spans(team.log)).map((r) => r.as), ['ann', 'bob', 'ann', 'bob', 'ann'], 'the fifth handoff woke no one');
+    const [refusal] = (await team.log()).filter((e) => e.handoffRefused);
+    assert.equal(refusal.as, 'ann');
+    assert.match(refusal.handoffRefused, /4 handoffs/);
+  });
+});
+
+test('a new message from the human lets agents hand the thread on again', { timeout: 30_000 }, async () => {
+  await withTeam(['ann', 'bob'], 'handoff', async (team) => {
+    await team.comment('--quote', 'extra load', '@ann ann hands to bob, bob hands to ann');
+    await pingPong(team, { messages: 6, refused: 1 });
+    const [thread] = (await team.sidecar()).threads;
+    await team.reply(thread.id, '@ann again: ann hands to bob, bob hands to ann');
+    const messages = await pingPong(team, { messages: 12, refused: 2 });
+    assert.deepEqual(messages.slice(7).map((m) => [m.author.name, m.to ?? null]),
+      [['ann', 'bob'], ['bob', 'ann'], ['ann', 'bob'], ['bob', 'ann'], ['ann', null]]);
+    assert.equal((await spans(team.log)).length, 10);
   });
 });
 

@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import { basename, resolve as resolvePath } from 'node:path';
 import {
-  AnchorError, FormatError, OpError,
+  AnchorError, FormatError, MAX_HANDOFFS, OpError,
   activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, newId, project, proposeChanges,
 } from '../core/index.js';
 import { threadLines } from '../core/lines.js';
@@ -28,7 +28,7 @@ Usage:
   opendoc inbox    <doc> --as <name> [--json]
   opendoc wait     <doc> --as <name> [--timeout <seconds>] [--json]
   opendoc comment  <doc> [--quote "<text>" [--occurrence <n>]] "<body>" --as <name>
-  opendoc reply    <doc> <thread-id> "<body>" --as <name>
+  opendoc reply    <doc> <thread-id> "<body>" --as <name> [--to <agent>]
   opendoc propose  <doc> <thread-id> --as <name>   (stdin: {"body": "...", "changes": [{"before": "...", "after": "..."}]})
   opendoc resolve  <doc> <thread-id> --as <name> --kind human
   opendoc reopen   <doc> <thread-id> --as <name> --kind human
@@ -53,6 +53,9 @@ it or no one):
 Identity: --as <name> (or OPENDOC_AS), --kind agent|human (or OPENDOC_KIND; default agent).
 A thread waits on <name> when its latest message from a human mentions @<name> and <name> has
 not answered it yet, or mentions no one and no one has answered it yet.
+An agent hands a thread to another agent with reply --to <agent>, which wakes that agent;
+an @mention in an agent's reply wakes no one. After ${MAX_HANDOFFS} handoffs in a row in a thread,
+--to is refused until a human writes there again.
 wait blocks until a thread is waiting on <name>, marks it as being answered,
 prints it and exits 0; it exits 3 on timeout (default ${DEFAULT_WAIT_SECONDS}s, 0 = none).
 propose replies with changes instead of making them; each "before" must appear exactly
@@ -64,6 +67,7 @@ class UsageError extends Error {}
 
 const OPTIONS = {
   as: { type: 'string' },
+  to: { type: 'string' },
   kind: { type: 'string' },
   json: { type: 'boolean' },
   status: { type: 'string' },
@@ -188,8 +192,9 @@ const COMMANDS = {
     const me = identity(values, env);
     requireThreadId(threadId);
     const body = fitBody(me, requireBody(bodyParts));
+    const to = values.to === undefined ? {} : { to: values.to };
     return writeAndPrint(docPath, values, out, threadId, (s) =>
-      applyOp(s, { type: 'addMessage', threadId, message: message(me, body) }));
+      applyOp(s, { type: 'addMessage', threadId, message: { ...message(me, body), ...to } }));
   },
 
   // The Claude Code hooks the server sets up for its runs (OPENDOC_GUARD_URL

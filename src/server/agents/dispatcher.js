@@ -12,7 +12,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { activeWorking, applyOp, diffEdits, findEdit, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange, workingList } from '../../core/index.js';
+import { activeWorking, applyOp, diffEdits, findEdit, handedTo, inbox, locate, newId, openAsk, project, proposeChanges, sourceRange, workingList } from '../../core/index.js';
 import { merge3 } from '../../core/merge.js';
 import { sameName } from '../../core/mentions.js';
 import { threadLines } from '../../core/lines.js';
@@ -318,7 +318,13 @@ export class Dispatcher {
   #waiting(sidecar) {
     const now = Date.now();
     return inbox(sidecar, this.name, now, { mentionsOnly: this.presence === 'dnd' })
-      .filter((t) => !this.failed.has(failureKey(t)) && !this.held(t.id) && !(openAsk(t) && activeWorking(t, now).length > 0));
+      .filter((t) => !this.failed.has(failureKey(t)) && !this.held(t.id) && !(this.#open(t) && activeWorking(t, now).length > 0));
+  }
+
+  // Whether the thread is an open ask for it, one it may take or leave: not
+  // when another agent handed it the thread.
+  #open(thread) {
+    return openAsk(thread) && !handedTo(thread, this.name);
   }
 
   // Whether its runs may change the doc.
@@ -371,7 +377,7 @@ export class Dispatcher {
     await this.adapter.prepare?.({ workdir, docPath: this.docPath, editMode: this.editMode });
     const docRef = workdir === dirname(this.docPath) ? this.docFile : this.docPath.replaceAll('\\', '/');
     // With Auto Commenter, an open ask is the agent's to take or leave (`open`).
-    const open = new Set(this.presence === 'online' ? threads.filter(openAsk).map((t) => t.id) : []);
+    const open = new Set(this.presence === 'online' ? threads.filter((t) => this.#open(t)).map((t) => t.id) : []);
     const payload = { doc: docRef, threads: threads.map((t, i) => ({ ...t, line: lines[i], ...(open.has(t.id) ? { open: true } : {}) })) };
     const typing = this.editMode === 'auto' ? await this.typingIn().catch(() => null) : null;
     const prompt = buildPrompt({

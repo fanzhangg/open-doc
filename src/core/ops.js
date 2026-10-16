@@ -7,6 +7,7 @@ import { AGENT_RULES } from './agents.js'; // used only inside functions, so the
 
 export const FORMAT_VERSION = 1;
 export const WORKING_TTL_MS = 5 * 60 * 1000;
+export const MAX_HANDOFFS = 4; // agent-to-agent handoffs in a row in one thread, until a human writes again
 const MESSAGE_ID = /^m_[A-Za-z0-9_-]{6,}$/;
 const PARTICIPANT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -49,7 +50,9 @@ export function newId(prefix) {
  * A message may carry `edits` (what its author changed in the doc, §2.5),
  * `undoes` (the id of the message whose edits it reverted), `proposal`
  * (changes the author suggests instead of making them, §2.6) and `applies`
- * (the id of the message whose proposal it applied).
+ * (the id of the message whose proposal it applied). An agent's message may
+ * carry `to`, another agent it hands the thread to (SPEC.md §5): at most
+ * MAX_HANDOFFS of them since the thread's latest message from a human.
  *
  * Only a human may resolve or reopen a thread (§2.2): `by` must not be a
  * participant of kind "agent", and `kind`, when given, must be "human".
@@ -220,12 +223,17 @@ function addMessage(sidecar, { threadId, message }) {
     working: stopWorking(t, message.author.name),
     // A new ask from a human is open to every agent again.
     ...(t.passed?.length && message.author.kind === 'human' && !message.undoes && !message.applies ? { passed: [] } : {}),
-    messages: [...t.messages, buildMessage(joined, message)],
+    messages: [...t.messages, buildMessage(joined, message, t)],
   }));
 }
 
-function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, proposal, applies }) {
+function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, proposal, applies, to }, thread = null) {
   if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
+  if (to !== undefined) {
+    to = validateHandoff(sidecar, author, to, thread);
+    // The human reads whom it went to in the text itself.
+    if (!parseMentions(body, sidecar.participants).includes(to)) body = `@${to} ${body}`;
+  }
   const message = {
     id,
     author: authorIn(sidecar, author),
@@ -233,11 +241,34 @@ function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, pro
     mentions: parseMentions(body, sidecar.participants),
     createdAt,
   };
+  if (to !== undefined) message.to = to;
   if (edits !== undefined) message.edits = validateEdits(edits);
   if (undoes !== undefined) message.undoes = validateMessageId(undoes);
   if (proposal !== undefined) message.proposal = validateProposal(proposal);
   if (applies !== undefined) message.applies = validateMessageId(applies);
   return message;
+}
+
+// A handoff goes from an agent to another agent of the doc, in a reply, and
+// only so many in a row: a human's message starts the count again.
+function validateHandoff(sidecar, author, to, thread) {
+  if (typeof to !== 'string' || !NAME_PATTERN.test(to)) throw new OpError('bad_input', `invalid participant name: ${to}`);
+  if (author.kind !== 'agent') throw new OpError('bad_input', 'only an agent hands a thread to another agent; a human @mentions them');
+  if (!thread) throw new OpError('bad_input', 'a thread is handed to another agent in a reply');
+  const target = sidecar.participants.find((p) => sameName(p.name, to));
+  if (!target || target.kind !== 'agent') throw new OpError('bad_input', `${to} is not an agent in this doc`);
+  if (sameName(target.name, author.name)) throw new OpError('bad_input', 'an agent cannot hand a thread to itself');
+  if (handoffs(thread.messages) >= MAX_HANDOFFS) {
+    throw new OpError('bad_input', `this thread has had ${MAX_HANDOFFS} handoffs between agents since the human last wrote; reply without --to and let the human decide`);
+  }
+  return target.name;
+}
+
+/** Handoffs between agents (messages with `to`) since the thread's latest message from a human. */
+export function handoffs(messages) {
+  const said = messages.filter((m) => !m.undoes && !m.applies);
+  const human = said.findLastIndex((m) => m.author.kind === 'human');
+  return said.slice(human + 1).filter((m) => m.to).length;
 }
 
 function validateMessageId(id) {

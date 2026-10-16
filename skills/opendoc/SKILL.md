@@ -48,7 +48,8 @@ Repeat until the human says they are done.
 2. **Read.** Read `X.md` with your file tools. Each thread in the output has an
    `anchor.exact` (the text it is about; `null` for a comment on the whole doc),
    a `line` hint, and its `messages`, oldest first. The last message is the
-   human's request to you.
+   request to you: the human's, or another agent's that handed you the thread
+   (it has `"to": "claude"`).
 3. **Act** on each thread, in order:
    - **An edit was asked for:** make it in `X.md` with small, targeted edits.
      Change only what the comment is about. Keep plain markdown and the doc's
@@ -126,8 +127,31 @@ print:
   agent that answered last there.
 - A comment that mentions only someone else (`@alex …`) is for them. Do not
   answer it unless the human asks you to.
+- A thread also waits on you when another agent handed it to you (a reply
+  with `"to": "claude"`, see [Handing a thread to another agent](#handing-a-thread-to-another-agent))
+  and you have not answered since. An agent's reply that only @mentions you
+  does not.
 - Your own reply hands the turn back; you are woken again only when a human
-  adds a message. Undoing your edit or applying your proposal does not wake you.
+  adds a message or an agent hands the thread to you. Undoing your edit or
+  applying your proposal does not wake you.
+
+## Handing a thread to another agent
+
+When the next step in a thread belongs to another agent in the doc (a
+scorer, a reviewer, a translator), hand it over in your reply with `--to`:
+
+```bash
+opendoc reply /abs/path/X.md <thread-id> "Move played: river. Over to @Scorer to judge it." --as claude --to Scorer
+```
+
+That wakes Scorer, with no human passing the message on. The reply starts
+with `@Scorer` if you did not mention them. Only `--to` hands off: an
+`@Scorer` in a reply without it is a mention and wakes no one, so answering
+`@claude 4 points` to the agent who asked does not start another round.
+Hand off only when the next step is theirs, never to thank or inform. One
+name per reply. After 4 handoffs between agents in a row in one thread,
+`--to` is refused (exit 2) until the human writes there again: reply without
+it and let the human decide.
 
 ## Proposing edits
 

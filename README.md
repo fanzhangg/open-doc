@@ -231,7 +231,9 @@ opendoc mv plan.md q4-plan.md            # moves the sidecar too
 Every command takes `--json`. `--as` defaults to `OPENDOC_AS`; `--kind`
 defaults to `agent`. Exit codes: 0 ok, 1 error, 2 bad input, 3 `wait` timed
 out, 4 sidecar busy. A thread is in someone's inbox when its latest message is
-from a human and mentions them or no one. Only a human can resolve or reopen a thread;
+from a human and mentions them or no one, or when an agent handed it to them
+with `reply --to <agent>` (an agent's plain @mention wakes no one; at most 4
+handoffs in a row before a human writes again). Only a human can resolve or reopen a thread;
 `resolve` and `reopen` as an agent exit 2. In `propose`, each `before` is
 markdown source that must appear exactly once in the doc.
 
