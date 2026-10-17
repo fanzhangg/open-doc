@@ -38,61 +38,9 @@ function colorOf(name) {
 
 let ids = 0; // gradient ids, unique per page
 
-// The brand mark on the app and document icons: a warm yellow coil, eyes on
-// either side and asymmetric brows.
-function coilMark() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
-  const id = `od-clippy-${++ids}`;
-  const defs = node('defs', {});
-  const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  for (const [offset, color] of [[0, '#ffe9a3'], [0.55, '#ffd05b'], [1, '#edac38']]) {
-    gradient.append(node('stop', { offset, 'stop-color': color }));
-  }
-  defs.append(gradient);
-  const body = node('g', {});
-  svg.append(defs, body);
-  body.append(node('path', {
-    class: 'od-face-body',
-    d: coil(),
-    fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  }));
-  const features = node('g', { class: 'od-face-look' });
-  drawEye(features, 'big', 23, 46, -1, 1.55, [0.8, -0.3]);
-  drawEye(features, 'big', 77, 43, 1, 1.55, [-0.8, -0.3]);
-  // A small highlight softens the gaze without adding another facial feature.
-  for (const [x, y] of [[22, 43], [74, 40]]) {
-    features.append(node('circle', { cx: x, cy: y, r: '1.7', fill: '#fff' }));
-  }
-  features.append(stroke('M13 26Q22 22 31 25', 3.5), stroke('M68 21Q76 16 84 18', 3.5));
-  svg.append(features);
-  return svg;
-}
-
-// An Archimedean spiral around (50, 50): two turns from the tail at the lower
-// left, winding anticlockwise in.
-function coil() {
-  const [outer, inner, turns, start] = [35, 4, 2, Math.PI * 3 / 4];
-  const steps = turns * 48;
-  const points = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const a = start - t * turns * Math.PI * 2;
-    const r = outer - (outer - inner) * t;
-    points.push([50 + r * Math.cos(a), 50 + r * Math.sin(a)]);
-  }
-  // Curve through each point, ending on the midpoints between them.
-  let d = `M${f(points[0][0])} ${f(points[0][1])}`;
-  for (let i = 1; i < steps; i++) {
-    const [p, q] = [points[i], points[i + 1]];
-    d += `Q${f(p[0])} ${f(p[1])} ${f((p[0] + q[0]) / 2)} ${f((p[1] + q[1]) / 2)}`;
-  }
-  return `${d}L${f(points[steps][0])} ${f(points[steps][1])}`;
-}
-
-// The app icon: Clippy on a paper tile, the shape and size of Apple's icon grid
-// (824 of 1024). macOS 26 shrinks an icon that does not fill this shape onto a
-// grey plate, which is how the bare coil showed in the Dock and Finder.
+// The app icon: Clippy's face on a paper tile, the shape and size of Apple's
+// icon grid (824 of 1024). macOS 26 shrinks an icon that does not fill this
+// shape onto a grey plate.
 export function appIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
   const defs = node('defs', {});
@@ -104,15 +52,15 @@ export function appIcon() {
     x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
     fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
   }));
-  const avatar = coilMark();
-  const mark = node('g', { transform: 'translate(50 50.5) scale(0.64) translate(-50 -51)' });
+  const avatar = agentFace(CLIPPY.name);
+  const mark = node('g', { transform: 'translate(50 50) scale(0.64) translate(-50 -50)' });
   mark.append(...avatar.childNodes);
   svg.append(mark);
   return svg;
 }
 
-// A large warm yellow coil overlaps the folded page; its white halo cuts the
-// page edge where they cross.
+// Clippy's face overlaps the folded page; its white halo cuts the page edge
+// where they cross.
 export function documentIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
@@ -121,15 +69,15 @@ export function documentIcon() {
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
-  const avatar = coilMark();
-  svg.append(avatar.querySelector('defs'));
-  const coil = avatar.querySelector('.od-face-body');
-  const halo = coil.cloneNode(true);
-  halo.setAttribute('stroke', '#fff');
-  halo.setAttribute('stroke-width', '16');
-  const mark = node('g', { transform: 'translate(-1 20) scale(0.73)' });
-  mark.append(halo, coil);
-  svg.append(mark);
+  const [defs, clippy] = agentFace(CLIPPY.name).children;
+  const halo = clippy.cloneNode(true);
+  halo.querySelector('.od-face-look').remove();
+  for (const [key, value] of Object.entries({ fill: '#fff', stroke: '#fff', 'stroke-width': '12', 'stroke-linejoin': 'round' })) {
+    halo.querySelector('.od-face-body').setAttribute(key, value);
+  }
+  const mark = node('g', { transform: 'translate(-2 34) scale(0.62)' });
+  mark.append(halo, clippy);
+  svg.append(defs, mark);
   return svg;
 }
 
@@ -297,7 +245,7 @@ function drawFace(g, { eye, mouth, extra }, cy, hue) {
     for (const side of [-1, 1]) g.append(node('ellipse', { cx: f(50 + side * (gap + 5)), cy: f(eyeY + 9), rx: '5.5', ry: '3.2', fill: blush }));
   }
 
-  for (const side of [-1, 1]) drawEye(g, eye, 50 + side * gap, eyeY, side, 1, [0, 0]);
+  for (const side of [-1, 1]) drawEye(g, eye, 50 + side * gap, eyeY, side);
 
   if (extra === 'glasses') {
     const r = 9.5;
@@ -314,24 +262,21 @@ function drawFace(g, { eye, mouth, extra }, cy, hue) {
   }
 }
 
-function drawEye(g, style, x, y, side, size, [gx, gy]) {
-  const s = size;
+function drawEye(g, style, x, y, side) {
   if (style === 'dot') {
-    g.append(node('circle', { cx: f(x + gx * 0.6), cy: f(y + gy * 0.6), r: f(5.4 * s), fill: INK }));
+    g.append(node('circle', { cx: f(x), cy: f(y), r: '5.4', fill: INK }));
   } else if (style === 'big') {
-    const r = 9 * s;
     g.append(
-      node('circle', { cx: f(x), cy: f(y), r: f(r), fill: '#fff', stroke: INK, 'stroke-width': '2.6' }),
-      node('circle', { cx: f(x + gx * 1.4), cy: f(y + gy * 1.4), r: f(4.6 * s), fill: INK }),
+      node('circle', { cx: f(x), cy: f(y), r: '9', fill: '#fff', stroke: INK, 'stroke-width': '2.6' }),
+      node('circle', { cx: f(x), cy: f(y), r: '4.6', fill: INK }),
     );
   } else if (style === 'happy') {
-    g.append(stroke(`M${f(x - 6 * s)} ${f(y + 2.5)}Q${f(x)} ${f(y - 6 * s)} ${f(x + 6 * s)} ${f(y + 2.5)}`));
+    g.append(stroke(`M${f(x - 6)} ${f(y + 2.5)}Q${f(x)} ${f(y - 6)} ${f(x + 6)} ${f(y + 2.5)}`));
   } else if (style === 'sleepy') {
-    g.append(stroke(`M${f(x - 6 * s)} ${f(y - 1)}Q${f(x)} ${f(y + 6 * s)} ${f(x + 6 * s)} ${f(y - 1)}`));
+    g.append(stroke(`M${f(x - 6)} ${f(y - 1)}Q${f(x)} ${f(y + 6)} ${f(x + 6)} ${f(y - 1)}`));
   } else if (style === 'squint') {
     // > <, pointing in
-    const w = 5 * s;
-    g.append(stroke(`M${f(x + side * w)} ${f(y - w)}L${f(x - side * w * 0.6)} ${f(y)}L${f(x + side * w)} ${f(y + w)}`));
+    g.append(stroke(`M${f(x + side * 5)} ${f(y - 5)}L${f(x - side * 3)} ${f(y)}L${f(x + side * 5)} ${f(y + 5)}`));
   }
 }
 
