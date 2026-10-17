@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { createDocEditor } from './editor.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
+import { setBuddies } from './faces.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
@@ -187,6 +188,7 @@ async function start() {
     pin: (chip) => people.pin(...who(chip)),
     unpeek: () => people.unpeek(),
   });
+  setBuddies(initial.agents.map((a) => a.name));
   people.render({ agents: initial.agents });
   chrome.refreshAgents();
   margin.setAgents(initial.agents);
@@ -413,6 +415,7 @@ function showAgents(next) {
   if (json === shownAgents) return;
   shownAgents = json;
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
+  setBuddies(next.map((a) => a.name));
   people.render({ agents: next });
   chrome.refreshAgents();
   margin.setAgents(next);

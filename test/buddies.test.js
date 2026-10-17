@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLIPPY, buddiesHere, buddyText, parseBuddy } from '../src/core/buddies.js';
+import { CLIPPY, buddiesHere, buddyText, colorSlots, parseBuddy } from '../src/core/buddies.js';
 import { readSettings } from '../src/store/settings.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, until } from './helpers.js';
 
@@ -44,6 +44,18 @@ test('a buddy file: the name is the file name, the first line the persona, the r
 });
 
 const CLIPPY_ROW = ['Clippy', CLIPPY.persona, 'app'];
+
+test('buddy colors: Clippy has its own; up to seven others get different ones, the same in any order', () => {
+  // Seven names that would all pick the same color on their own.
+  const alone = (name) => colorSlots([name]).get(name);
+  const names = [];
+  for (let i = 0; names.length < 7; i++) if (alone(`b${i}`) === alone('b0')) names.push(`b${i}`);
+  const slots = colorSlots(['Clippy', ...names]);
+  assert.equal(slots.get('clippy'), 0);
+  assert.deepEqual(new Set(names.map((n) => slots.get(n))), new Set([1, 2, 3, 4, 5, 6, 7]), 'all seven differ, none is Clippy\'s');
+  assert.deepEqual(colorSlots([...names].reverse()), slots, 'the same buddies, the same colors');
+  assert.equal(colorSlots(['Ada', 'Critic']).get('ada'), colorSlots(['ada']).get('ada'), 'the first by name keeps the one its name picks');
+});
 
 test('Clippy is built in: in every doc, and nothing can change it', async () => {
   const settingsDir = await fakeConfig();

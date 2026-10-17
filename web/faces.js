@@ -1,12 +1,14 @@
-// Avatars: a face drawn from a seed, the name unless one is saved (yours
-// and your agents', so a new name keeps the face; see threads.js avatar).
-// Everyone gets their own colour and expression, a little personality, and
-// keeps it wherever they show up (the header, threads, history).
+// Avatars: a face drawn from the name. Everyone gets their own expression,
+// a little personality, and keeps it wherever they show up (the header,
+// threads, history). A buddy's colour is one of eight, different from the
+// other buddies in the doc (colorSlots); a person's is drawn from the name.
 // People are round; agents are soft blobs that stay close to a circle, so
 // they still read as avatars but are told apart from people at a glance.
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
 // legible down to the 18px faces in a thread's footer.
+
+import { colorSlots } from '../src/core/buddies.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const INK = '#1f1d24';
@@ -27,6 +29,22 @@ const COLORS = [
   [290, 62, 74], // orchid
   [36, 90, 70], // apricot
 ];
+
+// A buddy's colour: eight hues evenly apart in OKLCH, Clippy's yellow first.
+const BUDDY_HUES = [90, 135, 180, 225, 270, 315, 0, 45];
+let slots = colorSlots([]);
+
+/** The buddies in this doc, so each gets a colour no other one has. */
+export function setBuddies(names) {
+  slots = colorSlots(names);
+}
+
+/** Buddy `name`'s colour, a little lighter (`lift` > 0) or darker. */
+export function buddyColor(name, lift = 0) {
+  const key = name.toLowerCase();
+  const slot = slots.get(key) ?? colorSlots([key]).get(key);
+  return `oklch(${(0.78 + lift).toFixed(2)} 0.14 ${BUDDY_HUES[slot]})`;
+}
 
 let ids = 0; // gradient ids, unique per page
 
@@ -92,17 +110,16 @@ export function documentIcon() {
 
 function face(name, round) {
   const rand = random(seed(name));
-  const [hue, sat, light] = pick(rand, COLORS);
+  const [hue, sat, light] = pick(rand, COLORS); // drawn for buddies too, so their faces stay as they were
   const body = round ? CIRCLE : bodyShape(rand);
 
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
   const id = `od-face-${++ids}`;
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  gradient.append(
-    node('stop', { offset: '0', 'stop-color': `hsl(${hue} ${sat}% ${Math.min(light + 14, 90)}%)` }),
-    node('stop', { offset: '0.55', 'stop-color': `hsl(${hue} ${sat}% ${light}%)` }),
-    node('stop', { offset: '1', 'stop-color': `hsl(${hue} ${sat}% ${light - 9}%)` }),
-  );
+  const stops = round
+    ? [`hsl(${hue} ${sat}% ${Math.min(light + 14, 90)}%)`, `hsl(${hue} ${sat}% ${light}%)`, `hsl(${hue} ${sat}% ${light - 9}%)`]
+    : [buddyColor(name, 0.08), buddyColor(name), buddyColor(name, -0.07)];
+  gradient.append(...[0, 0.55, 1].map((offset, i) => node('stop', { offset: String(offset), 'stop-color': stops[i] })));
   const defs = node('defs', {});
   defs.append(gradient);
   svg.append(defs, node('path', { class: 'od-face-body', d: body.d, fill: `url(#${id})` }));
