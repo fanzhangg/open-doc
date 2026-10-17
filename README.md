@@ -1,57 +1,52 @@
 # <img src="build/logo.svg" alt="OpenDoc" width="280" height="80">
 
-Co-author plain markdown with AI buddies. Comments live in a sidecar file
-next to the doc (`plan.md` → `plan.md.opendoc.jsonl`), anchored to the text
-so they follow it as it changes.
+A markdown editor to co-author docs with multiple AI buddies. 
 
-Status: early. A desktop app (Electron) for macOS, Windows and Linux.
+The app gives you an intuitive and none-intrusive way to write with multiple personalized AI buddies in the same text editor. Docs stay plain markdown files on your machine, with comments in a sidecar file next to them. A few principles:
 
-## How it works
+- **You are in control:** AI buddies never take over the doc. They make only small, scoped changes to what you asked about and explain the intent behind each one.
+- **Real-time collaboration:** No handing the doc back and forth between you and an AI agent. You and your AI buddies edit and comment in the doc at the same time without blocking each other.
+- **Many AI buddies, not just one:** The magic happens when many personalized AI buddies see the same doc and threads you do, and act through the same edits and comments. Just see how they interact with you and with each other.
+- **Familiar experience:** Just like your favorite doc collaboration app: edit, comment and @mention. You already know how to use it.
+- **Open:** Open source, plain markdown with an open comment format, and works with any command-line agent (Claude Code, Codex or your own command).
 
-Select text, comment, and @mention a buddy: `@Clippy tighten this`. The buddy
-edits the doc, may comment on other passages, and replies in the thread. Its
-edits can be undone from the reply; where you changed the same text, your
-text wins. Cmd+Z undoes only your own typing. See [user experience](docs/user-experience.md).
+## Download
 
-A **buddy** is a markdown file, `<Name>.md`: the first line is its persona,
-the rest its instructions. Clippy is built in and in every doc; every other
-buddy belongs to a project, in its `.opendoc/buddies/`, and travels with it
-([buddies and projects](spec/PROJECT.md)).
+Nightly installers for macOS (`.dmg`) and Windows are on the [nightly release](https://github.com/fanzhangg/open-doc/releases/tag/nightly), rebuilt from `main` after every change that passes the checks. They are pre-release builds.
 
-What runs a buddy is an **agent**: Claude Code or Codex, through a script in
-`agents/` in the config folder. The script gets the prompt on stdin and copies
-of the doc and its comments in its working folder, and prints the reply
-([agent config](docs/agent-config.md)).
+## Getting started
 
-The config folder is `~/Library/Application Support/OpenDoc` on macOS,
-`%APPDATA%\OpenDoc` on Windows and `~/.config/opendoc` on Linux
-(`OPENDOC_CONFIG_DIR` overrides it). It also holds `settings.json` and each
-doc's version history.
+1. Install the app, or build it from source (see below).
+2. Open a markdown file or a folder.
+3. Select some text, add a comment and @mention a buddy. Its reply and any edits show up in the doc as it works.
 
-- [Architecture](docs/architecture.md)
-- [Format spec](spec/SPEC.md), with an [example doc](spec/examples/plan.md)
-- [File management](docs/file-management.md)
-- [Testing and CI](docs/testing-ci.md)
+Buddies run on a command-line agent you already have, such as Claude Code or Codex. See [Agent Config](docs/agent-config.md) to set one up.
 
 ## Development
 
+Requires Node 20 or later.
+
 ```bash
 npm install
-npm run desktop                      # home page: Open Project, recent projects, Settings
-npm run desktop -- path/to/plan.md   # open a doc
-npm run desktop -- path/to/project   # open a folder as a project
+npm run build                 # bundle the editor into dist/web
+npm run desktop               # build and launch the desktop app
+npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
 
 npm run lint
-npm run build           # bundles the editor into dist/web
-npm test
-npm run smoke:desktop   # launch the app and check it end to end, with a fake agent
+npm test                      # unit and integration tests
+npm run test:stress           # stress tests
+npm run smoke:desktop         # launch the built app and check it
 
-npm run pack:desktop    # the desktop app, unpacked, in release/
-npm run dist:desktop    # its installer in release/
+npm run pack:desktop          # unpacked app in release/
+npm run dist:desktop          # installer in release/
 ```
 
-The installer is not signed yet, so Windows SmartScreen warns before running
-it. `npm run icon:desktop` generates the Clippy avatar, application logo and
-document icons from `web/faces.js` into `build/`.
+## Learn more
 
-Requires Node 20 or later.
+- [Product vision](docs/product-vision.md)
+- [Architecture](docs/architecture.md)
+- [Comment format spec](spec/SPEC.md): the open sidecar format, so other tools can read and write OpenDoc comments
+
+## Contributing
+
+Issues and pull requests are welcome on [GitHub](https://github.com/fanzhangg/open-doc). Before opening a pull request, run `npm run lint` and `npm test`.
