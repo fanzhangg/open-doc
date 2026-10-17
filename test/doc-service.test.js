@@ -10,12 +10,12 @@ import { project } from '../src/core/project.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const PILOT = [{ id: 'a_pilot001', name: 'Pilot', persona: 'You answer everything.', starred: true }];
+const PILOT = { Pilot: 'You answer everything.\n' };
 
-async function withDoc(fn, { content = SAMPLE, agents = PILOT, sidecar = null } = {}) {
+async function withDoc(fn, { content = SAMPLE, buddies = PILOT, sidecar = null } = {}) {
   const docPath = await tempDoc(content);
   if (sidecar !== null) await writeFile(sidecarPath(docPath), sidecar);
-  const settingsDir = await fakeConfig({ agents });
+  const settingsDir = await fakeConfig({ buddies });
   const opened = await openTestDoc(docPath, { settingsDir });
   try {
     await fn({ ...opened, docPath, settingsDir });
@@ -132,7 +132,7 @@ test('a v1 sidecar opens with a notice, and its bytes are unchanged', async () =
   const v1 = '{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": [],\n  "participants": []\n}\n';
   const docPath = await tempDoc();
   await writeFile(`${docPath}.opendoc.json`, v1);
-  const settingsDir = await fakeConfig({ agents: PILOT });
+  const settingsDir = await fakeConfig({ buddies: PILOT });
   const { doc, call, state } = await openTestDoc(docPath, { settingsDir });
   try {
     const now = await state();
@@ -195,7 +195,7 @@ test('settings: saved for every window; a bad patch is refused; another window\'
     const saved = await call('saveSettings', { font: 'serif' });
     assert.equal(saved.settings.font, 'serif');
     assert.equal(JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).font, 'serif');
-    for (const patch of [{ font: 'comic' }, { colour: 'red' }, { id: 'u_someone' }, { agents: [] }]) {
+    for (const patch of [{ font: 'comic' }, { colour: 'red' }, { id: 'u_someone' }, { agents: [] }, { face: 'x' }]) {
       await assert.rejects(call('saveSettings', patch), refused('bad_input'), JSON.stringify(patch));
     }
     const other = await openTestDoc(await tempDoc(), { settingsDir });
@@ -236,7 +236,7 @@ test('an @name typed in the doc text is plain text: it asks no one', { timeout: 
 });
 
 test('several docs open at once: each saves, comments and runs its buddies', { timeout: 30_000 }, async () => {
-  const settingsDir = await fakeConfig({ agents: PILOT });
+  const settingsDir = await fakeConfig({ buddies: PILOT });
   const opened = await Promise.all([0, 1, 2].map(async () => openTestDoc(await tempDoc(), { settingsDir })));
   try {
     await Promise.all(opened.map(async ({ call, state }, i) => {
@@ -251,52 +251,6 @@ test('several docs open at once: each saves, comments and runs its buddies', { t
     }
   } finally {
     await Promise.all(opened.map(({ doc }) => doc.close()));
-  }
-});
-
-test('buddies: the doc reaches the starred ones and its own; one is made, renamed and deleted from the page', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ call, state, settingsDir }) => {
-    assert.deepEqual((await state()).agents.map((a) => [a.name, a.state]), [['Pilot', 'ready']]);
-    await assert.rejects(call('createAgent', { agent: { name: 'boss', role: 'pilot' } }), refused('bad_input'), 'roles are gone');
-    await assert.rejects(call('createAgent', { agent: { editMode: 'auto' } }), refused('bad_input'), 'permissions are gone');
-    await assert.rejects(call('createAgent', { agent: { doc: '/x.md' } }), refused('bad_input'), 'the page cannot pick a doc');
-    const created = await call('createAgent', { agent: { name: 'helper', persona: 'Says it short', instructions: 'You are terse.' } });
-    assert.equal(created.agent.doc, (await state()).docKey, 'this doc\'s own');
-    assert.ok(created.agents.some((a) => a.name === 'helper' && a.persona === 'Says it short'));
-    await assert.rejects(call('createAgent', { agent: { name: 'helper' } }), /the name helper is taken/, 'a name asked for is refused, not changed');
-
-    // @helper answers, in its persona.
-    const { id } = await call('comment', { anchor: null, body: '@helper shorten this' });
-    await until(async () => (await threadOf(state, id)).comments.length === 2, 'helper\'s answer');
-    assert.match((await fakeRuns(settingsDir))[0].prompt, /Says it short[\s\S]*You are terse\./, 'persona and instructions reach the run');
-    assert.deepEqual((await threadOf(state, id)).comments[1].by, { id: 'helper', name: 'helper', kind: 'ai' });
-
-    await call('updateAgent', { id: created.agent.id, patch: { name: 'editor' } });
-    assert.ok((await state()).agents.some((a) => a.name === 'editor'));
-    await assert.rejects(call('updateAgent', { id: created.agent.id, patch: { name: 'fzhan' } }), refused('bad_input'), "not the human's name");
-    const deleted = await call('deleteAgent', { id: created.agent.id });
-    assert.deepEqual(deleted.agents.map((a) => a.name), ['Pilot']);
-    assert.equal((await threadOf(state, id)).comments[1].by.name, 'helper', 'its comments stay');
-  });
-});
-
-test('a doc\'s own buddy is reached only from it, and moves with it', async () => {
-  const settingsDir = await fakeConfig({ agents: PILOT });
-  const docA = await tempDoc();
-  const docB = await tempDoc();
-  let a = await openTestDoc(docA, { settingsDir });
-  await a.call('createAgent', { agent: { name: 'critic' } });
-  const b = await openTestDoc(docB, { settingsDir });
-  try {
-    assert.ok(!(await b.state()).agents.some((x) => x.name === 'critic'));
-    const moved = join(dirname(docA), 'moved.md');
-    await a.doc.moveTo(moved);
-    await a.doc.close();
-    a = await openTestDoc(moved, { settingsDir });
-    assert.ok((await a.state()).agents.some((x) => x.name === 'critic'));
-  } finally {
-    await a.doc.close();
-    await b.doc.close();
   }
 });
 

@@ -3,8 +3,8 @@
 // shares, some Windows setups) and folders that do not exist yet.
 
 import { watch } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { sidecarPath } from './files.js';
 
 export const POLL_INTERVAL_MS = 500;
@@ -25,8 +25,23 @@ export function watchDoc(docPath, onChange) {
  */
 export function watchFiles(paths, onChange) {
   const names = new Set(paths.map((path) => basename(path)));
+  const signature = async () => (await Promise.all(paths.map(signatureOf))).join('|');
+  return watchIn(dirname(paths[0]), (name) => names.has(name), signature, onChange);
+}
+
+/** Call `onChange()` (debounced) whenever a file in folder `dir` is created, changed or removed. */
+export function watchFolder(dir, onChange) {
+  const signature = async () => {
+    const names = await readdir(dir).catch(() => null);
+    if (!names) return 'missing';
+    return (await Promise.all(names.sort().map(async (name) => `${name}:${await signatureOf(join(dir, name))}`))).join('|');
+  };
+  return watchIn(dir, () => true, signature, onChange);
+}
+
+function watchIn(dir, matches, signature, onChange) {
   let timer = null;
-  let last = null;
+  let last = signature(); // as the watch starts: a change right after it counts
   const fire = () => {
     clearTimeout(timer);
     timer = setTimeout(onChange, DEBOUNCE_MS);
@@ -34,8 +49,8 @@ export function watchFiles(paths, onChange) {
 
   let watcher = null;
   try {
-    watcher = watch(dirname(paths[0]), (_event, name) => {
-      if (!name || names.has(name.toString())) fire();
+    watcher = watch(dir, (_event, name) => {
+      if (!name || matches(name.toString())) fire();
     });
     watcher.on('error', () => {}); // polling keeps working
   } catch {
@@ -43,9 +58,9 @@ export function watchFiles(paths, onChange) {
   }
 
   const poll = setInterval(async () => {
-    const signature = (await Promise.all(paths.map(signatureOf))).join('|');
-    if (last !== null && signature !== last) fire();
-    last = signature;
+    const now = await signature();
+    if (now !== (await last)) fire();
+    last = now;
   }, POLL_INTERVAL_MS);
 
   return () => {

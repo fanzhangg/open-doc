@@ -4,7 +4,7 @@
 // Folder… and the recent list only log, since there is no app to open them.
 
 (() => {
-  let settings = { name: 'you', face: null, theme: 'system', font: 'sans', width: 'normal', outline: true, wordCount: false, focus: false };
+  let settings = { name: 'you', theme: 'system', font: 'sans', width: 'normal', outline: true, wordCount: false, focus: false };
   const recent = [
     { name: 'plan.md', folder: '/Users/you/Documents/launch', kind: 'doc' },
     { name: 'docs', folder: '/Users/you/Workplace/open-doc', kind: 'folder' },

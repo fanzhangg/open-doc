@@ -32,12 +32,12 @@ export const api = {
   scripts: () => call('scripts'),
   /** Write shipped agent script `name` again as it came. */
   resetScript: (name) => call('resetScript', { name }),
-  /** A new agent for the user: { agent, settings, agents }. */
-  createAgent: (agent) => call('createAgent', { agent }),
-  /** Change the user's agent `id`: { settings, agents }. */
-  updateAgent: (id, patch) => call('updateAgent', { id, patch }),
-  /** Delete the user's agent `id`: { settings, agents }. */
-  deleteAgent: (id) => call('deleteAgent', { id }),
+  /** A new buddy, `where` 'user' or 'project': { agents }. */
+  createBuddy: (buddy, where) => call('createBuddy', { buddy, where }),
+  /** Change buddy `name` here: { agents }. */
+  updateBuddy: (name, patch) => call('updateBuddy', { name, patch }),
+  /** Delete buddy `name`'s file: { agents }. */
+  deleteBuddy: (name) => call('deleteBuddy', { name }),
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await call('history')).versions,
   /** One version: { version, markdown, before }. */

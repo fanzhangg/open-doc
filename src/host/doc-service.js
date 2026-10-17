@@ -9,18 +9,19 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
-import { AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
+import { BuddyError, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
 import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, editAgents, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
-import { watchDoc } from '../store/watch.js';
+import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
+import { installClippy, projectBuddiesDir, readBuddies, removeBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
+import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { splice } from './splice.js';
 import { Runner } from './runner.js';
@@ -34,13 +35,13 @@ export class DocError extends Error {
 }
 
 /**
- * Open the doc at `docPath`. The doc's buddies are the user's agents (the
- * Agents panel) it can reach: the starred ones and its own. One @mentioned
- * in a comment of this user's answers it, in a run of the agent script
- * picked in Settings (src/store/agents.js). `settingsDir` is the folder of
- * the user's settings file (default: the per-user config folder), which
- * also holds the agent scripts. `folder` is the project folder the doc was
- * opened from, handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
+ * Open the doc at `docPath`. Its buddies are the user's and, in project
+ * mode, the project folder's (src/store/buddies.js). One @mentioned in a
+ * comment of this user's answers it, in a run of the agent script picked in
+ * Settings (src/store/agents.js). `settingsDir` is the user's config folder
+ * (default: the per-user one): settings, buddies and agent scripts.
+ * `folder` is the project folder the doc was opened from (null in doc
+ * mode), handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
  * what changed. `call(type, arg)` runs a window's request (see `calls`);
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
@@ -48,8 +49,6 @@ export class DocError extends Error {
  */
 export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
   await readDoc(docPath); // fail early on a missing doc
-  // An unstarred agent belongs to one doc, known by its full path.
-  const docKey = () => resolve(docPath);
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
@@ -147,7 +146,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       defaultName: defaultName(),
       me: await me(),
       agents: agentStatuses(),
-      docKey: docKey(), // which of the user's unstarred agents are this doc's own
+      project: folder !== null, // whether a new buddy may be the project's
     };
   }
 
@@ -224,13 +223,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- the doc's buddies ----
 
-  // The user's agents the doc reaches: the starred ones and this doc's own,
-  // this doc's own before a starred one of the same name.
+  // The user's buddies and the project's; the project's wins a name both have.
   async function buddies() {
-    const { settings } = await readSettings(settingsDir);
-    currentAgent = settings.agent;
-    const ours = settings.agents.filter((a) => availableIn(a, docKey())).sort((a, b) => Number(a.starred) - Number(b.starred));
-    return ours.filter((agent, i) => ours.findIndex((a) => sameName(a.name, agent.name)) === i);
+    currentAgent = (await readSettings(settingsDir)).settings.agent;
+    return buddiesHere(await readBuddies(userBuddiesDir(settingsDir)), folder ? await readBuddies(projectBuddiesDir(folder)) : []);
   }
 
   // The asks waiting on a buddy now (docs/architecture-v2.md, Who answers):
@@ -253,7 +249,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const running = runner.statuses();
     return shownBuddies.map((b) => {
       const run = running.find((r) => sameName(r.name, b.name));
-      return { name: b.name, id: b.id, persona: b.persona, state: run ? 'running' : 'ready', threadIds: run?.threadIds ?? [] };
+      return { ...b, state: run ? 'running' : 'ready', threadIds: run?.threadIds ?? [] };
     });
   }
 
@@ -305,55 +301,60 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       .catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
 
-  async function currentSettings() {
-    return (await readSettings(settingsDir)).settings;
+  // ---- buddy files ----
+
+  const dirOf = (where) => {
+    if (where === 'user') return userBuddiesDir(settingsDir);
+    if (where === 'project' && folder) return projectBuddiesDir(folder);
+    throw new DocError('bad_input', where === 'project' ? 'not in a project' : 'where is user or project');
+  };
+
+  // A buddy can be called anything but its owner's name.
+  async function checkBuddy(fields) {
+    try {
+      checkBuddyPatch(fields);
+    } catch (error) {
+      throw new DocError(error.code, error.message);
+    }
+    if (fields.name !== undefined && sameName(fields.name, (await me()).name)) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
 
-  // New agent for the user's roster, from the page. A name asked for is
-  // kept or refused as taken; none gets a free one ("agent", "agent-2", …).
-  async function rosterCreate(body) {
-    const { id: _id, ...fields } = body?.agent ?? {};
-    checkServerKeys(fields);
-    // Unless starred, it is this doc's own.
-    fields.doc = fields.starred === true ? null : docKey();
-    const taken = (await me()).name;
-    let created;
-    const settings = await editAgents((agents) => {
-      created = createAgent(agents, fields, [taken], { exact: Object.hasOwn(fields, 'name') });
-      return [...agents, created];
-    }, settingsDir).catch(agentError);
+  // Write buddy files; a folder watch tells every window.
+  async function changeBuddies(work) {
+    try {
+      await work();
+    } catch (error) {
+      if (error instanceof BuddyError) throw new DocError(error.code, error.message);
+      throw error;
+    }
     await syncAgents();
-    return { agent: created, settings, agents: agentStatuses() };
+    return { agents: agentStatuses() };
   }
 
-  // Change one of the user's agents. Starring puts it in the library, for
-  // every doc; unstarring makes it this doc's own.
-  async function rosterUpdate(body) {
-    const id = body?.id;
-    const patch = body?.patch ?? {};
-    if (!(await currentSettings()).agents.some((a) => a.id === id)) throw new DocError('not_found', 'no such agent');
-    checkServerKeys(patch);
-    if (patch.starred === true) patch.doc = null;
-    if (patch.starred === false) patch.doc = docKey();
-    const taken = (await me()).name;
-    const settings = await editAgents((agents) => updateAgent(agents, id, patch, [taken]), settingsDir).catch(agentError);
-    await syncAgents();
-    return { settings, agents: agentStatuses() };
+  // A new buddy: `where` 'user' (every doc) or 'project' (this folder's
+  // .opendoc/buddies/, made if missing).
+  async function createBuddy({ buddy, where = 'user' } = {}) {
+    const fields = { persona: '', instructions: '', ...buddy };
+    await checkBuddy(fields);
+    if (!fields.name) throw new DocError('bad_input', 'a buddy needs a name');
+    const dir = dirOf(where);
+    return changeBuddies(() => writeBuddy(dir, fields));
   }
 
-  // Delete one of the user's agents. Its comments stay.
-  async function rosterDelete(body) {
-    const agent = (await currentSettings()).agents.find((a) => a.id === body?.id);
-    if (!agent) throw new DocError('not_found', 'no such agent');
-    const settings = await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
-    await syncAgents();
-    return { settings, agents: agentStatuses() };
+  // Change buddy `name` here: its name (renames its file), persona or instructions.
+  async function updateBuddy({ name, patch = {} } = {}) {
+    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
+    if (!found) throw new DocError('not_found', 'no such buddy');
+    await checkBuddy(patch);
+    const { where, ...was } = found;
+    return changeBuddies(() => writeBuddy(dirOf(where), { ...was, ...patch }, found.name));
   }
 
-  // Which doc an agent belongs to is the app's to say.
-  function checkServerKeys(fields) {
-    const key = AGENT_SERVER_KEYS.find((k) => Object.hasOwn(fields, k));
-    if (key) throw new DocError('bad_input', `${key} is set by the app`);
+  // Delete buddy `name`'s file. Its comments stay.
+  async function deleteBuddy({ name } = {}) {
+    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
+    if (!found) throw new DocError('not_found', 'no such buddy');
+    return changeBuddies(() => removeBuddy(dirOf(found.where), found.name));
   }
 
   // Add the doc as it now reads to its history (one version at a time, in
@@ -433,16 +434,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   async function moveTo(newPath, move = moveDoc) {
     return serial(async () => {
-      const before = docKey();
       const target = (await move(docPath, newPath)) ?? newPath;
       stopWatching();
       await runner.stop(); // their asks run again once the doc is at its new name
       await chronicle;
-      // This doc's own agents move with it.
-      if ((await currentSettings()).agents.some((a) => a.doc === before)) {
-        await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: resolve(target) } : a)), settingsDir)
-          .catch((error) => console.error('Could not move the doc\'s agents:', error));
-      }
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
       // A folder moved with the doc in it: the watch may have seen it go.
@@ -451,12 +446,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       stopWatching = watchDoc(docPath, onFilesChanged);
       runner.resume();
       await syncAgents();
-      emit('renamed', { doc: basename(docPath), docKey: docKey() });
+      emit('renamed', { doc: basename(docPath) });
       return docPath;
     });
   }
 
   await installAgents(settingsDir).catch((error) => console.error('Could not write the agent scripts:', error));
+  await installClippy(settingsDir).catch((error) => console.error('Could not write Clippy:', error));
   const opened = await readDoc(docPath);
   lastDocHash = opened.hash;
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
@@ -464,6 +460,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
+  const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
+  let stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
   await syncAgents();
 
   // What a window may ask. Each returns what changed, for the window that asked.
@@ -476,7 +474,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     reopen: (body) => comment({ thread: body?.thread, body: 'Reopened.' }),
     deleteComment: removeComment,
     async saveSettings(patch) {
-      if (patch && Object.hasOwn(patch, 'agents')) throw new DocError('bad_input', 'agents are changed through createAgent and updateAgent');
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
       try {
         return { settings: await updateSettings(patch, settingsDir) };
@@ -485,9 +482,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         throw error;
       }
     },
-    createAgent: rosterCreate,
-    updateAgent: rosterUpdate,
-    deleteAgent: rosterDelete,
+    createBuddy,
+    updateBuddy,
+    deleteBuddy,
     scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) }),
     // A shipped agent script, written again as it came.
     async resetScript(body) {
@@ -524,20 +521,19 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     moveTo,
     setFolder(next) {
       folder = next;
+      stopWatchingProjectBuddies();
+      stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
+      syncAgents();
     },
     async close() {
       stopWatching();
       stopWatchingSettings();
+      stopWatchingUserBuddies();
+      stopWatchingProjectBuddies();
       closed = true;
       await runner.stop();
     },
   };
-}
-
-function agentError(error) {
-  if (error instanceof AgentError) throw new DocError(error.code, error.message);
-  if (error instanceof SettingsError) throw new DocError('bad_input', error.message);
-  throw error;
 }
 
 function versionId(id) {

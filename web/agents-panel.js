@@ -1,23 +1,22 @@
-// The Agents panel: the user's buddies, for every doc, in a dialog of their
-// own. On the left, the list; on the right, the one picked: who it is (name,
-// persona), whether it is starred, and its instructions. What runs every
-// buddy is the agent picked in Settings.
+// The Buddies panel: the buddies this doc reaches, in a dialog of their own.
+// On the left, the list; on the right, the one picked: who it is (name,
+// persona), where its file is, and its instructions. What runs every buddy
+// is the agent picked in Settings.
 //
-// Changes save through the doc host as they are made. A new agent is a draft
-// until Create: nothing is saved before it has a name, so one
-// left half made (the panel closed, Esc, another agent picked) leaves no
-// trace.
+// Changes save to the buddy's file as they are made. A new buddy is a draft
+// until Create: nothing is saved before it has a name, so one left half
+// made (the panel closed, Esc, another buddy picked) leaves no trace. In a
+// project, a new buddy may be the project's instead of yours.
 
 import { api } from './api.js';
 import { avatar } from './threads.js';
 import { NAME_RULE } from './agent.js';
-import { agentFace } from './faces.js';
-import { availableIn, checkAgentPatch, createFields, draftAgent, introOf } from '../src/core/agents.js';
+import { BUDDY_RULES, checkBuddyPatch } from '../src/core/buddies.js';
 
 /**
- * @param {{ store: object, onResult: (result: { settings?, sidecar?, agents? }) => void, docKey?: () => string | null }} options
+ * @param {{ buddies: () => object[], project: () => boolean, onResult: (result: { agents? }) => void }} options
  */
-export function createAgentsPanel({ store, onResult, docKey = () => null }) {
+export function createAgentsPanel({ buddies, project, onResult }) {
   const dialog = document.querySelector('.od-agents-dialog');
   const list = dialog.querySelector('.od-agents-list');
   const form = dialog.querySelector('.od-agent-editor');
@@ -26,33 +25,39 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   const nameError = form.querySelector('.od-input-error');
   const createButton = form.querySelector('[data-action="create-agent"]');
   const where = form.querySelector('.od-agent-where');
-  let selected = null; // the id of the agent shown
-  let draft = null; // a new agent not created yet: { agent }
+  const inProject = form.querySelector('.od-agent-keep');
+  let selected = null; // the name of the buddy shown
+  let draft = null; // a new buddy not created yet: { buddy, project }
   let creating = false;
 
-  // Your starred agents, and this doc's own; other docs' own stay with them.
-  const agents = () => store.get().agents.filter((a) => availableIn(a, docKey()));
-  const current = () => draft?.agent ?? agents().find((a) => a.id === selected) ?? null;
+  const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  const current = () => draft?.buddy ?? buddies().find((b) => same(b.name, selected ?? '')) ?? null;
   const valid = (patch) => {
     try {
-      checkAgentPatch(patch);
+      checkBuddyPatch(patch);
       return true;
     } catch {
       return false;
     }
   };
+  // What creating the draft sends, or null while its name is not valid.
+  const draftFields = () => {
+    const name = draft.buddy.name.trim();
+    return BUDDY_RULES.name(name) ? { ...draft.buddy, name } : null;
+  };
 
   async function save(patch) {
-    const agent = current();
-    if (!agent || !valid(patch)) return false;
+    const buddy = current();
+    if (!buddy || !valid(patch)) return false;
     if (draft) {
       // Kept in the draft, and sent with the rest by Create.
-      draft.agent = { ...draft.agent, ...patch };
+      draft.buddy = { ...draft.buddy, ...patch };
       paint();
       return true;
     }
     try {
-      onResult(await api.updateAgent(agent.id, patch));
+      onResult(await api.updateBuddy(buddy.name, patch));
+      if (patch.name) selected = patch.name;
       return true;
     } catch (error) {
       if (Object.hasOwn(patch, 'name')) {
@@ -65,25 +70,27 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   }
 
   function paint() {
-    const roster = agents();
-    if (selected && !roster.some((a) => a.id === selected)) selected = null;
-    selected ??= roster[0]?.id ?? null;
-    list.replaceChildren(...(draft ? [draftRow()] : []), ...roster.map((agent) => listRow(agent)));
-    if (roster.length === 0 && !draft) list.append(el('p', 'od-agents-empty', 'No buddies yet. Make one with +.'));
+    const all = buddies();
+    if (selected && !all.some((b) => same(b.name, selected))) selected = null;
+    selected ??= all[0]?.name ?? null;
+    list.replaceChildren(...(draft ? [draftRow()] : []), ...all.map((buddy) => listRow(buddy)));
+    if (all.length === 0 && !draft) list.append(el('p', 'od-agents-empty', 'No buddies yet. Make one with +.'));
 
-    const agent = current();
-    form.hidden = !agent;
-    if (!agent) return;
+    const buddy = current();
+    form.hidden = !buddy;
+    if (!buddy) return;
     form.toggleAttribute('data-draft', Boolean(draft));
-    headAvatar.replaceChildren(draft ? draftFace() : avatar(agent.name, 'agent'));
-    createButton.disabled = creating || !draft || !createFields(draft.agent);
-    for (const input of form.querySelectorAll('input[data-agent]:not([type="checkbox"]), textarea[data-agent]')) {
+    headAvatar.replaceChildren(avatar(buddy.name || '?', 'agent'));
+    createButton.disabled = creating || !draft || !draftFields();
+    for (const input of form.querySelectorAll('input[data-agent], textarea[data-agent]')) {
       if (document.activeElement === input) continue;
-      input.value = agent[input.dataset.agent] ?? '';
+      input.value = buddy[input.dataset.agent] ?? '';
       input.removeAttribute('aria-invalid');
     }
-    form.querySelector('[data-agent="starred"]').checked = agent.starred;
-    where.textContent = agent.starred ? 'In every doc.' : 'Only in this doc.';
+    inProject.hidden = !draft || !project();
+    inProject.querySelector('input').checked = Boolean(draft?.project);
+    where.hidden = Boolean(draft);
+    where.textContent = buddy.where === 'project' ? `This project's: .opendoc/buddies/${buddy.name}.md` : `Yours, in every doc: buddies/${buddy.name}.md in your config folder`;
   }
 
   // The draft, first in the list and picked, under the name typed so far.
@@ -92,38 +99,30 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
     row.setAttribute('role', 'option');
     row.setAttribute('aria-selected', 'true');
     const face = el('span', 'od-profile-face');
-    face.append(draftFace(true));
+    face.append(avatar(draft.buddy.name || '?', 'agent', true));
     const who = el('span', 'od-agents-who');
-    who.append(el('span', 'od-agents-name', draft.agent.name.trim() || 'New buddy'), el('span', 'od-agents-sub', 'Not created yet'));
+    who.append(el('span', 'od-agents-name', draft.buddy.name.trim() || 'New buddy'), el('span', 'od-agents-sub', 'Not created yet'));
     row.append(face, who);
     return row;
   }
 
-  // Its face is drawn from a seed of its own, so it does not change with
-  // every letter of the name.
-  function draftFace(small = false) {
-    const node = el('span', `od-avatar od-avatar-agent${small ? ' od-avatar-small' : ''}`);
-    node.append(agentFace(draft.agent.face));
-    return node;
-  }
-
-  function listRow(agent) {
+  function listRow(buddy) {
     const row = el('button', 'od-agents-row');
     row.type = 'button';
     row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', String(!draft && agent.id === selected));
-    row.dataset.agentId = agent.id;
+    row.setAttribute('aria-selected', String(!draft && same(buddy.name, selected ?? '')));
+    row.dataset.buddy = buddy.name;
     const face = el('span', 'od-profile-face');
-    face.append(avatar(agent.name, 'agent', true));
+    face.append(avatar(buddy.name, 'agent', true));
     const who = el('span', 'od-agents-who');
-    who.append(el('span', 'od-agents-name', agent.name), el('span', 'od-agents-sub', introOf(agent)));
+    who.append(el('span', 'od-agents-name', buddy.name), el('span', 'od-agents-sub', buddy.persona));
     row.append(face, who);
     return row;
   }
 
-  function show(id) {
-    draft = null; // another agent, or the panel opened again: a draft goes
-    if (id) selected = id;
+  function show(name) {
+    draft = null; // another buddy, or the panel opened again: a draft goes
+    if (name) selected = name;
     nameError.hidden = true;
     paint();
   }
@@ -132,16 +131,16 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
     if (event.target === dialog) return dialog.close(); // backdrop
     const button = event.target.closest('button');
     if (!button) return;
-    if (button.dataset.agentId) show(button.dataset.agentId);
+    if (button.dataset.buddy) show(button.dataset.buddy);
     else if (button.dataset.action === 'close') dialog.close();
     else if (button.dataset.action === 'new-agent') newAgent();
     else if (button.dataset.action === 'create-agent') create();
     else if (button.dataset.action === 'discard-draft') show();
     else if (button.dataset.action === 'delete-agent') {
-      const agent = current();
-      if (!agent || !window.confirm(`Delete ${agent.name}?\n\nIt leaves this doc and stops answering in every doc. Its comments stay.`)) return;
+      const buddy = current();
+      if (!buddy || !window.confirm(`Delete ${buddy.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
       try {
-        onResult(await api.deleteAgent(agent.id));
+        onResult(await api.deleteBuddy(buddy.name));
       } catch {
         // already gone
       }
@@ -151,7 +150,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   form.addEventListener('submit', (event) => event.preventDefault());
   form.addEventListener('keydown', (event) => {
     // Enter in a one-line field saves it, as leaving it does; in a draft's
-    // name, it creates the agent.
+    // name, it creates the buddy.
     if (event.key === 'Enter' && event.target.matches('input[type="text"]')) {
       event.preventDefault();
       if (draft && event.target === nameInput) create();
@@ -160,9 +159,12 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   });
   form.addEventListener('change', (event) => {
     const input = event.target;
+    if (input.dataset.draft === 'project') {
+      draft.project = input.checked;
+      return;
+    }
     const key = input.dataset.agent;
     if (!key || (draft && key === 'name')) return; // a draft's name is taken as it is typed
-    if (input.type === 'checkbox') return save({ [key]: input.checked });
     const value = key === 'instructions' ? input.value : input.value.trim();
     if (key === 'name' && value === '') return paint();
     if (!valid({ [key]: value })) {
@@ -175,8 +177,8 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   });
   form.addEventListener('input', (event) => {
     if (draft && event.target === nameInput) {
-      draft.agent = { ...draft.agent, name: nameInput.value };
-      const bad = nameInput.value.trim() !== '' && !createFields(draft.agent);
+      draft.buddy = { ...draft.buddy, name: nameInput.value };
+      const bad = nameInput.value.trim() !== '' && !draftFields();
       nameInput.toggleAttribute('aria-invalid', bad);
       nameError.textContent = bad ? NAME_RULE : '';
       nameError.hidden = !bad;
@@ -187,29 +189,28 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
     if (event.target.matches?.('[aria-invalid="true"]')) paint(); // an invalid value is not kept
   });
 
-  // New agent: a draft in the editor, its name to type first. Nothing is
+  // New buddy: a draft in the editor, its name to type first. Nothing is
   // saved until Create.
   function newAgent() {
     if (!dialog.open) dialog.showModal();
     show();
-    draft = { agent: draftAgent({ face: Math.random().toString(36).slice(2, 10) }) };
+    draft = { buddy: { name: '', persona: '', instructions: '' }, project: false };
     paint();
     nameInput.focus();
   }
 
-  // One request: the agent with everything set in the draft.
+  // One request: the buddy with everything set in the draft.
   async function create() {
-    const fields = draft && createFields(draft.agent);
+    const fields = draft && draftFields();
     if (!fields || creating) return;
     creating = true;
     paint();
     try {
-      const result = await api.createAgent(fields);
+      onResult(await api.createBuddy(fields, draft.project ? 'project' : 'user'));
       draft = null;
-      onResult(result);
-      show(result.agent.id);
+      show(fields.name);
     } catch (error) {
-      // Its name is taken, or there are too many agents: the draft stays.
+      // Its name is taken: the draft stays.
       nameError.textContent = error.message;
       nameError.hidden = false;
       nameInput.focus();
@@ -219,9 +220,9 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
     }
   }
 
-  function open(id) {
+  function open(name) {
     if (!dialog.open) dialog.showModal();
-    show(id);
+    show(name);
     list.querySelector('[aria-selected="true"]')?.focus();
   }
 
@@ -230,13 +231,14 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
     draft = null;
   });
 
-  store.subscribe(paint);
   paint();
   return {
-    /** Open the panel on agent `id` (or the one shown last). */
+    /** Open the panel on buddy `name` (or the one shown last). */
     open,
-    /** Open the panel on a new agent's draft. */
+    /** Open the panel on a new buddy's draft. */
     newAgent,
+    /** The buddies changed: show them. */
+    refresh: paint,
     /** Open the panel, or close it when it is open. */
     toggle() {
       if (dialog.open) dialog.close();

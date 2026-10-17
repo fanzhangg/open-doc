@@ -164,10 +164,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile { display: flex; align-items: center; gap: 12px; }
 .od-profile .od-avatar { --size: 44px; }
 /* on an editable card, the face is a button that draws a new one */
-.od-face-picker { flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; transition: transform 0.15s ease; }
-.od-face-picker:hover { transform: scale(1.08) rotate(-4deg); }
-.od-face-picker:active { transform: scale(0.94); }
-.od-face-picker:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .od-profile-who { min-width: 0; }
 .od-profile-name { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .od-profile-sub { margin-top: 2px; color: var(--text-soft); }
@@ -244,8 +240,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile-tools { margin-left: auto; align-self: flex-start; display: flex; gap: 2px; }
 .od-profile-tools .od-icon-button { width: 28px; height: 28px; }
 .od-profile-tools .od-icon { width: 16px; height: 16px; }
-.od-star[aria-pressed="true"] { color: #e8a400; }
-.od-star[aria-pressed="true"] .od-icon { fill: currentColor; }
 /* name and persona on an agent card: text you click to edit, then a field in its place */
 .od-editable { margin-left: -4px; padding: 1px 4px; border-radius: 4px; cursor: text; }
 .od-editable:hover, .od-editable:focus-visible { background: var(--hover); outline: none; }

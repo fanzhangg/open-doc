@@ -8,10 +8,10 @@
 import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agentsDir } from '../src/store/agents.js';
-import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
+import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
 import { moveHistory } from '../src/store/history.js';
@@ -478,8 +478,8 @@ function recentMenu() {
 // ---- the start window's settings ----
 
 // The settings the start window shows and changes (its Settings dialog):
-// your name and how things look, never the agents or their programs.
-const PAGE_SETTING_KEYS = ['name', 'face', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus'];
+// your name and how things look, never buddies or agent scripts.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus'];
 const pageSettings = (all) => Object.fromEntries(PAGE_SETTING_KEYS.map((key) => [key, all[key]]));
 
 async function saveStartSettings(patch) {
@@ -547,7 +547,7 @@ async function sidebarCreate(win, { parent, name, kind } = {}) {
 /**
  * Rename or move the sidebar's doc or folder `from` to `to` (its new place,
  * as typed; a doc keeps its extension unless `to` names one). Its comments,
- * history and own agents go with each doc, and any window showing one
+ * and history go with each doc, and any window showing one
  * follows it.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
@@ -579,7 +579,7 @@ async function sidebarMove(win, { from, kind, to } = {}) {
   return { rel };
 }
 
-// A doc and its comments, history and own agents; an open doc does
+// A doc and its comments and history; an open doc does
 // all of that itself.
 async function moveDoc(fromPath, toPath) {
   const open = windows.windowOf(await realpath(fromPath));
@@ -615,14 +615,9 @@ async function moveFolderOf(fromPath, toPath) {
 }
 
 // What a doc that is not open leaves outside its folder, moved with it: its
-// version history, and the agents that belong to it (by its full path).
+// version history.
 async function followDoc(fromPath, toPath) {
-  const [before, after] = [resolve(fromPath), resolve(toPath)];
   try {
-    const { settings: current } = await readSettings();
-    if (current.agents.some((a) => a.doc === before)) {
-      await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: after } : a)));
-    }
     await moveHistory(fromPath, toPath, configDir());
   } catch (error) {
     console.error(`Could not move what belongs to ${basename(fromPath)}:`, error);

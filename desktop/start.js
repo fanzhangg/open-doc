@@ -35,7 +35,7 @@ desktop.settings().then((initial) => {
     getName: () => store.get().name ?? '',
     setName(next) {
       if (!NAME_PATTERN.test(next)) return false;
-      if (next !== store.get().name) store.set({ name: next, face: store.get().face ?? store.get().name ?? next });
+      if (next !== store.get().name) store.set({ name: next });
       return true;
     },
   });

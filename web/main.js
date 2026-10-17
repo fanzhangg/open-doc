@@ -8,7 +8,7 @@
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
-import { avatar, createCommentMargin, namecardFor, setFaces } from './threads.js';
+import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
@@ -19,8 +19,7 @@ import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
-import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
-import { availableIn } from '../src/core/agents.js';
+import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
@@ -47,7 +46,7 @@ let people;
 let history;
 let settings;
 let defaultName;
-let docKey; // the doc's full path: which of your unstarred agents are its own
+let inProject = false; // the doc was opened from a project folder
 let me; // your name
 let myId; // your id, which your comments carry
 let comments; // the doc's threads, who wrote in them, and a notice about its sidecar (state())
@@ -97,17 +96,13 @@ async function start() {
   baseHash = initial.docHash;
   defaultName = initial.defaultName;
   myId = initial.me.id;
-  docKey = initial.docKey;
+  inProject = initial.project;
   settings = createSettings(initial.settings, {
     save: api.saveSettings,
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
   me = settings.get().name ?? defaultName;
-  setFaces(faceOf);
-  settings.subscribe((next, prev) => {
-    renameMe(next.name ?? defaultName); // before the dialog's, which shows `me`
-    if (facesOf(next) !== facesOf(prev)) repaintFaces();
-  });
+  settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
   showDocName(initial.doc);
   offerRename();
   paintNameChip();
@@ -141,7 +136,7 @@ async function start() {
   synced = editor.getMarkdown();
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
-    docKey: () => docKey,
+    buddies: () => people?.statuses() ?? [], project: () => inProject,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -180,12 +175,8 @@ async function start() {
     getName: () => me,
     getId: () => settings.get().id,
     setName,
-    setFace: (face) => settings.set({ face }),
-    docKey: () => docKey,
-    openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
+    openSettings: (section, name) => (section === 'agents' ? chrome.openAgent(name) : chrome.command('settings')),
     newAgent: () => chrome.newAgent(),
-    onSettings: (next) => settings.receive(next),
-    onError: (message) => setStatus(message, 'error'),
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
   createNameCards({
@@ -194,8 +185,8 @@ async function start() {
     pin: (chip) => people.pin(...who(chip)),
     unpeek: () => people.unpeek(),
   });
-  people.render({ agents: initial.agents, roster: settings.get().agents });
-  settings.subscribe((next) => people.render({ roster: next.agents }));
+  people.render({ agents: initial.agents });
+  chrome.refreshAgents();
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
@@ -262,11 +253,7 @@ async function start() {
   events.on('history', () => history.changed());
   events.on('agents', (data) => showAgents(data));
   events.on('settings', (data) => settings.receive(data));
-  events.on('renamed', (data) => {
-    showDocName(data.doc);
-    docKey = data.docKey ?? docKey; // its own agents moved with it
-    people?.render({ roster: settings.get().agents });
-  });
+  events.on('renamed', (data) => showDocName(data.doc));
   events.on('missing', (data) => setMissing(data.missing));
   // First on the line: the doc may have gone missing, or runs started, since `state`.
   events.on('hello', (data) => {
@@ -425,12 +412,12 @@ function showAgents(next) {
   shownAgents = json;
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   people.render({ agents: next });
+  chrome.refreshAgents();
   margin.setAgents(next);
 }
 
 // What a request about buddies answers with.
 function takeAgentResult(result) {
-  if (result.settings) settings.receive(result.settings);
   if (result.agents) showAgents(result.agents);
 }
 
@@ -670,30 +657,11 @@ function paintNameChip() {
   button.setAttribute('aria-label', `You (${me})`);
 }
 
-/** Rename the human in comments, in every doc; false when the name is not allowed. Your face stays. */
+/** Rename the human in comments, in every doc; false when the name is not allowed. */
 function setName(next) {
   if (!NAME_PATTERN.test(next)) return false;
-  if (next !== me) settings.set({ name: next, face: settings.get().face ?? me });
+  if (next !== me) settings.set({ name: next });
   return true;
-}
-
-// The seed of a face (see setFaces): yours and your agents' as saved, so a
-// new name keeps the old face.
-function faceOf(name, kind) {
-  const saved = settings.get();
-  if (kind !== 'agent') return sameName(name, me) ? saved.face ?? me : name;
-  const mine = saved.agents.filter((a) => sameName(a.name, name));
-  const agent = mine.find((a) => availableIn(a, docKey)) ?? mine[0];
-  return agent?.face ?? name;
-}
-
-const facesOf = (saved) => JSON.stringify([saved.face, ...saved.agents.map((a) => [a.id, a.face])]);
-
-// A face changed: everywhere it shows. (People's own repaint comes with the roster.)
-function repaintFaces() {
-  paintNameChip();
-  margin?.rerender();
-  people?.renameMe();
 }
 
 function renameMe(next) {

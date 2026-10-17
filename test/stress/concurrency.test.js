@@ -32,7 +32,7 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
   const doc = ['# Stress', ...asks.map((a) => `Para ${a.key} old.`), ...human.map((h) => `Para ${h} old.`)].join('\n\n') + '\n';
   const docPath = await tempDoc(doc);
 
-  const settingsDir = await fakeConfig({ agents: buddies.map((name, i) => ({ id: `a_stress${i}`, name, starred: true })) });
+  const settingsDir = await fakeConfig({ buddies: Object.fromEntries(buddies.map((name) => [name, '\n'])) });
   const { doc: opened, call, state } = await openTestDoc(docPath, { settingsDir });
   try {
     // Every ask at once, in a random order, while the human edits their own paragraphs.

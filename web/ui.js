@@ -27,9 +27,9 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean,
- *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void }} options
+ *           buddies: () => object[], project: () => boolean, onAgentResult: (result: { agents? }) => void }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, buddies, project, onAgentResult }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -50,7 +50,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       showFolder: window.opendocDesktop && (() => window.opendocDesktop.showAgents()),
     },
   });
-  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey });
+  const agentsPanel = createAgentsPanel({ buddies, project, onResult: onAgentResult });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -166,9 +166,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     hideBubble() {
       bubble.hidden = true;
     },
-    /** Open the Buddies panel on buddy `id` (or the one shown last). */
-    openAgent(id) {
-      agentsPanel.open(id);
+    /** Open the Buddies panel on buddy `name` (or the one shown last). */
+    openAgent(name) {
+      agentsPanel.open(name);
+    },
+    /** The buddies changed. */
+    refreshAgents() {
+      agentsPanel.refresh();
     },
     /** Open the Buddies panel on a new buddy's draft. */
     newAgent() {

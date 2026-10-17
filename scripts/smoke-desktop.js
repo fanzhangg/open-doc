@@ -98,8 +98,8 @@ await app.quit();
 console.log(failed ? 'smoke: FAILED' : 'smoke: passed');
 process.exit(failed ? 1 : 0);
 
-// Comment on the doc in `page`, asking Clippy (the buddy every new doc
-// starts with) to change the title from `from` to `title`; true once the
+// Comment on the doc in `page`, asking Clippy (made on first run)
+// to change the title from `from` to `title`; true once the
 // reply is in and the doc on disk has the new title.
 async function answers(page, from, title, doc) {
   const replied = await page.evaluate(`(async () => {

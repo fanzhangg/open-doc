@@ -14,11 +14,11 @@ import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './hel
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const CLIPPY = [{ id: 'a_clippy01', name: 'Clippy', persona: 'Helps with docs', instructions: 'Be brief.', starred: true }];
+const CLIPPY = { Clippy: 'Helps with docs\n\nBe brief.\n' };
 
-async function withDoc(fn, { agents = CLIPPY, folder = null, content = SAMPLE } = {}) {
+async function withDoc(fn, { buddies = CLIPPY, folder = null, content = SAMPLE } = {}) {
   const docPath = await tempDoc(content);
-  const settingsDir = await fakeConfig({ agents });
+  const settingsDir = await fakeConfig({ buddies });
   let opened = await openTestDoc(docPath, { settingsDir, folder });
   const release = (buddy) => writeFile(join(settingsDir, `release-${buddy}`), '');
   const restart = async () => {
@@ -82,10 +82,7 @@ test('the human edits the same text during a run: theirs stays, the buddy\'s cha
 });
 
 test('two buddies run at once on one doc; both edits land', { timeout: 30_000 }, async () => {
-  const agents = [
-    { id: 'a_clippy01', name: 'Clippy', starred: true },
-    { id: 'a_ada00001', name: 'Ada', starred: true },
-  ];
+  const buddies = { Clippy: '\n', Ada: '\n' };
   await withDoc(async ({ docPath, call, state, runs, release }) => {
     const first = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     const second = await comment(call, '@Ada hold replace "week one" with "week two"');
@@ -97,7 +94,7 @@ test('two buddies run at once on one doc; both edits land', { timeout: 30_000 },
     assert.match(text, /extra peak load/);
     assert.match(text, /week two/);
     for (const id of [first, second]) assert.ok(!(await repliesIn(state, id))[0].conflict);
-  }, { agents });
+  }, { buddies });
 });
 
 test('a script that exits 1 is answered with a reply marked failed; @mentioning the buddy again runs it again', { timeout: 30_000 }, async () => {
