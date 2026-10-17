@@ -1,9 +1,9 @@
 #!/bin/sh
 # Runs a buddy on Codex (docs/agent-config.md): the prompt on stdin, the
 # doc's copy in the working folder, the reply on stdout. Yours to change.
+# It reads the project without --add-dir, which would make it writable.
 reply="$(mktemp)"
 codex exec --full-auto --skip-git-repo-check \
-  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT"} \
   --output-last-message "$reply" - >&2
 status=$?
 cat "$reply"
