@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { diffEdits, findEdit } from '../src/core/diff.js';
+import { diffEdits, findEdit, revertEdits } from '../src/core/diff.js';
 import { SAMPLE } from './helpers.js';
 
 const edits = (before, after) => diffEdits(before, after).map((c) => c.edit);
@@ -43,3 +43,10 @@ test('an edit changed since is not found', () => {
   assert.ok(findEdit(peak.replace('# Q4 Launch Plan', '# Q4 Plan'), all[0]), 'edits elsewhere do not get in the way');
 });
 
+test('undo by changes: each change still in place is put back; one changed since is skipped', () => {
+  // Three changes, on lines apart (changed lines next to each other are one change).
+  const run = SAMPLE.replace('Q4 Launch', 'Q1 Launch').replace('week one', 'week two').replace('extra load', 'extra peak load');
+  assert.equal(revertEdits(run, SAMPLE, run), SAMPLE);
+  const later = run.replace('week two', 'week three').replace('## Risks', '## Open risks');
+  assert.equal(revertEdits(later, SAMPLE, run), SAMPLE.replace('week one', 'week three').replace('## Risks', '## Open risks'), 'the touched change stays, the rest go, later edits stay');
+});

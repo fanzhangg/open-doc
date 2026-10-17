@@ -17,6 +17,7 @@ import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddie
 import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
+import { revertEdits } from '../core/diff.js';
 import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
@@ -294,17 +295,19 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- undo ----
 
-  // Undo a buddy's edit (docs/architecture.md, Undo): the change from the
-  // version before its edit to the version after it, reversed and merged
-  // into the doc as it is now. Where the human changed that text since,
-  // theirs stays. Only on this machine, which has the versions.
+  // Undo a buddy's run (docs/architecture.md, Undo): each change from the
+  // version before it to the version after it is put back where its new
+  // text still is; text anyone changed since stays. Only on this machine,
+  // which has the versions.
   async function undoReply(body) {
     await chronicle;
     const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
     const found = edit && (await readVersion(docPath, settingsDir, edit.id));
     if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
     const current = await readDoc(docPath);
-    const next = mergeInto(current.markdown, found.markdown, found.before).text;
+    const lf = (text) => text.replace(/\r\n/g, '\n');
+    const reverted = revertEdits(lf(current.markdown), lf(found.before), lf(found.markdown));
+    const next = current.markdown.includes('\r\n') ? reverted.replace(/\n/g, '\r\n') : reverted;
     await writeChange(current, next, { kind: 'undo', author: await me(), undid: body.id });
     return { docHash: hashBytes(Buffer.from(next)), markdown: next, ...(await commentsView(next)) };
   }

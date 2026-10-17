@@ -1,8 +1,8 @@
 # v2 Milestones
 
-Done: M1–M6, one commit each on branch `v2`. Verified on Linux (lint,
-build, `npm test`, `test:stress`, `smoke:desktop` under xvfb); not yet on
-macOS or Windows, nor with the real Claude Code and Codex scripts. Changed
+Done: M1–M11, one commit each on branch `v2`. M1–M6 verified on Linux,
+M7–M11 on macOS (lint, build, `npm test`, `test:stress`, `smoke:desktop`);
+not yet on Windows, nor with the real Claude Code and Codex scripts. Changed
 from the plan: history keeps versions of the doc only, not of its sidecar.
 This plan keeps the Removed lists as the record of what went.
 

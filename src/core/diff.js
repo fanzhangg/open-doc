@@ -136,6 +136,26 @@ export function findEdit(markdown, edit) {
   return best === null ? null : { start: best, end: best };
 }
 
+/**
+ * Undo by changes (docs/architecture.md, Undo): `markdown` with each change
+ * from `before` to `after` put back where its new text still is, as
+ * findEdit finds it; a change anyone touched since is skipped.
+ */
+export function revertEdits(markdown, before, after) {
+  const spots = diffEdits(before, after)
+    .map(({ edit }) => ({ edit, at: findEdit(markdown, edit) }))
+    .filter((s) => s.at)
+    .sort((x, y) => y.at.start - x.at.start);
+  let text = markdown;
+  let limit = Infinity; // from the end, so earlier offsets hold; an overlap is skipped
+  for (const { edit, at } of spots) {
+    if (at.end > limit) continue;
+    text = text.slice(0, at.start) + edit.before + text.slice(at.end);
+    limit = at.start;
+  }
+  return text;
+}
+
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].
 function changedRegions(map, n, m) {
   const regions = [];

@@ -67,6 +67,21 @@ test('where you changed the buddy\'s text since, Undo leaves your text and asks 
   });
 });
 
+test('where another buddy changed the run\'s text since, Undo leaves that change and takes back the rest', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, ask, disk }) => {
+    const ada = await ask('@Ada replace "extra load" with "extra peak load"');
+    await ask('@Ada replace "week one" with "week two"').then(() => null);
+    const both = await ask('@Ada replace "beta cohort" with "beta group"');
+    await ask('@Ben replace "beta group" with "beta crew"');
+    await call('undoReply', { id: both.id });
+    assert.match(await disk(), /beta crew/, "Ben's change of the run's text stays");
+    await call('undoReply', { id: ada.id });
+    const text = await disk();
+    assert.match(text, /the extra load\./);
+    assert.match(text, /week two/);
+  });
+});
+
 test('an outside change (git pull) to the paragraph being typed: the typing stays, the pulled version is in history', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, docPath, disk, versions }) => {
     const before = await state();
