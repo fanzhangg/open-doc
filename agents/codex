@@ -3,7 +3,7 @@
 # doc's copy in the working folder, the reply on stdout. Yours to change.
 # It reads the project without --add-dir, which would make it writable.
 reply="$(mktemp)"
-codex exec --full-auto --skip-git-repo-check \
+codex exec --sandbox workspace-write --skip-git-repo-check \
   --output-last-message "$reply" - >&2
 status=$?
 cat "$reply"
