@@ -19,7 +19,6 @@ export const api = {
   reply: (thread, body) => call('reply', { thread, body }),
   resolve: (thread) => call('resolve', { thread }),
   reopen: (thread) => call('reopen', { thread }),
-  deleteComment: (id) => call('deleteComment', { id }),
   /** The doc's events: `on(name, fn)`, fn getting the event's data. */
   events() {
     const handlers = new Map();

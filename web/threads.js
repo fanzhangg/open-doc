@@ -18,7 +18,7 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  * @param {{ onCreate: (body: string) => Promise<void>, onCancelDraft: () => void,
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
- *           onDelete: (commentId: string) => Promise<void>, onUndo: (replyId: string) => Promise<void>,
+ *           onUndo: (replyId: string) => Promise<void>,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
@@ -137,7 +137,6 @@ export function createCommentMargin(margin, handlers) {
     who.append(name, el('time', 'od-time', relativeTime(comment.at)));
     namecardFor(name, comment.by.name, kind, 'click');
     head.append(namecardFor(avatar(comment.by.name, kind), comment.by.name, kind, 'click'), who);
-    if (kind === 'agent' || comment.by.id === me.id) head.append(deleteButton(comment));
     if (action) head.append(action);
     const open = unfolded.has(comment.id);
     const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
@@ -176,22 +175,6 @@ export function createCommentMargin(margin, handlers) {
       box.append(undo);
     }
     return box;
-  }
-
-  // Delete, shown on hover: a first comment goes with its replies.
-  function deleteButton(comment) {
-    const first = comment.thread === undefined;
-    const button = el('button', 'od-icon-button od-on-hover od-delete');
-    button.type = 'button';
-    button.title = first ? 'Delete this comment and its replies' : 'Delete this reply';
-    button.setAttribute('aria-label', 'Delete');
-    button.append(icon('trash'));
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (first && !window.confirm('Delete this comment and its replies?')) return;
-      handlers.onDelete(comment.id).catch(() => {});
-    });
-    return button;
   }
 
   // The replies folded out of a long thread: who wrote them and how many,

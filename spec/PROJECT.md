@@ -51,7 +51,7 @@ looks the same on every machine.
 ## 3. What a buddy may do
 
 It edits the doc it answers in, and comments there as a human does, but
-cannot resolve or delete; each run's edits can be undone. On the machine, it
+cannot resolve; each run's edits can be undone. On the machine, it
 does whatever its agent CLI's own config allows; OpenDoc only tells it
 where the project folder is
 ([agent config](../docs/agent-config.md#permissions)).

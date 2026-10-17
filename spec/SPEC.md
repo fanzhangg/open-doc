@@ -139,9 +139,7 @@ score = 50 * quoteSim
 
 - The file is written whole: to a temporary file in the same folder,
   renamed over it.
-- Deleting a comment removes its line; deleting a first comment also
-  removes its replies.
-- A human deletes their own comments and any buddy's.
+- Comments are never removed: a thread ends by being resolved.
 
 ## 6. Mentions
 

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FormatError, askedOf, deleteComment, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
+import { FormatError, askedOf, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
 import { parseMentions } from '../src/core/mentions.js';
 
 const { reading, mentions } = JSON.parse(readFileSync(new URL('../spec/conformance/sidecar.json', import.meta.url), 'utf8'));
@@ -68,12 +68,6 @@ test('writing: the whole file, bad lines kept as they are, unknown fields kept, 
   const again = read(serializeSidecar(added).trimEnd().split('\n'));
   assert.deepEqual(comments(again).map((c) => c.id), ['c_extra001', 'c_added001']);
   assert.deepEqual(comments(again)[0].future, { x: 1 });
-});
-
-test('deleting a comment removes its line; deleting a first comment takes its replies', () => {
-  const lines = read(reading[0].sidecar).lines;
-  assert.deepEqual(comments({ lines: deleteComment(lines, 'c_reply02') }).map((c) => c.id), ['c_first01', 'c_reply03', 'c_reply01']);
-  assert.deepEqual(deleteComment(lines, 'c_first01'), []);
 });
 
 test('who is asked: whom my comment @mentions, or with no mention the thread\'s buddies, until each replies; another user\'s comment asks no one', () => {

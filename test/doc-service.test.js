@@ -104,19 +104,6 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
   });
 });
 
-test('deleting removes lines: your own comment, or a buddy\'s, a first comment with its replies; never another person\'s', async () => {
-  const other = { id: 'c_other0001', by: { id: 'u_someone1', name: 'sam', kind: 'human' }, at: '2026-10-01T10:00:00Z', body: 'Theirs' };
-  const buddy = { id: 'c_buddy0001', thread: 'c_other0001', by: { id: 'Pilot', name: 'Pilot', kind: 'ai' }, at: '2026-10-01T10:01:00Z', body: 'Answer' };
-  await withDoc(async ({ call, state }) => {
-    await assert.rejects(call('deleteComment', { id: other.id }), refused('bad_input'));
-    assert.equal((await call('deleteComment', { id: buddy.id })).threads[0].comments.length, 1);
-    const { id } = await call('comment', { anchor: null, body: 'Mine' });
-    await call('reply', { thread: id, body: 'Mine too' });
-    await call('deleteComment', { id });
-    assert.deepEqual((await state()).threads.map((t) => t.id), [other.id]);
-  }, { sidecar: `{"opendoc":2}\n${line(other)}\n${line(buddy)}\n` });
-});
-
 test('a comment by another user that @mentions a buddy runs nothing; one by you does', { timeout: 30_000 }, async () => {
   const theirs = { id: 'c_theirs001', by: { id: 'u_someone1', name: 'sam', kind: 'human' }, at: '2026-10-01T10:00:00Z', body: '@Pilot replace "extra load" with "peak"' };
   await withDoc(async ({ call, state, settingsDir }) => {

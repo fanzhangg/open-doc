@@ -75,7 +75,7 @@ user's id. Buddies run only on docs open in a window.
 4. The private folder is deleted.
 
 A buddy comments as a human does: new threads, replies in any thread. It
-cannot resolve or delete; anything but appended comments is ignored
+cannot resolve; anything but appended comments is ignored
 ([agent config](agent-config.md#comments)). Its comments start no runs
 (principle 6).
 
