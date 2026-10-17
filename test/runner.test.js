@@ -1,4 +1,4 @@
-// Runner: a buddy's run is a filter (docs/architecture-v2.md, A run). The
+// Runner: a buddy's run is a filter (docs/architecture.md, A run). The
 // agent is always the fake script (test/fixtures/fake-agent.js).
 
 import { test } from 'node:test';

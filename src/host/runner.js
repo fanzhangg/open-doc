@@ -1,4 +1,4 @@
-// The Runner (docs/architecture-v2.md, A run): starts a run for each ask
+// The Runner (docs/architecture.md, A run): starts a run for each ask
 // waiting on a buddy, one run per ask. A run copies the doc into a new
 // private folder, runs the agent script there with the prompt on stdin, and
 // hands back the copy and the script's stdout when it exits. The agent knows

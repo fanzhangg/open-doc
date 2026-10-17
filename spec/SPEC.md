@@ -1,239 +1,58 @@
-# opendoc format — version 1 (draft)
+# opendoc format — version 2
 
-opendoc lets humans and AI agents co-author a plain markdown file through
-comment threads anchored to its text. This document specifies the file layout,
-the sidecar format, how anchors are computed and re-found, and the rules every
-tool that reads or writes opendoc files must follow.
+The sidecar holds a doc's comments and nothing else. Buddies, their runs
+and versions are not part of the format (see
+[architecture](../docs/architecture.md)).
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## 1. Files
 
-A doc is any markdown file `X.md`. Its opendoc data lives in exactly one
-**sidecar** file next to it:
+- A doc is a markdown file `X.md`. Its comments live in `X.md.opendoc.jsonl`
+  next to it. The doc MUST stay plain markdown.
+- The sidecar is created with the first comment. A sidecar whose doc is
+  missing is orphaned: tools report it and MUST NOT delete it on their own.
+- Renaming a doc renames its sidecar.
+- A version 1 sidecar (`X.md.opendoc.json`) is not read.
+- In git, `*.opendoc.jsonl merge=union` SHOULD be set.
 
-```
-docs/
-  plan.md
-  plan.md.opendoc.json
-```
+## 2. Comments
 
-- The sidecar path is the doc path with `.opendoc.json` appended. The doc path
-  is the sidecar path with `.opendoc.json` removed. No other mapping exists.
-- The doc file MUST stay plain markdown. opendoc never writes markers,
-  comments or metadata into it.
-- A sidecar is created on the first write (for example, the first comment). A
-  doc without a sidecar is valid and has no threads.
-- The sidecar's `doc` field MUST equal the doc's file name. A tool that finds a
-  mismatch (for example after the pair was copied under a new name) MUST NOT
-  silently use the threads; it SHOULD ask whether to adopt them or start fresh.
-- A sidecar whose doc is missing is **orphaned**. Tools SHOULD report it and
-  MUST NOT delete it automatically.
-- Renaming a doc MUST rename its sidecar and update `doc`.
-
-## 2. Sidecar format
-
-The sidecar is a UTF-8 JSON object. The JSON Schema is
-[`opendoc.schema.json`](./opendoc.schema.json).
-
-```json
-{
-  "opendoc": 1,
-  "doc": "plan.md",
-  "docHash": "sha256:9f2c…",
-  "participants": [
-    { "name": "fzhan", "kind": "human" },
-    { "name": "claude", "kind": "agent" }
-  ],
-  "threads": [
-    {
-      "id": "t_8f3k2a9x",
-      "anchor": { "exact": "ship all six features", "prefix": "We plan to ", "suffix": " in week one, then gather", "start": 26 },
-      "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
-      "working": null,
-      "messages": [
-        {
-          "id": "m_q81xk2pd",
-          "author": { "name": "fzhan", "kind": "human" },
-          "body": "@claude is six realistic?",
-          "mentions": ["claude"],
-          "createdAt": "2026-10-14T18:20:00Z"
-        }
-      ]
-    }
-  ]
-}
-```
-
-### 2.1 Top level
+UTF-8 text, one JSON object per line, `\n` after each. The first line is
+`{"opendoc":2}`; a tool MUST refuse a major version it does not know. Every
+other line is a comment. A tool MUST keep fields it does not understand.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `opendoc` | integer | Format major version. This spec is `1`. |
-| `doc` | string | File name of the doc (no directory). |
-| `docHash` | string or null | `sha256:` + lowercase hex SHA-256 of the doc's bytes at the moment the anchors were last computed. `null` before any anchor exists. |
-| `participants` | array | The @mention directory (§2.4). |
-| `threads` | array | Comment threads (§2.2). |
+| `id` | string | `c_` + at least 6 characters from `[A-Za-z0-9_-]`. The first comment's id is also its thread's id. |
+| `thread` | string, optional | The first comment of the thread this one replies in. Absent on a first comment. |
+| `anchor` | object or null, optional | First comments only: the text it is about (§3). Absent or `null` for a comment on the whole doc. |
+| `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. A human's `id` is random and stays when the name changes; a buddy's `id` is its name. |
+| `at` | string | When it was written, RFC 3339 UTC. |
+| `body` | string | Plain text; may be empty when `resolved` is set. |
+| `resolved` | `true`, optional | Humans only: resolves the thread. |
+| `conflict` | `true`, optional | Buddies only: part of its edit was dropped because a human changed the same text meanwhile. |
+| `failed` | `true`, optional | Buddies only: its run failed; `body` is the end of the program's output. |
 
-### 2.2 Thread
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `id` | string | Unique in the sidecar, `t_` + at least 6 characters from `[A-Za-z0-9_-]`. |
-| `anchor` | object or null | Where the thread is attached (§3). `null` is a doc-level thread. |
-| `detached` | boolean | `true` when the anchor could not be re-found in the current doc. The last known anchor is kept so it can be re-found later. |
-| `status` | `"open"` or `"resolved"` | |
-| `resolvedBy` | string or null | Participant name that resolved the thread. |
-| `resolvedAt` | string or null | RFC 3339 UTC timestamp. |
-| `working` | array or null | Who is responding right now: a list of `{ "by": <name>, "since": <timestamp> }`, one per participant, since several agents may answer one thread at once. `null` when no one is; tools write `null` rather than an empty list. Tools MUST ignore an entry older than 5 minutes, and MUST read a single object (as sidecars written before the list) as a list of one. |
-| `passed` | array of strings, optional | Participants who looked at the thread's open ask (§5) and left it to others. Absent means empty. |
-| `failed` | array, optional | `{ "name": <participant>, "error": <string>, "at": <timestamp> }` for each agent whose run on the thread's ask failed: what went wrong, for the human to retry or cancel. Absent means empty. |
-| `cancelled` | array of strings, optional | Agents a human took the thread's ask back from. Absent means empty. |
-| `messages` | array | At least one message, oldest first. |
-
-Only a participant with `kind: "human"` may resolve or reopen a thread, or
-retry or cancel an agent's request;
-tools MUST refuse a resolve or reopen made as an agent. An agent answers by
-replying, and the human decides whether the thread is done. (Sidecars
-written before this rule may have threads resolved by an agent; they stay
-valid as they are.) Reopening sets `resolvedBy` and `resolvedAt` to `null`. Adding a message to a resolved thread reopens it. A
-message from a participant takes their entry out of `working`; resolving
-clears `working`. Passing takes the entry of the participant who passes out of `working`,
-and a new message from a human that is not a notice (§5) empties `passed`,
-`failed` and `cancelled`. A failure takes the entry of the agent that failed
-out of `working`. Retrying removes the agent from `failed`; cancelling
-removes it from `failed`, takes its entry out of `working`, and adds it to
-`cancelled`. Tools MUST NOT retry a failed ask without a human: it waits in
-`failed` until a human retries it, cancels it, or asks again.
-
-### 2.3 Message
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `id` | string | Unique in the sidecar, `m_` + at least 6 characters from `[A-Za-z0-9_-]`. |
-| `author` | object | `{ "name": <participant name>, "kind": "human" \| "agent" }`, plus the participant's `id` when they have one (§2.4). |
-| `body` | string | Plain text. Tools MUST NOT interpret it as markup. |
-| `mentions` | array of strings | Participant names mentioned in `body` (§4). |
-| `createdAt` | string | RFC 3339 UTC timestamp. |
-| `edits` | array, optional | What the author changed in the doc while answering this thread (§2.5). |
-| `undoes` | string, optional | Id of a message whose `edits` this message reverted. Such a message is an **undo notice** (§5). |
-| `proposal` | array, optional | Changes the author suggests instead of making them (§2.6). |
-| `applies` | string, optional | Id of a message whose `proposal` this message applied. Such a message is an **apply notice** (§2.6); it carries the resulting `edits`. |
-
-### 2.4 Participants
-
-Each entry is `{ "name", "kind" }`. A name matches
-`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is unique, compared case-insensitively.
-An entry MAY carry an `id` (1–64 characters from `[A-Za-z0-9_-]`, unique in
-the sidecar) that stays the same when the participant changes their name, so
-a rename does not make them someone new. Their messages' `author` carries the
-same `id`. When a participant with an `id` goes by a new name, a tool renames
-them everywhere the sidecar names them: their entry, their messages'
-`author.name`, `mentions`, `resolvedBy`, `working.by` and `passed`. Message
-bodies stay as written. A name another participant has is not taken: the
-participant keeps their old one. An entry with no `id` (written before the
-participant had one) MAY be claimed by the participant who posted under that
-name: it takes their `id`, and two such entries for one person merge into one.
-An agent's entry MAY also say who the agent is, so the doc keeps its agents
-wherever it goes: `persona`, one line (at most 120 characters, no line
-breaks) that defines it, and `instructions`, the details and rules behind it
-(at most 4000 characters). Both are plain text written by people, given to
-the agent with every task. A tool that opens a doc MAY set up an agent from
-them, but never takes permissions from the sidecar: what an agent may do is
-decided on the machine that runs it.
-A participant is added the first time they post, when an agent starts
-waiting for comments, or when a human invites an agent into the doc. A
-participant who leaves (for example an agent the human removed from the doc)
-is taken out of the list; their messages stay, and they stop working on any
-thread. Editors use this list for @ autocompletion.
-
-### 2.5 Edits
-
-A tool that runs an agent on a thread MAY record what the agent changed in
-the doc as `edits` on the agent's reply, so a human can review and undo it.
-Each edit is a change to the doc's **markdown source** (not the rendered
-text):
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `before` | string | The source text that was replaced. Empty for an insertion. |
-| `after` | string | The source text that replaced it. Empty for a deletion. |
-| `prefix` | string | Up to 32 characters of source immediately before `after`, just after the change. |
-| `suffix` | string | Up to 32 characters of source immediately after `after`, just after the change. |
-| `start` | integer | Offset of `after` in the source just after the change. A hint. |
-| `scope` | `"thread"` or `"run"`, optional | `"run"` when the change could not be tied to this thread because one agent run answered several threads; it is then recorded on each of them. Default `"thread"`. |
-
-`before` and `after` differ. A change is usually trimmed to the characters
-that differ and widened to whole words where it splits one: `extra load`
-becoming `extra peak load` is recorded as an insertion of `peak `, and
-`colour` becoming `color` as `colour` → `color`. A change is tied to
-the thread whose anchor it overlaps or touches; when a run answered one
-thread, every change in it belongs to that thread.
-
-To **undo** an edit, a tool finds `after` in the current source as if it
-were an anchor (`exact` = `after`, §3.3 step 1 only), requiring that the
-match also keeps `prefix` or `suffix` next to it; an empty `after` is found
-as the place where `prefix` is directly followed by `suffix` (closest to
-`start`). If any edit of the message cannot be found this way, the text has
-changed since and the tool MUST NOT undo. Otherwise it replaces each match
-with `before` and posts an undo notice: a human message with `undoes` set
-to the reverted message's id, which reopens the thread.
-
-### 2.6 Proposals
-
-A participant who should not change the doc directly (for example an agent
-whose edits need the human's approval) MAY reply with a **proposal**: the
-changes it suggests, which a human applies or ignores. Each change is to the
-doc's markdown source:
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `before` | string | The source text to replace, non-empty. |
-| `after` | string | The source text to put in its place. Empty for a deletion. |
-| `prefix` | string | Up to 32 characters of source immediately before `before`, when the proposal was made. |
-| `suffix` | string | Up to 32 characters of source immediately after `before`, when the proposal was made. |
-| `start` | integer | Offset of `before` in the source when the proposal was made. A hint. |
-
-`before` and `after` differ. When a proposal is made, each `before` MUST
-occur exactly once in the doc's source and no two may overlap; a tool
-refuses the proposal otherwise, so the author can quote more text. To insert,
-quote the text next to the insertion point and repeat it in `after`.
-
-To **apply** a proposal, a tool finds each `before` in the current source by
-the undo rule of §2.5 run the other way (`exact` = `before`, §3.3 step 1
-only, keeping `prefix` or `suffix` next to it). If any change cannot be found
-this way, the text has changed since and the tool MUST NOT apply. Otherwise
-it replaces each match with `after`, saves the doc, and posts an apply
-notice: a human message with `applies` set to the proposal's message id and
-`edits` (§2.5) recording what changed, so it can be undone like any edit.
-Applying a proposal does not resolve the thread.
+A comment never changes once written.
 
 ## 3. Anchors
 
-An anchor identifies a span of the doc's **rendered text** (§3.1):
+An anchor is `{ "exact", "prefix", "suffix", "start" }` on the doc's
+rendered text (§3.1): the quote, non-empty; up to 32 characters before and
+after it; and its offset when made, a hint. This follows the W3C Web
+Annotation `TextQuoteSelector` plus a `TextPositionSelector` start hint.
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `exact` | string | The quoted text, non-empty. |
-| `prefix` | string | Up to 32 characters immediately before `exact`. |
-| `suffix` | string | Up to 32 characters immediately after `exact`. |
-| `start` | integer | Offset of `exact` in the rendered text when the anchor was last computed. A hint, not a guarantee. |
-
-This follows the W3C Web Annotation `TextQuoteSelector` plus a
-`TextPositionSelector` start hint.
+An anchor is never rewritten. Where it is now is found by each reader
+(§3.3). A comment whose anchor is not found stays, shown as detached.
 
 ### 3.1 Rendered text
 
-The rendered text is what a reader sees, with markdown syntax removed. Both
-the Node and the browser implementations MUST produce identical text for the
-same doc. It is built from the CommonMark + GFM syntax tree, with emphasis
-delimiters read by the CJK-friendly amendment
+The rendered text is what a reader sees, with markdown syntax removed. It is
+built from the CommonMark + GFM syntax tree, with emphasis delimiters read
+by the CJK-friendly amendment
 ([markdown-cjk-friendly](https://github.com/tats-u/markdown-cjk-friendly)), so
-`**熟悉：**直接` is bold as a Chinese writer means it, although plain
-CommonMark leaves the asterisks as text:
+`**熟悉：**直接` is bold as a Chinese writer means it:
 
 1. Each **text block** contributes one line. Text blocks are: paragraphs,
    headings, table cells, code blocks and raw HTML blocks. Blocks nested in
@@ -243,9 +62,9 @@ CommonMark leaves the asterisks as text:
    (for example thematic breaks) are skipped.
 3. Inside a text block, inline content contributes: text (escapes and
    entities decoded), inline code (its content), inline raw HTML (as
-   written), and the children of emphasis, strong, strikethrough and links. Images, footnote references and
-   link reference definitions contribute nothing. A hard line break
-   contributes one space.
+   written), and the children of emphasis, strong, strikethrough and links.
+   Images, footnote references and link reference definitions contribute
+   nothing. A hard line break contributes one space.
 4. Inside every text block except code blocks, each run of whitespace becomes
    one space, and leading and trailing whitespace is removed. Code block
    content is kept as written.
@@ -256,16 +75,11 @@ Given a selection `[start, end)` in the rendered text, `exact` is
 `text[start:end]`, `prefix` is the up to 32 characters before it, `suffix` the
 up to 32 after it, and `start` is `start`.
 
-An agent may give a quote instead of a range. Tools find the quote in the
-rendered text; if it is not found, they render the quote itself by §3.1 (so
-`**ship** it` becomes `ship it`) and search again. A quote that matches more
-than once MUST be refused unless the caller picks an occurrence.
+### 3.3 Finding an anchor
 
-### 3.3 Re-finding an anchor
-
-When the doc changes, a tool re-finds each anchor in the new rendered text.
-A candidate range from step 1 or step 3 is **acceptable** only if all of
-these hold, where quote similarity is `sim(exact, candidate)` and context
+A reader finds each anchor in the doc's rendered text as it is now. A
+candidate range from step 1 or step 3 is **acceptable** only if all of these
+hold, where quote similarity is `sim(exact, candidate)` and context
 similarity is the mean of prefix and suffix similarity (§3.4):
 
 - its quote similarity is at least 0.5;
@@ -273,8 +87,7 @@ similarity is the mean of prefix and suffix similarity (§3.4):
   least 0.5;
 - when `exact` is shorter than 8 characters, its context similarity is at
   least 0.5, whatever its quote similarity, so a short quote that was
-  deleted does not jump to an unrelated copy elsewhere (an exact copy is
-  also a perfect fuzzy match, so this applies in step 3 too).
+  deleted does not jump to an unrelated copy elsewhere.
 
 Step 2's candidates have their full `prefix` and `suffix` exactly, so they
 need no such check. The steps, in order:
@@ -293,11 +106,10 @@ need no such check. The steps, in order:
    first in a window around `start`, then in the whole text; among the
    acceptable matches, pick the best score. Quotes shorter than 4 characters
    are never fuzzy-matched.
-4. **Detach.** Otherwise set `detached: true` and keep the anchor unchanged.
+4. **Detached.** Otherwise the anchor is not found.
 
-A re-found anchor is rewritten from the new range (§3.2) and `detached` is set
-to `false`. Re-finding is deterministic: the same doc and sidecar always
-produce the same result.
+Finding is deterministic: the same doc and anchor always give the same
+result.
 
 ### 3.4 Scoring
 
@@ -311,92 +123,35 @@ score = 50 * quoteSim
       +  2 * (1 - |candidateStart - start| / len(text))
 ```
 
-### 3.5 Keeping anchors fresh
+## 4. Reading
 
-`docHash` records which version of the doc the anchors describe. A tool that
-reads a sidecar whose `docHash` differs from the current doc's hash SHOULD
-re-find all anchors and write the result (with the new `docHash`) using the
-write protocol (§6). Because re-finding is deterministic, concurrent tools
-writing the refreshed result agree.
+1. Lines with the same `id` are the same comment (a git merge may keep two);
+   keep the first.
+2. A thread is its first comment and the comments whose `thread` is its id,
+   ordered by `at`, then `id`. A reply whose first comment is missing is
+   hidden.
+3. A thread is resolved when its latest comment has `resolved`.
+4. A human is shown by the name in their latest comment.
+5. A line that is not valid JSON or not a valid comment is reported, skipped
+   and kept as it is.
 
-## 4. Mentions
+## 5. Writing
 
-A mention is `@` followed by a participant name, where the `@` is at the start
-of the body or follows a character that is not a letter, digit, `.`, `_` or
-`-`, and the name is not followed by a letter, digit, `_` or `-`. Matching is
-case-insensitive. `mentions` lists the canonical names, each once, in order of
-first appearance. `@` followed by a name that is not a participant is not a
-mention.
+- The file is written whole: to a temporary file in the same folder,
+  renamed over it.
+- Deleting a comment removes its line; deleting a first comment also
+  removes its replies.
+- A human deletes their own comments and any buddy's.
 
-### 4.1 Mentions in the doc text
+## 6. Mentions
 
-A human may also @mention an agent in the doc itself, outside code and raw
-HTML (by the same rule, applied to the rendered text, §3.1). A tool MAY turn
-such a mention into a thread: once the human has added it and is done
-writing it, it creates a thread as that human, anchored on the rendered text
-from the `@` to the end of its block, with that text as the first message's
-`body`. When the human is done is the tool's to judge (for example: they move
-on to another block, or the block has been still for a while). Only a
-mention the human added counts, not one that was already there or one an
-agent wrote. Until an agent answers it, a tool MAY keep the thread bound to
-that text: when the human rewrites it, the tool MAY hold the thread back from
-the agents it runs, stop a run answering it, and then replace the first
-message's `body` (and `mentions`) and the anchor with the new text. The thread
-is otherwise like any other; the sidecar format does not change and the inbox
-(§5) is still computed from the sidecar alone. The agent that answers it
-SHOULD remove the mention's text from the doc once it is done (or propose
-removing it).
+`@name` in a body, where the `@` starts the body or follows a character that
+is not a letter, digit, `.`, `_` or `-`, and the name is followed by none of
+a letter, digit, `_` or `-`. It mentions the buddy of that name, compared
+case-insensitively, among the buddies the doc reaches.
 
-## 5. Inbox
+## 7. Trust
 
-A thread is in participant `P`'s inbox when all of these hold:
-
-- `status` is `"open"`;
-- it has a message from a human (`kind: "human"`) that is not an undo notice
-  or an apply notice (§2.3); call the latest such message the **ask**;
-- the ask is **addressed** to the participants it mentions; an ask that
-  mentions no one, in a thread where an agent posted before it, is addressed
-  to the agent that posted last before it (a follow-up continues that
-  conversation); otherwise it is addressed to no one;
-- the ask is addressed to `P`, or to no one (an **open ask**) and `P` is not
-  in `passed`;
-- no message after the ask (other than notices) is from `P`;
-- `P` is in neither `failed` nor `cancelled`;
-- `working` has no entry for `P` (a stale one does not count).
-
-A comment addressed only to someone else does not wake `P`, and undoing an
-edit or applying a proposal does not ask the agent to act again. A comment
-that mentions several agents waits on each of them until each has answered
-it. An open ask waits on everyone who takes open asks until each has
-answered or passed: several agents may answer it, each one that it fits. A
-tool MAY let a participant narrow its inbox to asks addressed to it (for
-example an agent that answers only when called, leaving open asks to agents
-that take them). The last rule keeps a participant who is still answering
-a thread from being handed it again. The inbox is computed from the sidecar
-alone; tools need no cursor or other state.
-
-## 6. Writing
-
-Writers MUST NOT lose each other's changes:
-
-1. Take an exclusive lock by creating `X.md.opendoc.json.lock` with
-   exclusive-create semantics. A lock file older than 2 seconds is stale and
-   MAY be removed. A writer that cannot take the lock within 5 seconds gives
-   up and reports a conflict.
-2. Re-read the sidecar and apply the change to the latest content.
-3. Write the result to a temporary file in the same directory and rename it
-   over the sidecar.
-4. Remove the lock.
-
-Changes are expressed as operations (add thread, add message, resolve, reopen,
-set working, pass, join, attach edits) carrying client-generated ids, so a retried operation is
-applied at most once. A proposal or an apply notice is an add-message
-operation whose message carries `proposal` or `applies`.
-
-## 7. Compatibility
-
-- A tool MUST refuse a sidecar whose `opendoc` major version it does not know.
-- A tool MUST preserve top-level sections and fields it does not understand,
-  at every level, when it rewrites a sidecar.
-- Third-party additions use keys that start with `x-` (for example
-  `"x-acme": { … }`).
+A sidecar is plain shared text: anyone who can change the file can write
+anything in it, and `by` is only what its writer says. A tool runs a buddy
+only for a comment whose `by.id` is its own user's.

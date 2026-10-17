@@ -1,6 +1,12 @@
-# v2 Milestones (draft)
+# v2 Milestones
 
-How to get from today's app to [architecture v2](architecture-v2.md) in
+Done: M1–M6, one commit each on branch `v2`. Verified on Linux (lint,
+build, `npm test`, `test:stress`, `smoke:desktop` under xvfb); not yet on
+macOS or Windows, nor with the real Claude Code and Codex scripts. Changed
+from the plan: history keeps versions of the doc only, not of its sidecar.
+This plan keeps the Removed lists as the record of what went.
+
+How to get from the app before v2 to the [architecture](architecture.md) in
 steps. Each milestone ships on its own: the app works end to end, `npm test`
 and lint pass on macOS, Windows and Linux, and the docs it touches are
 updated. Tests follow [testing and CI](testing-ci.md): the agent is a fake
@@ -60,7 +66,7 @@ server, its port, token and SSE; text asks (`@name` typed in the doc),
 
 ## M3. Sidecar v2
 
-`X.md.opendoc.jsonl` per [SPEC v2](../spec/SPEC-v2.md): one kind of line,
+`X.md.opendoc.jsonl` per [SPEC](../spec/SPEC.md): one kind of line,
 the comment.
 
 **In:** reading and writing v2, the file always written whole; `resolved`,
@@ -80,7 +86,7 @@ participants in the sidecar, and setting them up from a doc.
 
 ## M4. Buddies are files
 
-**In:** buddy files per [PROJECT v2](../spec/PROJECT-v2.md): the user's in
+**In:** buddy files per [PROJECT](../spec/PROJECT.md): the user's in
 `<config>/buddies/` (`Clippy.md` made there on first run), a project's in
 `.opendoc/buddies/`; doc mode is project mode with no folder; a project's
 buddy wins a shared name; each buddy a `<Name>.md` (name from the file,
@@ -124,4 +130,4 @@ loses, and its version is saved.
 **Done when:**
 - The v2 docs replace `architecture.md` and `spec/SPEC.md`.
 - `user-experience.md` and `README.md` describe v2.
-- No doc mentions a concept in architecture v2's Removed list.
+- No doc but this plan mentions a concept in architecture v2's Removed list.

@@ -1,4 +1,4 @@
-// The doc and its sidecar on disk (spec/SPEC-v2.md §1, §5): reads, writing
+// The doc and its sidecar on disk (spec/SPEC.md §1, §5): reads, writing
 // a file whole (a temporary file renamed over it), and renaming a doc with
 // its sidecar. Only the doc host writes them, one change at a time.
 

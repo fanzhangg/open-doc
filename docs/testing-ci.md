@@ -1,8 +1,8 @@
 # Testing and CI/CD (draft)
 
 How OpenDoc is tested and shipped, derived from
-[architecture v2](architecture-v2.md), [SPEC v2](../spec/SPEC-v2.md),
-[PROJECT v2](../spec/PROJECT-v2.md) and [agent config](agent-config.md).
+[architecture](architecture.md), [SPEC](../spec/SPEC.md),
+[PROJECT](../spec/PROJECT.md) and [agent config](agent-config.md).
 Each test guards a rule there; a test that guards none is not needed.
 
 ## Principles

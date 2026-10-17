@@ -1,4 +1,4 @@
-// Buddies are files (spec/PROJECT-v2.md): the user's in <config>/buddies/,
+// Buddies are files (spec/PROJECT.md): the user's in <config>/buddies/,
 // a project's in .opendoc/buddies/. Runs use the fake agent script.
 
 import { test } from 'node:test';

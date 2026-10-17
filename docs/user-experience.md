@@ -1,164 +1,103 @@
 # User Experience
 
-How a person writes with agents in OpenDoc today. For why, see the
-[product vision](product-vision.md); for how it is built, see [architecture](architecture.md).
+How a person writes with buddies in OpenDoc. For why, see the
+[product vision](product-vision.md); for how it is built, see
+[architecture](architecture.md).
 
 ## The basic loop
 
 1. **Open a doc.** Any `.md` file: from the start window, File > Open, a
-   double-click in the OS, a drag onto the app, or `opendoc serve plan.md`
-   for a browser tab. Each doc gets its own window.
+   double-click in the OS, or a drag onto the app. Each doc gets its own
+   window. A folder opened from the start window is a **project**: its docs
+   in a sidebar.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
 3. **Comment.** Select text and click the comment button at the page edge
-   (Ctrl+Alt+M). The comment sits in the margin beside its text and stays
-   attached as the text is edited by anyone.
-4. **An agent answers.** It works on the comment, edits or proposes, and
-   always ends with a reply in the thread.
-5. **You decide.** Resolve the thread, reply again, apply a proposal, or undo
-   the agent's edit. Only humans resolve threads.
+   (Ctrl+Alt+M). The comment sits in the margin beside its text and follows
+   it as the text changes.
+4. **A buddy answers.** `@Clippy` in a comment asks Clippy. It edits the doc
+   and replies in the thread.
+5. **You decide.** Keep the edit, undo it from the reply, reply again, or
+   resolve the thread. Only people resolve threads.
 
-## Agents are collaborators
+## Buddies
 
-Each agent is set up like a person in a shared doc: a name you @mention, a
-persona, and only the permissions you give it. The **persona** is one line in
-your own words that defines it ("a strict copy editor who never changes
-meaning"), shown on its card and in the People panel; it stays blank until
-you write one. **Instructions** (Agents panel) hold the details and rules
-behind it. Both go into the agent's prompt as one block, and anyone can
-rewrite them. OpenDoc comes with one agent,
-**Clippy**, starred, with a generic persona (a general writing assistant
-that helps draft and edit docs), and Editor, Auto Editor and
-Auto Commenter switched on. There are no built-in roles: a grammar checker, a
-fact checker or a tough reader is an agent whose persona you wrote.
+A buddy is someone you @mention: a name, a one-line **persona** and optional
+**instructions**, all in one markdown file, `<Name>.md`. The file name is its
+name, the first line its persona, the rest its instructions. Its face is
+drawn from its name, so everyone sees the same one.
 
-Agents are light, and belong to the doc unless you star them:
+- **Yours** live in `buddies/` in your config folder and answer in every doc.
+  `Clippy.md`, a general writing assistant, is made there the first time the
+  app runs; edit or delete it like any other.
+- **A project's** live in its `.opendoc/buddies/` and travel with the folder
+  (commit them). They answer only in that project's docs. When both have a
+  name, the project's buddy gets it.
+- A doc opened on its own (from Finder, say) reaches only yours, even if it
+  sits inside a project folder.
 
-- **New agent** (People panel) pops a new agent into the doc and opens its
-  card, ready to name: type a name, Enter, then its persona. On any card,
-  click the name or the persona to edit it in place; Enter or leaving the
-  field saves, Escape cancels. The settings button opens the Agents panel.
-- A new agent is the doc's own. It shows only in that doc, is saved with it
-  (name, persona and instructions in the sidecar), and is back whenever you
-  open the doc. Removing it from the doc deletes it; its comments stay under
-  its name.
-- **Star** an agent to put it in your agents, for every doc. Unstarring keeps
-  it in the docs that use it. Agents made before stars existed count as
-  starred.
-- A doc from someone else brings its agents, set up as its own with the
-  safest permissions (proposes edits, answers only when @mentioned, no web or
-  files). Permissions never come from the doc.
-- A new doc starts with **Clippy**. The first time a doc with no agents yet
-  is opened, Clippy joins it (under whatever name you gave it), so a new doc
-  always has someone to answer. Add any other agent in the doc: the People
-  panel, or an @mention. A doc that already has agents keeps its own.
+**New buddy** (People panel, or + in the Buddies panel) starts a draft: type a
+name, then a persona and instructions, and Create. In a project, switch on
+"In this project" to make it the project's. On a buddy's card, click its name
+or persona to edit it in place; the Buddies panel holds its instructions and
+Delete. Editing the files by hand works too: the app picks up changes at once.
 
-**Permissions** are plain switches on the agent's card:
+What runs every buddy is the agent picked in Settings > Agent (Claude Code or
+Codex): a script in `agents/` in your config folder that you may edit (see
+[agent config](agent-config.md)).
 
-- **Editor**: may change the doc. Without Auto Editor it *proposes* each change.
-- **Auto Editor**: edits directly and replies with what it changed (undoable).
-  On for every new agent, as for a co-author; switch it off to review each change.
-- **Auto Commenter**: answers comments that mention no one, if they fit its persona.
-  The first agent in a doc (Clippy, in a new one) starts with it and leads; the
-  ones after it answer when @mentioned.
-- **Web Searcher** / **File Searcher**: may use the web / read your other files
-  (never secrets). Turning one on asks to confirm, with a warning if the agent
-  already has the other.
+## Who answers what
 
-**Who answers what:**
+- Only your own comments ask. A comment that @mentions a buddy asks it; one
+  that mentions no one asks no one. A buddy's reply asks no one, and neither
+  does an `@name` typed in the doc's text.
+- A comment that mentions several buddies asks each of them; they work at
+  the same time.
+- Every run starts fresh with the doc, its persona and the thread. Nothing
+  is remembered in private; anything worth keeping is written in the doc or
+  the thread.
 
-- A comment that mentions no one goes to every agent with Auto Commenter
-  (by default the first one, Clippy for a new user). Each answers only if it
-  fits its persona.
-- `@name` calls a specific agent. Mentioning one that is not in the doc yet
-  brings it in.
-- `@name` in the doc's text works like a comment. Type
-  `@Clippy add the risks here` in a paragraph; once you are done writing it,
-  it becomes your comment on the text from the `@` to the end of the
-  paragraph, and the agent answers there and removes that text when it is
-  done (or proposes removing it). There is nothing to press: you are done
-  when you move on (your caret goes to another paragraph, you type
-  elsewhere, or you leave the editor), when the ask ends a sentence
-  (`.` `!` `?` `。` …) and you pause for 3 seconds, or when the paragraph has
-  been still for 15 seconds. Stopping mid-sentence to think does not cut the
-  ask short, and typing elsewhere does not hold it back. A bare `@Clippy`
-  with nothing after it waits until you move on.
-- Until the agent answers, the comment follows the text. Reword the ask
-  while the agent waits its turn and it gets the new words; reword it while
-  the agent is working on it and that run stops and starts over with them
-  once you are done again.
-- Each mention counts once: editing around an old one, moving text before
-  it, or a mention in code asks nothing new.
-- A follow-up with no mention continues with the agent that answered last.
-- Agents hand work to each other in the thread, so you never pass messages
-  between them. An agent that needs another to act next hands it the thread
-  (its reply starts with `@Scorer` and wakes Scorer); an agent that only
-  mentions another, such as a score reply to `@claude`, wakes no one. After
-  four handoffs in a row the thread waits for you, and your next message lets
-  them go on.
-- Agents work at the same time: a comment that mentions three agents gets
-  all three working on it at once, each shown typing in the thread. Only
-  their edits to the doc take turns, so each agent's changes are recorded on
-  its own reply and undo on their own.
-- Nothing is remembered in private. Every run starts a fresh session that
-  reads the doc and its threads; anything worth keeping is written there.
+## Buddies always edit, and every edit can be undone
 
-## Seeing and steering agent work
+- A buddy edits a copy of the doc; when it is done, its changes are merged
+  into the doc as it is then, and typed into the page with its name.
+- **Your text wins.** Where you changed the same text while it worked, yours
+  stays, its change there is dropped, and its reply says so. @mention it
+  again to redo it.
+- **Undo its edit** on the reply takes that buddy's change back, keeping
+  everything written since; where you changed its text since, yours stays.
+  It works on the computer that ran the buddy.
+- **Cmd+Z** (Ctrl+Z) undoes only your own typing, never a buddy's edit.
+- **A failed run** replies with the end of its output, marked failed.
+  @mention the buddy again to retry.
 
-- **Presence.** People's avatars are circles; each agent's is a soft blob
-  with a face, its shape, colour and expression drawn from its name, so it
-  looks the same everywhere. They sit side by side in the header. While an
-  agent works its body rolls under its face like a spinner
-  and the comment card pulses; an agent that is not running, still starting
-  or failing is greyed out.
-  Its edits are typed into the page as a collaborator would, highlighted with
-  its name, merged with whatever you are typing elsewhere.
-- **Proposals.** An agent without Auto Editor replies with suggested changes.
-  Selecting the thread previews them in the text (old struck through, new
-  inserted). Click Apply to make them; Apply is disabled if the text changed
-  since.
-- **Undo.** Every agent edit is recorded on its reply and can be undone from
-  there. The record holds only the agent's own changes, never your typing.
-- **You keep priority.** An agent will not edit the paragraph you are typing
-  in. If you both change the same paragraph, your text is kept and the
-  agent's version comes back as a proposal. Nothing is silently lost.
-- **Offline agents.** A failed run, a missing sign-in, or the hourly limit
-  greys the agent out; its card says why and offers Try again.
+## Seeing buddies work
 
-## Managing agents
-
-- **People** button (round, after the avatars): who is in this doc. New
-  agent, add (+) or remove (×) agents.
-- **Agent card** (click an avatar): name and persona (click either to edit),
-  permission switches, a star to keep it, and a button for more settings.
-- **Agents** panel: every agent, with the finer settings. Name, persona,
-  starred, permissions, instructions, and under Advanced the runtime (Claude Code,
-  Codex, or a custom command), model and limits.
+- **Presence.** People's avatars are circles; each buddy's is a soft blob
+  with a face. They sit side by side in the header. While a buddy works its
+  body rolls under its face and the thread shows it typing.
+- **People** button (after the avatars): you, the people who commented, and
+  the buddies here, with New buddy.
 
 ## Around the doc
 
-- **Version history** (clock button): every version with who made it, a diff
-  against the one before, and Restore. Kept in the config folder, not in the
-  doc's folder.
-- **Settings** (name, theme, font, width, outline, word count, focus mode)
-  are global and apply at once to every open window, the start window too
-  (its gear, or Ctrl+,).
-- **Files.** New Doc, New Doc in This Folder, and Rename (moves the comments
+- **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
+  who made it (you, a buddy and the comment it answered, or a program
+  outside OpenDoc), a diff against the one before, and Restore. A version is
+  saved before and after each buddy edit, before each change from outside
+  OpenDoc, and for each undo and restore, so any of them can be restored.
+  History is kept in the config folder, never next to the doc.
+- **Changes from outside** (a `git pull`, another editor) show up live and
+  merge with your typing. Where they overlap what you are typing, your typing
+  stays and their version is in history.
+- **Settings** (name, theme, font, width, outline, word count, focus mode,
+  agent) apply at once to every open window, the start window too.
+- **Files.** New Doc, New Doc in This Folder, and Rename (the comments move
   too). Opening an already open doc focuses its window. If the file is moved
-  or deleted outside the app, a banner says so and saving pauses. A folder
-  window's sidebar also makes, renames, moves (drag, or Move To…) and deletes
-  docs and folders in place; see [file management](file-management.md).
-
-## Agents outside the app
-
-Any agent that can run a command line can join through the CLI, for example a
-Claude Code chat session with the `opendoc` skill:
-
-```bash
-opendoc wait plan.md --as claude      # block until a thread needs claude
-opendoc reply plan.md <thread> "Done." --as claude
-```
-
-It reads and edits `plan.md` with its own tools (or uses `opendoc propose`),
-replies, and waits again. Big rewrites can go through a chat agent; small,
-targeted changes through comments in the doc.
+  or deleted outside the app, a banner says so and saving pauses. A project's
+  sidebar also makes, renames, moves and deletes docs and folders; see
+  [file management](file-management.md).
+- **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
+  they merge in git ([format](../spec/SPEC.md)). A sidecar from OpenDoc 1
+  (`X.md.opendoc.json`) is not read; a banner says so and the file is left
+  as it is.

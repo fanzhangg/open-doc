@@ -1,4 +1,4 @@
-// Buddy files (spec/PROJECT-v2.md): the user's in the config folder's
+// Buddy files (spec/PROJECT.md): the user's in the config folder's
 // `buddies/`, a project's in its `.opendoc/buddies/`. `Clippy.md` is made
 // in the user's on first run, when that folder does not exist yet.
 

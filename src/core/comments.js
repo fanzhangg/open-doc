@@ -1,4 +1,4 @@
-// The sidecar, version 2 (spec/SPEC-v2.md): `X.md.opendoc.jsonl`, a first
+// The sidecar, version 2 (spec/SPEC.md): `X.md.opendoc.jsonl`, a first
 // line `{"opendoc":2}` and then one comment per line. A comment never
 // changes; resolving is a comment, deleting removes lines. Threads, who is
 // mentioned and who is asked are read from the comments, never stored.
@@ -118,7 +118,7 @@ export function threadsOf(comments, mentionable = []) {
 /**
  * The buddies the open `thread` (from threadsOf) waits on: each X that a
  * comment by user `me` (an id) @mentions, newer than X's last comment there
- * (docs/architecture-v2.md, Who answers).
+ * (docs/architecture.md, Who answers).
  */
 export function askedOf(thread, me) {
   if (thread.resolved) return [];

@@ -1,4 +1,4 @@
-# opendoc buddies and projects — version 2 (draft)
+# opendoc buddies and projects
 
 A **buddy** is someone you @mention in a doc: a name, a persona and
 instructions, in a markdown file. What does the work is an agent CLI
@@ -7,7 +7,7 @@ instructions, in a markdown file. What does the work is an agent CLI
 
 The user's buddies live in the config folder's `buddies/`; a project's live
 in its `.opendoc/buddies/` and travel with it. A doc's comments are not
-here; they stay in its sidecar ([SPEC v2](SPEC-v2.md)).
+here; they stay in its sidecar ([SPEC](SPEC.md)).
 
 ## 1. Projects
 

@@ -1,4 +1,4 @@
-// Undo and history (docs/architecture-v2.md, Undo): a buddy's edit is
+// Undo and history (docs/architecture.md, Undo): a buddy's edit is
 // undone from its reply; an outside change never beats typing; every undo
 // and restore is a version. Buddies run the fake agent script.
 

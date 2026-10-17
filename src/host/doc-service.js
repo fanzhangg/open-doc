@@ -1,4 +1,4 @@
-// DocService (docs/architecture-v2.md): every write to one doc and its
+// DocService (docs/architecture.md): every write to one doc and its
 // sidecar, one at a time; changes made outside the app; versions. It runs
 // the buddies @mentioned in the doc's comments (runner.js) and merges what
 // each run changed into the doc when it ends. It lives in the doc host;
@@ -140,7 +140,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     };
   }
 
-  // ---- comments (spec/SPEC-v2.md) ----
+  // ---- comments (spec/SPEC.md) ----
 
   // The sidecar as it is on disk: its lines, the lines it could not read,
   // and `error` when it is not a version 2 sidecar at all.
@@ -219,7 +219,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return buddiesHere(await readBuddies(userBuddiesDir(settingsDir)), folder ? await readBuddies(projectBuddiesDir(folder)) : []);
   }
 
-  // The asks waiting on a buddy now (docs/architecture-v2.md, Who answers):
+  // The asks waiting on a buddy now (docs/architecture.md, Who answers):
   // only this user's comments ask.
   async function asks() {
     if (closed) return [];
@@ -286,7 +286,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- undo ----
 
-  // Undo a buddy's edit (docs/architecture-v2.md, Undo): the change from the
+  // Undo a buddy's edit (docs/architecture.md, Undo): the change from the
   // version before its edit to the version after it, reversed and merged
   // into the doc as it is now. Where the human changed that text since,
   // theirs stays. Only on this machine, which has the versions.

@@ -1,5 +1,5 @@
 {
-  "description": "Reading a version 2 sidecar (spec/SPEC-v2.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
+  "description": "Reading a version 2 sidecar (spec/SPEC.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
   "reading": [
     {
       "name": "a first comment and its replies, in order of at, then id",

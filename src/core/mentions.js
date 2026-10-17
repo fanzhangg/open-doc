@@ -1,4 +1,4 @@
-// @mentions (spec/SPEC-v2.md §6): `@name` where the `@` starts the body or
+// @mentions (spec/SPEC.md §6): `@name` where the `@` starts the body or
 // follows a character that is not a letter, digit, `.`, `_` or `-`, and the
 // name is followed by none of a letter, digit, `_` or `-`. Names compare
 // case-insensitively.

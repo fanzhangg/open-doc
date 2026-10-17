@@ -1,4 +1,4 @@
-// A buddy (spec/PROJECT-v2.md §2): a `<Name>.md` file. The file name is its
+// A buddy (spec/PROJECT.md §2): a `<Name>.md` file. The file name is its
 // name, the first line its persona, the rest its instructions. Its avatar
 // is drawn from its name (web/faces.js), so everyone sees the same face.
 // Pure, so the doc host and the page check them the same way.

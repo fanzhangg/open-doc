@@ -6,7 +6,7 @@ else about it.
 
 ## The contract
 
-An agent is a filter ([architecture v2](architecture-v2.md#a-run)):
+An agent is a filter ([architecture](architecture.md#a-run)):
 
 | | |
 | --- | --- |

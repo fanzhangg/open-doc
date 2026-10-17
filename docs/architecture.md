@@ -1,160 +1,112 @@
 # Architecture
 
-How OpenDoc is built. For what it does, see
-[user experience](user-experience.md); for the file format in full, see
-[SPEC.md](../spec/SPEC.md).
+How OpenDoc is built, and why. No backward compatibility with OpenDoc 1: a
+version 1 sidecar is reported as unreadable.
 
-## Overview
+Two words: a **buddy** is who you @mention in a doc (a name, a persona,
+instructions); an **agent** is the CLI that does its work (Claude Code,
+Codex). A buddy runs on an agent.
 
-```
-Desktop app (Electron)                 Browser (opendoc serve)
-  one window per doc ──┐                    │
-                       ▼                    ▼
-              Local server, one per doc (127.0.0.1 + token)
-              ├─ HTTP API + SSE live sync
-              ├─ file watcher, saves, version history
-              └─ agent team → dispatchers → agent CLIs (claude, codex, …)
-                       │
-                       ▼
-        plan.md  +  plan.md.opendoc.json      ◄── opendoc CLI (agents, scripts)
-```
+## Principles
 
-Everything converges on two plain files. The doc is the source of truth; the
-server, the CLI and outside agents all read and write the same files using the
-same core library, so any of them can work without the others.
+1. **Files are the truth.** Docs, sidecars and buddy files are plain files.
+   Everything else is a cache, rebuilt from them, or only costs undo if
+   lost.
+2. **Only the app writes them.** An agent gets only a copy. Any other
+   change (other editors, `git pull`) is seen and merged.
+3. **An agent is a filter:** prompt on stdin, a doc copy to edit, reply on
+   stdout. It knows nothing of OpenDoc and remembers nothing.
+4. **No one resolves a conflict by hand.** The person typing always wins.
+   What loses is redone (ask the buddy again) or restored (history).
+5. **Buddies always edit, and every edit can be undone.** See
+   [Undo](#undo).
+6. **Only my own comments start runs.** Nothing in a shared file makes a
+   buddy run, or chooses what program runs, on this machine.
 
-## Data: the doc and its sidecar
+## Buddies and folders
 
-- **Doc**: any markdown file, never modified to hold OpenDoc data.
-- **Sidecar** (`X.md.opendoc.json`): participants and comment threads. Each
-  thread has an anchor, messages, status, and optional agent edits and
-  proposals. Created on the first comment; `opendoc mv` moves it with the doc.
-- **Anchors** are on the doc's *rendered* text (markup removed): the quote plus
-  up to 32 characters of context each side and a position hint. After a
-  change, re-anchoring tries exact match, then surrounding context, then fuzzy
-  match; failing all, the thread is marked `detached`, never dropped. It is
-  deterministic, so every tool agrees.
-- **Inbox** is computed from the sidecar alone: a thread waits on an agent when
-  its latest human message mentions it (or no one, for agents taking open
-  asks) and the agent has not answered since. No cursors or server state.
-- **Mentions in the doc text** (SPEC §4.1) become threads, so the inbox rule
-  stays the same. On each human save the server diffs the rendered text
-  (lines, then the characters of changed lines) and takes as new each
-  `@name` of an agent outside code that is not an old one carried over
-  untouched (`addedMentions`, `src/core/text-mentions.js`); agents' writes
-  ask nothing. `src/server/text-asks.js` follows each by an anchor on its
-  `@name` and sends it, as a thread by the human anchored from the `@` to the
-  end of its block, once the human is done writing it: the caret (the page
-  reports moves between paragraphs and blur, `POST /api/caret`) or a save is
-  in another paragraph, or the paragraph has been still for 15 s, or 3 s when
-  the ask ends a sentence. Until the agent answers, the thread follows the
-  text: a human change to the ask holds the thread back from the agents
-  (`held`, checked by each dispatcher), stops a run answering it (not counted
-  as a failure), and once the human is done again rewrites the first
-  message and anchor and lets the agents look.
-- **Writes** take a short exclusive lock file, re-read, apply an operation with
-  a client-generated id, and rename a temp file over the sidecar. Concurrent
-  writers never lose changes; retries apply at most once.
+A window has a doc and, in project mode, a folder. Its buddies are the
+user's (`<config>/buddies/`) and the folder's (`.opendoc/buddies/`); each
+is a `<Name>.md` file ([PROJECT](../spec/PROJECT.md)). A folder's
+buddy wins a name both have.
 
-## Code layout
+| | Doc mode | Project mode |
+| --- | --- | --- |
+| Opened from | Finder: a `.md` file | The home page: a folder |
+| Window | One doc | File tree and docs |
+| Folder | none | the opened folder |
 
-| Path | Role |
+That is the only difference: doc mode is project mode with no folder.
+
+## Components
+
+| Component | Owns |
 | --- | --- |
-| `spec/` | Format spec, JSON Schema, example doc. The contract between tools. |
-| `src/core/` | Pure library, same output in Node and the browser: rendered text (`project`), anchors, sidecar ops, inbox, mentions (in comments and in the doc text), diffs/edits/proposals, three-way merge, settings and agent profiles. |
-| `src/store/` | Disk: locked sidecar writes, file watching, user settings, version history. |
-| `src/server/` | Local HTTP server per doc: API, SSE, byte-preserving saves (`splice.js`), @mentions typed in the text (`text-asks.js`), and the agent runner (`agents/`). |
-| `src/cli/` | `opendoc` CLI: `comment`, `comments`, `inbox`, `wait`, `reply`, `propose`, `resolve`, `mv`, `serve`, `guard`. `--json` and stable exit codes. |
-| `web/` | Editor page: Milkdown (ProseMirror) editor, comment margin, replay of agent edits, proposal previews, panels. Bundled by esbuild into `dist/web`. |
-| `desktop/` | Electron shell: windows, menus, dialogs, OS file association, start window, `opendoc` shim. |
-| `skills/opendoc/` | Skill that teaches an agent the comment loop. |
+| Format | `X.md` + `X.md.opendoc.jsonl` ([SPEC](../spec/SPEC.md)) |
+| Model (`src/core`) | rendered text, anchors, diff and three-way merge, reading the sidecar, the inbox. No I/O. |
+| DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
+| Runner | which runs should start (the inbox), runs them, their status in memory |
+| Windows | editing and commenting, through DocService |
 
-## Editor and saving
+DocService and Runner run in the doc host, the app's utility process.
+Windows reach it over Electron message ports.
 
-- The page edits markdown in a WYSIWYG editor and sends the serialized
-  markdown to the server. `splice.js` keeps the original bytes of every block
-  whose meaning did not change, so diffs show only real edits.
-- Changes on disk arrive over SSE. Agent edits are **replayed** as typing
-  (`web/replay.js`), mapped through the human's own transactions so both can
-  type at once. Other outside changes replace only the blocks that differ.
-- Concurrent edits merge three-way (`src/core/merge.js`): different
-  paragraphs merge; the same paragraph merges by character when safe; true
-  overlaps keep the human's text and turn the agent's into a proposal.
+## Who answers
 
-## Agents
+A thread waits on buddy X when a comment by this machine's user, newer than
+X's last comment there, @mentions X. That is computed from the sidecar and
+the user's id. A comment that mentions no one asks no one. Buddies run only
+on docs open in a window.
 
-- **Profiles** live in the user's `settings.json` (`src/core/agents.js`):
-  name, persona (one line), instructions (any length), runtime, permissions, limits,
-  and whether it is starred. A new user has one generic agent, Clippy (a general writing assistant), starred;
-  there are no built-in roles. An unstarred agent is one doc's own (`doc`:
-  its full path, set only by the server, moved on rename): it shows and runs
-  only there, and removing it from the doc deletes it. Names are unique among
-  the starred agents and each doc's own. **Membership** lives in the
-  sidecar's participants, which also carry each agent's persona and
-  instructions (SPEC §2.4), so a doc travels with its agents: opening a doc
-  whose agents this machine lacks sets them up as its own, with the safest
-  permissions (never taken from the doc). Clippy (`DEFAULT_AGENT_ID`, under
-  whatever name it has) joins a doc the first time it is opened with no
-  agents in it; every other agent is added in the doc.
-- **Team** (`agents/team.js`): one dispatcher per agent in the open doc.
-  Their runs go on at the same time; they share a `Floor` so only one writes
-  the doc at a time. A run that cannot edit never takes it. A Claude Code run
-  takes it for one edit at a time: the guard's hook before an Edit waits for
-  it (up to 15 s, then refuses the edit and says why), the hook after the
-  Edit gives it back. A run of another program that may edit holds it from
-  start to end, and others that may edit wait their turn. Each run's base
-  (the doc as it would be without the run) takes in every change made by the
-  human or by another run when that run gives the floor back, so the diff
-  from base to the doc at the end is the run's own (recorded edits, undo,
-  version history).
-- **Dispatcher** (`agents/dispatcher.js`): watches the inbox, claims threads
-  (an entry in `working`; several agents can work in one thread), runs the agent with the threads and a prompt (task, persona and instructions as one block,
-  other agents, rules), records the run's edits on its reply, and handles
-  failures, limits and restarts when settings change.
-- **Runtimes** (`agents/config.js`, `adapters.js`): an adapter per program
-  (Claude Code, Codex, custom command) that checks the program, builds the
-  command line, prepares an empty private working folder per agent per doc,
-  and parses the result.
-- **Nothing remembered in private.** Every run is a new session: no
-  `--resume`, Claude Code runs with `--no-session-persistence`, and the
-  private folder is emptied before each run. What an agent knows comes from
-  the doc and its threads, which the human sees too. The agent acts only through its file tools and
-  the `opendoc` CLI, so a new runtime needs no other changes.
-- **Permissions are enforced by the run's tools**, not just the prompt: a
-  permission that is off is absent from the command line. Secrets (`.env*`,
-  keys, `~/.ssh`, `~/.aws`) are always denied. With Auto Editor, a hook runs
-  `opendoc guard` before each edit and refuses one where the human is typing.
-- An agent's program path can only be set from the desktop app (with a native
-  confirmation) or `settings.json`; the page can only clear it.
+## A run
 
-## Desktop app
+1. Runner copies the doc into a new private folder and runs the
+   [agent script](agent-config.md) there, with the prompt (persona,
+   instructions, the thread, the rules) on stdin and the buddy's name in
+   `OPENDOC_BUDDY`.
+2. The agent edits the copy and prints its reply on stdout.
+3. On exit 0, DocService saves versions before and after, merges the copy's
+   diff into the doc, three-way from the copy as it started, and writes the
+   reply as the buddy's comment. Where the human changed the same text
+   meanwhile, the buddy's change is dropped and the reply is marked
+   `conflict`.
+4. The private folder is deleted.
 
-- Electron, because the server, watcher and dispatcher are Node and run
-  unchanged. Each window loads its doc's local server, so the app and
-  `opendoc serve` share one page.
-- The doc servers, agent runs included, run in one Electron utility process,
-  the doc host (`desktop/doc-host.js`), not in the main process, which pumps
-  every window's input: starting an agent's program blocks the thread that
-  calls it for most of a second on Windows. A host that stops is started
-  again, and its docs' windows reload from their new servers.
-- Single instance: a second launch hands its files to the running app. Paths
-  are resolved to real paths, so one doc never opens twice.
-- Renderer is sandboxed with context isolation; the preload API accepts only
-  user-initiated actions and never takes paths from the page.
-- Packaged with electron-builder: a Windows NSIS installer (unsigned), a
-  macOS dmg (ad-hoc signed until there is a Developer ID), and a Linux
-  AppImage target.
+A run that fails is answered too: the buddy's comment is marked `failed`,
+with the end of the program's output. One ask, one reply; to retry, or to
+redo a `conflict`, @mention the buddy again. Which runs are working lives
+only in memory: after a restart, unanswered asks run again. Runs go on at
+the same time; their merges are applied one at a time.
+
+## Undo
+
+1. **Your own edits:** Cmd+Z, which undoes only yours, as in shared docs.
+2. **A buddy's edit:** Undo on its reply. DocService reverses the diff
+   between the versions saved before and after it, merged three-way into
+   the doc as it is now; where you changed the same text since, yours
+   stays.
+3. **Anything else:** restore a version from history.
+
+Each of them saves a version first. Undo on a reply works only on the
+machine that ran it, where its versions are.
+
+## Writes
+
+- Before writing, DocService checks the file is still what it last read;
+  if not, it merges the outside change first. Where it overlaps what is
+  being typed, the typing wins and the outside version is saved to history.
+- Every file is written whole: a temporary file in the same folder,
+  renamed over it.
 
 ## Local state
 
-All in the user config folder (`%APPDATA%\OpenDoc`,
-`~/Library/Application Support/OpenDoc`, `~/.config/opendoc`;
-`OPENDOC_CONFIG_DIR` overrides):
+In the config folder (`~/Library/Application Support/OpenDoc/` on macOS),
+written only by the app.
 
-- `settings.json`: editor settings and agent profiles, shared by every window
-  and `opendoc serve`, with live updates.
-- `state.json`: recent docs and window bounds.
-- `history/`: per-doc version snapshots, kept out of the doc's folder.
-
-Nothing leaves the machine except what an agent's own program sends to its
-model provider.
+| File | Holds |
+| --- | --- |
+| `settings.json` | the user's id and name; editor preferences; which agent runs buddies |
+| `buddies/` | the user's buddies; `Clippy.md` is made here on first run |
+| `agents/` | agent scripts; Claude Code and Codex ship as two |
+| `state.json` | recent docs and folders, window bounds |
+| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |

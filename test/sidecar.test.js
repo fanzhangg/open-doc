@@ -1,4 +1,4 @@
-// The version 2 sidecar (spec/SPEC-v2.md): conformance fixtures
+// The version 2 sidecar (spec/SPEC.md): conformance fixtures
 // (spec/conformance/sidecar.json), any order or duplication of lines
 // reading to the same threads, and writing.
 

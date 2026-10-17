@@ -22,7 +22,7 @@ We provide props, like dice, not games. The doc, comments, edits, anchors and @ 
 ## Design Principles
 
 - **Familiar**: Edit and comment, the way you already work on docs with people. Nothing new to learn
-- **Real-time**: No handoffs. You and agents work in the same doc at the same time, and an agent responds as soon as you @ it
+- **Real-time**: No waiting your turn. You and agents work in the same doc at the same time, and an agent responds as soon as you @ it
 - **In control**: Agents change only what you asked about and explain every change; you can undo it or have them suggest first. Only you resolve a thread
 - **Open**: Open format and open-source editor, no lock-in
 - **Agents work like your teammates**: An agent is another user in the doc, with the same view and the same actions you have
@@ -63,7 +63,7 @@ Existing tools fall into four categories:
 
 How we're different:
 
-- **A shared live doc, not handoffs**: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it (or comment, in auto-commenter mode) instead of waiting for you to hand the doc over.
+- **A shared live doc, not turn-taking**: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it instead of waiting for you to hand the doc over.
 - **Comments are the interface**: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.
 - **Local, plain Markdown**: A regular file in your repo, comments stored alongside it; no subscription lock-in.
 - **Any agent, many agents**: Any command-line agent can plug in, several can work in the same doc at once, and they @ each other to hand off work.

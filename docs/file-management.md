@@ -13,7 +13,7 @@ and folders, in the desktop app's folder window.
 
 Out, for now: multi-select, duplicate, sort options, dragging files in from
 Finder or Explorer, and rewriting links in other docs (see
-[Later](#later)). The browser (`opendoc serve`) has no sidebar and gets none.
+[Later](#later)).
 
 ## What others do
 
@@ -43,7 +43,7 @@ What carries over:
 ## Principles
 
 1. **A doc and its comments move as one.** Every operation carries the
-   sidecar (`plan.md.opendoc.json`), the version history and any open window
+   sidecar (`plan.md.opendoc.jsonl`), the version history and any open window
    with the doc. The user never sees a sidecar in the tree.
 2. **Nothing is created until it is named.** New doc and new folder ask for
    the name first, in the tree.
@@ -193,7 +193,7 @@ outside the app.
 ## Open windows and the open doc
 
 - **Rename or move the doc this window shows:** the window stays, its
-  server follows the doc (as File > Rename does), the header name updates.
+  doc host follows the doc (as File > Rename does), the header name updates.
 - **The same for a doc open in another window:** that window follows too.
 - **Delete the doc this window shows:** the window opens its neighbour (the
   next doc below, else above, in the same folder, else the folder's first
@@ -250,11 +250,11 @@ The tree becomes a real tree (`role="tree"`): one Tab stop, then arrows.
 - Like every bridge call these need a click or a key press. A drop ends a
   drag, which leaves no user activation in Chromium, so a trusted pointer
   release just before counts too.
-- Docs reuse `renameDoc` and `moveHistory`, and move the doc's own agents in
-  `settings.json`; an open doc's server does that itself. A folder move is
-  one rename of the folder (`moveFolder`); then each open doc's server
+- Docs reuse `renameDoc` and `moveHistory`; an open doc's doc host does
+  that itself. A folder move is
+  one rename of the folder (`moveFolder`); then each open doc's doc host
   follows its doc (`moveTo(path, { moved: true })`) and each other doc's
-  history and agents follow. Trash is Electron's `shell.trashItem`, doc then
+  history follows. Trash is Electron's `shell.trashItem`, doc then
   sidecar (`trashDoc`).
 - `listDocs` also returns the empty folders; the sidebar draws them.
 - While a name is being typed, a redraw of the tree waits for it.
