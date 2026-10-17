@@ -2,12 +2,10 @@
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. The agent shows up like any other collaborator: an avatar, its
 // replies (with what it changed in the doc and Undo, or the changes it
-// proposes and Apply), and typing dots while it works. Only the human
-// resolves threads.
+// proposes and Apply), and typing dots while it works. A reply whose run
+// failed, or whose edit was partly dropped for the human's text, says so.
+// Only the human resolves threads.
 
-import { activeWorking } from '../src/core/ops.js';
-import { failedFor, inbox } from '../src/core/inbox.js';
-import { apology } from './apology.js';
 import { appliedBy } from './review.js';
 import { icon } from './icons.js';
 import { agentFace, personFace } from './faces.js';
@@ -22,8 +20,6 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
  *           onUndo: (threadId: string, message: object) => Promise<void>,
- *           onRetry: (threadId: string, name: string) => Promise<void>,
- *           onCancelRequest: (threadId: string, name: string) => Promise<void>,
  *           onApply: (threadId: string, message: object) => Promise<void>,
  *           canApply: (message: object) => boolean,
  *           onReview: (threadId: string, message: object) => void, reviewing: () => string | null,
@@ -34,14 +30,13 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  */
 export function createCommentMargin(margin, handlers) {
   let sidecar = { participants: [], threads: [] };
-  let agents = []; // the agents' statuses in this doc
+  let agents = []; // the agents' statuses in this doc: who works on which threads
   let me = '';
   let activeId = null;
   let draft = null; // { hint } while composing a comment on the selected text
   let showResolved = false;
   const replyDrafts = new Map();
   const busy = new Set(); // ids of messages being undone or applied
-  const settling = new Set(); // "threadId:name" of requests being retried or cancelled
   const errors = new Map(); // message id → why undo or apply failed
   const unfolded = new Set(); // ids of long messages shown in full
   const expanded = new Set(); // ids of long threads shown with every reply
@@ -91,7 +86,7 @@ export function createCommentMargin(margin, handlers) {
     const card = el('article', 'od-card');
     card.dataset.thread = thread.id;
     const active = thread.id === activeId;
-    const working = thread.status === 'open' ? activeWorking(thread, Date.now()) : [];
+    const working = thread.status === 'open' ? agents.filter((a) => a.threadIds.includes(thread.id)).map((a) => a.name) : [];
     card.classList.toggle('od-card-active', active);
     card.classList.toggle('od-card-working', working.length > 0);
     card.classList.toggle('od-card-resolved', thread.status === 'resolved');
@@ -119,12 +114,11 @@ export function createCommentMargin(margin, handlers) {
       card.append(row);
     });
 
-    if (thread.status === 'open') card.append(...requestRows(thread, working));
     // Typing dots for each agent working on it; several can at once.
-    for (const w of working) {
+    for (const name of working) {
       const row = el('div', 'od-typing');
-      row.title = `${w.by} is working on it`;
-      row.append(avatar(w.by, 'agent', true), dots());
+      row.title = `${name} is working on it`;
+      row.append(avatar(name, 'agent', true), dots());
       card.append(row);
     }
     if (thread.status === 'resolved') {
@@ -154,78 +148,11 @@ export function createCommentMargin(margin, handlers) {
     const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
     body.append(...withMentions(message.body, handlers.mentionable?.() ?? []));
     row.append(head, body, foldButton(message.id, open));
+    // To retry, or to redo what was dropped, the human asks again.
+    if (message.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${author.name} again to retry.`));
+    if (message.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${author.name} again to redo it.`));
+    row.classList.toggle('od-msg-failed', Boolean(message.failed));
     return row;
-  }
-
-  // What the agents this comment asked could not do, said by each agent in
-  // its own words like any reply: a run that failed, or an agent that cannot
-  // start, each with Retry and Cancel (nothing is retried on its own); and
-  // the requests cancelled.
-  function requestRows(thread, working) {
-    const rows = [];
-    const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-    const kindOf = (name) => agents.find((a) => same(a.name, name))?.kind ?? null;
-    for (const failure of thread.failed ?? []) {
-      if (working.some((w) => same(w.by, failure.name))) continue;
-      rows.push(failedRow(thread, failure.name, failure.error, kindOf(failure.name), failure.at));
-    }
-    const now = Date.now();
-    for (const status of agents) {
-      if (status.state !== 'unavailable' || failedFor(thread, status.name)) continue;
-      if (inbox({ threads: [thread] }, status.name, now, { mentionsOnly: !status.autoComment }).length === 0) continue;
-      rows.push(failedRow(thread, status.name, status.error ?? '', status.kind));
-    }
-    for (const name of thread.cancelled ?? []) {
-      rows.push(el('div', 'od-card-note od-request-cancelled', `You cancelled the request to ${name}.`));
-    }
-    return rows;
-  }
-
-  function failedRow(thread, name, error, kind, at = null) {
-    const key = `${thread.id}:${name.toLowerCase()}`;
-    const row = el('div', 'od-msg od-msg-failed');
-    row.setAttribute('role', 'status');
-    const head = el('div', 'od-msg-head');
-    const who = el('div', 'od-who');
-    const label = el('span', 'od-name', name);
-    label.append(el('span', 'od-ai', 'AI'));
-    who.append(label);
-    if (at) who.append(el('time', 'od-time', relativeTime(at)));
-    const settle = (handler) => async (event) => {
-      event.stopPropagation();
-      if (settling.has(key)) return;
-      settling.add(key);
-      render();
-      try {
-        await handler(thread.id, name);
-      } catch {
-        // the status line says what failed
-      } finally {
-        settling.delete(key);
-        render();
-      }
-    };
-    const actions = el('div', 'od-msg-actions');
-    actions.append(
-      requestButton('retry', 'Try again', settle(handlers.onRetry), settling.has(key)),
-      requestButton('close', 'Cancel request', settle(handlers.onCancelRequest), settling.has(key)),
-    );
-    head.append(avatar(name, 'agent'), who, actions);
-    const body = el('div', 'od-body', apology(error, kind));
-    if (error) body.title = error; // what went wrong, word for word
-    row.append(head, body);
-    return row;
-  }
-
-  function requestButton(name, label, onClick, disabled) {
-    const button = el('button', 'od-change-button');
-    button.type = 'button';
-    button.dataset.tip = label;
-    button.setAttribute('aria-label', label);
-    button.disabled = disabled;
-    button.append(icon(name));
-    button.addEventListener('click', onClick);
-    return button;
   }
 
   // The replies folded out of a long thread: who wrote them and how many,

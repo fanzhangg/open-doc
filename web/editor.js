@@ -22,7 +22,6 @@ import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
-import { activeWorking } from '../src/core/ops.js';
 import { MENTION_TOKEN } from '../src/core/mentions.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { markdownPlugins } from './markdown-schema.js';
@@ -234,14 +233,12 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const v = view();
     const decorations = [];
     const drawn = [];
-    const now = Date.now();
     const open = new Map(threads.filter((t) => t.anchor && !t.detached && t.status === 'open').map((t) => [t.id, t]));
     const comment = (from, to, id) => {
       const thread = open.get(id);
       if (!thread && id !== 'draft') return;
       let classes = 'od-hl';
       if (id === 'draft' || id === activeId) classes += ' od-hl-active';
-      if (thread && activeWorking(thread, now).length > 0) classes += ' od-hl-working';
       decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id }));
       drawn.push(from, to, id, classes);
     };

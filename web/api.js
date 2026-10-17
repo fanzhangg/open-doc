@@ -27,14 +27,10 @@ export const api = {
   saveDoc: (markdown, baseHash, { recreate = false } = {}) => request('PUT', '/api/doc', { markdown, baseHash, ...(recreate ? { recreate } : {}) }),
   op: async (op) => (await request('POST', '/api/ops', { op })).data,
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),
-  /** 'retry' agent `name`, or set its 'presence' ({ presence: 'online' | 'dnd' }); resolves to its status. */
-  agentAction: async (name, action, extra = {}) => (await request('POST', '/api/agent', { name, action, ...extra })).data.status,
-  /** Agent `name`'s status and last run log. */
-  /** Whether Claude Code and Codex work: { claude, codex }, each from programStatus, with the `defaultModel` an agent with none runs on. */
-  programs: async () => (await request('GET', '/api/programs')).data.programs,
-  /** Check one program again; this doc's agents that could not start on it try again. */
-  checkProgram: async (kind) => (await request('POST', '/api/programs/check', { kind })).data,
-  agentDetails: async (name) => (await request('GET', `/api/agent?name=${encodeURIComponent(name)}`)).data,
+  /** The agent scripts: { agents: names, shipped: the names OpenDoc comes with, folder }. */
+  scripts: async () => (await request('GET', '/api/scripts')).data,
+  /** Write shipped agent script `name` again as it came. */
+  resetScript: async (name) => (await request('POST', '/api/scripts/reset', { name })).data,
   /** Invite agent `id` (from the user's agents) into the doc: { sidecar, agents }. */
   invite: async (id) => okData(await request('POST', '/api/agents/invite', { id })),
   /** Remove agent `name` from the doc: { sidecar, agents }. */
@@ -45,12 +41,8 @@ export const api = {
   updateAgent: async (id, patch) => okData(await request('PUT', '/api/roster', { id, patch })),
   /** Delete the user's agent `id` (it leaves this doc too): { settings, agents }. */
   deleteAgent: async (id) => okData(await request('POST', '/api/roster/delete', { id })),
-  /** The human is typing in the block `anchor` points at (an anchor on the rendered text). */
-  typing: (anchor) => request('POST', '/api/editing', { anchor }),
   /** The caret moved to the block `anchor` points at, or out of the doc (null). */
   caret: (anchor) => request('POST', '/api/caret', { anchor }),
-  /** Offer back changes of agent `name` the human's text was kept over: [{ before, after }]. */
-  agentOverwritten: async (name, changes) => (await request('POST', '/api/agent/overwritten', { name, changes })).data.offered,
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await request('GET', '/api/history')).data.versions,
   /** One version: { version, markdown, before }. */

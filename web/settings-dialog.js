@@ -3,8 +3,8 @@
 // (web/ui.js) and the desktop start window (desktop/start.js), so both look
 // and behave the same. Settings are saved for every doc and window (see
 // settings.js); a change made in another window shows up here too. In a doc,
-// Agents at the foot of the list opens the Agents panel: agents are set up
-// there, not twice.
+// Agent picks the agent script that runs every buddy, and Buddies at the
+// foot of the list opens the Buddies panel: buddies are set up there, not twice.
 
 import { hydrateIcons } from './icons.js';
 
@@ -24,7 +24,8 @@ const DIALOG = `
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
-    <button type="button" class="od-settings-agents" data-action="agents" data-icon="users" hidden>Agents</button>
+    <button type="button" role="tab" data-section="agent" data-icon="settings" hidden>Agent</button>
+    <button type="button" class="od-settings-agents" data-action="agents" data-icon="users" hidden>Buddies</button>
   </nav>
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
@@ -97,6 +98,21 @@ const DIALOG = `
       </label>
     </section>
 
+    <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
+      <h2>Agent</h2>
+      <div class="od-setting">
+        <div class="od-setting-text">
+          <label for="od-agent-script">Runs every buddy</label>
+          <span class="od-setting-hint">A script in <code class="od-agents-folder"></code>: the prompt on stdin, the reply on stdout. Edit it to change the program, model or flags.</span>
+        </div>
+        <select id="od-agent-script" class="od-input"></select>
+      </div>
+      <div class="od-setting-row">
+        <button type="button" class="od-secondary" data-action="reset-agent">Reset to Default</button>
+        <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
+      </div>
+    </section>
+
     <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
       <h2>Keyboard shortcuts</h2>
       <div class="od-shortcuts-body"></div>
@@ -117,11 +133,13 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. With `openAgents`, the list has Agents, which opens that.
+ * one page shows. With `openAgents`, the list has Buddies, which opens the Buddies panel.
+ * With `scripts` ({ list() → { agents, shipped, folder }, reset(name),
+ * showFolder? }), it has Agent, which picks the agent script.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, openAgents?: () => void }} options
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, openAgents?: () => void, scripts?: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, openAgents = null }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, openAgents = null, scripts = null }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   hydrateIcons(dialog);
@@ -132,6 +150,30 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
   dialog.querySelector('[data-action="agents"]').hidden = !openAgents;
+  dialog.querySelector('[data-section="agent"][role="tab"]').hidden = !scripts;
+  dialog.querySelector('[data-action="show-agents"]').hidden = !scripts?.showFolder;
+  const scriptSelect = dialog.querySelector('#od-agent-script');
+  let shipped = [];
+
+  // The scripts are read again each time the section shows: the user may add one.
+  async function paintScripts() {
+    let found;
+    try {
+      found = await scripts.list();
+    } catch {
+      return;
+    }
+    shipped = found.shipped;
+    dialog.querySelector('.od-agents-folder').textContent = found.folder;
+    const names = found.agents.includes(store.get().agent) ? found.agents : [...found.agents, store.get().agent];
+    scriptSelect.replaceChildren(...names.map((name) => Object.assign(document.createElement('option'), { value: name, textContent: name })));
+    scriptSelect.value = store.get().agent;
+    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
+  }
+  scriptSelect.addEventListener('change', () => {
+    set({ agent: scriptSelect.value });
+    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
+  });
 
   function apply() {
     const settings = store.get();
@@ -158,6 +200,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
     for (const panel of sections) panel.hidden = panel.dataset.section !== section;
+    if (section === 'agent') paintScripts();
   }
 
   function open(section = 'general') {
@@ -187,7 +230,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
     else if (button.dataset.action === 'agents') {
       dialog.close();
       openAgents();
-    } else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    } else if (button.dataset.action === 'reset-agent') {
+      const name = scriptSelect.value;
+      if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
+    } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
     else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
     else if (button.dataset.width) set({ width: button.dataset.width });

@@ -1,8 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 // Keep tests away from the real user's settings file.
 process.env.OPENDOC_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'opendoc-config-'));
@@ -24,26 +23,4 @@ export async function tempDoc(content = SAMPLE, name = 'plan.md') {
   const path = join(dir, name);
   await writeFile(path, content);
   return path;
-}
-
-const FAKE_PROGRAM = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-program.cjs');
-
-/**
- * Runs `fn` with node (process.execPath) standing in for Claude Code and
- * Codex: it answers their sign-in checks as signed in or not (`signedIn`).
- * Pass the returned `set` a new answer to change it mid-test.
- */
-export async function withFakeProgram(signedIn, fn) {
-  const saved = { NODE_OPTIONS: process.env.NODE_OPTIONS, FAKE_PROGRAM: process.env.FAKE_PROGRAM };
-  const set = (yes) => { process.env.FAKE_PROGRAM = yes ? 'signed-in' : 'signed-out'; };
-  process.env.NODE_OPTIONS = `--require "${FAKE_PROGRAM.replaceAll('\\', '/')}"`;
-  set(signedIn);
-  try {
-    return await fn({ program: process.execPath, set });
-  } finally {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
 }

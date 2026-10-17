@@ -1,9 +1,10 @@
 // The opendoc page: wires the editor, the comment margin, the people (the
-// doc's agents and you) and the server together. Saves are debounced and conditional on the hash
-// they were based on. Changes made on disk (usually by the agent) arrive as
-// SSE events and are merged into the page like a collaborator's edits, an
-// agent's typed in by its caret: only a change that overlaps what the human
-// changed in the same paragraph asks them to choose.
+// doc's agents and you) and the server together. Saves are debounced and
+// conditional on the hash they were based on. Changes made on disk (a
+// buddy's merged edit, another program) arrive as SSE events and are merged
+// into the page like a collaborator's edits, a buddy's typed in by its
+// caret. Where one overlaps what the human is typing, the human's text
+// stays: no one is asked to choose.
 
 import { api } from './api.js';
 import { createDocEditor } from './editor.js';
@@ -13,20 +14,19 @@ import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
 import { icon } from './icons.js';
-import { followLines, merge3 } from '../src/core/merge.js';
+import { merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
 import { canApply, editItems, openProposal, previewItems } from './review.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
-import { activeWorking, newId } from '../src/core/ops.js';
+import { newId } from '../src/core/ops.js';
 import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
 import { availableIn } from '../src/core/agents.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
-const TYPING_REPORT_MS = 1000;
 // Changes from disk and comment updates wait for a pause in typing this long,
 // but never longer than WAIT_FOR_PAUSE_MS: taking them in while keys arrive
 // would stall the keys.
@@ -35,7 +35,6 @@ const WAIT_FOR_PAUSE_MS = 3000;
 const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
 
 const status = document.querySelector('.od-status');
-const banner = document.querySelector('.od-banner');
 const missingBanner = document.querySelector('.od-missing');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 const commentsToggle = document.querySelector('.od-tool-comment');
@@ -51,7 +50,6 @@ let history;
 let settings;
 let defaultName;
 let docKey; // the doc's full path: which of your unstarred agents are its own
-let folderName = null; // the folder the doc was opened from, whose files its agents may read
 let me;
 let sidecar;
 let baseHash;
@@ -68,10 +66,6 @@ let pendingSelection = null;
 let typedAt = -Infinity; // when the human last typed in the doc
 let shownAgents = ''; // the agent statuses on screen, as JSON
 let shownSidecar = ''; // the sidecar on screen, as JSON
-// An agent's text the last merge left out for the human's, offered back on
-// its comment once the human's is saved: { by: the agent, text: the merged
-// markdown, items: [{ at, count, theirs }] } (lines of `text` and the agent's version).
-let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
@@ -108,7 +102,6 @@ async function start() {
   disk = initial.markdown;
   defaultName = initial.defaultName;
   docKey = initial.docKey;
-  folderName = initial.folder ?? null;
   settings = createSettings(initial.settings, {
     save: api.saveSettings,
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
@@ -132,7 +125,6 @@ async function start() {
       version++;
       setStatus('Saving…', 'saving');
       scheduleSave();
-      reportTyping();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onSelectThread: (id) => {
@@ -156,8 +148,6 @@ async function start() {
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
-    folder: () => folderName,
-    settingsFile: () => initial.settingsFile ?? null,
     mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
@@ -178,8 +168,6 @@ async function start() {
     onReply: (threadId, body) => sendOp({ type: 'addMessage', threadId, message: newMessage(body) }),
     onResolve: (threadId) => sendOp({ type: 'resolve', threadId, by: me }),
     onReopen: (threadId) => sendOp({ type: 'reopen', threadId, by: me }),
-    onRetry: (threadId, name) => sendOp({ type: 'retry', threadId, name }),
-    onCancelRequest: (threadId, name) => sendOp({ type: 'cancel', threadId, name }),
     onUndo: undoEdit,
     onApply: applyProposalEdit,
     canApply: (message) => canApply(disk, message),
@@ -286,12 +274,6 @@ async function start() {
   events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
   events.addEventListener('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.addEventListener('history', () => history.changed());
-  // The running agent is about to edit there: its caret goes there first.
-  events.addEventListener('agentTarget', (event) => {
-    const { quote } = JSON.parse(event.data);
-    const agent = people.running();
-    if (agent && quote) editor.agentLooking(agent.name, [{ exact: quote, prefix: '', suffix: '', start: 0 }]);
-  });
   events.addEventListener('agents', (event) => showAgents(JSON.parse(event.data)));
   events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
   events.addEventListener('renamed', (event) => {
@@ -299,9 +281,6 @@ async function start() {
     showDocName(data.doc);
     docKey = data.docKey ?? docKey; // its own agents moved with it
     people?.render({ roster: settings.get().agents });
-  });
-  events.addEventListener('folder', (event) => {
-    folderName = JSON.parse(event.data).folder ?? null;
   });
   events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
   events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
@@ -321,7 +300,7 @@ function scheduleSave() {
 }
 
 async function save() {
-  if (saving || !dirty || !banner.hidden || missing) return;
+  if (saving || !dirty || missing) return;
   if (editor.replaying()) {
     // The text is between versions; the replay reports any typing when it ends.
     scheduleSave();
@@ -340,7 +319,6 @@ async function save() {
       baseHash = data.docHash;
       synced = markdown;
       setDisk(data.markdown ?? disk);
-      offerOverwritten(markdown);
       if (version === savedVersion) dirty = false;
       if (dirty) setStatus('Saving…', 'saving');
       else setStatus('Saved');
@@ -366,7 +344,6 @@ async function flushSave() {
   clearTimeout(saveTimer);
   editor.finishReplay();
   while (dirty || saving) {
-    if (!banner.hidden) throw new Error('resolve the conflict first');
     if (missing) throw new Error('the doc is missing from disk');
     if (!saving) await save();
     else await new Promise((resolve) => setTimeout(resolve, 50));
@@ -438,19 +415,9 @@ async function doSync() {
   // so its partial text is not taken for the human's.
   editor.finishReplay();
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
-  const mine = editor.getMarkdown();
-  // Where an agent changed text the human is still typing in, the human's
-  // stays and the agent's goes back to its comment as a proposal. Other
-  // changes (another program, a collaborator the page does not know) still
-  // ask the human to choose.
-  const fromAgent = people.statuses().some((a) => a.name === by);
-  const merged = merge3(synced, mine, theirs, fromAgent ? { prefer: 'ours' } : {});
-  if (merged.conflict) {
-    showConflict(by);
-    return;
-  }
-  keepOverwritten(merged, by);
-  // The agent's changes are typed in; anything else just appears.
+  // Where the change overlaps what the human typed since, the human's stays.
+  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
+  // A buddy's changes are typed in; anything else just appears.
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
   baseHash = fresh.docHash;
@@ -468,21 +435,6 @@ async function doSync() {
     version++;
     scheduleSave();
   }
-}
-
-// Tell the server which paragraph the human is typing in, at most once a
-// second, so agents' runs keep out of it (the server forgets it 15 seconds
-// after the last report).
-let typingTimer = null;
-let typingSentAt = 0;
-function reportTyping() {
-  if (typingTimer || !people?.statuses().length) return;
-  typingTimer = setTimeout(() => {
-    typingTimer = null;
-    typingSentAt = Date.now();
-    const anchor = editor.caretBlock();
-    if (anchor) api.typing(anchor).catch(() => {});
-  }, Math.max(0, TYPING_REPORT_MS - (Date.now() - typingSentAt)));
 }
 
 // Tell the server when the caret moves to another paragraph, or out of the
@@ -507,39 +459,6 @@ function reportCaret() {
   api.caret(editor.caretBlock()).catch(() => {});
 }
 
-// Remember what a merge left out of agent `by`'s change, following anything
-// remembered from an earlier merge (of the same agent) into this one's text.
-function keepOverwritten(merged, by) {
-  const items = [];
-  if (overwritten && overwritten.by === by) {
-    for (const item of overwritten.items) {
-      const range = followLines(overwritten.text, merged.text, item.at, item.count);
-      if (range) items.push({ ...item, at: range.start, count: range.end - range.start });
-    }
-  }
-  for (const d of merged.dropped ?? []) items.push({ at: d.at, count: d.count, theirs: d.theirs });
-  overwritten = items.length > 0 ? { by, text: merged.text, items } : null;
-}
-
-// The human's text is saved: offer the agent's version of each region it was
-// kept over, as it reads now (`saved`, the markdown just saved).
-function offerOverwritten(saved) {
-  if (!overwritten) return;
-  const { by, text, items } = overwritten;
-  overwritten = null;
-  const lines = saved.split('\n');
-  const trim = (s) => s.replace(/^\n+|\n+$/g, '');
-  const changes = [];
-  for (const item of items) {
-    const range = followLines(text, saved, item.at, item.count);
-    if (!range) continue;
-    const before = trim(lines.slice(range.start, range.end).join('\n'));
-    const after = trim(item.theirs);
-    if (before && before !== after) changes.push({ before, after });
-  }
-  if (changes.length > 0) api.agentOverwritten(by, changes).catch(() => {});
-}
-
 // The doc's agents changed (a status, or who is here).
 function showAgents(next) {
   // The server repeats statuses (each connection starts with them); redrawing
@@ -562,7 +481,6 @@ function takeAgentResult(result) {
 
 // A run starting puts its agent's caret on the comment it is reading, as a
 // collaborator would scroll there; when it stops, the caret stays and fades.
-// Agents run one at a time.
 function showAgentCaret(before, after) {
   if (after && after.name !== before?.name) {
     const ids = after.threadIds ?? [];
@@ -573,51 +491,13 @@ function showAgentCaret(before, after) {
   }
 }
 
-// Who most likely changed the file: the agent running, or the collaborator
-// working on a comment.
+// Who most likely changed the file: a buddy at work (its edit is merged
+// before its run ends), or the one that replied last.
 function editorName(nextSidecar) {
-  const agent = people.running();
-  if (agent) return agent.name;
-  const working = nextSidecar.threads.flatMap((t) => activeWorking(t));
-  return working[0]?.by ?? ON_DISK;
+  const latest = nextSidecar.threads.flatMap((t) => t.messages).filter((m) => m.author.kind === 'agent')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  return people.running()?.name ?? latest?.author.name ?? ON_DISK;
 }
-
-function showConflict(by) {
-  clearTimeout(saveTimer);
-  setStatus('Needs your choice', 'conflict');
-  banner.querySelector('.od-banner-text').textContent = by === ON_DISK
-    ? 'The file changed on disk in a paragraph you are editing.'
-    : `${by} edited a paragraph you are editing.`;
-  banner.hidden = false;
-}
-
-banner.querySelector('[data-action="reload"]').addEventListener('click', async () => {
-  const fresh = await api.state();
-  banner.hidden = true;
-  dirty = false;
-  editor.applyMarkdown(fresh.markdown, editorName(fresh.sidecar));
-  synced = editor.normalize(fresh.markdown);
-  baseHash = fresh.docHash;
-  disk = fresh.markdown;
-  applySidecar(fresh.sidecar);
-  setStatus('Saved');
-});
-// Keep the human's text where both changed it, and the other side's
-// changes everywhere else.
-banner.querySelector('[data-action="keep"]').addEventListener('click', async () => {
-  const fresh = await api.state();
-  const theirs = editor.normalize(fresh.markdown);
-  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
-  editor.applyMarkdown(merged.text, editorName(fresh.sidecar));
-  baseHash = fresh.docHash;
-  synced = theirs;
-  disk = fresh.markdown;
-  applySidecar(fresh.sidecar);
-  banner.hidden = true;
-  dirty = true;
-  version++;
-  await save();
-});
 
 // ---- the doc moved or deleted outside the app ----
 

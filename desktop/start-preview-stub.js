@@ -22,7 +22,6 @@
     openFolder: () => log('Open Folder…'),
     rename: () => log('Rename'),
     setAgentProgram: () => Promise.resolve(false),
-    chooseProgram: () => Promise.resolve(null),
     openRecent: (index) => log(`Open ${recent[index]?.name}`),
     recent: () => Promise.resolve(recent.map((doc) => ({ ...doc }))),
     onRecentChanged: () => {},

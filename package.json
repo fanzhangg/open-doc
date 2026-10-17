@@ -15,7 +15,7 @@
     "src/",
     "spec/",
     "dist/",
-    "skills/"
+    "agents/"
   ],
   "scripts": {
     "icon:desktop": "electron scripts/make-icon.cjs",

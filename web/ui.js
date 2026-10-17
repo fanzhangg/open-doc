@@ -6,6 +6,7 @@
 import { hydrateIcons, icon } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { createAgentsPanel } from './agents-panel.js';
+import { api } from './api.js';
 import { fillMentionMenu } from './threads.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
@@ -30,7 +31,7 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
  *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void,
  *           mentionChoices?: (query: string) => { name, kind, group, tagline? }[] }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, folder = () => null, settingsFile = () => null, mentionChoices = () => [] }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, mentionChoices = () => [] }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -45,8 +46,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
     },
     openAgents: () => agentsPanel.open(),
+    scripts: {
+      list: api.scripts,
+      reset: api.resetScript,
+      showFolder: window.opendocDesktop && (() => window.opendocDesktop.showAgents()),
+    },
   });
-  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey, folder, settingsFile });
+  const agentsPanel = createAgentsPanel({ store, onResult: onAgentResult, docKey });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);

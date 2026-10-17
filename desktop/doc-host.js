@@ -34,7 +34,7 @@ const server = (serverId) => {
 
 const handlers = {
   async start({ docPath, folder = null }) {
-    const started = await startServer(docPath, { agentFromSettings: true, folder });
+    const started = await startServer(docPath, { folder });
     const serverId = ++nextId;
     servers.set(serverId, started);
     return { serverId, url: started.url };
@@ -46,7 +46,7 @@ const handlers = {
   },
   // `moved`: the doc is already at `toPath` (its folder moved); the server follows it.
   moveTo: ({ serverId, toPath, moved }) => server(serverId).moveTo(toPath, moved ? async () => toPath : renameDoc),
-  running: ({ serverId }) => server(serverId).team.statuses().filter((s) => s.state === 'running').map((s) => s.name),
+  running: ({ serverId }) => server(serverId).runner.statuses().map((s) => s.name),
   setFolder: ({ serverId, folder }) => server(serverId).setFolder(folder),
   async closeAll() {
     const all = [...servers.values()];

@@ -85,13 +85,8 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
     ipcRenderer.on('opendoc:folder-changed', () => callback());
   },
   rename: () => act('rename'),
-  /**
-   * Set agent `id`'s `command`, or `claudeBin` or `codexBin` for every agent, after the user
-   * confirms it; resolves to whether it was set.
-   */
-  setAgentProgram: (key, value, id = null) => act('agentProgram', { key: String(key), value: value === null ? null : String(value), id: id === null ? null : String(id) }),
-  /** Pick where Claude Code ('claudeBin') or Codex ('codexBin') is in a native dialog. */
-  chooseProgram: (key) => act('chooseProgram', String(key)),
+  /** Show the folder of the agent scripts. */
+  showAgents: () => act('showAgents'),
   openRecent: (index) => act('openRecent', Number(index)),
   recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
   onRecentChanged: (callback) => {

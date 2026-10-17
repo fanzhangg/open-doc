@@ -10,8 +10,7 @@ import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSettingsPatch } from '../src/core/settings.js';
-import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
+import { agentsDir } from '../src/store/agents.js';
 import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecar } from '../src/store/files.js';
 import { moveHistory } from '../src/store/history.js';
@@ -446,52 +445,9 @@ function pageCommand(win, name) {
   page?.webContents.send('opendoc:command', name);
 }
 
-// ---- the agent's program ----
-
-// The programs the Agents panel can point at, for every agent of a runtime.
-const PROGRAMS = { claudeBin: 'Claude Code', codexBin: 'Codex' };
-
-// The Agents panel may set what program agent runs start: a custom agent's
-// command (`id` names the agent), or where Claude Code or Codex is
-// ('claudeBin', 'codexBin', for every agent). Pages cannot set it through the
-// local server; here the user confirms the exact command in a native dialog.
-async function setAgentProgram(win, { key, value, id } = {}) {
-  if (key !== 'command' && !Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
-  const next = typeof value === 'string' && value.trim() ? value.trim() : null;
-  const current = (await readSettings()).settings;
-  const agent = key === 'command' ? current.agents.find((a) => a.id === id) : null;
-  if (key === 'command' && !agent) throw new Error('no such agent');
-  if (key === 'command') checkAgentPatch({ command: next });
-  else checkSettingsPatch({ [key]: next });
-  const before = agent ? agent.command : current[key];
-  if (next !== null && next !== before) {
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'warning',
-      message: agent ? `Run this command for ${agent.name}?` : `Use this program as ${PROGRAMS[key]}?`,
-      detail: `${next}\n\nOpenDoc runs it in the doc's folder whenever a comment is waiting for ${agent ? agent.name : 'an agent'}.`,
-      buttons: ['Allow', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-    });
-    if (response !== 0) return false;
-  }
-  if (agent) await editAgents((agents) => updateAgent(agents, id, { command: next }));
-  else await updateSettings({ [key]: next });
-  return true;
-}
-
-// Agents > Programs > Choose…: pick the Claude Code or Codex executable in a native dialog.
-async function chooseProgram(win, key) {
-  if (!Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
-  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: `Choose ${PROGRAMS[key]}`,
-    buttonLabel: 'Choose',
-    filters: process.platform === 'win32' ? [{ name: 'Programs', extensions: ['exe', 'cmd'] }] : [],
-    properties: ['openFile'],
-  });
-  if (canceled || filePaths.length === 0) return false;
-  await updateSettings({ [key]: filePaths[0] });
-  return true;
+// Settings > Agent > Show folder: where the agent scripts are, to edit them.
+function showAgents() {
+  shell.openPath(agentsDir()).catch(() => {});
 }
 
 function revealDoc(win) {
@@ -819,8 +775,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderMove' && fromDoc) return sidebarMove(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);
   if (action === 'folderMenu' && fromDoc) return void (await sidebarMenu(win, event.sender, arg));
-  if (action === 'agentProgram' && fromDoc) return setAgentProgram(win, arg);
-  if (action === 'chooseProgram' && fromDoc) return chooseProgram(win, arg);
+  if (action === 'showAgents' && fromDoc) return void showAgents();
   if (action === 'recent' && fromStart) {
     return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path), kind: isDirectory(path) ? 'folder' : 'doc' }));
   }

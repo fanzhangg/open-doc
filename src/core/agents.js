@@ -1,104 +1,44 @@
-// The user's agents: collaborators with a name, an introduction, a persona,
-// their own permissions and a runtime, kept in the user's settings (one
-// roster for every doc). Pure, so the server and the page validate them the
-// same way.
+// The user's buddies (docs/architecture-v2.md calls who you @mention a
+// buddy; the code still says agent): a name, a persona and instructions,
+// kept in the user's settings (one roster for every doc). Pure, so the
+// server and the page validate them the same way. What runs a buddy is the
+// agent script picked in Settings, the same for every buddy.
 //
-// Every agent reads the doc it works on. Beyond that, permissions, each a
-// switch on the agent's card (PERMISSIONS):
-// - **Editor**: changes the doc. Without **Auto Editor** it proposes each
-//   change for the human to apply; with it, it edits directly. Neither: it
-//   only replies. Stored as `editMode`: 'none', 'approve' or 'auto'. A new
-//   agent edits directly, as a co-author would: every edit can be undone.
-// - **Auto Commenter** (`autoComment`): looks at every new comment that
-//   @mentions no one in the docs it is in, answering the ones that fit its
-//   persona. Without it, an agent answers only when @mentioned. Mentioning an
-//   agent brings it into the doc, as mentioning a person shares a doc with them.
-//   The first agent among those it works with leads them: it starts with
-//   Auto Commenter (`leaderless`); the others answer when @mentioned.
-// - **Web Searcher** (`webAccess`): searches and fetches the web.
-// - **File Searcher** (`fileAccess`): reads the user's other files.
-// Turning on web or files when the agent has the other asks to confirm: one
-// that reads your files could otherwise send them to a website.
-//
-// Agents are light. A new one belongs to the doc it was made in (`doc`: the
-// doc's path): it shows and answers only there, comes back whenever the doc
-// is opened, and is deleted when it is removed from the doc. Starring it
-// (`starred`) puts it in the user's library, for every doc. Agents saved
-// before stars existed count as starred. Names are unique among the starred
-// agents and each doc's own, so two docs may each have a "reviewer".
+// A new one belongs to the doc it was made in (`doc`: the doc's path): it
+// shows and answers only there, comes back whenever the doc is opened, and
+// is deleted when it is removed from the doc. Starring it (`starred`) puts
+// it in the user's library, for every doc. Names are unique among the
+// starred agents and each doc's own, so two docs may each have a "reviewer".
 //
 // A new doc starts with Clippy, the agent the app comes with: the first time
 // a doc is opened with no agents in it, Clippy joins it (under whatever name
 // the user gave it). Every other agent is added in the doc.
 //
 // Who an agent is takes two plain-text fields: its **persona**, one line
-// that defines it ("a strict copy editor") and shows on its card and in the
-// People panel, and its **instructions**, the details and rules behind it
-// (optional, edited in the Agents panel). Both reach every runtime with the
-// task, so the same agent can run on another runtime without being
-// rewritten. The runtime is what executes it: 'claude'
-// (Claude Code), 'codex' (OpenAI Codex CLI) or 'custom' (any command line).
-//
-// An agent's face (web/faces.js) is drawn from its `face`, a seed: null
-// draws it from the name. Renaming one keeps the face it had.
-//
-// What a doc says its own agent is can change outside OpenDoc (a git pull,
-// another program): the agent takes the new persona and instructions, but
-// not the permissions the user gave the old ones. It goes back to the safest
-// (safestPermissions), and `permissionsReset` says so on its card until the
-// user changes its permissions or who it is.
+// that shows on its card, and its **instructions**, the details and rules
+// behind it. An agent's face (web/faces.js) is drawn from its `face`, a
+// seed: null draws it from the name. Renaming one keeps the face it had.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 import { newId } from './ops.js';
 
-export const RUNTIMES = Object.freeze(['claude', 'codex', 'custom']);
-export const EDIT_MODES = Object.freeze(['none', 'approve', 'auto']);
-export const EFFORTS = Object.freeze(['low', 'medium', 'high']);
 export const MAX_PERSONA = 120;
 export const MAX_INSTRUCTIONS = 4000;
 export const MAX_AGENTS = 500;
 
-/**
- * One agent, as stored. `persona` is one line; `instructions` any length.
- * `command` (a custom runtime's command line) decides what program runs.
- * A Claude agent sees only the doc unless `webAccess` or `fileAccess`. A Codex
- * agent runs under a Codex permission profile (in the doc's folder it sees
- * only the doc and its sidecar); `webAccess` turns on its web search. `model` applies to both; `effort`, `maxTurns`,
- * `maxBudgetUsd`, `isolated` and `fileAccess` only to Claude. A Claude agent
- * with no `model` runs on a fast one (see claudeAdapter), at low `effort`:
- * most comments ask for small changes.
- */
+/** One agent, as stored: `persona` is one line; `instructions` any length. */
 export const AGENT_DEFAULTS = Object.freeze({
   face: null,
   starred: false,
   doc: null,
   persona: '',
   instructions: '',
-  runtime: 'claude',
-  command: null,
-  editMode: 'auto',
-  autoComment: false,
-  model: null,
-  effort: 'low',
-  maxTurns: 30,
-  runTimeoutMinutes: 10,
-  runsPerHour: 20,
-  maxBudgetUsd: null,
-  isolated: false,
-  webAccess: false,
-  fileAccess: false,
-  permissionsReset: false,
 });
 
-/** Agent fields that choose the program to run: set only in the desktop app or settings.json. */
-export const AGENT_PROGRAM_KEYS = Object.freeze(['command']);
+/** Agent fields only the server sets: which doc an unstarred agent belongs to. */
+export const AGENT_SERVER_KEYS = Object.freeze(['doc']);
 
-/** Agent fields only the server sets: which doc an unstarred agent belongs to, and whether its permissions were reset. */
-export const AGENT_SERVER_KEYS = Object.freeze(['doc', 'permissionsReset']);
-
-const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
-const integer = (min, max) => (v) => Number.isInteger(v) && v >= min && v <= max;
 const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= max && !/[\0\r\n]/.test(v);
 const orNull = (rule) => (v) => v === null || rule(v);
 
@@ -113,20 +53,6 @@ export const AGENT_RULES = Object.freeze({
   doc: orNull((v) => typeof v === 'string' && v.length > 0 && v.length <= 4096 && !v.includes('\0')),
   persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !/[\0\r\n]/.test(v),
   instructions: (v) => typeof v === 'string' && v.length <= MAX_INSTRUCTIONS && !v.includes('\0'),
-  runtime: oneOf(...RUNTIMES),
-  command: orNull(text(2000)),
-  editMode: oneOf(...EDIT_MODES),
-  autoComment: boolean,
-  model: orNull((v) => typeof v === 'string' && /^[A-Za-z0-9._:[\]-]{1,100}$/.test(v)),
-  effort: oneOf(...EFFORTS),
-  maxTurns: integer(1, 500),
-  runTimeoutMinutes: integer(1, 240),
-  runsPerHour: integer(1, 1000),
-  maxBudgetUsd: orNull((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0.01 && v <= 10_000),
-  isolated: boolean,
-  webAccess: boolean,
-  fileAccess: boolean,
-  permissionsReset: boolean,
 });
 
 /** The id of Clippy, the agent the app comes with and every new doc starts with. */
@@ -138,7 +64,7 @@ export const DEFAULT_AGENT_ID = 'a_default_clippy';
  * no job titles; who does what is up to the personas people write, Clippy's too.
  */
 export const DEFAULT_AGENTS = Object.freeze([
-  { id: DEFAULT_AGENT_ID, name: 'Clippy', persona: 'A general writing assistant that helps draft and edit docs', starred: true, editMode: 'auto', autoComment: true },
+  { id: DEFAULT_AGENT_ID, name: 'Clippy', persona: 'A general writing assistant that helps draft and edit docs', starred: true },
 ].map((agent) => Object.freeze({ ...AGENT_DEFAULTS, ...agent })));
 
 export class AgentError extends Error {
@@ -158,48 +84,16 @@ export function checkAgentPatch(patch) {
   return patch;
 }
 
-/**
- * A stored agent → a complete, valid one, or null when it has no valid id or
- * name. An agent saved as the one pilot that answered every open comment
- * (`role`), or with this switch's earlier name (`autoPilot`), keeps the job
- * as Auto Commenter.
- */
-export function resolveAgent(saved) {
-  if (!isObject(saved) || !AGENT_RULES.id(saved.id) || !AGENT_RULES.name(saved.name)) return null;
-  const stored = upgradePersona(saved);
+/** A stored agent → a complete, valid one, or null when it has no valid id or name. */
+export function resolveAgent(stored) {
+  if (!isObject(stored) || !AGENT_RULES.id(stored.id) || !AGENT_RULES.name(stored.name)) return null;
   const out = { id: stored.id, name: stored.name, ...AGENT_DEFAULTS };
   for (const key of Object.keys(AGENT_DEFAULTS)) {
     if (Object.hasOwn(stored, key) && AGENT_RULES[key](stored[key])) out[key] = stored[key];
   }
-  if (!Object.hasOwn(stored, 'autoComment') && (stored.autoPilot === true || stored.role === 'pilot')) out.autoComment = true;
-  if (!Object.hasOwn(stored, 'starred')) out.starred = true; // saved before stars: the user kept it
   if (!out.doc) out.starred = true; // in no doc: the user's
   if (out.starred) out.doc = null;
   return out;
-}
-
-/**
- * An agent saved before persona and instructions were split had an
- * introduction (`tagline`) and a `persona` of any length: the introduction,
- * or else a one-line persona, becomes the persona line, and the rest the
- * instructions.
- */
-function upgradePersona(stored) {
-  if (Object.hasOwn(stored, 'instructions')) return stored;
-  const { tagline, ...rest } = stored;
-  const old = typeof stored.persona === 'string' ? stored.persona.replace(/\0/g, '') : '';
-  const intro = typeof tagline === 'string' ? tagline.trim() : '';
-  const short = !/[\r\n]/.test(old.trim()) && old.trim().length <= MAX_PERSONA ? old.trim() : '';
-  const persona = (intro || short || firstSentence(old)).slice(0, MAX_PERSONA);
-  return { ...rest, persona, instructions: old.trim() === persona ? '' : old.slice(0, MAX_INSTRUCTIONS) };
-}
-
-/**
- * Whether none of `agents` has Auto Commenter: then a new agent joining them
- * leads, taking the comments that @mention no one.
- */
-export function leaderless(agents) {
-  return !agents.some((a) => a.autoComment);
 }
 
 /** Whether `agent` belongs to one doc only: not starred. */
@@ -258,29 +152,18 @@ export function draftAgent(fields = {}) {
 
 /**
  * What creating `draft` sends: its name, trimmed, and the fields changed from
- * the defaults; or null while the name is not valid. Left out: the fields the
- * server sets (the doc) and the program (set by the desktop app, which asks
- * first). An unchanged Auto Commenter is left for the server, which gives it
- * to the first agent in a doc.
+ * the defaults; or null while the name is not valid. The doc is the server's
+ * to set.
  */
 export function createFields(draft) {
   const name = (draft.name ?? '').trim();
   if (!AGENT_RULES.name(name)) return null;
   const fields = { name };
   for (const [key, value] of Object.entries(draft)) {
-    if (!Object.hasOwn(AGENT_DEFAULTS, key) || AGENT_SERVER_KEYS.includes(key) || AGENT_PROGRAM_KEYS.includes(key)) continue;
+    if (!Object.hasOwn(AGENT_DEFAULTS, key) || AGENT_SERVER_KEYS.includes(key)) continue;
     if (value !== AGENT_DEFAULTS[key]) fields[key] = value;
   }
   return checkAgentPatch(fields);
-}
-
-/**
- * The line that gives an agent `command` in settings.json, where the page
- * cannot set one (it goes in the agent's entry, in place of `"command": null`).
- * No command yet: an example to edit.
- */
-export function commandSnippet(command) {
-  return `"command": ${JSON.stringify(command || 'mybot --prompt-file {promptFile}')}`;
 }
 
 /** `roster` with agent `id` changed by `patch` (validated; the id cannot change). */
@@ -305,122 +188,9 @@ export function deleteAgent(roster, id) {
   return roster.filter((a) => a.id !== id);
 }
 
-/** The permissions, in the order cards show them. */
-export const PERMISSIONS = Object.freeze([
-  { key: 'editor', label: 'Editor', hint: 'Changes the doc. Without Auto Editor, it proposes each change for you to apply.' },
-  { key: 'autoEditor', label: 'Auto Editor', hint: 'Edits the doc directly, without asking you first. Every edit can be undone.' },
-  { key: 'autoComment', label: 'Auto Commenter', hint: 'Answers new comments that fit its persona without being @mentioned, in the docs it is in.' },
-  { key: 'web', label: 'Web Searcher', hint: 'Searches the web and opens web pages.' },
-  { key: 'files', label: 'File Searcher', hint: 'Reads your other files, except keys and .env files.' },
-].map((p) => Object.freeze(p)));
-
-/**
- * The patch that takes `agent` to the safest permissions, the ones an agent
- * set up from a doc starts with: it proposes edits (or only replies, if it
- * did), answers only when @mentioned, and has no web or files. Null when it
- * has nothing more.
- */
-export function safestPermissions(agent) {
-  const patch = {};
-  if (agent.editMode === 'auto') patch.editMode = 'approve';
-  if (agent.autoComment) patch.autoComment = false;
-  if (agent.webAccess) patch.webAccess = false;
-  if (agent.fileAccess) patch.fileAccess = false;
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-
-/** Which permissions `agent` has: { editor, autoEditor, autoComment, web, files }. */
-export function permissionsOf(agent) {
-  return {
-    editor: agent.editMode === 'approve' || agent.editMode === 'auto',
-    autoEditor: agent.editMode === 'auto',
-    autoComment: Boolean(agent.autoComment),
-    web: Boolean(agent.webAccess),
-    files: Boolean(agent.fileAccess),
-  };
-}
-
-/**
- * The agent patch that switches permission `key` of `agent` on or off.
- * Auto Editor needs Editor: switching it on turns Editor on, and switching
- * Editor off turns it off. Null for an unknown permission.
- */
-export function permissionPatch(agent, key, on) {
-  const edit = permissionsOf(agent);
-  switch (key) {
-    case 'editor':
-      return { editMode: on ? (edit.autoEditor ? 'auto' : 'approve') : 'none' };
-    case 'autoEditor':
-      return { editMode: on ? 'auto' : edit.editor ? 'approve' : 'none' };
-    case 'autoComment':
-      return { autoComment: on };
-    case 'web':
-      return { webAccess: on };
-    case 'files':
-      return { fileAccess: on };
-    default:
-      return null;
-  }
-}
-
 /** Who `agent` is, in a line: its persona, or '' when the user has not written one. */
 export function introOf(agent) {
   return (agent.persona ?? '').trim().split('\n')[0];
-}
-
-// The first sentence of `text`, "You are" left out ("A strict copy editor").
-function firstSentence(text) {
-  const first = text.trim().split('\n')[0].split(/(?<=[.!?])\s/)[0];
-  const intro = first.replace(/^you are\s+/i, '').replace(/[.!?:;,]+$/, '').trim();
-  return intro ? intro[0].toUpperCase() + intro.slice(1) : '';
-}
-
-/** What each runtime is called in the agents list, short. */
-export const RUNTIME_LABELS = Object.freeze({ claude: 'Claude', codex: 'Codex', custom: 'Command' });
-
-/** The model names Claude Code itself takes besides a full `claude-…` ID; the first three are suggested. */
-export const CLAUDE_MODEL_ALIASES = Object.freeze(['haiku', 'sonnet', 'opus', 'default', 'opusplan', 'sonnet[1m]', 'opus[1m]']);
-
-/**
- * The patch that moves `agent` to `runtime`, and the note to show, or ''.
- * A model names one program's model (sonnet means nothing to Codex), so the
- * model goes back to the new runtime's default in the same save.
- */
-export function runtimePatch(agent, runtime) {
-  const note = agent.model && agent.runtime !== runtime ? `Model reset to default (was ${agent.model}).` : '';
-  return { patch: { runtime, model: null }, note };
-}
-
-/**
- * The Model field's suggestions and placeholder for `runtime`, given the
- * model it runs on when none is set (`defaultModel`: Claude Code's, or the
- * one in the user's Codex config, or null).
- */
-export function modelChoices(runtime, defaultModel = null) {
-  if (runtime === 'claude') {
-    return { suggestions: CLAUDE_MODEL_ALIASES.slice(0, 3), placeholder: defaultModel ? `${defaultModel} (default)` : 'Default' };
-  }
-  if (runtime === 'codex') {
-    // Codex's model names change often: suggest only the one the user set.
-    return { suggestions: defaultModel ? [defaultModel] : [], placeholder: defaultModel ? `${defaultModel} (your Codex default)` : 'Your Codex default' };
-  }
-  return { suggestions: [], placeholder: '' };
-}
-
-/**
- * A warning for a model that `runtime` may not run, or ''. Only a guess from
- * the name: asking the program would cost a run.
- */
-export function modelWarning(runtime, model) {
-  if (runtime !== 'claude' || !model) return '';
-  const name = model.toLowerCase();
-  return CLAUDE_MODEL_ALIASES.includes(name) || name.startsWith('claude-') ? '' : 'Claude Code may not recognize this model.';
-}
-
-/** The labels of the permissions `agent` has: ['Editor', 'Web Searcher']. */
-export function permissionLabels(agent) {
-  const has = permissionsOf(agent);
-  return PERMISSIONS.filter((p) => has[p.key]).map((p) => p.label);
 }
 
 function isObject(value) {

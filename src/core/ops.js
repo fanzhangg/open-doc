@@ -6,13 +6,11 @@ import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
 import { AGENT_RULES } from './agents.js'; // used only inside functions, so the import cycle is safe
 
 export const FORMAT_VERSION = 1;
-export const WORKING_TTL_MS = 5 * 60 * 1000;
-export const MAX_HANDOFFS = 4; // agent-to-agent handoffs in a row in one thread, until a human writes again
 const MESSAGE_ID = /^m_[A-Za-z0-9_-]{6,}$/;
 const PARTICIPANT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export class OpError extends Error {
-  /** @param {'unknown_thread' | 'bad_input' | 'not_allowed'} code */
+  /** @param {'unknown_thread' | 'bad_input' | 'not_allowed' | 'not_found'} code */
   constructor(code, message) {
     super(message);
     this.code = code;
@@ -43,24 +41,16 @@ export function newId(prefix) {
  *   { type: 'addMessage', threadId, message }
  *   { type: 'resolve', threadId, by, kind?, at }   // humans only
  *   { type: 'reopen', threadId, by, kind? }        // humans only
- *   { type: 'setWorking', threadId, by, since, owner? }  // since: null clears `by`'s; owner marks a server run
- *   { type: 'beatWorking', threadId, by, since, owner? } // refresh `by`'s claim; no-op if it has none
- *   { type: 'pass', threadId, by }                 // `by` leaves an open ask to others
- *   { type: 'fail', threadId, by, error, at }      // `by`'s run on the ask failed
- *   { type: 'retry', threadId, name, by, kind? }   // humans only: `name` tries the ask again
- *   { type: 'cancel', threadId, name, by, kind? }  // humans only: takes the ask back from `name`
- *   { type: 'attachEdits', threadId, messageId, edits }
  *
  * A message may carry `edits` (what its author changed in the doc, §2.5),
  * `undoes` (the id of the message whose edits it reverted), `proposal`
  * (changes the author suggests instead of making them, §2.6) and `applies`
- * (the id of the message whose proposal it applied). An agent's message may
- * carry `to`, another agent it hands the thread to (SPEC.md §5): at most
- * MAX_HANDOFFS of them since the thread's latest message from a human.
+ * (the id of the message whose proposal it applied). A buddy's reply may
+ * carry `conflict: true` (part of its edit was dropped for the human's text)
+ * or `failed: true` (its run failed; the body says how).
  *
- * Only a human may resolve or reopen a thread, or retry or cancel an agent's
- * request (§2.2): `by` must not be a participant of kind "agent", and
- * `kind`, when given, must be "human".
+ * Only a human may resolve or reopen a thread (§2.2): `by` must not be a
+ * participant of kind "agent", and `kind`, when given, must be "human".
  */
 export function applyOp(sidecar, op) {
   switch (op.type) {
@@ -79,89 +69,14 @@ export function applyOp(sidecar, op) {
     case 'resolve':
       requireHuman(sidecar, op);
       return updateThread(sidecar, op.threadId, (t) =>
-        t.status === 'resolved' ? t : { ...t, status: 'resolved', resolvedBy: canonicalName(sidecar, op.by), resolvedAt: op.at, working: null });
+        t.status === 'resolved' ? t : { ...t, status: 'resolved', resolvedBy: canonicalName(sidecar, op.by), resolvedAt: op.at });
     case 'reopen':
       requireHuman(sidecar, op);
       return updateThread(sidecar, op.threadId, (t) =>
         t.status === 'open' ? t : { ...t, status: 'open', resolvedBy: null, resolvedAt: null });
-    case 'setWorking':
-      return updateThread(sidecar, op.threadId, (t) => {
-        const others = workingList(t).filter((w) => !sameName(w.by, op.by));
-        return { ...t, working: listOrNull(op.since ? [...others, workingEntry(op)] : others) };
-      });
-    case 'beatWorking':
-      // Refresh an existing claim's timestamp (a server run holds a long
-      // thread longer than the stale timeout). It never creates a claim, so
-      // a heartbeat landing after the thread was answered does not re-add one.
-      return updateThread(sidecar, op.threadId, (t) => {
-        if (!workingList(t).some((w) => sameName(w.by, op.by))) return t;
-        const others = workingList(t).filter((w) => !sameName(w.by, op.by));
-        return { ...t, working: listOrNull([...others, workingEntry(op)]) };
-      });
-    case 'pass':
-      return pass(sidecar, op);
-    case 'fail':
-      return fail(sidecar, op);
-    case 'retry':
-      requireHuman(sidecar, op, 'retry an agent');
-      return settle(sidecar, op, false);
-    case 'cancel':
-      requireHuman(sidecar, op, "cancel an agent's request");
-      return settle(sidecar, op, true);
-    case 'attachEdits':
-      return attachEdits(sidecar, op);
     default:
       throw new OpError('bad_input', `unknown operation: ${op.type}`);
   }
-}
-
-// An agent looked at the thread's open ask (one addressed to no one, SPEC
-// §5) and left it to others: it is out of that agent's inbox until a human
-// asks again. `passed` is optional; a thread without it has no passes.
-function pass(sidecar, { threadId, by }) {
-  if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
-  return updateThread(sidecar, threadId, (t) => {
-    const passed = t.passed ?? [];
-    const working = stopWorking(t, by);
-    if (passed.some((n) => sameName(n, by))) return working === t.working ? t : { ...t, working };
-    return { ...t, working, passed: [...passed, canonicalName(sidecar, by)] };
-  });
-}
-
-// An agent's run on the thread's ask failed with `error`: the ask is out of
-// its inbox until a human retries it, cancels it or asks again. `failed` is
-// optional; a thread without it has no failures.
-function fail(sidecar, { threadId, by, error, at }) {
-  if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
-  if (typeof error !== 'string' || error.trim() === '') throw new OpError('bad_input', 'a failure needs an error');
-  return updateThread(sidecar, threadId, (t) => ({
-    ...t,
-    working: stopWorking(t, by),
-    failed: [...(t.failed ?? []).filter((f) => !sameName(f.name, by)), { name: canonicalName(sidecar, by), error: error.slice(0, 500), at }],
-  }));
-}
-
-// A human settles agent `name`'s failed request: retrying puts the ask back
-// in its inbox; cancelling takes the ask back from it (`cancelled`) until a
-// human asks again.
-function settle(sidecar, { threadId, name }, cancel) {
-  if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new OpError('bad_input', `invalid participant name: ${name}`);
-  return updateThread(sidecar, threadId, (t) => {
-    const failed = (t.failed ?? []).filter((f) => !sameName(f.name, name));
-    const cancelled = t.cancelled ?? [];
-    const next = { ...t };
-    if (t.failed) next.failed = failed;
-    if (cancel && !cancelled.some((n) => sameName(n, name))) next.cancelled = [...cancelled, canonicalName(sidecar, name)];
-    if (cancel) next.working = stopWorking(t, name);
-    return next;
-  });
-}
-
-// What a new ask from a human resets.
-function fresh(t) {
-  const out = {};
-  for (const key of ['passed', 'failed', 'cancelled']) if (t[key]?.length) out[key] = [];
-  return out;
 }
 
 function join(sidecar, participant) {
@@ -175,7 +90,7 @@ function join(sidecar, participant) {
 
 // A participant with an `id` is one person whatever they are called (SPEC
 // §2.4): under a new name, their entry and every place the doc names them
-// (authors, mentions, resolvedBy, working, passed) take it. Entries without
+// (authors, mentions, resolvedBy) take it. Entries without
 // an id, from before the doc knew it, are theirs when named `name` or one
 // of `aka` (names they went by), and merge into one. Bodies stay as written.
 // A name another participant has is not taken: they keep their old one.
@@ -202,10 +117,6 @@ function identify(sidecar, participant, aka = []) {
   const threads = sidecar.threads.map((t) => ({
     ...t,
     resolvedBy: rename(t.resolvedBy),
-    ...(t.working ? { working: { ...t.working, by: rename(t.working.by) } } : {}),
-    ...(t.passed ? { passed: t.passed.map(rename).filter(once) } : {}),
-    ...(t.failed ? { failed: t.failed.map((f) => ({ ...f, name: rename(f.name) })).filter((f, i, all) => all.findIndex((g) => sameName(g.name, f.name)) === i) } : {}),
-    ...(t.cancelled ? { cancelled: t.cancelled.map(rename).filter(once) } : {}),
     messages: t.messages.map((m) => {
       const mine = m.author.id === id || (m.author.id === undefined && m.author.kind === kind && was(m.author.name));
       return { ...m, ...(mine ? { author: { ...m.author, name, id } } : {}), mentions: m.mentions.map(rename).filter(once) };
@@ -238,19 +149,11 @@ function about({ kind, persona, instructions }) {
 }
 
 // A participant leaves the doc (an agent removed from it): they are no
-// longer offered for @mentions and stop working on any thread. Their messages
-// stay, under their name.
+// longer offered for @mentions. Their messages stay, under their name.
 function leave(sidecar, name) {
   if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new OpError('bad_input', `invalid participant name: ${name}`);
   if (!sidecar.participants.some((p) => sameName(p.name, name))) return sidecar;
-  return {
-    ...sidecar,
-    participants: sidecar.participants.filter((p) => !sameName(p.name, name)),
-    threads: sidecar.threads.map((t) => {
-      const working = stopWorking(t, name);
-      return working === t.working ? t : { ...t, working };
-    }),
-  };
+  return { ...sidecar, participants: sidecar.participants.filter((p) => !sameName(p.name, name)) };
 }
 
 function addThread(sidecar, { id, anchor, message }) {
@@ -263,7 +166,6 @@ function addThread(sidecar, { id, anchor, message }) {
     status: 'open',
     resolvedBy: null,
     resolvedAt: null,
-    working: null,
     messages: [buildMessage(joined, message)],
   };
   return { ...joined, threads: [...joined.threads, thread] };
@@ -279,22 +181,12 @@ function addMessage(sidecar, { threadId, message }) {
     status: 'open',
     resolvedBy: null,
     resolvedAt: null,
-    // The agent's reply ends its "responding…" state.
-    working: stopWorking(t, message.author.name),
-    // A new ask from a human is open to every agent again, and asks again
-    // the ones that failed it or had it taken back.
-    ...(message.author.kind === 'human' && !message.undoes && !message.applies ? fresh(t) : {}),
-    messages: [...t.messages, buildMessage(joined, message, t)],
+    messages: [...t.messages, buildMessage(joined, message)],
   }));
 }
 
-function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, proposal, applies, to }, thread = null) {
+function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, proposal, applies, conflict, failed }) {
   if (typeof body !== 'string' || body.trim() === '') throw new OpError('bad_input', 'message body is empty');
-  if (to !== undefined) {
-    to = validateHandoff(sidecar, author, to, thread);
-    // The human reads whom it went to in the text itself.
-    if (!parseMentions(body, sidecar.participants).includes(to)) body = `@${to} ${body}`;
-  }
   const message = {
     id,
     author: authorIn(sidecar, author),
@@ -302,34 +194,16 @@ function buildMessage(sidecar, { id, author, body, createdAt, edits, undoes, pro
     mentions: parseMentions(body, sidecar.participants),
     createdAt,
   };
-  if (to !== undefined) message.to = to;
   if (edits !== undefined) message.edits = validateEdits(edits);
   if (undoes !== undefined) message.undoes = validateMessageId(undoes);
   if (proposal !== undefined) message.proposal = validateProposal(proposal);
   if (applies !== undefined) message.applies = validateMessageId(applies);
-  return message;
-}
-
-// A handoff goes from an agent to another agent of the doc, in a reply, and
-// only so many in a row: a human's message starts the count again.
-function validateHandoff(sidecar, author, to, thread) {
-  if (typeof to !== 'string' || !NAME_PATTERN.test(to)) throw new OpError('bad_input', `invalid participant name: ${to}`);
-  if (author.kind !== 'agent') throw new OpError('bad_input', 'only an agent hands a thread to another agent; a human @mentions them');
-  if (!thread) throw new OpError('bad_input', 'a thread is handed to another agent in a reply');
-  const target = sidecar.participants.find((p) => sameName(p.name, to));
-  if (!target || target.kind !== 'agent') throw new OpError('bad_input', `${to} is not an agent in this doc`);
-  if (sameName(target.name, author.name)) throw new OpError('bad_input', 'an agent cannot hand a thread to itself');
-  if (handoffs(thread.messages) >= MAX_HANDOFFS) {
-    throw new OpError('bad_input', `this thread has had ${MAX_HANDOFFS} handoffs between agents since the human last wrote; reply without --to and let the human decide`);
+  for (const [key, value] of [['conflict', conflict], ['failed', failed]]) {
+    if (value === undefined) continue;
+    if (value !== true || author.kind !== 'agent') throw new OpError('bad_input', `${key} is true, on a buddy's reply`);
+    message[key] = true;
   }
-  return target.name;
-}
-
-/** Handoffs between agents (messages with `to`) since the thread's latest message from a human. */
-export function handoffs(messages) {
-  const said = messages.filter((m) => !m.undoes && !m.applies);
-  const human = said.findLastIndex((m) => m.author.kind === 'human');
-  return said.slice(human + 1).filter((m) => m.to).length;
+  return message;
 }
 
 function validateMessageId(id) {
@@ -348,26 +222,13 @@ function validateProposal(proposal) {
 }
 
 // Resolving and reopening are the human's decisions (SPEC.md §2.2).
-function requireHuman(sidecar, { by, kind }, action = 'resolve or reopen a thread') {
+function requireHuman(sidecar, { by, kind }) {
   if (typeof by !== 'string' || !NAME_PATTERN.test(by)) throw new OpError('bad_input', `invalid participant name: ${by}`);
   const known = sidecar.participants.find((p) => sameName(p.name, by));
   if (kind === 'agent' || known?.kind === 'agent') {
-    throw new OpError('not_allowed', `${by} is an agent; only a human can ${action}. Reply instead.`);
+    throw new OpError('not_allowed', `${by} is an agent; only a human can resolve or reopen a thread. Reply instead.`);
   }
   if (kind !== undefined && kind !== 'human') throw new OpError('bad_input', `invalid participant kind: ${kind}`);
-}
-
-// Set a message's edits; an empty list removes them.
-function attachEdits(sidecar, { threadId, messageId, edits }) {
-  if (!Array.isArray(edits) || edits.length > 0) validateEdits(edits);
-  return updateThread(sidecar, threadId, (t) => {
-    const current = t.messages.find((m) => m.id === messageId);
-    if (!current) throw new OpError('bad_input', `no message ${messageId} in thread ${threadId}`);
-    if (JSON.stringify(current.edits ?? []) === JSON.stringify(edits)) return t;
-    const { edits: _old, ...rest } = current;
-    const next = edits.length > 0 ? { ...rest, edits } : rest;
-    return { ...t, messages: t.messages.map((m) => (m === current ? next : m)) };
-  });
 }
 
 function validateEdits(edits) {
@@ -415,55 +276,3 @@ function validateParticipant(participant) {
     throw new OpError('bad_input', `invalid participant id: ${participant.id}`);
   }
 }
-
-/**
- * Who is working on the thread: `working` as a list of { by, since }. A
- * sidecar written before several could work at once holds a single object.
- */
-export function workingList(thread) {
-  const w = thread.working;
-  if (!w) return [];
-  return (Array.isArray(w) ? w : [w]).filter((e) => e && typeof e.by === 'string');
-}
-
-/**
- * Who is working on the thread as seen at `now`: entries whose `since` (set
- * on claim and refreshed by `beatWorking` while a server run lasts) is older
- * than the stale timeout do not count, so a crashed holder's claim frees up.
- */
-export function activeWorking(thread, now = Date.now()) {
-  return workingList(thread).filter((w) => now - Date.parse(w.since) < WORKING_TTL_MS);
-}
-
-/** A working entry; keeps `owner` (the server run that made it) when given. */
-function workingEntry({ by, since, owner }) {
-  return owner ? { by, since, owner } : { by, since };
-}
-
-/**
- * Drop every claim a server run made (one with an `owner`), keeping claims
- * from a chat session's `wait` (which has none). A doc server calls this when
- * it starts: any run it would own is one a previous, now-dead server left, so
- * its thread is free again without waiting out the stale timeout.
- */
-export function clearAgentClaims(sidecar) {
-  let changed = false;
-  const threads = sidecar.threads.map((t) => {
-    const kept = workingList(t).filter((w) => !w.owner);
-    if (kept.length === workingList(t).length) return t;
-    changed = true;
-    return { ...t, working: listOrNull(kept) };
-  });
-  return changed ? { ...sidecar, threads } : sidecar;
-}
-
-// `working` without `name`'s entry (the same value when it had none).
-function stopWorking(thread, name) {
-  const list = workingList(thread);
-  const rest = list.filter((w) => !sameName(w.by, name));
-  return rest.length === list.length ? thread.working : listOrNull(rest);
-}
-
-// No one working is written as null, which tools that knew only a single
-// object also read as no one.
-const listOrNull = (list) => (list.length > 0 ? list : null);

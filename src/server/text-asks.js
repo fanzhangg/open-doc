@@ -27,11 +27,11 @@ export class TextAsks {
    * as the human's comment and returns `{ threadId, messageId }` (null when
    * it cannot). `open(threadId, messageId)` says whether that message is
    * still the thread's last, unanswered. `rebind({ threadId, messageId, text,
-   * start, end })` gives it the ask's new text. `restart(threadId)` stops a
-   * run answering the thread; `release()` lets the agents look again.
+   * start, end })` gives it the ask's new text; `release()` lets the agents
+   * look again.
    */
-  constructor({ idleMs, settleMs, mentionable, text, send, open, rebind, restart, release, onError = (error) => console.error('Could not follow an @mention in the doc:', error) }) {
-    Object.assign(this, { idleMs, settleMs, mentionable, text, send, open, rebind, restart, release, onError });
+  constructor({ idleMs, settleMs, mentionable, text, send, open, rebind, release, onError = (error) => console.error('Could not follow an @mention in the doc:', error) }) {
+    Object.assign(this, { idleMs, settleMs, mentionable, text, send, open, rebind, release, onError });
     // { name, token: anchor of its `@name`, at, seen: the text `at` is in,
     //   touched: when its paragraph last changed, left: the human moved on
     //   since, thread: { id, messageId, quote } once sent, held }
@@ -102,7 +102,6 @@ export class TextAsks {
         continue;
       }
       ask.held = true;
-      await this.restart(ask.thread.id);
     }
     const names = after.includes('@') ? await this.mentionable() : [];
     for (const m of addedMentions(before, after, names)) {

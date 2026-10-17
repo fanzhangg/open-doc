@@ -17,14 +17,14 @@ files:
   - desktop/**
   - bin/**
   - src/**
-  - skills/**
+  - agents/**
   - dist/web/**
   - build/icon.png
   - build/icon.svg
   - build/document.ico
 
-# No asar archive: agent runs read the skill file and run the bundled CLI
-# (`opendoc`) from these files directly, outside the app.
+# No asar archive: the shipped agent scripts are copied from agents/, and
+# the bundled CLI (`opendoc`) runs from these files directly.
 asar: false
 
 win:

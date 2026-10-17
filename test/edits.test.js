@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyProposal, diffEdits, findEdit, findProposal, proposeChanges, revertEdits } from '../src/core/diff.js';
 import { OpError } from '../src/core/ops.js';
-import { project, createAnchor, findQuote } from '../src/core/index.js';
-import { attributeEdits } from '../src/server/agents/dispatcher.js';
 import { SAMPLE } from './helpers.js';
 
 const edits = (before, after) => diffEdits(before, after).map((c) => c.edit);
@@ -54,30 +52,6 @@ test('CRLF sources round-trip', () => {
   const crlf = SAMPLE.replace(/\n/g, '\r\n');
   const after = crlf.replace('extra load', 'extra peak load');
   assert.equal(revertEdits(after, edits(crlf, after)), crlf);
-});
-
-test('attribution: the thread whose anchor the change touches, else the run', () => {
-  const text = project(SAMPLE).text;
-  const thread = (id, quote) => {
-    const { start, end } = findQuote(text, quote);
-    return { id, anchor: createAnchor(text, start, end), detached: false };
-  };
-  const load = thread('t_load01', 'extra load');
-  const ship = thread('t_ship01', 'ship all six features');
-  const docLevel = { id: 't_doc001', anchor: null, detached: false };
-
-  const both = attributeEdits([load, ship], SAMPLE, peak);
-  assert.deepEqual([...both.keys()], ['t_load01']);
-  assert.equal(both.get('t_load01')[0].after, 'peak ');
-
-  const heading = SAMPLE.replace('# Q4 Launch Plan', '# Q4 Launch Plan (draft)');
-  const unclaimed = attributeEdits([load, ship], SAMPLE, heading);
-  assert.deepEqual([...unclaimed.keys()], ['t_load01', 't_ship01']);
-  assert.equal(unclaimed.get('t_ship01')[0].scope, 'run');
-
-  const alone = attributeEdits([docLevel], SAMPLE, heading);
-  assert.equal(alone.get('t_doc001')[0].after, ' (draft)');
-  assert.equal(alone.get('t_doc001')[0].scope, undefined);
 });
 
 test('proposals: before must be unique; applying finds it again after other edits', () => {

@@ -1,13 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COALESCE_MS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
 import { startServer } from '../src/server/server.js';
-import { customAdapter } from '../src/server/agents/adapters.js';
 import { SAMPLE, tempDoc } from './helpers.js';
 
 const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-agent.js');
@@ -114,12 +113,17 @@ async function waitUntil(check, ms = 10_000) {
   return false;
 }
 
-async function withServer(fn, options = {}) {
+// The doc's buddy, histbot, runs the fake agent script.
+async function withServer(fn) {
   const docPath = await tempDoc(SAMPLE);
   const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
   const settingsDir = await configRoot();
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan' }));
-  const server = await startServer(docPath, { assetsDir, settingsDir, ...options(docPath, settingsDir) });
+  process.env.FAKE_DIR = settingsDir;
+  await mkdir(join(settingsDir, 'agents'));
+  await writeFile(join(settingsDir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
+  await writeFile(join(settingsDir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
+  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', agents: [{ id: 'a_histbot', name: 'histbot', starred: true }] }));
+  const server = await startServer(docPath, { assetsDir, settingsDir });
   try {
     await fn({ server, docPath, versions: async () => (await call(server, 'GET', '/api/history')).body.versions });
   } finally {
@@ -160,18 +164,16 @@ test('the server records saves, changes on disk and restores', async () => {
 
     assert.equal((await call(server, 'GET', '/api/history/version?id=../index')).status, 400);
     assert.equal((await call(server, 'GET', '/api/history/version?id=v_nothere1')).status, 404);
-  }, () => ({}));
+  });
 });
 
-test("the agent's edits during a run are recorded as its own", { timeout: 30_000 }, async () => {
+test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async () => {
   await withServer(async ({ server, versions }) => {
-    const message = { id: 'm_hist0001', author: me, body: '@histbot please edit' };
+    const message = { id: 'm_hist0001', author: me, body: '@histbot replace "extra load" with "extra peak load"' };
     await call(server, 'POST', '/api/ops', { op: { type: 'addThread', id: 't_hist0001', anchor: null, message } });
     assert.ok(await waitUntil(async () => (await versions()).length === 2), 'the agent edit was recorded');
     const [, agentVersion] = await versions();
     assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
     assert.deepEqual(agentVersion.threadIds, ['t_hist0001']);
-  }, (_doc, settingsDir) => ({
-    agent: { name: 'histbot', adapter: customAdapter(`"${process.execPath}" "${FAKE_AGENT}" {threadsFile} edit-slow "${join(settingsDir, 'runs.log')}"`) },
-  }));
+  });
 });

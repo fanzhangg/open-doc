@@ -1,36 +1,34 @@
 // Local editor server for one doc: static editor assets, a small JSON API,
 // and a Server-Sent Events stream of changes (doc, sidecar, agents, settings).
 // Single user, bound to 127.0.0.1, every API call carries a per-run token.
+// It runs the buddies @mentioned in the doc's comments (runner.js) and
+// merges what each run changed into the doc when it ends.
 
 import { createServer } from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, realpath } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, blockAt, clearAgentClaims, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
+import { OpError, applyOp, askedOf, createAnchor, newId, project } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, leaderless, safestPermissions, updateAgent } from '../core/agents.js';
-import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
+import { AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, updateAgent } from '../core/agents.js';
+import { SettingsError } from '../core/settings.js';
+import { merge3 } from '../core/merge.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
-import { configDir, editAgents, readSettings, settingsPath, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, editAgents, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
+import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { splice } from './splice.js';
-import { Team } from './agents/team.js';
+import { Runner } from './runner.js';
 import { TextAsks } from './text-asks.js';
-import { agentSpec } from './agents/config.js';
-import { CLAUDE_DEFAULT_MODEL, programStatus, userCodexConfig } from './agents/adapters.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
-// One id per process: it marks the claims this process's agent runs make, so
-// a server that starts over a crash can tell its predecessor's leftover
-// claims (to clear) from a chat session's (to leave).
-const HOST_ID = newId('h');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
-const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
+const MENTION_IDLE_MS = 15_000; // an @mention typed in the doc is sent once its paragraph is still this long
 const MENTION_SETTLE_MS = 3_000; // an @mention typed in the doc that ends a sentence is sent once its paragraph is still this long
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
@@ -39,7 +37,7 @@ const ASSETS = {
   '/assets/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
-const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen', 'retry', 'cancel']);
+const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);
 const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
 
 class HttpError extends Error {
@@ -51,29 +49,24 @@ class HttpError extends Error {
 }
 
 /**
- * The doc's agents run as a Team (src/server/agents/team.js): a headless
- * agent run starts whenever a comment waits on one of them, one run at a time.
- * `agent`, when given, is `{ name, adapter, limits, editMode, persona }`, an
- * agent from `serve` flags that joins the doc and works on it while this
- * server runs. `agentFromSettings: true` also runs the user's agents
- * (the Agents panel) that are invited into the doc, following every change
- * to them or to who is invited.
+ * The doc's buddies are the user's agents (the Agents panel) that are in
+ * it; one @mentioned in a comment answers it, in a run of the agent script
+ * picked in Settings (src/store/agents.js), while this server runs.
  * `settingsDir` is the folder of the user's settings file (default: the
- * per-user config folder). `typingMs` is how long the human counts as typing
- * in a paragraph after their last keystroke there (default 15 s).
+ * per-user config folder), which also holds the agent scripts.
  * An @mention typed in the doc is sent once its paragraph has been still for
- * `mentionIdleMs` (default `typingMs`), or `mentionSettleMs` (default 3 s)
+ * `mentionIdleMs` (default 15 s), or `mentionSettleMs` (default 3 s)
  * when it ends a sentence, or at once when the human moves on from it.
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path); the page is told its new name.
- * `folder`, when given, is the folder the doc was opened from (the desktop
- * app's sidebar): the user's agents may read every file in it, though they
- * still work only on this doc. `setFolder(folder)` changes it.
- * @returns {Promise<{ url: string, port: number, token: string, team: Team, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => Promise<void>, close: () => Promise<void> }>}
+ * `folder`, when given, is the project folder the doc was opened from (the
+ * desktop app's sidebar), handed to runs as OPENDOC_PROJECT. `setFolder(folder)`
+ * changes it.
+ * @returns {Promise<{ url: string, port: number, token: string, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => Promise<void>, close: () => Promise<void> }>}
  */
 export async function startServer(docPath, {
-  port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, agent: fixedAgent, agentFromSettings: useSettings = false, folder = null,
-  settingsDir = configDir(), typingMs = TYPING_MS, mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = typingMs,
+  port = 0, token = randomBytes(16).toString('hex'), assetsDir = DEFAULT_ASSETS, folder = null,
+  settingsDir = configDir(), mentionSettleMs = MENTION_SETTLE_MS, mentionIdleMs = MENTION_IDLE_MS,
 } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   const clients = new Set();
@@ -81,41 +74,22 @@ export async function startServer(docPath, {
   const docKey = () => resolve(docPath);
   // An agent's entry among the doc's participants: its name, and who it is.
   const asParticipant = (agent) => ({ name: agent.name, kind: 'agent', persona: agent.persona, instructions: agent.instructions });
-  // The doc's agents; they start once the server listens (syncAgents).
-  const broadcastAgents = () => broadcast('agents', team.statuses());
-  const team = new Team({
-    docPath,
+  const broadcastAgents = () => broadcast('agents', agentStatuses());
+  const runner = new Runner({
+    asks: () => asks(),
+    doc: async () => ({ name: basename(docPath), markdown: (await readDoc(docPath)).markdown }),
+    script: () => agentScript(currentAgent, settingsDir),
+    folder: () => folder,
+    human: async () => (await human()).name,
+    finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
-    options: (spec) => ({
-      hostId: HOST_ID,
-      onStatus: broadcastAgents,
-      guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken(spec.name) },
-      typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
-      humanName: async () => (await human()).name,
-      catchUp: () => onFilesChanged(),
-      held: (threadId) => textAsks.held(threadId),
-    }),
   });
+  let currentAgent = 'claude'; // the agent script that runs every buddy (settings.agent)
   let actualPort = port;
   let lastDocHash = null;
   let lastSidecarHash = null;
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
-  // Where the human last typed ({ anchor, at }, from the page), and the keys
-  // the agents' runs use to ask the guard before an edit: one per agent, so
-  // a request names the agent that made it, and not the page's token, which
-  // would let a run act as the human.
-  let editing = null;
-  const guardTokens = new Map(); // agent name, lower case → token
-  const guardToken = (name) => {
-    const key = name.toLowerCase();
-    if (!guardTokens.has(key)) guardTokens.set(key, randomBytes(16).toString('hex'));
-    return guardTokens.get(key);
-  };
-  const guardedAgent = (given) => {
-    for (const [key, value] of guardTokens) if (tokenMatches(given, value)) return team.get(key);
-    return null;
-  };
   // Writes to the doc and its sidecar run one at a time, so a rename never
   // lands in the middle of a save.
   let writes = Promise.resolve();
@@ -180,12 +154,6 @@ export async function startServer(docPath, {
     }
 
     if (!url.pathname.startsWith('/api/')) throw new HttpError(404, 'not_found', 'not found');
-    if (req.method === 'POST' && url.pathname === '/api/guard') {
-      checkWriteRequest(req, actualPort);
-      const agent = guardedAgent(req.headers['x-opendoc-guard']);
-      if (!agent) throw new HttpError(403, 'forbidden', 'missing or wrong guard token');
-      return sendJson(res, 200, await guard(agent, await readJson(req)));
-    }
     if (!tokenMatches(req.headers['x-opendoc-token'] ?? url.searchParams.get('t'), token)) {
       throw new HttpError(403, 'forbidden', 'missing or wrong token');
     }
@@ -211,21 +179,7 @@ export async function startServer(docPath, {
         const patch = await readJson(req);
         if (patch && Object.hasOwn(patch, 'agents')) throw new HttpError(400, 'bad_input', 'agents are changed through /api/roster');
         if (patch && Object.hasOwn(patch, 'id')) throw new HttpError(400, 'bad_input', 'your id cannot be changed');
-        await checkProgram(PROGRAM_KEYS, patch, (await readSettings(settingsDir)).settings);
         return sendJson(res, 200, { settings: await updateSettings(patch, settingsDir) });
-      }
-      case 'GET /api/agent': {
-        const member = team.get(url.searchParams.get('name') ?? '');
-        if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
-        return sendJson(res, 200, { status: member.status(), log: member.log() });
-      }
-      case 'POST /api/agent':
-        return sendJson(res, 200, { status: await agentAction(await readJson(req)) });
-      case 'GET /api/programs':
-        return sendJson(res, 200, { programs: await programs() });
-      case 'POST /api/programs/check': {
-        const body = await readJson(req);
-        return sendJson(res, 200, await recheckProgram(body?.kind));
       }
       case 'POST /api/agents/invite': {
         const body = await readJson(req);
@@ -247,10 +201,17 @@ export async function startServer(docPath, {
         const body = await readJson(req);
         return sendJson(res, 200, await rosterDelete(body));
       }
+      case 'GET /api/scripts':
+        return sendJson(res, 200, { agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) });
+      case 'POST /api/scripts/reset': {
+        // A shipped agent script, written again as it came.
+        const name = (await readJson(req))?.name;
+        if (!SHIPPED_AGENTS.includes(name)) throw new HttpError(400, 'bad_input', 'not a shipped agent');
+        await installAgents(settingsDir, { reset: name });
+        return sendJson(res, 200, { agents: await listAgents(settingsDir) });
+      }
       case 'POST /api/editing': {
-        const anchor = (await readJson(req))?.anchor;
-        editing = anchor ? { anchor: validAnchor(anchor), at: Date.now() } : null;
-        textAsks.caret(editing?.anchor ?? null);
+        textAsks.caret(validAnchor((await readJson(req))?.anchor));
         return sendJson(res, 200, {});
       }
       case 'POST /api/caret': {
@@ -260,14 +221,6 @@ export async function startServer(docPath, {
         const anchor = (await readJson(req))?.anchor;
         textAsks.caret(anchor ? validAnchor(anchor) : null);
         return sendJson(res, 200, {});
-      }
-      case 'POST /api/agent/overwritten': {
-        const body = await readJson(req);
-        const changes = validChanges(body?.changes);
-        const member = typeof body.name === 'string' ? team.get(body.name) : team.editing() ?? team.lastToRun();
-        if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
-        const offered = await serial(() => member.overwritten(changes));
-        return sendJson(res, 200, { offered });
       }
       case 'GET /api/history':
         await chronicle;
@@ -312,7 +265,6 @@ export async function startServer(docPath, {
         await noteDisk(current); // whatever reached the disk since, before the human's change
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
-        team.humanEdited(current.markdown, next); // not the agent's edit
         await update(docPath, (s) => s); // refresh anchors against the saved doc
         await noteVersion(next, { kind: 'edit', author: await human() });
         textAsks.humanSaved(current.markdown, next);
@@ -337,23 +289,10 @@ export async function startServer(docPath, {
         await noteDisk(current);
         lastWritten = hashBytes(Buffer.from(next));
         await writeAtomic(docPath, next);
-        team.humanEdited(current.markdown, next);
         await update(docPath, (s) => s);
         await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
       }
       return [res, 200, { docHash: hashBytes(Buffer.from(next)), markdown: next }];
-    }
-  }
-
-  // An agent's program (a custom command, or where Claude Code is) decides
-  // what runs on this machine, so a page can only clear it. Setting one takes
-  // the desktop app, which asks the user first, or editing settings.json.
-  async function checkProgram(keys, patch, current) {
-    if (!patch || typeof patch !== 'object') return;
-    for (const key of keys) {
-      if (Object.hasOwn(patch, key) && patch[key] !== null && patch[key] !== (current?.[key] ?? null)) {
-        throw new HttpError(403, 'forbidden', "an agent's program can be set in the desktop app or in settings.json, not from the page");
-      }
     }
   }
 
@@ -368,55 +307,107 @@ export async function startServer(docPath, {
       settings,
       settingsSaved: saved,
       defaultName: defaultName(),
-      agents: team.statuses(),
+      agents: agentStatuses(),
       docKey: docKey(), // which of the user's unstarred agents are this doc's own
-      folder: folder && basename(folder), // the folder the agents may read, if any
-      settingsFile: settingsPath(settingsDir), // where a browser tab says to set an agent's command
     };
   }
 
-  // ---- the doc's agents ----
+  // ---- the doc's buddies ----
 
-  // Who should work on the doc now: the agent from flags, and the user's
-  // agents that are participants of the doc (Clippy, whom it started with, this
-  // doc's own, or starred ones brought in by an @mention or added), except
-  // one being removed. Another doc's own agents never work here; this doc's own come
-  // before a starred agent of the same name. A restart is due whenever an
-  // agent's `key` changes; switching Auto Commenter only changes whom it answers.
-  const leaving = new Set();
-  async function wantedAgents() {
-    const specs = [];
-    if (fixedAgent) specs.push({ presence: 'online', ...fixedAgent, key: 'flags', source: 'flags', join: true });
-    if (!useSettings) return specs;
+  // The user's agents that are in the doc: this doc's own and starred ones
+  // brought in (Clippy, whom it started with, or one @mentioned or added),
+  // this doc's own before a starred one of the same name. A person of the
+  // same name keeps the name; the agent stays out.
+  async function buddies() {
     const { settings } = await readSettings(settingsDir);
+    currentAgent = settings.agent;
     let participants;
     try {
       participants = (await readSidecar(docPath)).participants;
     } catch {
-      return specs; // a sidecar that cannot be read invites no one
+      return []; // a sidecar that cannot be read invites no one
     }
     const ours = settings.agents.filter((a) => availableIn(a, docKey())).sort((a, b) => Number(a.starred) - Number(b.starred));
+    const found = [];
     for (const agent of ours) {
-      const here = participants.some((p) => p.kind === 'agent' && sameName(p.name, agent.name));
-      if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
-      // A person of the same name keeps the name; the agent stays out.
+      if (found.some((b) => sameName(b.name, agent.name))) continue;
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, permissionsReset: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, folder });
-      specs.push({ ...agentSpec(agent, settings, docPath, { folder }), key, source: 'roster', join: false, participant: asParticipant(agent) });
+      if (participants.some((p) => p.kind === 'agent' && sameName(p.name, agent.name))) found.push(agent);
     }
-    return specs;
+    return found;
   }
 
-  // Bring the team in line with the settings and the sidecar, one change at a time.
-  let agentChanges = Promise.resolve();
-  let closed = false;
-  let listening = false; // runs need the server's port, for the guard
-  function syncAgents() {
-    const run = agentChanges.then(async () => {
-      if (!closed && listening) await team.sync(await wantedAgents());
+  // The asks waiting on a buddy now (src/core/inbox.js), but not the ones
+  // whose @mention in the text the human is still writing.
+  async function asks() {
+    if (closed) return [];
+    const here = await buddies();
+    if (here.length === 0) return [];
+    const sidecar = await readSidecar(docPath);
+    return sidecar.threads.filter((t) => !textAsks.held(t.id)).flatMap((thread) => askedOf(thread).flatMap((name) => {
+      const buddy = here.find((b) => sameName(b.name, name));
+      return buddy ? [{ threadId: thread.id, thread, buddy }] : [];
+    }));
+  }
+
+  // The buddies in the doc, and which are at work.
+  let shownBuddies = [];
+  function agentStatuses() {
+    const running = runner.statuses();
+    return shownBuddies.map((b) => {
+      const run = running.find((r) => sameName(r.name, b.name));
+      return { name: b.name, id: b.id, persona: b.persona, state: run ? 'running' : 'ready', threadIds: run?.threadIds ?? [] };
     });
-    agentChanges = run.catch((error) => console.error('Could not start the agents:', error));
-    return agentChanges;
+  }
+
+  // The buddies or the sidecar changed: show who is here, and start the runs due.
+  let closed = false;
+  async function syncAgents() {
+    if (closed) return;
+    try {
+      shownBuddies = await buddies();
+    } catch (error) {
+      console.error('Could not read the buddies:', error);
+    }
+    broadcastAgents();
+    await runner.notify();
+  }
+
+  // A run ended (src/server/runner.js): merge what it changed in its copy
+  // into the doc, three-way from the copy as it started, then post its
+  // reply. Where the human changed the same text meanwhile, theirs stays,
+  // the buddy's change there is dropped and the reply says `conflict`.
+  // Run in `serial`.
+  async function finishRun({ threadId, name, base, edited, body, failed }) {
+    let conflict = false;
+    if (edited !== null && edited !== base) {
+      let current = null;
+      try {
+        current = await readDoc(docPath);
+      } catch {
+        // the doc is gone: nothing to merge into
+      }
+      if (current) {
+        const crlf = current.markdown.includes('\r\n');
+        const lf = (text) => text.replace(/\r\n/g, '\n');
+        const merged = merge3(lf(base), lf(current.markdown), lf(edited), { prefer: 'ours' });
+        conflict = merged.dropped.length > 0;
+        const next = crlf ? merged.text.replace(/\n/g, '\r\n') : merged.text;
+        if (next !== current.markdown) {
+          await noteDisk(current);
+          lastWritten = hashBytes(Buffer.from(next));
+          await writeAtomic(docPath, next);
+          await update(docPath, (s) => s); // refresh anchors against the merged doc
+          await noteVersion(next, { kind: 'edit', author: { name, kind: 'agent' }, threadIds: [threadId] });
+        }
+      }
+    }
+    const message = {
+      id: newId('m'), author: { name, kind: 'agent' }, body, createdAt: new Date().toISOString(),
+      ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
+    };
+    await update(docPath, (s) => (s.threads.some((t) => t.id === threadId) ? applyOp(s, { type: 'addMessage', threadId, message }) : s))
+      .catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
 
   async function currentSettings() {
@@ -424,9 +415,7 @@ export async function startServer(docPath, {
   }
 
   // Invite agent `id` from the user's roster: it joins the doc's participants
-  // like a person added to it, and starts answering. Only the sidecar write
-  // holds the write lock: starting the agent can wait on another agent's run,
-  // and saves must not wait with it.
+  // like a person added to it, and answers when @mentioned.
   async function invite(id) {
     const agent = (await currentSettings()).agents.find((a) => a.id === id && availableIn(a, docKey()));
     if (!agent) throw new HttpError(404, 'not_found', 'no such agent');
@@ -436,46 +425,36 @@ export async function startServer(docPath, {
       return applyOp(s, { type: 'join', participant: asParticipant(agent) });
     }));
     await syncAgents();
-    return { sidecar, agents: team.statuses() };
+    return { sidecar, agents: agentStatuses() };
   }
 
-  // Remove an agent from the doc: its run in progress ends, and it leaves the
-  // participants, so it is no longer offered for @mentions. Its comments stay.
+  // Remove an agent from the doc: it leaves the participants, so it is no
+  // longer offered for @mentions. A run in progress still replies. Its
+  // comments stay.
   async function removeAgent(name) {
     if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new HttpError(400, 'bad_input', 'invalid name');
-    if (fixedAgent && sameName(fixedAgent.name, name)) throw new HttpError(409, 'flags', `${name} was started with --agent; stop opendoc serve to remove it`);
     const { participants } = await readSidecar(docPath);
     if (!participants.some((p) => p.kind === 'agent' && sameName(p.name, name))) throw new HttpError(404, 'not_found', `no agent ${name} in this doc`);
-    leaving.add(name.toLowerCase());
-    try {
-      await syncAgents(); // ends its run, outside the write lock (see invite)
-      const sidecar = await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name })));
-      // This doc's own agent has nowhere else to be: removing it deletes it.
-      const own = useSettings ? (await currentSettings()).agents.find((a) => docOnly(a) && a.doc === docKey() && sameName(a.name, name)) : null;
-      const settings = own ? await editAgents((agents) => deleteAgent(agents, own.id), settingsDir) : null;
-      return { sidecar, agents: team.statuses(), ...(settings ? { settings } : {}) };
-    } finally {
-      leaving.delete(name.toLowerCase());
-    }
+    const sidecar = await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name })));
+    // This doc's own agent has nowhere else to be: removing it deletes it.
+    const own = (await currentSettings()).agents.find((a) => docOnly(a) && a.doc === docKey() && sameName(a.name, name));
+    const settings = own ? await editAgents((agents) => deleteAgent(agents, own.id), settingsDir) : null;
+    await syncAgents();
+    return { sidecar, agents: agentStatuses(), ...(settings ? { settings } : {}) };
   }
 
-  // New agent for the user's roster, from the page: any fields but its
-  // program. With `invite`, it joins this doc at once. A name asked for is
-  // kept or refused as taken; none gets a free one ("agent", "agent-2", …).
+  // New agent for the user's roster, from the page. With `invite`, it joins
+  // this doc at once. A name asked for is kept or refused as taken; none gets
+  // a free one ("agent", "agent-2", …).
   async function rosterCreate(body) {
     const { id: _id, ...fields } = body?.agent ?? {};
-    await checkProgram(AGENT_PROGRAM_KEYS, fields, {});
     checkServerKeys(fields);
     // Unless starred, it is this doc's own.
     fields.doc = fields.starred === true ? null : docKey();
     const me = (await human()).name;
-    // The first agent in the doc leads it: it starts with Auto Commenter.
-    const { participants } = Object.hasOwn(fields, 'autoComment') ? {} : await readSidecar(docPath);
-    const here = (a) => availableIn(a, docKey()) && participants.some((p) => p.kind === 'agent' && sameName(p.name, a.name));
     let created;
     const settings = await editAgents((agents) => {
-      const lead = participants ? { autoComment: leaderless(agents.filter(here)) } : {};
-      created = createAgent(agents, { ...fields, ...lead }, [me], { exact: Object.hasOwn(fields, 'name') });
+      created = createAgent(agents, fields, [me], { exact: Object.hasOwn(fields, 'name') });
       return [...agents, created];
     }, settingsDir).catch(agentError);
     const joined = body?.invite === true ? await invite(created.id) : {};
@@ -484,15 +463,12 @@ export async function startServer(docPath, {
 
   // Change one of the user's agents. Renaming one that is in this doc keeps
   // it here under the new name; other docs keep the old one until it is
-  // invited again. The answer does not wait for the agent to restart (after
-  // a run in progress, then checking its program): a switch on its card
-  // flips at once, and the new status follows over SSE.
+  // invited again.
   async function rosterUpdate(body) {
     const id = body?.id;
     const patch = body?.patch ?? {};
     const before = (await currentSettings()).agents.find((a) => a.id === id);
     if (!before) throw new HttpError(404, 'not_found', 'no such agent');
-    await checkProgram(AGENT_PROGRAM_KEYS, patch, before);
     checkServerKeys(patch);
     // Starring puts it in the library, for every doc. Unstarring keeps it in
     // this doc as its own; one not in this doc leaves the library (the docs
@@ -503,8 +479,6 @@ export async function startServer(docPath, {
       if (!here) return rosterDelete({ id });
       patch.doc = docKey();
     }
-    // The user has looked at it again: its card stops saying its permissions were reset.
-    if (['editMode', 'autoComment', 'webAccess', 'fileAccess', 'persona', 'instructions'].some((k) => Object.hasOwn(patch, k))) patch.permissionsReset = false;
     const me = (await human()).name;
     // The settings and the doc change together, so adoptDocAgents never
     // takes this change for one made outside OpenDoc.
@@ -523,8 +497,8 @@ export async function startServer(docPath, {
       }
       return saved;
     });
-    syncAgents();
-    return { settings, agents: team.statuses() };
+    await syncAgents();
+    return { settings, agents: agentStatuses() };
   }
 
   // Delete one of the user's agents; it leaves this doc too. Other docs keep
@@ -535,7 +509,7 @@ export async function startServer(docPath, {
     const settings = await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
     await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name: agent.name })));
     await syncAgents();
-    return { settings, agents: team.statuses() };
+    return { settings, agents: agentStatuses() };
   }
 
   // Which doc an agent belongs to is the server's to say.
@@ -549,7 +523,6 @@ export async function startServer(docPath, {
   // new doc has someone to answer; other agents are added in the doc. A doc
   // that has agents keeps the ones it has.
   async function joinDefaultAgent() {
-    if (!useSettings) return;
     const clippy = (await currentSettings()).agents.find((a) => a.id === DEFAULT_AGENT_ID && a.starred);
     if (!clippy) return; // deleted or made one doc's own: no one
     let participants;
@@ -567,18 +540,10 @@ export async function startServer(docPath, {
 
   // A doc carries its agents (SPEC §2.4). One that is not set up here yet (a
   // cloned repo, another computer, or one unstarred elsewhere) is set up from
-  // the doc as this doc's own, with the safest permissions: it proposes
-  // edits (not the default for new agents: the doc's text can steer it),
-  // answers only when @mentioned, and has no web or files. One the doc does
-  // not describe is set up too, with no persona. A doc's own agent follows
-  // what the doc says it is. Permissions never come from the doc.
-  //
-  // OpenDoc writes a doc's own agent to the settings and the sidecar
-  // together (rosterUpdate, in the same queue), so when the two disagree,
-  // the doc was changed outside OpenDoc: the agent takes what it says, at
-  // the safest permissions, and its card says so. Run it in `serial`.
+  // the doc as this doc's own; one the doc does not describe is set up too,
+  // with no persona. A doc's own agent follows what the doc says it is.
+  // Run it in `serial`.
   async function adoptDocAgents() {
-    if (!useSettings) return false;
     let participants;
     try {
       participants = (await readSidecar(docPath)).participants;
@@ -594,10 +559,9 @@ export async function startServer(docPath, {
         const instructions = p.instructions ?? '';
         const described = Boolean(persona || instructions);
         const mine = next.find((a) => sameName(a.name, p.name) && availableIn(a, docKey()));
-        if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey(), editMode: 'approve', autoComment: false }, [me])];
+        if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey() }, [me])];
         else if (described && docOnly(mine) && (mine.persona !== persona || mine.instructions !== instructions)) {
-          const reset = safestPermissions(mine);
-          next = updateAgent(next, mine.id, { persona, instructions, ...(reset ? { ...reset, permissionsReset: true } : {}) });
+          next = updateAgent(next, mine.id, { persona, instructions });
         }
       }
       return next;
@@ -619,15 +583,11 @@ export async function startServer(docPath, {
     return chronicle;
   }
 
-  // The doc on disk changed and not by this server's hand: the edit of the
-  // agent holding the floor (only one writes at a time), otherwise a change
-  // made outside OpenDoc.
+  // The doc on disk changed and not by this server's hand: a change made
+  // outside OpenDoc (buddies edit only their copies).
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
-    const agentNow = team.editing()?.status();
-    return noteVersion(doc.markdown, agentNow
-      ? { kind: 'edit', author: { name: agentNow.name, kind: 'agent' }, threadIds: agentNow.threadIds }
-      : { kind: 'external', author: null });
+    return noteVersion(doc.markdown, { kind: 'external', author: null });
   }
 
   // The human, by the id that keeps them one person in the doc whatever
@@ -652,44 +612,6 @@ export async function startServer(docPath, {
     await serial(() => update(docPath, (s) => asHuman(s, who)));
   }
 
-  // 'retry' an agent that is offline.
-  // ---- Agents > Programs ----
-
-  // The last check of each program, for the path it checked: opening the
-  // page again does not run the programs again; a new path, or Check, does.
-  const programChecks = {};
-  async function programs(recheck = null) {
-    const settings = await currentSettings();
-    const kinds = ['claude', 'codex'];
-    for (const kind of kinds) {
-      const bin = settings[`${kind}Bin`] ?? null;
-      const last = programChecks[kind];
-      if (!last || last.bin !== bin || recheck === kind) programChecks[kind] = { bin, status: programStatus(kind, bin) };
-    }
-    // What an agent with no model runs on, for the Model field. The Codex
-    // config is read each time: the user may change it without OpenDoc.
-    const defaultModel = { claude: CLAUDE_DEFAULT_MODEL, codex: userCodexConfig().model ?? null };
-    return Object.fromEntries(await Promise.all(kinds.map(async (kind) => [kind, { ...(await programChecks[kind].status), defaultModel: defaultModel[kind] }])));
-  }
-
-  // Check: run the program's checks again, then retry this doc's agents that
-  // could not start on it. Nothing else re-checks an agent's program.
-  async function recheckProgram(kind) {
-    if (kind !== 'claude' && kind !== 'codex') throw new HttpError(400, 'bad_input', 'kind must be claude or codex');
-    const result = await programs(kind);
-    const stuck = team.statuses().filter((s) => s.kind === kind && s.state === 'unavailable');
-    await Promise.all(stuck.map((s) => team.get(s.name)?.retry()));
-    return { programs: result, agents: team.statuses() };
-  }
-
-  async function agentAction(body) {
-    const member = team.get(typeof body?.name === 'string' ? body.name : '');
-    if (!member) throw new HttpError(404, 'no_agent', 'no such agent in this doc');
-    if (body.action !== 'retry') throw new HttpError(400, 'bad_input', 'action must be retry');
-    await member.retry();
-    return member.status();
-  }
-
   // An @mention of an agent typed in the doc's text, not in a comment, works
   // like one (src/server/text-asks.js): once the human is done writing it,
   // it becomes their comment on the text from the @ to the end of its
@@ -710,12 +632,11 @@ export async function startServer(docPath, {
       }
     },
     rebind: (ask) => serial(() => rebindTextAsk(ask)),
-    restart: (threadId) => team.restart(threadId),
-    release: () => team.notify(),
+    release: () => runner.notify(),
   });
 
   async function sendTextAsk({ name, text, start, end }) {
-    const roster = useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
+    const roster = (await currentSettings()).agents.filter((a) => availableIn(a, docKey()));
     const who = await me();
     const { author } = who;
     const threadId = newId('t');
@@ -736,7 +657,6 @@ export async function startServer(docPath, {
       const message = { id: messageId, author, body: text.slice(start, end), createdAt: new Date().toISOString() };
       return applyOp(next, { type: 'addThread', id: threadId, anchor: createAnchor(text, start, end), message });
     }));
-    freeParagraph(text, start);
     if (joined) await syncAgents();
     return sent ? { threadId, messageId } : null;
   }
@@ -749,24 +669,15 @@ export async function startServer(docPath, {
       if (!thread || thread.messages.at(-1)?.id !== messageId) return s;
       const body = text.slice(start, end);
       const messages = thread.messages.map((m) => (m.id === messageId ? { ...m, body, mentions: parseMentions(body, s.participants) } : m));
-      const next = { ...thread, anchor: createAnchor(text, start, end), detached: false, messages, ...(thread.passed ? { passed: [] } : {}) };
+      const next = { ...thread, anchor: createAnchor(text, start, end), detached: false, messages };
       return { ...s, threads: s.threads.map((t) => (t === thread ? next : t)) };
     });
-    freeParagraph(text, start);
-  }
-
-  // The human is done with the ask at `start` of `text`: the agent may edit
-  // its paragraph to answer (a new keystroke there counts again).
-  function freeParagraph(text, start) {
-    const at = editing && locate(text, editing.anchor);
-    const block = blockAt(text, start);
-    if (at && block.start <= at.end && at.start <= block.end) editing = null;
   }
 
   // Agents an @mention in the text can reach: the doc's agents, and the
   // user's other agents (a mention brings one in, as in a comment).
   async function mentionableAgents() {
-    const names = team.statuses().map((s) => s.name);
+    const names = agentStatuses().map((s) => s.name);
     let participants = [];
     try {
       participants = (await readSidecar(docPath)).participants;
@@ -774,7 +685,7 @@ export async function startServer(docPath, {
       // no sidecar yet: no participants
     }
     names.push(...participants.filter((p) => p.kind === 'agent').map((p) => p.name));
-    if (useSettings) names.push(...(await currentSettings()).agents.filter((a) => availableIn(a, docKey())).map((a) => a.name));
+    names.push(...(await currentSettings()).agents.filter((a) => availableIn(a, docKey())).map((a) => a.name));
     const people = participants.filter((p) => p.kind === 'human');
     return names.filter((name, i) => names.findIndex((n) => sameName(n, name)) === i && !people.some((p) => sameName(p.name, name)));
   }
@@ -786,7 +697,7 @@ export async function startServer(docPath, {
     const who = await me();
     const op = validateOp(body?.op, who.author);
     const message = op.message;
-    const roster = message && useSettings ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
+    const roster = message ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
     let joined = false;
     // Only the write holds the lock (see sendTextAsk).
     const sidecar = await serial(() => update(docPath, (s) => {
@@ -799,10 +710,7 @@ export async function startServer(docPath, {
       return applyOp(next, op);
     }));
     if (joined) await syncAgents();
-    // Retrying an agent that cannot start checks its program again first.
-    const retried = op.type === 'retry' ? team.get(op.name) : null;
-    if (retried?.status().state === 'unavailable') await retried.retry();
-    return { sidecar, ...(joined || retried ? { agents: team.statuses() } : {}) };
+    return { sidecar, ...(joined ? { agents: agentStatuses() } : {}) };
   }
 
   function openEvents(req, res) {
@@ -812,74 +720,10 @@ export async function startServer(docPath, {
       connection: 'keep-alive',
     });
     res.write(`event: hello\ndata: ${JSON.stringify({ docHash: lastDocHash, sidecarHash: lastSidecarHash, missing })}\n\n`);
-    // Agents start after the server does, so their statuses may have changed
-    // since the page read /api/state.
-    res.write(`event: agents\ndata: ${JSON.stringify(team.statuses())}\n\n`);
+    // Runs may have started or ended since the page read /api/state.
+    res.write(`event: agents\ndata: ${JSON.stringify(agentStatuses())}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
-  }
-
-  // An edit `agent`'s run is about to make (from `opendoc guard`): it waits
-  // while another agent writes the doc, and takes the floor until the edit
-  // is done (`event: 'post'`, from the hook after it). Refused when the
-  // floor stays taken, or while it would change the paragraph the human
-  // typed in during the last `typingMs`; otherwise the page is told where it
-  // is about to land.
-  async function guard(agent, body) {
-    if (body?.event === 'post') {
-      await agent.endEdit();
-      return {};
-    }
-    const old = typeof body?.oldString === 'string' ? body.oldString.replace(/\r\n/g, '\n') : '';
-    if (!old || !(await aboutDoc(body))) return { allow: true };
-    if (!(await agent.startEdit())) {
-      const by = team.editing();
-      return {
-        allow: false,
-        reason: `${by ? `@${by.name} is` : 'Another agent is'} editing the doc right now. Do the rest of your work first and try this edit again after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
-      };
-    }
-    const markdown = (await readDoc(docPath)).markdown.replace(/\r\n/g, '\n');
-    const at = markdown.indexOf(old);
-    if (at === -1) {
-      await agent.endEdit();
-      return { allow: true }; // the edit fails on its own
-    }
-    const human = typingIn(markdown);
-    if (human && at < human.end && human.start < at + old.length) {
-      agent.avoided();
-      await agent.endEdit();
-      return {
-        allow: false,
-        reason: `The human is typing in the paragraph that starts "${human.quote}" right now. Edit other parts first. If you still need to change this paragraph, try once more after that; if it is refused again, propose the change with opendoc propose instead of editing.`,
-      };
-    }
-    broadcast('agentTarget', { quote: project(old).text.trim().slice(0, 300) });
-    return { allow: true };
-  }
-
-  // Whether the edit the guard is asked about is to the doc (a run that may
-  // read other files can also be refused edits to them). A request that does
-  // not say is taken to be.
-  async function aboutDoc({ filePath, cwd }) {
-    if (typeof filePath !== 'string' || !filePath) return true;
-    const real = (path) => realpath(path).catch(() => path);
-    const [edited, doc] = await Promise.all([real(resolve(typeof cwd === 'string' ? cwd : dirname(docPath), filePath)), real(resolve(docPath))]);
-    return process.platform === 'linux' ? edited === doc : edited.toLowerCase() === doc.toLowerCase();
-  }
-
-  // The whole lines of `markdown` the human typed in during the last
-  // `typingMs`, with the start of their text: { start, end, quote }, or null.
-  function typingIn(markdown) {
-    if (!editing || Date.now() - editing.at > typingMs) return null;
-    const projection = project(markdown);
-    const found = locate(projection.text, editing.anchor);
-    if (!found) return null;
-    const range = sourceRange(projection, found.start, found.end);
-    const start = markdown.lastIndexOf('\n', range.start - 1) + 1;
-    const lineEnd = markdown.indexOf('\n', range.end);
-    const quote = projection.text.slice(found.start, found.end).split('\n')[0].slice(0, 60);
-    return { start, end: lineEnd === -1 ? markdown.length : lineEnd, quote };
   }
 
   function broadcast(event, data) {
@@ -887,8 +731,8 @@ export async function startServer(docPath, {
     for (const res of clients) res.write(chunk);
   }
 
-  // Watch both files; refresh anchors when the doc changes (the agent may
-  // have edited it directly) and tell the page what changed, including the
+  // Watch both files; refresh anchors when the doc changes (another program
+  // may have edited it) and tell the page what changed, including the
   // doc going missing (moved or deleted outside the app) and coming back.
   async function onFilesChanged() {
     try {
@@ -917,9 +761,8 @@ export async function startServer(docPath, {
       if (sidecarHash !== lastSidecarHash) {
         lastSidecarHash = sidecarHash;
         broadcast('sidecar', { hash: sidecarHash });
-        team.notify();
-        // Someone may have been invited or removed, or the doc (a git pull)
-        // may bring agents of its own.
+        // A new ask, someone invited or removed, or the doc (a git pull)
+        // bringing agents of its own.
         serial(adoptDocAgents).catch((error) => console.error('Could not set up the doc\'s agents:', error)).finally(() => syncAgents());
       }
     } catch (error) {
@@ -947,26 +790,25 @@ export async function startServer(docPath, {
       const before = docKey();
       const target = (await move(docPath, newPath)) ?? newPath;
       stopWatching();
-      await team.stop();
+      await runner.stop(); // their asks run again once the doc is at its new name
       await chronicle;
       // This doc's own agents move with it.
-      if (useSettings) {
-        await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: resolve(target) } : a)), settingsDir)
-          .catch((error) => console.error('Could not move the doc\'s agents:', error));
-      }
+      if ((await currentSettings()).agents.some((a) => a.doc === before)) await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: resolve(target) } : a)), settingsDir)
+        .catch((error) => console.error('Could not move the doc\'s agents:', error));
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
-      team.docPath = target;
       // A folder moved with the doc in it: the watch may have seen it go.
       if (missing) broadcast('missing', { missing: false, doc: basename(docPath) });
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
-      await syncAgents(); // hooks, and so warnings, depend on the folder
+      runner.resume();
+      await syncAgents();
       broadcast('renamed', { doc: basename(docPath), docKey: docKey() });
       return docPath;
     });
   }
 
+  await installAgents(settingsDir).catch((error) => console.error('Could not write the agent scripts:', error));
   const opened = await readDoc(docPath);
   lastDocHash = opened.hash;
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
@@ -988,25 +830,17 @@ export async function startServer(docPath, {
     server.listen(port, '127.0.0.1', resolve);
   });
   actualPort = server.address().port;
-  listening = true;
-
-  // No agent run exists yet, so any run's claim in the sidecar is one a
-  // previous server left when it stopped: free those threads now instead of
-  // waiting out the stale timeout. A chat session's claim (no owner) stays.
-  await update(docPath, clearAgentClaims).catch(() => {});
   await syncAgents();
 
   return {
     url: `http://127.0.0.1:${actualPort}/?t=${token}`,
     port: actualPort,
     token,
-    team,
+    runner,
     docPath: () => docPath,
     moveTo,
     async setFolder(next) {
       folder = next;
-      broadcast('folder', { folder: folder && basename(folder) });
-      await syncAgents(); // they restart with the folder to read
     },
     async close() {
       clearInterval(heartbeat);
@@ -1014,9 +848,7 @@ export async function startServer(docPath, {
       stopWatching();
       stopWatchingSettings();
       closed = true;
-      await team.stop(); // ends runs in progress, which a pending agent change may be waiting on
-      await agentChanges;
-      await team.stop();
+      await runner.stop();
       for (const res of clients) res.end();
       await new Promise((resolve) => server.close(resolve));
     },
@@ -1082,23 +914,9 @@ function validateOp(op, me) {
       return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
     case 'resolve':
       return { type: 'resolve', threadId: threadId(op.threadId), by: me.name, kind: 'human', at: now };
-    case 'retry':
-    case 'cancel':
-      if (!NAME_PATTERN.test(op.name ?? '')) throw new HttpError(400, 'bad_input', 'invalid agent name');
-      return { type: op.type, threadId: threadId(op.threadId), name: op.name, by: me.name, kind: 'human' };
     default:
       return { type: 'reopen', threadId: threadId(op.threadId), by: me.name, kind: 'human' };
   }
-}
-
-// What the editor kept of the human's where the agent had changed the same
-// text: [{ before: the human's text, after: the agent's }].
-function validChanges(changes) {
-  const text = (v) => typeof v === 'string' && v.length <= 200_000;
-  const ok = Array.isArray(changes) && changes.length > 0 && changes.length <= 20
-    && changes.every((c) => c && text(c.before) && c.before.length > 0 && text(c.after) && c.before !== c.after);
-  if (!ok) throw new HttpError(400, 'bad_input', 'expected { changes: [{ before, after }] }');
-  return changes.map(({ before, after }) => ({ before, after }));
 }
 
 function agentError(error) {

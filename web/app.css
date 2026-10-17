@@ -391,7 +391,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 /* a selection inside commented text has to read over its grey */
 .od-editor .od-hl::selection, .od-editor .od-hl *::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .od-hl-active { background: var(--highlight-active); }
-.od-hl-working { background: var(--agent-soft); animation: od-shimmer 1.6s ease-in-out infinite; }
 /* a proposal or a past edit shown in the text; .od-replay plays it once: removal first, then the new text */
 .od-mark-del { color: var(--del); text-decoration: line-through; text-decoration-color: var(--del); background: color-mix(in srgb, var(--del) 8%, transparent); }
 .od-mark-ins { color: var(--ins); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--ins) 50%, transparent); background: color-mix(in srgb, var(--ins) 10%, transparent); }
@@ -402,7 +401,6 @@ del.od-mark-del { margin-right: 0.15em; }
 @keyframes od-replay-del { from { text-decoration-color: transparent; background: transparent; color: var(--text); } }
 @keyframes od-replay-ins { from { opacity: 0; background: color-mix(in srgb, var(--ins) 35%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .od-replay { animation: none !important; } }
-@keyframes od-shimmer { 50% { background: var(--agent-glow); } }
 
 /* text the agent just changed, labelled with its name, fading out */
 .od-flash { animation: od-flash 6s ease-out forwards; border-radius: 2px; }

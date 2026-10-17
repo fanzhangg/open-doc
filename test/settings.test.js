@@ -4,9 +4,9 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, commandSnippet, createAgent, createFields, deleteAgent, draftAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, safestPermissions, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, createAgent, createFields, deleteAgent, draftAgent, docOnly, introOf, resolveRoster, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -112,51 +112,29 @@ test('watchSettings sees the file appear and change', async () => {
 test('agents: the app comes with Clippy, starred, generic, and no built-in roles', () => {
   const roster = resolveSettings(null).agents;
   assert.deepEqual(roster.map((a) => [a.id, a.name, a.persona, a.starred, a.doc]), [[DEFAULT_AGENT_ID, 'Clippy', 'A general writing assistant that helps draft and edit docs', true, null]], 'a generic writing assistant');
-  assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'A poet' }), 'A poet', 'the persona is the line on its card');
   assert.equal(introOf({ persona: '', instructions: 'You are a poet.' }), '', 'empty until the user writes one');
 });
 
-test('agents: a persona is one line; instructions hold the rest; old agents are split', () => {
+test('agents: a persona is one line; instructions hold the rest', () => {
   assert.doesNotThrow(() => checkAgentPatch({ persona: 'A strict copy editor', instructions: 'Fix grammar only.\nReply with a list.' }));
   assert.throws(() => checkAgentPatch({ persona: 'two\nlines' }), /persona/);
   assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(121) }), /persona/);
   assert.throws(() => checkAgentPatch({ instructions: 'x'.repeat(4001) }), /instructions/);
   assert.throws(() => checkAgentPatch({ tagline: 'gone' }), /unknown agent setting: tagline/);
-  const [short, introduced, long] = resolveRoster([
-    { id: 'a_old001', name: 'translator', tagline: '', persona: 'Translate English to Chinese when I @you' },
-    { id: 'a_old002', name: 'will', tagline: 'Polishes style', persona: 'You are Will.\nKeep the voice.' },
-    { id: 'a_old003', name: 'sam', persona: 'You are Sam, the proofreader. Your job is spelling.\nNothing else.' },
-  ]);
-  assert.deepEqual([short.persona, short.instructions], ['Translate English to Chinese when I @you', '']);
-  assert.deepEqual([introduced.persona, introduced.instructions], ['Polishes style', 'You are Will.\nKeep the voice.']);
-  assert.deepEqual([long.persona, long.instructions], ['Sam, the proofreader', 'You are Sam, the proofreader. Your job is spelling.\nNothing else.']);
-  assert.equal(Object.hasOwn(short, 'tagline'), false);
 });
 
-test('agents: a new one edits directly, and the first among its peers leads', () => {
-  assert.equal(createAgent([]).editMode, 'auto', 'Auto Editor, as a co-author');
-  assert.equal(createAgent([]).autoComment, false, 'Auto Commenter is the caller\'s choice');
-  assert.equal(leaderless([]), true, 'no one yet: the next one leads');
-  assert.equal(leaderless([{ autoComment: false }, { autoComment: false }]), true);
-  assert.equal(leaderless([{ autoComment: false }, { autoComment: true }]), false);
-});
 
 test('agents: a new one is a draft until created, and Create sends only what changed', () => {
   const draft = draftAgent({ face: 'seed1234' });
-  assert.deepEqual([draft.id, draft.name, draft.runtime, draft.face], [null, '', 'claude', 'seed1234'], 'the defaults, no id or name yet');
+  assert.deepEqual([draft.id, draft.name, draft.face], [null, '', 'seed1234'], 'the defaults, no id or name yet');
   assert.equal(createFields(draft), null, 'no name: nothing to create');
   assert.equal(createFields({ ...draft, name: '  ' }), null);
   assert.equal(createFields({ ...draft, name: 'bad name' }), null, 'a name it could not be @mentioned by');
   assert.deepEqual(createFields({ ...draft, name: ' critic ' }), { name: 'critic', face: 'seed1234' }, 'the name trimmed, and the face it was drawn with');
-  const set = { ...draft, name: 'critic', persona: 'A tough reader', runtime: 'codex', webAccess: true, maxTurns: 40 };
-  assert.deepEqual(createFields(set), { name: 'critic', face: 'seed1234', persona: 'A tough reader', runtime: 'codex', webAccess: true, maxTurns: 40 });
-  // The doc is the server's to set and the program the desktop app's; Auto
-  // Commenter left unchanged is the server's to give to a doc's first agent.
-  const fields = createFields({ ...draft, name: 'bot', runtime: 'custom', command: 'mybot {promptFile}', doc: '/x.md', autoComment: false });
-  assert.deepEqual(fields, { name: 'bot', face: 'seed1234', runtime: 'custom' });
-  assert.equal(createFields({ ...draft, name: 'lead', autoComment: true }).autoComment, true, 'a choice made in the draft is kept');
+  assert.deepEqual(createFields({ ...draft, name: 'critic', persona: 'A tough reader', doc: '/x.md' }), { name: 'critic', face: 'seed1234', persona: 'A tough reader' }, 'the doc is the server\'s to set');
 });
+
 
 test('agents: a name asked for is kept or refused; none asked for gets a free one', () => {
   const roster = [createAgent([], { name: 'critic' })];
@@ -166,91 +144,22 @@ test('agents: a name asked for is kept or refused; none asked for gets a free on
   assert.equal(createAgent(roster, { name: 'muse' }, [], { exact: true }).name, 'muse');
 });
 
-test('agents: the settings.json line for a command, where the page cannot set it', () => {
-  assert.equal(commandSnippet('mybot --prompt-file {promptFile}'), '"command": "mybot --prompt-file {promptFile}"');
-  assert.equal(commandSnippet('"C:\\bots\\run.exe" {doc}'), String.raw`"command": "\"C:\\bots\\run.exe\" {doc}"`, 'escaped as JSON');
-  assert.equal(commandSnippet(null), '"command": "mybot --prompt-file {promptFile}"', 'none yet: an example to edit');
-  assert.deepEqual(JSON.parse(`{${commandSnippet('a "b"')}}`), { command: 'a "b"' }, 'valid JSON in an object');
-});
-
-test('agents: each permission is a switch, and Auto Editor needs Editor', () => {
-  const agent = { ...AGENT_DEFAULTS, editMode: 'none' };
-  assert.deepEqual(permissionsOf(agent), { editor: false, autoEditor: false, autoComment: false, web: false, files: false });
-  assert.deepEqual(permissionPatch(agent, 'editor', true), { editMode: 'approve' });
-  assert.deepEqual(permissionPatch(agent, 'autoEditor', true), { editMode: 'auto' }, 'Auto Editor turns Editor on');
-  const auto = { ...agent, editMode: 'auto' };
-  assert.deepEqual(permissionPatch(auto, 'autoEditor', false), { editMode: 'approve' }, 'off, it still proposes');
-  assert.deepEqual(permissionPatch(auto, 'editor', false), { editMode: 'none' }, 'Editor off turns Auto Editor off');
-  assert.deepEqual(permissionPatch({ ...agent, editMode: 'approve' }, 'editor', true), { editMode: 'approve' });
-  assert.deepEqual(permissionPatch(agent, 'autoComment', true), { autoComment: true });
-  assert.deepEqual(permissionPatch(agent, 'web', true), { webAccess: true });
-  assert.deepEqual(permissionPatch(agent, 'files', true), { fileAccess: true });
-  assert.equal(permissionPatch(agent, 'reader', false), null, 'reading the doc is not a switch');
-  assert.deepEqual(permissionLabels(agent), []);
-});
-
-test('agents: another runtime starts on its default model, and the Model field says which', () => {
-  const sonnet = { ...AGENT_DEFAULTS, model: 'sonnet' };
-  assert.deepEqual(runtimePatch(sonnet, 'codex'), { patch: { runtime: 'codex', model: null }, note: 'Model reset to default (was sonnet).' });
-  assert.deepEqual(runtimePatch(AGENT_DEFAULTS, 'codex'), { patch: { runtime: 'codex', model: null }, note: '' }, 'nothing to say with no model');
-  assert.doesNotThrow(() => checkAgentPatch(runtimePatch(sonnet, 'custom').patch), 'saved in one change');
-
-  assert.deepEqual(modelChoices('claude', 'haiku'), { suggestions: ['haiku', 'sonnet', 'opus'], placeholder: 'haiku (default)' });
-  assert.deepEqual(modelChoices('codex', 'gpt-test'), { suggestions: ['gpt-test'], placeholder: 'gpt-test (your Codex default)' });
-  assert.deepEqual(modelChoices('codex', null), { suggestions: [], placeholder: 'Your Codex default' }, 'no Codex model names of its own');
-
-  assert.equal(modelWarning('claude', 'Opus'), '');
-  assert.equal(modelWarning('claude', 'claude-sonnet-4-5'), '');
-  assert.equal(modelWarning('claude', null), '');
-  assert.equal(modelWarning('claude', 'gpt-5'), 'Claude Code may not recognize this model.');
-  assert.equal(modelWarning('codex', 'gpt-5'), '', 'only Claude names are known');
-  assert.deepEqual(RUNTIMES.map((r) => RUNTIME_LABELS[r]), ['Claude', 'Codex', 'Command']);
-});
-
-test('agents: the safest permissions take away only what an agent has, never give', () => {
-  const all = { ...AGENT_DEFAULTS, editMode: 'auto', autoComment: true, webAccess: true, fileAccess: true };
-  assert.deepEqual(safestPermissions(all), { editMode: 'approve', autoComment: false, webAccess: false, fileAccess: false });
-  assert.equal(safestPermissions({ ...AGENT_DEFAULTS, editMode: 'approve' }), null, 'nothing to take');
-  assert.equal(safestPermissions({ ...AGENT_DEFAULTS, editMode: 'none' }), null, 'one that only replies keeps replying only');
-  assert.throws(() => checkAgentPatch({ permissionsReset: 'yes' }), AgentError);
-});
-
-test('agents: each field checked; any number of agents with Auto Commenter', () => {
+test('agents: each field checked; permissions and runtimes are gone', () => {
   const muse = { ...AGENT_DEFAULTS, id: 'a_muse01', name: 'muse', persona: 'A poet', instructions: 'Be bold.' };
   const plainAgent = { ...DEFAULT_AGENTS[0] };
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [plainAgent, muse] }));
-  assert.doesNotThrow(() => checkSettingsPatch({ agents: [muse] }), 'none with Auto Commenter');
-  assert.doesNotThrow(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, autoComment: true }] }), 'two with Auto Commenter');
   assert.doesNotThrow(() => checkSettingsPatch({ agents: [] }));
-  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, maxTurns: 0 }] }), /invalid value for agents/);
-  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, runtime: 'robot' }] }), SettingsError);
   assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, name: 'two words' }] }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agents: [plainAgent, { ...muse, role: 'pilot' }] }), SettingsError, 'roles are gone');
   assert.throws(() => checkSettingsPatch({ agents: [plainAgent, muse, { ...muse, id: 'a_muse02', name: 'MUSE' }] }), SettingsError, 'names are unique, case-insensitively');
-  assert.throws(() => checkAgentPatch({ persona: 'x'.repeat(121) }), AgentError);
-  assert.throws(() => checkAgentPatch({ instructions: 'x'.repeat(4001) }), AgentError);
-  assert.throws(() => checkAgentPatch({ editMode: 'sometimes' }), /editMode/);
-  assert.throws(() => checkAgentPatch({ autoComment: 'yes' }), /autoComment/);
-  assert.doesNotThrow(() => checkAgentPatch({ editMode: 'none' }));
-  // Effort: low by default (fast), and only the levels the settings offer.
-  assert.equal(AGENT_DEFAULTS.effort, 'low');
-  assert.doesNotThrow(() => checkAgentPatch({ effort: 'high' }));
-  assert.throws(() => checkAgentPatch({ effort: 'max' }), /effort/);
-  assert.equal(resolveRoster([{ ...muse, effort: 'extreme' }])[0].effort, 'low', 'an unknown effort falls back to the default');
-
-  // Stored rosters are repaired: broken entries dropped; the pilot of old keeps its job as Auto Commenter.
-  assert.deepEqual(resolveRoster([{ ...muse, maxTurns: -1 }, { name: 'no-id' }]).map((a) => [a.name, a.maxTurns]), [['muse', 30]]);
-  const { autoComment: _, ...before } = muse; // saved before Auto Commenter
-  const old = resolveRoster([{ ...before, role: 'pilot' }, { ...before, id: 'a_muse02', name: 'muse2', role: 'copilot' }]);
-  assert.deepEqual(old.map((a) => [a.autoComment, Object.hasOwn(a, 'role')]), [[true, false], [false, false]]);
+  for (const key of ['editMode', 'autoComment', 'webAccess', 'fileAccess', 'runtime', 'command', 'model']) {
+    assert.throws(() => checkAgentPatch({ [key]: null }), AgentError, key);
+  }
+  // Stored rosters are repaired: broken entries dropped, unknown fields left out.
+  const [kept] = resolveRoster([{ ...muse, editMode: 'auto', runtime: 'codex' }, { name: 'no-id' }]);
+  assert.deepEqual(kept, { ...muse, starred: true });
   assert.deepEqual(resolveSettings({ agents: [] }).agents, [], 'the user may have no agents');
-  // Settings from the single-agent version: the default agent, and where Claude Code is.
-  const legacy = resolveSettings({ agent: { enabled: true, name: 'helper', bin: '/opt/claude' } });
-  assert.deepEqual(legacy.agents.map((a) => a.name), DEFAULT_AGENTS.map((a) => a.name));
-  assert.equal(legacy.claudeBin, '/opt/claude');
-  // Grants from the ask-at-first-use version are dropped.
-  assert.equal(Object.hasOwn(resolveSettings({ grants: [] }), 'grants'), false);
 });
+
 
 test('agents: new ones get a free name; any agent can be changed or deleted', () => {
   const plain = resolveSettings(null).agents;
@@ -260,9 +169,8 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   assert.equal(one.name, 'Rocky-2');
   assert.equal(createAgent(plain).name, 'agent', 'a plain name to start with');
   assert.deepEqual([one.starred, one.doc], [false, null], 'new agents are not starred');
-  assert.equal(one.autoComment, false, 'a new agent answers when @mentioned');
   assert.equal(createAgent([], { name: 'fzhan' }, ['fzhan']).name, 'fzhan-2', "not the human's name");
-  assert.throws(() => createAgent([], { maxTurns: 0 }), AgentError);
+  assert.throws(() => createAgent([], { persona: 'a\nb' }), AgentError);
 
   const will = roster.find((a) => a.name === 'Will');
   const plainAgent = roster.find((a) => a.name === 'Clippy');
@@ -277,9 +185,6 @@ test('agents: new ones get a free name; any agent can be changed or deleted', ()
   assert.throws(() => checkAgentPatch({ face: '' }), AgentError);
   assert.equal(resolveSettings({ face: 'abc' }).face, 'abc');
   assert.equal(resolveSettings({ face: 'a\nb' }).face, null);
-  const both = updateAgent(roster, will.id, { autoComment: true });
-  assert.deepEqual(both.filter((a) => a.autoComment).map((a) => a.name), ['Clippy', 'Will']);
-  assert.equal(updateAgent(roster, plainAgent.id, { autoComment: false }).some((a) => a.autoComment), false);
   assert.deepEqual(deleteAgent(roster, plainAgent.id).map((a) => a.name), ['Rocky', 'Will']);
   assert.throws(() => deleteAgent(roster, 'a_nobody'), /no such agent/);
 });
@@ -310,12 +215,6 @@ test('agents: an unstarred agent is one doc\'s own; names are unique where they 
   assert.throws(() => updateAgent(two, 'a_rev001', { starred: true, doc: null }), /taken/, 'a starred one would show in the other doc too');
 });
 
-test('agents: a crew saved by an older app is dropped; new docs start with Clippy instead', () => {
-  const [old] = resolveRoster([{ id: 'a_old001', name: 'pilot', autoComment: true, crew: true }]);
-  assert.equal(Object.hasOwn(old, 'crew'), false);
-  assert.throws(() => checkAgentPatch({ crew: true }), /unknown agent setting: crew/);
-});
-
 test('agents: editAgents changes the roster under the lock and keeps other settings', async () => {
   const dir = await tempDir();
   await updateSettings({ font: 'serif' }, dir);
@@ -330,15 +229,11 @@ test('agents: editAgents changes the roster under the lock and keeps other setti
   assert.equal((await readSettings(dir)).settings.agents.length, 2);
 });
 
-test('claudeBin and codexBin: where Claude Code and Codex are, for every agent', () => {
-  assert.equal(DEFAULT_SETTINGS.claudeBin, null);
-  assert.equal(DEFAULT_SETTINGS.codexBin, null);
-  assert.deepEqual(PROGRAM_KEYS, ['claudeBin', 'codexBin'], 'set only in the desktop app or settings.json');
-  assert.doesNotThrow(() => checkSettingsPatch({ codexBin: 'C:\\tools\\codex.exe' }));
-  assert.throws(() => checkSettingsPatch({ codexBin: '' }), SettingsError);
-  assert.equal(resolveSettings({ codexBin: '/opt/codex' }).codexBin, '/opt/codex');
-  assert.equal(resolveSettings({ codexBin: 42 }).codexBin, null);
-  assert.doesNotThrow(() => checkSettingsPatch({ claudeBin: 'C:\\tools\\claude.exe' }));
-  assert.throws(() => checkSettingsPatch({ claudeBin: '' }), SettingsError);
-  assert.throws(() => checkSettingsPatch({ agent: { enabled: true } }), /unknown setting: agent/);
+test('agent: which agent script runs every buddy, Claude Code unless changed', () => {
+  assert.equal(DEFAULT_SETTINGS.agent, 'claude');
+  assert.doesNotThrow(() => checkSettingsPatch({ agent: 'codex' }));
+  assert.throws(() => checkSettingsPatch({ agent: '../evil' }), SettingsError);
+  assert.equal(resolveSettings({ agent: 'my-bot' }).agent, 'my-bot');
+  assert.equal(resolveSettings({ agent: 'a/b' }).agent, 'claude');
+  assert.throws(() => checkSettingsPatch({ claudeBin: '/opt/claude' }), /unknown setting: claudeBin/);
 });

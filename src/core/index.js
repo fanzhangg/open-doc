@@ -11,18 +11,7 @@ export {
 export { applyProposal, diffEdits, findEdit, findProposal, proposeChanges, revertEdits } from './diff.js';
 export { parseMentions } from './mentions.js';
 export { addedMentions, blockAt, carry, changedRanges, textMentions, tokenEnd } from './text-mentions.js';
-export {
-  FORMAT_VERSION,
-  MAX_HANDOFFS,
-  OpError,
-  activeWorking,
-  applyOp,
-  clearAgentClaims,
-  emptySidecar,
-  findThread,
-  newId,
-  workingList,
-} from './ops.js';
-export { cancelledFor, failedFor, handedTo, inbox, openAsk } from './inbox.js';
+export { FORMAT_VERSION, OpError, applyOp, emptySidecar, findThread, newId } from './ops.js';
+export { askedOf, inbox } from './inbox.js';
 export { FormatError, parseSidecar, serializeSidecar } from './format.js';
-export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, leaderless, PERMISSIONS, createAgent, deleteAgent, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from './agents.js';
+export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, createAgent, deleteAgent, resolveRoster, updateAgent } from './agents.js';
