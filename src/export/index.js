@@ -8,11 +8,13 @@ import { refreshSidecar } from '../core/anchor.js';
 import { readDoc, readSidecar } from '../store/files.js';
 import { COMMENT_CHOICES, pickThreads } from './comments.js';
 import { renderHtml } from './html.js';
+import { renderDocx } from './docx.js';
 
 export { COMMENT_CHOICES } from './comments.js';
 
 export const FORMATS = Object.freeze({
   pdf: { extension: 'pdf', type: 'application/pdf', label: 'PDF' },
+  docx: { extension: 'docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'Word' },
   html: { extension: 'html', type: 'text/html; charset=utf-8', label: 'Web page' },
 });
 export const PAPERS = Object.freeze(['a4', 'letter']);
@@ -45,7 +47,7 @@ export function exportName(docName, format) {
 
 /** Throws an ExportError unless the options are known; returns them complete. */
 export function checkExportOptions({ format, comments = 'none', paper, font = 'sans' } = {}) {
-  if (!Object.hasOwn(FORMATS, format)) throw new ExportError('format must be pdf or html');
+  if (!Object.hasOwn(FORMATS, format)) throw new ExportError('format must be pdf, docx or html');
   if (!COMMENT_CHOICES.includes(comments)) throw new ExportError('comments must be none, open or all');
   if (paper !== undefined && paper !== null && !PAPERS.includes(paper)) throw new ExportError('paper must be a4 or letter');
   if (!['sans', 'serif', 'mono'].includes(font)) throw new ExportError('font must be sans, serif or mono');
@@ -63,6 +65,7 @@ export async function exportDoc(docPath, options) {
   const sidecar = stored.threads.length > 0 ? refreshSidecar(stored, markdown, hash) : stored;
   const name = basename(docPath);
   const input = { name, markdown, docPath, picked: pickThreads(sidecar, markdown, comments), font, paper };
+  if (format === 'docx') return { bytes: await renderDocx(input), type: FORMATS.docx.type, name: exportName(name, 'docx') };
   const html = Buffer.from(await renderHtml(input), 'utf8');
   return { bytes: html, type: FORMATS.html.type, name: exportName(name, format) };
 }

@@ -253,7 +253,7 @@ echo '{"body": "Cut to three.", "changes": [{"before": "six features", "after": 
 opendoc resolve plan.md t_k3x9q2m7pa --as fzhan --kind human   # humans only
 opendoc mv plan.md q4-plan.md            # moves the sidecar too
 opendoc export plan.md --to pdf --comments open   # plan.pdf next to the doc
-opendoc export plan.md --to html --out ~/share/plan.html
+opendoc export plan.md --to docx --out ~/share/plan.docx
 ```
 
 Every command takes `--json`. `--as` defaults to `OPENDOC_AS`; `--kind`
@@ -264,9 +264,10 @@ with `reply --to <agent>` (an agent's plain @mention wakes no one; at most 4
 handoffs in a row before a human writes again). Only a human can resolve or reopen a thread;
 `resolve` and `reopen` as an agent exit 2. In `propose`, each `before` is
 markdown source that must appear exactly once in the doc. `export` takes
-`--to pdf|html`, `--comments none|open|all` (none by default), `--paper
-a4|letter` and `--font sans|serif|mono` (your editor font by default); a PDF
-needs Chrome, Edge or Chromium installed (`OPENDOC_BROWSER` points at one).
+`--to pdf|docx|html`, `--comments none|open|all` (none by default; in Word
+they are Word comments), `--paper a4|letter` and `--font sans|serif|mono`
+(your editor font by default); a PDF needs Chrome, Edge or Chromium installed
+(`OPENDOC_BROWSER` points at one).
 
 ## Core library
 

@@ -37,7 +37,7 @@ Usage:
   opendoc resolve  <doc> <thread-id> --as <name> --kind human
   opendoc reopen   <doc> <thread-id> --as <name> --kind human
   opendoc mv       <old.md> <new.md>
-  opendoc export   <doc> --to pdf|html [--out <file>] [--comments none|open|all] [--paper a4|letter] [--font sans|serif|mono]
+  opendoc export   <doc> --to pdf|docx|html [--out <file>] [--comments none|open|all] [--paper a4|letter] [--font sans|serif|mono]
   opendoc guard    (a Claude Code hook the server sets up for its runs; reads the hook input on stdin)
 
 serve also runs your agents invited into the doc (the Agents panel in the editor).
@@ -278,7 +278,7 @@ const COMMANDS = {
 
   async export([docArg], values, { out }) {
     const docPath = requireDoc(docArg);
-    if (!values.to) throw new UsageError('--to must be pdf or html');
+    if (!values.to) throw new UsageError('--to must be pdf, docx or html');
     const font = values.font ?? (await readSettings()).settings.font;
     const options = checkExportOptions({ format: values.to, comments: values.comments, paper: values.paper, font });
     const outPath = values.out ? resolvePath(values.out) : join(dirname(docPath), exportName(basename(docPath), options.format));
