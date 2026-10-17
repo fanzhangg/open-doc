@@ -39,6 +39,9 @@ const banner = document.querySelector('.od-banner');
 const missingBanner = document.querySelector('.od-missing');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 const commentsToggle = document.querySelector('.od-tool-comment');
+// In a narrow window the comments rise from the bottom over the page: closed
+// until the Comments button or commented text opens them. The highlights stay.
+const narrow = window.matchMedia('(max-width: 900px)');
 
 let editor;
 let chrome;
@@ -71,6 +74,7 @@ let shownSidecar = ''; // the sidecar on screen, as JSON
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 let files; // the folder sidebar (desktop folder windows)
+let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
 // The desktop app swaps one doc's page for another without a blank frame: it
 // shows this page once `opendocReady` resolves (the doc and the sidebar are
@@ -132,11 +136,16 @@ async function start() {
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onSelectThread: (id) => {
-      if (commentsShown()) select(id, { focus: false });
+      if (narrow.matches) {
+        openSheet(true);
+        select(id, { focus: false });
+        revealText(id);
+      } else if (commentsShown()) select(id, { focus: false });
     },
     onCommentRequest: (hint) => {
       chrome?.hideBubble();
-      if (!commentsShown()) showComments(true);
+      if (narrow.matches) openSheet(true);
+      else if (!commentsShown()) showComments(true);
       pendingSelection = hint;
       editor.setDraft(hint);
       margin.startDraft(hint);
@@ -156,6 +165,7 @@ async function start() {
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
       if (carry.commentsHidden) showComments(false);
+      if (carry.startTyping) startTyping = true;
     },
   });
 
@@ -175,7 +185,10 @@ async function start() {
     canApply: (message) => canApply(disk, message),
     onReview: review,
     reviewing: () => reviewing,
-    onSelect: select,
+    onSelect: (id) => {
+      select(id);
+      if (narrow.matches) revealText(id);
+    },
     anchorTops: (items) => editor.anchorTops(items),
     mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
     mentionable: () => people?.mentionable() ?? [],
@@ -222,12 +235,31 @@ async function start() {
     // no storage: comments start shown
   }
   if (hidden) showComments(false);
-  commentsToggle.addEventListener('click', () => showComments(!commentsShown()));
+  paintCommentsToggle();
+  commentsToggle.addEventListener('click', () => {
+    if (narrow.matches) openSheet(!sheetOpen());
+    else showComments(!commentsShown());
+  });
   resolvedToggle.addEventListener('click', () => {
     const on = resolvedToggle.getAttribute('aria-pressed') !== 'true';
     resolvedToggle.setAttribute('aria-pressed', String(on));
-    if (on && !commentsShown()) showComments(true);
+    if (on && narrow.matches) openSheet(true);
+    else if (on && !commentsShown()) showComments(true);
     margin.setShowResolved(on);
+  });
+  narrow.addEventListener('change', () => {
+    openSheet(false);
+    paintCommentsToggle();
+  });
+  // Escape or a click outside closes the sheet; a click on commented text picks another thread.
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !sheetOpen()) return;
+    openSheet(false);
+    commentsToggle.focus();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (!sheetOpen() || event.target.closest('.od-margin, .od-tool-comment, .od-show-resolved, [data-thread], .od-bubble')) return;
+    openSheet(false);
   });
   history = createHistory({
     api,
@@ -278,6 +310,7 @@ async function start() {
     else if (!missing) setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
   });
   await files.ready;
+  if (startTyping) editor.focus();
 }
 
 // ---- saving ----
@@ -673,14 +706,36 @@ function commentsShown() {
 function showComments(on) {
   if (!on) select(null);
   document.documentElement.toggleAttribute('data-hide-comments', !on);
-  commentsToggle.setAttribute('aria-pressed', String(on));
-  commentsToggle.dataset.tip = on ? 'Hide comments' : 'Show comments';
+  paintCommentsToggle();
   try {
     localStorage.setItem(COMMENTS_KEY, on ? 'shown' : 'hidden');
   } catch {
     // not remembered: fine
   }
   if (on) margin.rerender();
+}
+
+function sheetOpen() {
+  return document.documentElement.hasAttribute('data-comments-open');
+}
+
+function openSheet(on) {
+  if (on === sheetOpen()) return;
+  if (!on) select(null);
+  document.documentElement.toggleAttribute('data-comments-open', on);
+  paintCommentsToggle();
+  if (on) margin.rerender();
+}
+
+function paintCommentsToggle() {
+  const on = narrow.matches ? sheetOpen() : commentsShown();
+  commentsToggle.setAttribute('aria-pressed', String(on));
+  commentsToggle.dataset.tip = on ? 'Hide comments' : 'Show comments';
+}
+
+// Bring a thread's text into view above the sheet.
+function revealText(id) {
+  document.querySelector(`.od-page [data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 // Whether a proposal can still be applied depends on the text on disk.

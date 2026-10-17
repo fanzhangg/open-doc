@@ -1,23 +1,31 @@
 {
   "opendoc": 1,
   "doc": "product-vision.md",
-  "docHash": "sha256:9065653366673d70b81008d5c38f7b04152ae9f70fb9458df7832a7a5fe40979",
+  "docHash": "sha256:f0c4942c621abb34aa24e71cd8f7b24a7ff7c8694e86eb706f9addcc88e366db",
   "participants": [
-    {
-      "name": "claude",
-      "kind": "agent"
-    },
     {
       "name": "fanzhangg",
       "kind": "human"
     },
     {
       "name": "Dobby",
-      "kind": "agent"
+      "kind": "agent",
+      "persona": "OpenDoc CEO"
     },
     {
-      "name": "fanzhang",
-      "kind": "human"
+      "name": "Frank",
+      "kind": "human",
+      "id": "u_bqnc9bx0hq"
+    },
+    {
+      "name": "James",
+      "kind": "agent",
+      "persona": "OpenDoc Product Manager"
+    },
+    {
+      "name": "Bob",
+      "kind": "agent",
+      "persona": "OpenDoc Principal SDE"
     }
   ],
   "threads": [
@@ -1160,7 +1168,7 @@
       },
       "detached": true,
       "status": "resolved",
-      "resolvedBy": "fanzhang",
+      "resolvedBy": "Frank",
       "resolvedAt": "2026-10-15T19:20:41.014Z",
       "working": null,
       "messages": [
@@ -1224,16 +1232,17 @@
         "start": 0
       },
       "detached": true,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T06:55:27.592Z",
       "working": null,
       "messages": [
         {
           "id": "m_rrgecf7rhi",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "can you translate this to English. Follow the common practice and vocabulary for a software product in English.",
           "mentions": [],
@@ -1454,6 +1463,10 @@
             }
           ]
         }
+      ],
+      "passed": [
+        "claude",
+        "James"
       ]
     },
     {
@@ -1465,16 +1478,17 @@
         "start": 15
       },
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T06:55:33.191Z",
       "working": null,
       "messages": [
         {
           "id": "m_tyizojs9y7",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "Is this a better framing of the vision?",
           "mentions": [],
@@ -1493,8 +1507,9 @@
         {
           "id": "m_vyr08t1lkt",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "how about this one?",
           "mentions": [],
@@ -1522,8 +1537,9 @@
         {
           "id": "m_9lgcca25bc",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "Applied Dobby's proposal",
           "mentions": [],
@@ -1547,19 +1563,20 @@
         "exact": "Competitive Landscape and Differentiation\nExisting tools fall into four categories:\nCategory\nExamples\nStrengths\nWeaknesses\nCloud docs with built-in AI\nGoogle Docs + Gemini, Notion AI, Word + Copilot\nReal-time co-editing between people; agentic edits in the doc\nLocked to the vendor's AI; cloud-only, proprietary format\nChat AI canvases\nChatGPT Canvas, Claude Artifacts\nGenerate and edit docs in a chat\nChat-centric; not local; no comment threads\nAI code editors and CLI agents\nCursor, VS Code + Copilot, Claude Code\nPowerful agents on local files\nBuilt for code, not for discussing prose paragraph by paragraph\nLocal Markdown editors\nObsidian, Typora + AI plugins\nLocal, open format\nAI is a plugin; no comments; no external agents\nHow we're different:\nA shared live doc, not handoffs: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it (or comment, in auto-commenter mode) instead of waiting for you to hand the doc over.\nComments are the interface: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.\nLocal, plain Markdown: A regular file in your repo, comments stored alongside it; no subscription lock-in.\nAny agent, many agents: Any command-line agent can plug in, several can work in the same doc at once, and they @ each other to hand off work.\nEverything is in the doc: An agent knows only what the doc and its threads say, so its behavior can always be explained from what you can see.",
         "prefix": "The page also works as a reader\n",
         "suffix": "\nSuccess Metrics\nUser in control",
-        "start": 5843
+        "start": 3451
       },
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T07:41:40.613Z",
       "working": null,
       "messages": [
         {
           "id": "m_fwpu93pfsm",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "Make this section more concise and on points",
           "mentions": [],
@@ -1598,6 +1615,10 @@
             }
           ]
         }
+      ],
+      "passed": [
+        "claude",
+        "James"
       ]
     },
     {
@@ -1606,19 +1627,25 @@
         "exact": "Success Metrics\nUser in control: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of edits users undo.\nLess waiting: Measure time from a comment or @ to the agent's reply, and how long people and agents wait on each other.\nMulti-agent collaboration: Measure the share of docs with 2+ agents, the number of edit conflicts, and how often a person has to pass a message from one agent to another (the target is never).\nBetter writing experience: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.\nOpen: Docs open correctly in any Markdown editor; count the third-party agents that connect.",
         "prefix": "xplained from what you can see.\n",
         "suffix": "\nRoadmap\nSingle agent + human: @",
-        "start": 7346
+        "start": 4954
       },
       "detached": false,
       "status": "open",
       "resolvedBy": null,
       "resolvedAt": null,
-      "working": null,
+      "working": {
+        "0": {
+          "by": "James",
+          "since": "2026-10-16T06:54:31.626Z"
+        }
+      },
       "messages": [
         {
           "id": "m_tb0afc0ahn",
           "author": {
-            "name": "fanzhang",
-            "kind": "human"
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
           },
           "body": "Make this more concise. Use 1-2 sentences to explain each point.",
           "mentions": [],
@@ -1642,6 +1669,412 @@
               "start": 4940
             }
           ]
+        }
+      ],
+      "passed": [
+        "claude",
+        "James"
+      ]
+    },
+    {
+      "id": "t_tktlarsxcw",
+      "anchor": {
+        "exact": "Design Principles\nFamiliar: The interface uses the familiar \"edit + comment\" interaction, so there is almost no learning curve. The AI agent reads comments, edits the file directly, and replies through the command line\nReal-time: Both agent and human do not need to hand over the doc to each other and wait for the other to finish the work. @ an agent in a comment or in the text, and it wakes up right away, reads the doc, and replies in the thread. An agent in auto-commenter mode watches every comment and reply when they see fit.\nIn control: Comments are anchored to the text you select, and the agent only changes what the comment is about, leaving unrelated sections alone. Every change is explained in the thread and can be undone. You can also ask the agent to only suggest changes and decide yourself whether to accept them. Only you decide when a comment is resolved\nOpen: An open-source document format and editor, so you never have to worry about being locked into a subscription service.\nAgents work like people: An agent is another user in the doc. It sees the same doc and threads you do, does the same things (comment, reply, edit, suggest), and signs everything it does. It can @ you, and in the multi-agent stage other agents too, so agents hand work to each other without you passing messages along. Its persona is plain text that anyone can read and rewrite: grammar police, fact checker, creative writer, ...\nNothing remembered in private: Each run (an @, or a comment picked up in auto-commenter mode) is a fresh agent session that reads the doc and its threads, does its part, and ends. Nothing carries over from one run to the next. Anything worth remembering is written into the doc or a thread, where everyone can see it. So you can always tell why an agent did something, and switch models or restart without losing progress",
+        "prefix": " reviewing a proposal together.\n",
+        "suffix": "\nAgent Design Philosophy: Props,",
+        "start": 1084
+      },
+      "detached": true,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T07:36:44.445Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_bo7mwts9mo",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "@James There are too many implementation details in this section. Let us distill and find the core design principle only!",
+          "mentions": [
+            "James"
+          ],
+          "createdAt": "2026-10-16T06:59:44.055Z"
+        },
+        {
+          "id": "m_la5xqt8rtu",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Cut each principle to its one core idea and dropped the mechanics (CLI, auto-commenter, sessions, personas), which the philosophy, roadmap and differentiation sections already cover. Undo if you want any detail back.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:00:04.322Z",
+          "edits": [
+            {
+              "before": "The interface uses the familiar \"edit + comment\" interaction, so there is almost no learning curve. The AI agent reads comments, edits the file directly, and replies through the command line\n- **Real-time**: Both agent and human do not need to hand over the doc to each other and wait for the other to finish the work. @ an agent in a comment or in the text, and it wakes up right away, reads the doc, and replies in the thread. An agent in auto-commenter mode watches every comment and reply when they see fit.\n- **In control**: Comments are anchored to the text you select, and the agent only changes what the comment is about, leaving unrelated sections alone. Every change is explained in the thread and can be undone. You can also ask the agent to only suggest changes and decide yourself whether to accept them. Only you decide when a comment is resolved\n- **Open**: An open-source document format and editor, so you never have to worry about being locked into a subscription service.\n- **Agents work like people**: An agent is another user in the doc. It sees the same doc and threads you do, does the same things (comment, reply, edit, suggest), and signs everything it does. It can @ you, and in the multi-agent stage other agents too, so agents hand work to each other without you passing messages along. Its persona is plain text that anyone can read and rewrite: grammar police, fact checker, creative writer, ...\n- **Nothing remembered in private**: Each run (an @, or a comment picked up in auto-commenter mode) is a fresh agent session that reads the doc and its threads, does its part, and ends. Nothing carries over from one run to the next. Anything worth remembering is written into the doc or a thread, where everyone can see it. So you can always tell why an agent did something, and switch models or restart without losing progress",
+              "after": "Edit and comment, the way you already work on docs with people. Nothing new to learn\n- **Real-time**: No handoffs. You and agents work in the same doc at the same time, and an agent responds as soon as you @ it\n- **In control**: Agents change only what you asked about and explain every change; you can undo it or have them suggest first. Only you resolve a thread\n- **Open**: Open format and open-source editor, no lock-in\n- **Agents work like people**: An agent is another user in the doc, with the same view and the same actions you have\n- **Nothing remembered in private**: An agent knows only what the doc and its threads say, so everything it does can be explained from what you see",
+              "prefix": "ign Principles\n\n- **Familiar**: ",
+              "suffix": "\n\n## Agent Design Philosophy: Pr",
+              "start": 1150
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_mmz1i2wf43",
+      "anchor": {
+        "exact": "The doc is the state, agents are stateless: Agents keep no memory between runs; everything lives in the doc and its comments, so you see all an agent sees",
+        "prefix": "w and the same actions you have\n",
+        "suffix": "\nNon-Goals\nCloud documents: Docs",
+        "start": 2030
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T07:34:49.779Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_6mr5arkyyt",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "@Bob is this true? can you review the architecture and the implementation of the product?",
+          "mentions": [
+            "Bob"
+          ],
+          "createdAt": "2026-10-16T07:30:02.832Z"
+        },
+        {
+          "id": "m_y1nyautena",
+          "author": {
+            "name": "Bob",
+            "kind": "agent"
+          },
+          "body": "Mostly: no --resume, --no-session-persistence, and a wiped folder. Gap: this very run still got Claude Code's auto-memory dir (~/.claude/projects/<private folder>/memory) plus account context and connectors. Disable auto-memory and user config in the adapter to make it true.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:30:25.739Z"
+        },
+        {
+          "id": "m_kqpuvharyr",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "Can we safely assume the system can work with an stateless API? I am using claude code just to use my subscription. The agent does not need to be stateful.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:32:04.344Z"
+        },
+        {
+          "id": "m_qu52cdiwfe",
+          "author": {
+            "name": "Bob",
+            "kind": "agent"
+          },
+          "body": "Yes: each run gets everything from the doc and threads in its prompt, and nothing carries over between runs. The only state lives inside one run, the tool loop of read, edit and opendoc calls. So a raw stateless API works only if the adapter runs that loop itself.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:32:18.038Z"
+        },
+        {
+          "id": "m_vr5urh4rp5",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "Can we make the principle clear. i.e. The doc and the side car is the state, and the agent is stateless. No splitted views among agents and human.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:33:59.352Z"
+        },
+        {
+          "id": "m_vwvmzgeqlf",
+          "author": {
+            "name": "Bob",
+            "kind": "agent"
+          },
+          "body": "Reworded the principle: the doc and its comments file are the only state, agents carry nothing between runs and have no private memory or view, so everyone sees the same thing. The similar bullet under differentiation is left as is.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:34:08.797Z",
+          "edits": [
+            {
+              "before": "Nothing remembered in private**: An agent knows only what the doc and its threads say, so everything it does can be explained from what you see",
+              "after": "The doc is the state, agents are stateless**: The doc and its comments file are the only state. Agents carry nothing between runs and have no private memory or view, so people and agents always see the same thing, and everything an agent does can be explained from it",
+              "prefix": "d the same actions you have\n- **",
+              "suffix": "\n\n## Agent Design Philosophy: Pr",
+              "start": 1703
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_8akyecalxi",
+      "anchor": {
+        "exact": "The doc is the state, agents are stateless: Agents keep no memory between runs; everything lives in the doc and its comments, so you see all an agent sees",
+        "prefix": "w and the same actions you have\n",
+        "suffix": "\nNon-Goals\nCloud documents: Docs",
+        "start": 2030
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T07:36:46.812Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_ksgk3a54cd",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "@Bob can you make it more concise? format similar to the previous points",
+          "mentions": [
+            "Bob"
+          ],
+          "createdAt": "2026-10-16T07:35:23.018Z"
+        },
+        {
+          "id": "m_j4ajmtrle6",
+          "author": {
+            "name": "Bob",
+            "kind": "agent"
+          },
+          "body": "Trimmed it to one line like the others: agents keep no memory between runs, everything lives in the doc and its comments, so you see all an agent sees.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:35:29.470Z",
+          "edits": [
+            {
+              "before": "The doc and its comments file are the only state. Agents carry nothing between runs and have no private memory or view, so people and agents always see the same thing, and everything an agent does can be explained from it",
+              "after": "Agents keep no memory between runs; everything lives in the doc and its comments, so you see all an agent sees",
+              "prefix": " state, agents are stateless**: ",
+              "suffix": "\n\n## Agent Design Philosophy: Pr",
+              "start": 1749
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "t_7qi8w026py",
+      "anchor": {
+        "exact": "Agent Design Philosophy: Props, Not Games",
+        "prefix": " reviewing a proposal together.\n",
+        "suffix": "\nWe provide props, like dice, no",
+        "start": 1084
+      },
+      "detached": false,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_1cfqp4hivq",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "@James @Dobby @Bob should this even be in this vision doc?",
+          "mentions": [
+            "James",
+            "Dobby",
+            "Bob"
+          ],
+          "createdAt": "2026-10-16T07:37:11.847Z"
+        },
+        {
+          "id": "m_ddlykzdj11",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Yes, keep it: \"props, not games\" is the filter that decides what we build and what we refuse, which is vision. But trim it to the principle and the three exclusions; the guardrails paragraph and auto-commenter detail belong in a design doc.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:37:18.277Z"
+        },
+        {
+          "id": "m_ooomwrcp8r",
+          "author": {
+            "name": "Bob",
+            "kind": "agent"
+          },
+          "body": "Yes, but shorter: the die-vs-arcade-machine test is the filter we use to say no to features, so it belongs in the vision. The asymmetry/wake-up paragraph is implementation detail (and already stale on agent handoffs); I'd move that to a design doc.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:37:21.494Z"
+        },
+        {
+          "id": "m_uop8ikj2rv",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Yes, but shorter: \"props, not games\" is our strategy and what rules features in or out, so it belongs in the vision. The rules-out list and the guardrail details are design specifics I'd move to user-experience.md and leave a two-line summary here.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:37:23.763Z"
+        },
+        {
+          "id": "m_252x8u6yl0",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "Good to talk about the philosophy. this is simply too long, and not fit in this place. How will you revise it?",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:39:41.005Z"
+        },
+        {
+          "id": "m_ng0pz253j8",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "@Dobby",
+          "mentions": [
+            "Dobby"
+          ],
+          "createdAt": "2026-10-16T07:40:00.829Z"
+        },
+        {
+          "id": "m_dwklxscyjt",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Cut it to one paragraph: the dice idea, where the rules live, and the die-or-arcade test. The rules-out list and guardrails would move to user-experience.md, where the design detail belongs.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:40:06.803Z",
+          "proposal": [
+            {
+              "before": "We provide props like dice and playing cards, not games. Dice are generic, combine into games nobody planned, carry no rules of their own, and sit on the table where everyone can see them. The rules come from the players.",
+              "after": "We provide props like dice and playing cards, not games: generic pieces that combine into games nobody planned, while the rules come from the players. Our props are the doc, comments, edits, suggestions, and @; roles, workflows, and who goes next are written in plain language in the doc itself. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?**",
+              "prefix": "n Philosophy: Props, Not Games\n\n",
+              "suffix": "\n\nOur props are the doc, comment",
+              "start": 1907
+            },
+            {
+              "before": "\n\nOur props are the doc, comments and threads, edits and suggestions, anchors, and @. How people and agents use them (a review checklist, who goes next, when a draft is done) is written in plain language in the doc itself, and can change whenever the people in it want. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** Only generic props go into the product. That rules out:\n\n- **Job titles**: No built-in agent roles, orchestrator agents, or task routing. Agents are reached with @, and who does what emerges from the conversation, the way you @ a colleague known for careful reviews. Auto-commenter mode is a prop too: any agent can switch it on, like a colleague who keeps an eye on the doc and chimes in\n- **Built-in workflows**: No official review mode or game mode. Workflows live in the doc's text\n- **Hidden powers**: Agents get no back channel, private view, or memory that people can't see\n\nThe asymmetries are guardrails, not roles: anyone can speak, but only people resolve a thread, apply a proposal, or undo an agent's edit; when a person and an agent change the same paragraph, the person's text is kept and the agent's becomes a proposal; and for now only a person's message wakes an agent. Agents waking each other comes with the multi-agent stage, together with a guard against loops.",
+              "after": "",
+              "prefix": "The rules come from the players.",
+              "suffix": "\n\n## Non-Goals\n\n- **Cloud docume",
+              "start": 2128
+            }
+          ]
+        },
+        {
+          "id": "m_073lt4p9ec",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Cut it to one paragraph: the dice analogy, the die-vs-arcade-machine test, and the three things it rules out. The role/guardrail details and auto-commenter note move to a design doc.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:40:27.989Z",
+          "proposal": [
+            {
+              "before": "We provide props like dice and playing cards, not games. Dice are generic, combine into games nobody planned, carry no rules of their own, and sit on the table where everyone can see them. The rules come from the players.\n\nOur props are the doc, comments and threads, edits and suggestions, anchors, and @. How people and agents use them (a review checklist, who goes next, when a draft is done) is written in plain language in the doc itself, and can change whenever the people in it want. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** Only generic props go into the product. That rules out:\n\n- **Job titles**: No built-in agent roles, orchestrator agents, or task routing. Agents are reached with @, and who does what emerges from the conversation, the way you @ a colleague known for careful reviews. Auto-commenter mode is a prop too: any agent can switch it on, like a colleague who keeps an eye on the doc and chimes in\n- **Built-in workflows**: No official review mode or game mode. Workflows live in the doc's text\n- **Hidden powers**: Agents get no back channel, private view, or memory that people can't see\n\nThe asymmetries are guardrails, not roles: anyone can speak, but only people resolve a thread, apply a proposal, or undo an agent's edit; when a person and an agent change the same paragraph, the person's text is kept and the agent's becomes a proposal; and for now only a person's message wakes an agent. Agents waking each other comes with the multi-agent stage, together with a guard against loops.",
+              "after": "We provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.",
+              "prefix": "n Philosophy: Props, Not Games\n\n",
+              "suffix": "\n\n## Non-Goals\n\n- **Cloud docume",
+              "start": 1907
+            }
+          ]
+        },
+        {
+          "id": "m_bwv44tcztv",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "Applied Dobby's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:41:19.597Z",
+          "edits": [
+            {
+              "before": " like dice and playing cards, not games. Dice are generic, combine into games nobody planned, carry no rules of their own, and sit on the table where everyone can see them. The rules come from the players.\n\nOur props are the doc, comments and threads, edits and suggestions, anchors, and @. How people and agents use them (a review checklist, who goes next, when a draft is done) is written in plain language in the doc itself, and can change whenever the people in it want. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** Only generic props go into the product. That rules out:\n\n- **Job titles**: No built-in agent roles, orchestrator agents, or task routing. Agents are reached with @, and who does what emerges from the conversation, the way you @ a colleague known for careful reviews. Auto-commenter mode is a prop too: any agent can switch it on, like a colleague who keeps an eye on the doc and chimes in\n- **Built-in workflows**: No official review mode or game mode. Workflows live in the doc's text\n- **Hidden powers**: Agents get no back channel, private view, or memory that people can't see\n\nThe asymmetries are guardrails, not roles: anyone can speak, but only people resolve a thread, apply a proposal, or undo an agent's edit; when a person and an agent change the same paragraph, the person's text is kept and the agent's becomes a proposal; and for now only a person's message wakes an agent. Agents waking each other comes with the multi-agent stage, together with a guard against loops",
+              "after": ", like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers",
+              "prefix": "ops, Not Games\n\nWe provide props",
+              "suffix": ".\n\n## Non-Goals\n\n- **Cloud docum",
+              "start": 1923
+            }
+          ],
+          "applies": "m_073lt4p9ec"
+        },
+        {
+          "id": "m_w3qzheoupt",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "i think the section is out of order. where will you move it to?",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:42:01.315Z"
+        },
+        {
+          "id": "m_1v1vw1myic",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Move it up, right after Our Solution and before Design Principles: it is the strategy the principles follow from, so it should come first, not sit between principles and non-goals.",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:42:19.122Z",
+          "proposal": [
+            {
+              "before": "## Design Principles\n",
+              "after": "## Agent Design Philosophy: Props, Not Games\n\nWe provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.\n\n## Design Principles\n",
+              "prefix": "reviewing a proposal together.\n\n",
+              "suffix": "\n- **Familiar**: Edit and commen",
+              "start": 1112
+            },
+            {
+              "before": "## Agent Design Philosophy: Props, Not Games\n\nWe provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.\n\n## Non-Goals",
+              "after": "## Non-Goals",
+              "prefix": ", so you see all an agent sees\n\n",
+              "suffix": "\n\n- **Cloud documents**: Docs li",
+              "start": 1861
+            }
+          ]
+        },
+        {
+          "id": "m_z2t1embjtx",
+          "author": {
+            "name": "Frank",
+            "kind": "human",
+            "id": "u_bqnc9bx0hq"
+          },
+          "body": "Applied Dobby's proposal",
+          "mentions": [],
+          "createdAt": "2026-10-16T07:43:34.761Z",
+          "edits": [
+            {
+              "before": "",
+              "after": "## Agent Design Philosophy: Props, Not Games\n\nWe provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.\n\n",
+              "prefix": "reviewing a proposal together.\n\n",
+              "suffix": "## Design Principles\n\n- **Famili",
+              "start": 1112
+            },
+            {
+              "before": "\n## Agent Design Philosophy: Props, Not Games\n\nWe provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.\n",
+              "after": "",
+              "prefix": "s, so you see all an agent sees\n",
+              "suffix": "\n## Non-Goals\n\n- **Cloud documen",
+              "start": 2262
+            }
+          ],
+          "applies": "m_1v1vw1myic"
         }
       ]
     }

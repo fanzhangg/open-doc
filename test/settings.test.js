@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, PROGRAM_KEYS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
 import { configDir, editAgents, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, commandSnippet, createAgent, createFields, deleteAgent, draftAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, updateAgent } from '../src/core/agents.js';
+import { AGENT_DEFAULTS, AgentError, DEFAULT_AGENTS, DEFAULT_AGENT_ID, checkAgentPatch, availableIn, commandSnippet, createAgent, createFields, deleteAgent, draftAgent, docOnly, RUNTIMES, RUNTIME_LABELS, introOf, leaderless, modelChoices, modelWarning, permissionLabels, permissionPatch, permissionsOf, resolveRoster, runtimePatch, safestPermissions, updateAgent } from '../src/core/agents.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -205,6 +205,14 @@ test('agents: another runtime starts on its default model, and the Model field s
   assert.equal(modelWarning('claude', 'gpt-5'), 'Claude Code may not recognize this model.');
   assert.equal(modelWarning('codex', 'gpt-5'), '', 'only Claude names are known');
   assert.deepEqual(RUNTIMES.map((r) => RUNTIME_LABELS[r]), ['Claude', 'Codex', 'Command']);
+});
+
+test('agents: the safest permissions take away only what an agent has, never give', () => {
+  const all = { ...AGENT_DEFAULTS, editMode: 'auto', autoComment: true, webAccess: true, fileAccess: true };
+  assert.deepEqual(safestPermissions(all), { editMode: 'approve', autoComment: false, webAccess: false, fileAccess: false });
+  assert.equal(safestPermissions({ ...AGENT_DEFAULTS, editMode: 'approve' }), null, 'nothing to take');
+  assert.equal(safestPermissions({ ...AGENT_DEFAULTS, editMode: 'none' }), null, 'one that only replies keeps replying only');
+  assert.throws(() => checkAgentPatch({ permissionsReset: 'yes' }), AgentError);
 });
 
 test('agents: each field checked; any number of agents with Auto Commenter', () => {

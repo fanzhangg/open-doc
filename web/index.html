@@ -13,8 +13,12 @@
     <div class="od-files-head">
       <span class="od-files-icon" data-icon="folder"></span>
       <span class="od-files-name"></span>
+      <span class="od-files-tools">
+        <button class="od-icon-btn" type="button" data-action="new-doc" data-icon="filePlus" data-tip="New doc" aria-label="New doc"></button>
+        <button class="od-icon-btn" type="button" data-action="new-folder" data-icon="folderPlus" data-tip="New folder" aria-label="New folder"></button>
+      </span>
     </div>
-    <ul class="od-files-tree"></ul>
+    <ul class="od-files-tree" role="tree" aria-label="Docs"></ul>
     <p class="od-files-more" hidden></p>
   </aside>
 

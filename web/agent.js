@@ -359,16 +359,15 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     parts.push(cardHead(name));
 
     if (info.editMode) parts.push(permissionSwitches(info, profile));
+    if (profile?.permissionsReset) {
+      parts.push(el('div', 'od-profile-note', 'Its persona or instructions were changed outside OpenDoc, so its permissions went back to the safest. Switch on what it should have again.'));
+    }
 
     if (!status && !profile) {
-      // In the doc, but not run here: someone else's agent, or one you deleted.
+      // In the doc, but not run here: the doc's agents are set up when it
+      // opens, so this one shares your name, or agents are off (opendoc serve).
       const problem = el('div', 'od-profile-problem');
       problem.append(el('div', 'od-profile-problem-text', `None of your agents is called ${name}, so it does not answer here. It may answer from elsewhere, such as a chat session running opendoc wait.`));
-      if (!viewOnly) {
-        const actions = el('div', 'od-profile-actions');
-        actions.append(button(`Set up ${name}`, 'od-primary', () => setUp(name)));
-        problem.append(actions);
-      }
       parts.push(problem);
     } else if (status && OFFLINE.has(status.state)) {
       const problem = el('div', 'od-profile-problem');
@@ -582,10 +581,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (agent.starred && !here && !window.confirm(`Unstar ${agent.name}?\n\nIt leaves your agents. Docs that use it keep it as their own.`)) return;
     take(await api.updateAgent(agent.id, { starred: !agent.starred }));
   }, 'Could not change the agent');
-
-  const setUp = (name) => act(async () => {
-    take(await api.createAgent({ name }, { invite: false }));
-  }, 'Could not set up the agent');
 
   const remove = (name) => act(async () => {
     if (!window.confirm(`Remove ${name} from this doc?\n\nIt stops answering here until you @mention it again. Its comments stay.`)) return;

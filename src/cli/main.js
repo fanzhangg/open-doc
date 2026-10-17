@@ -474,6 +474,14 @@ function fitBody(author, body) {
 }
 
 function identity(values, env) {
+  // Inside an agent's run (the server sets OPENDOC_AGENT_RUN) the identity is
+  // pinned to that agent: the run cannot pass --kind human to resolve a
+  // thread, or a different --as, to act as the person or another agent.
+  if (env.OPENDOC_AGENT_RUN) {
+    const name = env.OPENDOC_AS;
+    if (!name) throw new UsageError('OPENDOC_AGENT_RUN is set without OPENDOC_AS');
+    return { name, kind: 'agent' };
+  }
   const name = values.as ?? env.OPENDOC_AS;
   if (!name) throw new UsageError('who is this? pass --as <name> or set OPENDOC_AS');
   const kind = values.kind ?? env.OPENDOC_KIND ?? 'agent';

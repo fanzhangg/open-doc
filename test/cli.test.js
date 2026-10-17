@@ -31,6 +31,19 @@ async function runWith(input, ...argv) {
 const asHuman = ['--as', 'fzhan', '--kind', 'human'];
 const asClaude = ['--as', 'claude'];
 
+// Run as the server runs an agent: OPENDOC_AGENT_RUN pins the identity.
+async function inRun(env, ...argv) {
+  let stdout = '';
+  let stderr = '';
+  const code = await main(argv, {
+    stdout: { write: (s) => { stdout += s; } },
+    stderr: { write: (s) => { stderr += s; } },
+    stdin: Readable.from(['']),
+    env: { OPENDOC_AGENT_RUN: '1', OPENDOC_AS: 'claude', ...env },
+  });
+  return { code, stdout, stderr };
+}
+
 async function json(...argv) {
   const result = await run(...argv, '--json');
   assert.equal(result.code, 0, result.stderr);
@@ -45,6 +58,25 @@ test('help and usage errors', async () => {
   const noId = await run('inbox', await tempDoc());
   assert.equal(noId.code, EXIT.badInput);
   assert.match(noId.stderr, /--as/);
+});
+
+test('a run cannot act as a human or as another name', async () => {
+  const doc = await tempDoc();
+  const { thread } = await json('comment', doc, '--quote', 'extra load', 'Look at this.', ...asHuman).then((r) => ({ thread: r.threads[0] }));
+
+  // A run that passes --kind human (and even a human's name) still writes as
+  // the agent it is: its reply is recorded as claude/agent, not fzhan/human.
+  const replied = await inRun({}, 'reply', doc, thread.id, 'On it.', '--as', 'fzhan', '--kind', 'human');
+  assert.equal(replied.code, EXIT.ok, replied.stderr);
+  const after = JSON.parse(await readFile(sidecarPath(doc), 'utf8')).threads[0];
+  const last = after.messages.at(-1);
+  assert.equal(last.author.name, 'claude');
+  assert.equal(last.author.kind, 'agent');
+
+  // So it cannot resolve the thread by claiming to be the human.
+  const refused = await inRun({}, 'resolve', doc, thread.id, '--as', 'fzhan', '--kind', 'human');
+  assert.equal(refused.code, EXIT.badInput);
+  assert.match(refused.stderr, /only a human can resolve/);
 });
 
 test('comment on a quote, list it with a line number, reply, resolve, reopen', async () => {

@@ -41,6 +41,12 @@
 //
 // An agent's face (web/faces.js) is drawn from its `face`, a seed: null
 // draws it from the name. Renaming one keeps the face it had.
+//
+// What a doc says its own agent is can change outside OpenDoc (a git pull,
+// another program): the agent takes the new persona and instructions, but
+// not the permissions the user gave the old ones. It goes back to the safest
+// (safestPermissions), and `permissionsReset` says so on its card until the
+// user changes its permissions or who it is.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 import { newId } from './ops.js';
@@ -81,13 +87,14 @@ export const AGENT_DEFAULTS = Object.freeze({
   isolated: false,
   webAccess: false,
   fileAccess: false,
+  permissionsReset: false,
 });
 
 /** Agent fields that choose the program to run: set only in the desktop app or settings.json. */
 export const AGENT_PROGRAM_KEYS = Object.freeze(['command']);
 
-/** Agent fields only the server sets: which doc an unstarred agent belongs to. */
-export const AGENT_SERVER_KEYS = Object.freeze(['doc']);
+/** Agent fields only the server sets: which doc an unstarred agent belongs to, and whether its permissions were reset. */
+export const AGENT_SERVER_KEYS = Object.freeze(['doc', 'permissionsReset']);
 
 const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
@@ -119,6 +126,7 @@ export const AGENT_RULES = Object.freeze({
   isolated: boolean,
   webAccess: boolean,
   fileAccess: boolean,
+  permissionsReset: boolean,
 });
 
 /** The id of Clippy, the agent the app comes with and every new doc starts with. */
@@ -305,6 +313,21 @@ export const PERMISSIONS = Object.freeze([
   { key: 'web', label: 'Web Searcher', hint: 'Searches the web and opens web pages.' },
   { key: 'files', label: 'File Searcher', hint: 'Reads your other files, except keys and .env files.' },
 ].map((p) => Object.freeze(p)));
+
+/**
+ * The patch that takes `agent` to the safest permissions, the ones an agent
+ * set up from a doc starts with: it proposes edits (or only replies, if it
+ * did), answers only when @mentioned, and has no web or files. Null when it
+ * has nothing more.
+ */
+export function safestPermissions(agent) {
+  const patch = {};
+  if (agent.editMode === 'auto') patch.editMode = 'approve';
+  if (agent.autoComment) patch.autoComment = false;
+  if (agent.webAccess) patch.webAccess = false;
+  if (agent.fileAccess) patch.fileAccess = false;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
 
 /** Which permissions `agent` has: { editor, autoEditor, autoComment, web, files }. */
 export function permissionsOf(agent) {

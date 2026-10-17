@@ -1,7 +1,7 @@
 {
   "opendoc": 1,
   "doc": "user-journey.md",
-  "docHash": "sha256:0779566637f8736a0dfd56537e95ed2bc38462a563bb5b0b674a060283301524",
+  "docHash": "sha256:1d169e404d466da6bea1793967df9fa3ffd76e88951f4b5e9e368f014e28b1e5",
   "participants": [
     {
       "name": "Dobby",
@@ -21,6 +21,10 @@
       "name": "John",
       "kind": "agent",
       "persona": "Programmer"
+    },
+    {
+      "name": "Frank",
+      "kind": "human"
     }
   ],
   "threads": [
@@ -601,9 +605,9 @@
       "id": "t_yekjsa2ewh",
       "anchor": {
         "exact": "Journey 1: Open a Doc",
-        "prefix": "their code (see the vision doc)\n",
+        "prefix": "stay in control of every change\n",
         "suffix": "\nStart: a markdown file on disk,",
-        "start": 177
+        "start": 338
       },
       "detached": false,
       "status": "resolved",
@@ -651,7 +655,7 @@
       "anchor": {
         "exact": " Dobby",
         "prefix": "User Journey\nAuthor: fanzhang,",
-        "suffix": ", James, John\nThe User\nOne or tw",
+        "suffix": ", James, John\nThe User\nSomeone w",
         "start": 30
       },
       "detached": false,
@@ -729,13 +733,13 @@
       "anchor": {
         "exact": "Author: fanzhang, Dobby, James, John",
         "prefix": "User Journey\n",
-        "suffix": "\nThe User\nOne or two lines: some",
+        "suffix": "\nThe User\nSomeone who already wr",
         "start": 13
       },
       "detached": false,
-      "status": "open",
-      "resolvedBy": null,
-      "resolvedAt": null,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T06:22:22.907Z",
       "working": null,
       "messages": [
         {
@@ -749,6 +753,135 @@
             "fanzhang"
           ],
           "createdAt": "2026-10-16T05:07:23.839Z"
+        },
+        {
+          "id": "m_9j66holsjh",
+          "author": {
+            "name": "Frank",
+            "kind": "human"
+          },
+          "body": "i want to keep the doc minimal and intend to delete this section",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:20:01.887Z"
+        },
+        {
+          "id": "m_uxfetpi87x",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Got it. The How to Use section is already gone, so I've left the byline alone and added nothing back.",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:20:10.089Z"
+        }
+      ]
+    },
+    {
+      "id": "t_y0iswxgnx3",
+      "anchor": {
+        "exact": "User Journey",
+        "prefix": "",
+        "suffix": "\nAuthor: fanzhang, Dobby, James,",
+        "start": 0
+      },
+      "detached": false,
+      "status": "resolved",
+      "resolvedBy": "Frank",
+      "resolvedAt": "2026-10-16T06:22:20.058Z",
+      "working": null,
+      "messages": [
+        {
+          "id": "m_jtrza4z256",
+          "author": {
+            "name": "Frank",
+            "kind": "human"
+          },
+          "body": "what is the file path of the file?",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:20:41.626Z"
+        },
+        {
+          "id": "m_npm5kde7ls",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "It's /Users/fanzhang/Workplace/open-doc/docs/user-journey.md, and its comments are stored next to it in user-journey.md.opendoc.json.",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:20:47.684Z"
+        }
+      ],
+      "passed": [
+        "James",
+        "John"
+      ]
+    },
+    {
+      "id": "t_00wx1ojnu7",
+      "anchor": {
+        "exact": "One or two lines: someone who writes markdown docs with an AI agent, locally, next to their code (see the vision doc)",
+        "prefix": "ng, Dobby, James, John\nThe User\n",
+        "suffix": "\nJourney 1: Open a Doc\nStart: a ",
+        "start": 59
+      },
+      "detached": true,
+      "status": "open",
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "working": null,
+      "messages": [
+        {
+          "id": "m_ldttog0zrw",
+          "author": {
+            "name": "Frank",
+            "kind": "human"
+          },
+          "body": "@Dobby @James @John Can you summarize the user of our product OpenDoc?",
+          "mentions": [
+            "Dobby",
+            "James",
+            "John"
+          ],
+          "createdAt": "2026-10-16T06:22:12.516Z"
+        },
+        {
+          "id": "m_81lwqggp8t",
+          "author": {
+            "name": "Dobby",
+            "kind": "agent"
+          },
+          "body": "Filled in the line from the vision doc's Target Users: local markdown writers who already use AI and want it as a teammate in the doc, not a chat box, with them in control. Worth validating 'in control' as the top need in interviews.",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:22:41.259Z",
+          "edits": [
+            {
+              "before": "One or two lines: someone who writes markdown docs with an AI agent, locally, next to their code (see the vision doc)",
+              "after": "Someone who already writes docs with an AI agent, in markdown files on their own machine next to their code (READMEs, design docs), and wants the agent to feel like a teammate in the doc rather than a chat box they copy and paste from, while they stay in control of every change",
+              "prefix": "by, James, John\n\n## The User\n\n- ",
+              "suffix": "\n\n## Journey 1: Open a Doc\n\n- **",
+              "start": 69
+            }
+          ]
+        },
+        {
+          "id": "m_yw78ih0doo",
+          "author": {
+            "name": "John",
+            "kind": "agent"
+          },
+          "body": "Dobby's line covers it; from the dev side I'd add that this user commits the .md to git, so every agent edit has to stay plain markdown with small, reviewable diffs. Happy to add that to the line if you want.",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:22:53.069Z"
+        },
+        {
+          "id": "m_iayjdu270h",
+          "author": {
+            "name": "James",
+            "kind": "agent"
+          },
+          "body": "Agree with Dobby's line. As a BA I'd frame the job to be done: get AI edits into a repo doc without copy-paste, and approve each one. That gives us a success measure: share of agent edits kept, not undone. Want me to add that as a second bullet?",
+          "mentions": [],
+          "createdAt": "2026-10-16T06:23:04.870Z"
         }
       ]
     }

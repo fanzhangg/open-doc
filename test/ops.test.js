@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activeWorking, applyOp, emptySidecar, newId, OpError, workingList } from '../src/core/ops.js';
+import { activeWorking, applyOp, clearAgentClaims, emptySidecar, newId, OpError, WORKING_TTL_MS, workingList } from '../src/core/ops.js';
 import { parseMentions } from '../src/core/mentions.js';
 import { addedMentions, carry, changedRanges, textMentions } from '../src/core/text-mentions.js';
 import { inbox } from '../src/core/inbox.js';
@@ -44,6 +44,40 @@ test('operations are idempotent by id', () => {
   const resolved = applyOp(twice, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at });
   assert.equal(applyOp(resolved, { type: 'resolve', threadId: 't_aaaaaa', by: 'fzhan', at }), resolved);
   assert.equal(resolved.threads[0].resolvedBy, 'fzhan');
+});
+
+test('a claim goes stale after the timeout, but a heartbeat keeps it alive', () => {
+  const t0 = Date.parse(at);
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude?') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_aaaaaa', by: 'claude', since: new Date(t0).toISOString(), owner: 'h_run1' });
+  assert.equal(s.threads[0].working[0].owner, 'h_run1');
+  // Past the timeout with no heartbeat, the claim is taken as abandoned.
+  assert.equal(activeWorking(s.threads[0], t0 + WORKING_TTL_MS + 1).length, 0);
+  // A heartbeat before it goes stale refreshes `since`, so it stays active.
+  s = applyOp(s, { type: 'beatWorking', threadId: 't_aaaaaa', by: 'claude', since: new Date(t0 + WORKING_TTL_MS / 2).toISOString(), owner: 'h_run1' });
+  assert.equal(activeWorking(s.threads[0], t0 + WORKING_TTL_MS + 1).length, 1);
+});
+
+test('beatWorking never revives a claim the reply already cleared', () => {
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_aaaaaa', anchor: null, message: msg(human, '@claude?') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_aaaaaa', by: 'claude', since: at, owner: 'h_run1' });
+  s = applyOp(s, { type: 'addMessage', threadId: 't_aaaaaa', message: msg(claude, 'Done.') });
+  assert.equal(s.threads[0].working, null);
+  const before = s;
+  s = applyOp(s, { type: 'beatWorking', threadId: 't_aaaaaa', by: 'claude', since: new Date().toISOString(), owner: 'h_run1' });
+  assert.equal(s.threads[0].working, null, 'a late heartbeat adds nothing');
+  assert.equal(s, before, 'and is a no-op');
+});
+
+test('clearAgentClaims drops a dead server run, keeps a chat session wait', () => {
+  let s = applyOp(withAgents(claude), { type: 'addThread', id: 't_run', anchor: null, message: msg(human, '@claude?') });
+  s = applyOp(s, { type: 'addThread', id: 't_wait', anchor: null, message: msg(human, '@claude again?') });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_run', by: 'claude', since: at, owner: 'h_dead' });
+  s = applyOp(s, { type: 'setWorking', threadId: 't_wait', by: 'claude', since: at }); // a chat session's `wait`: no owner
+  const cleared = clearAgentClaims(s);
+  assert.equal(cleared.threads.find((t) => t.id === 't_run').working, null);
+  assert.deepEqual(cleared.threads.find((t) => t.id === 't_wait').working.map((w) => w.by), ['claude']);
+  assert.equal(clearAgentClaims(cleared), cleared, 'nothing left to clear is a no-op');
 });
 
 test('a reply reopens a resolved thread; the agent reply clears its working flag', () => {

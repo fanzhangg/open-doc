@@ -234,41 +234,52 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const v = view();
     const decorations = [];
     const drawn = [];
-    const find = (anchor) => rangeOf(v.state.doc, anchor);
-    const add = (anchor, id, classes) => {
-      const range = find(anchor);
-      if (!range) return;
-      decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': id }));
-      drawn.push(range.from, range.to, id, classes);
-    };
     const now = Date.now();
-    for (const thread of threads) {
-      if (!thread.anchor || thread.detached || thread.status !== 'open') continue;
+    const open = new Map(threads.filter((t) => t.anchor && !t.detached && t.status === 'open').map((t) => [t.id, t]));
+    const comment = (from, to, id) => {
+      const thread = open.get(id);
+      if (!thread && id !== 'draft') return;
       let classes = 'od-hl';
-      if (thread.id === activeId) classes += ' od-hl-active';
-      if (activeWorking(thread, now).length > 0) classes += ' od-hl-working';
-      add(thread.anchor, thread.id, classes);
+      if (id === 'draft' || id === activeId) classes += ' od-hl-active';
+      if (thread && activeWorking(thread, now).length > 0) classes += ' od-hl-working';
+      decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id }));
+      drawn.push(from, to, id, classes);
+    };
+    if (replayer.active()) {
+      // Anchors are found in the text on disk; mid-replay they would land on
+      // half-typed words (a removed phrase's context brackets whatever is
+      // being typed in its place). The highlights stay where the replay's
+      // steps carried them, restyled, and are found again once it ends; the
+      // suggestion waits until then too.
+      for (const d of highlightKey.getState(v.state).find(undefined, undefined, (spec) => spec.thread)) comment(d.from, d.to, d.spec.thread);
+    } else {
+      const find = (anchor) => rangeOf(v.state.doc, anchor);
+      for (const [id, thread] of open) {
+        const range = find(thread.anchor);
+        if (range) comment(range.from, range.to, id);
+      }
+      const drafted = draft && find(draft);
+      if (drafted) comment(drafted.from, drafted.to, 'draft');
+      // A proposal or a past edit shows as a suggestion: removed text struck
+      // through, new text marked. Decorations only; the doc does not change. A
+      // new `replay` number gives the marks new attributes, so ProseMirror
+      // redraws them and their animation runs again.
+      const { replay } = preview;
+      const classes = (kind) => `od-mark-${kind}${replay ? ' od-replay' : ''}`;
+      preview.items.forEach(({ anchor, mark, widget }, i) => {
+        const range = find(anchor);
+        if (!range) return;
+        if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), 'data-replay': String(replay) }));
+        drawn.push(range.from, range.to, mark, replay);
+        if (!widget) return;
+        const before = widget.side === 'before';
+        const key = `change-${replay}-${i}-${widget.kind}-${widget.text}`;
+        decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
+          side: before ? -1 : 1, key,
+        }));
+        drawn.push(key, widget.side);
+      });
     }
-    if (draft) add(draft, 'draft', 'od-hl od-hl-active');
-    // A proposal or a past edit shows as a suggestion: removed text struck
-    // through, new text marked. Decorations only; the doc does not change. A
-    // new `replay` number gives the marks new attributes, so ProseMirror
-    // redraws them and their animation runs again.
-    const { replay } = preview;
-    const classes = (kind) => `od-mark-${kind}${replay ? ' od-replay' : ''}`;
-    preview.items.forEach(({ anchor, mark, widget }, i) => {
-      const range = find(anchor);
-      if (!range) return;
-      if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), 'data-replay': String(replay) }));
-      drawn.push(range.from, range.to, mark, replay);
-      if (!widget) return;
-      const before = widget.side === 'before';
-      const key = `change-${replay}-${i}-${widget.kind}-${widget.text}`;
-      decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
-        side: before ? -1 : 1, key,
-      }));
-      drawn.push(key, widget.side);
-    });
     const signature = JSON.stringify(drawn);
     if (v.state.doc === paintedDoc && signature === painted) return;
     paintedDoc = v.state.doc;
@@ -542,7 +553,14 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const target = parse(next);
     if (animate) {
       replayTarget = next;
-      if (replayer.start(target, by)) return;
+      if (replayer.start(target, by)) {
+        // The typing shows the change now. A suggestion shown for the old
+        // text (the proposal being applied, say) would be typed over, so it
+        // goes until the page sets one for the new text.
+        preview = { items: [], replay: 0 };
+        paintHighlights();
+        return;
+      }
       replayTarget = null;
     }
     const hunks = diffBlocks(current, target);
@@ -672,7 +690,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     setPreview(items, { replay = false } = {}) {
       preview = { items, replay: replay ? ++replays : 0 };
       paintHighlights();
-      if (!replay || items.length === 0) return;
+      if (!replay || items.length === 0 || replayer.active()) return;
       const v = view();
       const range = rangeOf(v.state.doc, items[0].anchor);
       if (!range) return;

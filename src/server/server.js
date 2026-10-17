@@ -9,9 +9,9 @@ import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, blockAt, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
+import { OpError, applyOp, blockAt, clearAgentClaims, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
+import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, leaderless, safestPermissions, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
 import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
@@ -24,6 +24,10 @@ import { agentSpec } from './agents/config.js';
 import { CLAUDE_DEFAULT_MODEL, programStatus, userCodexConfig } from './agents/adapters.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
+// One id per process: it marks the claims this process's agent runs make, so
+// a server that starts over a crash can tell its predecessor's leftover
+// claims (to clear) from a chat session's (to leave).
+const HOST_ID = newId('h');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
 const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
@@ -83,6 +87,7 @@ export async function startServer(docPath, {
     docPath,
     onChange: broadcastAgents,
     options: (spec) => ({
+      hostId: HOST_ID,
       onStatus: broadcastAgents,
       guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken(spec.name) },
       typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
@@ -396,7 +401,7 @@ export async function startServer(docPath, {
       if (!here || leaving.has(agent.name.toLowerCase()) || specs.some((s) => sameName(s.name, agent.name))) continue;
       // A person of the same name keeps the name; the agent stays out.
       if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, folder });
+      const key = JSON.stringify({ ...agent, face: undefined, autoComment: undefined, permissionsReset: undefined, claudeBin: settings.claudeBin, codexBin: settings.codexBin, docPath, folder });
       specs.push({ ...agentSpec(agent, settings, docPath, { folder }), key, source: 'roster', join: false, participant: asParticipant(agent) });
     }
     return specs;
@@ -498,17 +503,26 @@ export async function startServer(docPath, {
       if (!here) return rosterDelete({ id });
       patch.doc = docKey();
     }
+    // The user has looked at it again: its card stops saying its permissions were reset.
+    if (['editMode', 'autoComment', 'webAccess', 'fileAccess', 'persona', 'instructions'].some((k) => Object.hasOwn(patch, k))) patch.permissionsReset = false;
     const me = (await human()).name;
-    const settings = await editAgents((agents) => updateAgent(agents, id, patch, [me]), settingsDir).catch(agentError);
-    const after = settings.agents.find((a) => a.id === id);
-    // The doc keeps who its agents are: their names, personas and instructions.
-    if (after && here && ['name', 'persona', 'instructions'].some((k) => after[k] !== before[k])) {
-      await serial(() => update(docPath, (s) => {
-        if (!s.participants.some((p) => p.kind === 'agent' && sameName(p.name, before.name))) return s;
-        if (!sameName(after.name, before.name)) return applyOp(applyOp(s, { type: 'leave', name: before.name }), { type: 'join', participant: asParticipant(after) });
-        return applyOp(s, { type: 'describe', name: after.name, persona: after.persona, instructions: after.instructions });
-      }));
-    }
+    // The settings and the doc change together, so adoptDocAgents never
+    // takes this change for one made outside OpenDoc.
+    const settings = await serial(async () => {
+      const saved = await editAgents((agents) => updateAgent(agents, id, patch, [me]), settingsDir).catch(agentError);
+      const after = saved.agents.find((a) => a.id === id);
+      // The doc keeps who its agents are: their names, personas and
+      // instructions, and what its own agent is now, if it was starred.
+      const unstarred = before.starred && after && !after.starred;
+      if (after && here && (unstarred || ['name', 'persona', 'instructions'].some((k) => after[k] !== before[k]))) {
+        await update(docPath, (s) => {
+          if (!s.participants.some((p) => p.kind === 'agent' && sameName(p.name, before.name))) return s;
+          if (!sameName(after.name, before.name)) return applyOp(applyOp(s, { type: 'leave', name: before.name }), { type: 'join', participant: asParticipant(after) });
+          return applyOp(s, { type: 'describe', name: after.name, persona: after.persona, instructions: after.instructions });
+        });
+      }
+      return saved;
+    });
     syncAgents();
     return { settings, agents: team.statuses() };
   }
@@ -555,8 +569,14 @@ export async function startServer(docPath, {
   // cloned repo, another computer, or one unstarred elsewhere) is set up from
   // the doc as this doc's own, with the safest permissions: it proposes
   // edits (not the default for new agents: the doc's text can steer it),
-  // answers only when @mentioned, and has no web or files. A doc's own
-  // agent follows what the doc says it is. Permissions never come from the doc.
+  // answers only when @mentioned, and has no web or files. One the doc does
+  // not describe is set up too, with no persona. A doc's own agent follows
+  // what the doc says it is. Permissions never come from the doc.
+  //
+  // OpenDoc writes a doc's own agent to the settings and the sidecar
+  // together (rosterUpdate, in the same queue), so when the two disagree,
+  // the doc was changed outside OpenDoc: the agent takes what it says, at
+  // the safest permissions, and its card says so. Run it in `serial`.
   async function adoptDocAgents() {
     if (!useSettings) return false;
     let participants;
@@ -566,15 +586,19 @@ export async function startServer(docPath, {
       return false;
     }
     const me = (await human()).name;
-    const described = participants.filter((p) => p.kind === 'agent' && (p.persona || p.instructions) && !sameName(p.name, me));
+    const theirs = participants.filter((p) => p.kind === 'agent' && !sameName(p.name, me));
     const adopt = (agents) => {
       let next = agents;
-      for (const p of described) {
+      for (const p of theirs) {
         const persona = p.persona ?? '';
         const instructions = p.instructions ?? '';
+        const described = Boolean(persona || instructions);
         const mine = next.find((a) => sameName(a.name, p.name) && availableIn(a, docKey()));
         if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey(), editMode: 'approve', autoComment: false }, [me])];
-        else if (docOnly(mine) && (mine.persona !== persona || mine.instructions !== instructions)) next = updateAgent(next, mine.id, { persona, instructions });
+        else if (described && docOnly(mine) && (mine.persona !== persona || mine.instructions !== instructions)) {
+          const reset = safestPermissions(mine);
+          next = updateAgent(next, mine.id, { persona, instructions, ...(reset ? { ...reset, permissionsReset: true } : {}) });
+        }
       }
       return next;
     };
@@ -896,7 +920,7 @@ export async function startServer(docPath, {
         team.notify();
         // Someone may have been invited or removed, or the doc (a git pull)
         // may bring agents of its own.
-        adoptDocAgents().catch((error) => console.error('Could not set up the doc\'s agents:', error)).finally(() => syncAgents());
+        serial(adoptDocAgents).catch((error) => console.error('Could not set up the doc\'s agents:', error)).finally(() => syncAgents());
       }
     } catch (error) {
       if (!(error instanceof StoreError)) console.error(error);
@@ -933,6 +957,8 @@ export async function startServer(docPath, {
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
       team.docPath = target;
+      // A folder moved with the doc in it: the watch may have seen it go.
+      if (missing) broadcast('missing', { missing: false, doc: basename(docPath) });
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
       await syncAgents(); // hooks, and so warnings, depend on the folder
@@ -964,6 +990,10 @@ export async function startServer(docPath, {
   actualPort = server.address().port;
   listening = true;
 
+  // No agent run exists yet, so any run's claim in the sidecar is one a
+  // previous server left when it stopped: free those threads now instead of
+  // waiting out the stale timeout. A chat session's claim (no owner) stays.
+  await update(docPath, clearAgentClaims).catch(() => {});
   await syncAgents();
 
   return {

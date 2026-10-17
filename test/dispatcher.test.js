@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from '../src/server/server.js';
 import { Floor } from '../src/server/agents/dispatcher.js';
@@ -329,6 +329,21 @@ test('a hanging run is killed at the timeout', { timeout: 30_000 }, async () => 
     assert.match(dispatcher.status().error, /timed out/);
     assert.equal((await sidecar()).threads[0].working, null);
   }, { timeoutMs: 1500 });
+});
+
+test('a run refreshes its claim while it lasts, so a long run is not answered twice', { timeout: 30_000 }, async () => {
+  await withAgent('hang', async ({ dispatcher, sidecar, comment }) => {
+    dispatcher.heartbeatMs = 100;
+    await comment('--quote', 'extra load', '@claude quantify this');
+    const first = await until(async () => (await sidecar()).threads[0].working?.[0], { what: 'the claim' });
+    assert.ok(first.owner, 'the claim is marked as a server run');
+    // The run keeps running (hang); its claim's timestamp advances.
+    const refreshed = await until(async () => {
+      const w = (await sidecar()).threads[0].working?.[0];
+      return w && w.since !== first.since ? w : null;
+    }, { what: 'a heartbeat' });
+    assert.equal(refreshed.owner, first.owner);
+  }, { timeoutMs: 15_000 });
 });
 
 test('do not disturb answers only @mentions; back online, the rest is answered', { timeout: 30_000 }, async () => {
@@ -735,15 +750,16 @@ test('Codex permissions: in the doc folder only the doc and its sidecar; secrets
   const siblings = ['plan.md', 'plan.md.opendoc.json', 'plan.md.opendoc.json.lock', 'secret.txt', '.env', 'drafts'];
   const table = codexPermissions(docPath, { siblings, home });
   assert.equal(table[':root'], 'read', "Codex's elevated Windows sandbox needs the whole disk readable");
-  // The folder is writable so the sandboxed `opendoc reply` can make the
-  // sidecar's lock and temp files; every other file there is denied.
+  // The folder and the sidecar are writable so the sandboxed `opendoc reply`
+  // can make the sidecar's lock and temp files and rename one over it; every
+  // other file there is denied.
   assert.deepEqual(table[folder], {
     '.': 'write',
     '.env': 'deny',
     drafts: 'deny',
     'secret.txt': 'deny',
     'plan.md': 'write',
-    'plan.md.opendoc.json': 'read',
+    'plan.md.opendoc.json': 'write',
   });
   assert.equal(codexPermissions(docPath, { siblings, home, editMode: 'approve' })[folder]['plan.md'], 'read', 'approve mode: the doc is read-only');
   // Opened from a folder: the files next to the doc are read-only, secrets still denied.
@@ -754,7 +770,7 @@ test('Codex permissions: in the doc folder only the doc and its sidecar; secrets
     drafts: 'read',
     'secret.txt': 'read',
     'plan.md': 'write',
-    'plan.md.opendoc.json': 'read',
+    'plan.md.opendoc.json': 'write',
   });
   for (const dir of [join(tmpdir(), 'work'), tmpdir(), join(tmpdir(), '..')]) {
     assert.deepEqual(Object.keys(table[resolve(dir)] ?? {}), CODEX_DENIED_GLOBS, `secrets denied in ${dir}`);
@@ -773,6 +789,25 @@ test('Codex permissions: in the doc folder only the doc and its sidecar; secrets
   const line = config.split('\n').find((l) => l.startsWith(JSON.stringify(dirname(doc))));
   assert.ok(line.includes('"secret.txt" = "deny"'));
   assert.ok(line.includes(`${JSON.stringify(basename(doc))} = "read"`));
+});
+
+test('Codex trusts the private folder by its real path (macOS temp is a symlink)', { skip: process.platform === 'win32' }, async () => {
+  const real = await mkdtemp(join(realpathSync(tmpdir()), 'opendoc-real-tmp-'));
+  const link = `${real}-link`;
+  symlinkSync(real, link);
+  const saved = process.env.TMPDIR;
+  process.env.TMPDIR = link;
+  try {
+    const adapter = codexAdapter({ bin: 'codex', agentName: 'codex' });
+    const docPath = join(tmpdir(), 'docs', 'plan.md');
+    const workdir = adapter.workdir(docPath);
+    assert.ok(workdir.startsWith(real + sep), workdir);
+    const { args } = adapter.command({ prompt: 'P', docPath });
+    assert.ok(args.includes(`projects={ ${JSON.stringify(workdir)} = { "trust_level" = "trusted" } }`));
+  } finally {
+    if (saved === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = saved;
+  }
 });
 
 test("Codex runs keep only the model and Windows sandbox of the user's config", async () => {
