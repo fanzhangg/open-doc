@@ -153,7 +153,7 @@ test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async
 
 test('the shipped scripts pass the project folder only when there is one', () => {
   for (const name of ['claude', 'codex']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
-  assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /if defined OPENDOC_PROJECT set ADD=--add-dir "%OPENDOC_PROJECT%"/);
+  assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /set ADD=--add-dir "%OPENDOC_PROJECT%" --disallowedTools "Edit\(\/%P%\/\*\*\)"/, 'claude.cmd keeps the project read only');
   assert.doesNotMatch(readFileSync(join(ROOT, 'agents', 'codex.cmd'), 'utf8'), /codex exec[^\r]*--add-dir/, 'Codex reads the project without it');
   if (process.platform === 'win32') return;
   // A fake `claude` and `codex` on PATH read the prompt (else writing it can
