@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COALESCE_MS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
+import { writeAtomic } from '../src/store/files.js';
 import { startServer } from '../src/server/server.js';
 import { customAdapter } from '../src/server/agents/adapters.js';
 import { SAMPLE, tempDoc } from './helpers.js';
@@ -134,8 +135,10 @@ test('the server records saves, changes on disk and restores', async () => {
     const saved = await call(server, 'PUT', '/api/doc', { markdown: SAMPLE.replace('six', 'seven'), baseHash: state.docHash });
     assert.equal(saved.status, 200);
 
-    // Written by another program: noticed by the watcher.
-    await writeFile(docPath, SAMPLE.replace('six', 'eight'));
+    // Written by another program: noticed by the watcher. Written whole, as
+    // editors and git do: a plain writeFile empties the file first, and a
+    // watcher that reads it in between records the empty doc as a version too.
+    await writeAtomic(docPath, SAMPLE.replace('six', 'eight'));
     assert.ok(await waitUntil(async () => (await versions()).length === 3), 'the outside change was recorded');
     const list = await versions();
     assert.deepEqual(list.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['external', null]]);
