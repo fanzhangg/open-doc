@@ -3,7 +3,13 @@
 # app. Pushes to main that pass it replace the "nightly" pre-release
 # (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
 # that cannot open a doc never replaces a working one. The unit tests run
-# once, on Linux, and report without holding back the nightly.
+# once, on Linux, and report without holding back the nightly; the agent
+# concurrency stress test (npm run test:stress) does hold it back.
+#
+# A pull request that changes only docs (docs/ or a top-level *.md) skips the
+# installers, the tests and the stress test: the `changes` job decides, and
+# the `package` jobs still run and report success so the required checks pass.
+# Every push to main runs the full gate.
 
 name: Desktop builds
 
@@ -18,10 +24,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    # `code` is true when something other than docs changed, and always for a
+    # push or a manual run. The heavier jobs key off it.
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}...HEAD")
+          echo "changed files:"; echo "$files"
+          # Any changed file that is not under docs/ and is not a top-level *.md
+          # means code changed.
+          if echo "$files" | grep -qvE '^(docs/|[^/]*\.md$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     # "package (windows)" and "package (macos)" are the checks main's ruleset
-    # requires: rename them there too if they change.
+    # requires: rename them there too if they change. The job always runs so
+    # the required checks report; a docs-only PR skips its steps and passes.
     name: package (${{ matrix.platform }})
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -37,19 +71,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - if: needs.changes.outputs.code == 'true'
+        uses: actions/checkout@v4
+      - if: needs.changes.outputs.code == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npx electron-builder ${{ matrix.args }} --publish never
-      - name: Smoke test the packaged app
+      - if: needs.changes.outputs.code == 'true'
+        run: npm ci
+      - if: needs.changes.outputs.code == 'true'
+        run: npm run lint
+      - if: needs.changes.outputs.code == 'true'
+        run: npm run build
+      - if: needs.changes.outputs.code == 'true'
+        run: npx electron-builder ${{ matrix.args }} --publish never
+      - if: needs.changes.outputs.code == 'true'
+        name: Smoke test the packaged app
         run: node scripts/smoke-desktop.js ${{ matrix.app }}
         timeout-minutes: 5
-      - uses: actions/upload-artifact@v4
+      - if: needs.changes.outputs.code == 'true'
+        uses: actions/upload-artifact@v4
         with:
           name: opendoc-${{ runner.os }}
           path: |
@@ -58,6 +100,8 @@ jobs:
           if-no-files-found: error
 
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -70,8 +114,23 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  stress:
+    # The agent concurrency stress test: deterministic, a couple of minutes.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:stress
+
   release:
-    needs: build # not test: failing unit tests show on the PR but do not hold back the nightly
+    needs: [build, stress] # not test: flaky unit tests show on the PR but do not hold back the nightly
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
