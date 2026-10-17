@@ -10,8 +10,8 @@ import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 async function withDoc(fn) {
   const docPath = await tempDoc();
-  const settingsDir = await fakeConfig({ buddies: { Ada: '\n', Ben: '\n' } });
-  const opened = await openTestDoc(docPath, { settingsDir });
+  const settingsDir = await fakeConfig();
+  const opened = await openTestDoc(docPath, { settingsDir, buddies: { Ada: '\n', Ben: '\n' } });
   const versions = async () => (await opened.call('history')).versions;
   const disk = () => readFile(docPath, 'utf8');
   // Ask a buddy in a comment; its reply once the edit is in.

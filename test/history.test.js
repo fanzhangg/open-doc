@@ -81,8 +81,8 @@ test('history follows a renamed doc', async () => {
 // The doc's buddy, histbot, runs the fake agent script.
 async function withDoc(fn) {
   const docPath = await tempDoc(SAMPLE);
-  const settingsDir = await fakeConfig({ buddies: { histbot: '\n' } });
-  const { doc, call, state } = await openTestDoc(docPath, { settingsDir });
+  const settingsDir = await fakeConfig();
+  const { doc, call, state } = await openTestDoc(docPath, { settingsDir, buddies: { histbot: '\n' } });
   try {
     await fn({ call, state, docPath, versions: async () => (await call('history')).versions });
   } finally {

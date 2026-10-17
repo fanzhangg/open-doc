@@ -15,8 +15,8 @@ const PILOT = { Pilot: 'You answer everything.\n' };
 async function withDoc(fn, { content = SAMPLE, buddies = PILOT, sidecar = null } = {}) {
   const docPath = await tempDoc(content);
   if (sidecar !== null) await writeFile(sidecarPath(docPath), sidecar);
-  const settingsDir = await fakeConfig({ buddies });
-  const opened = await openTestDoc(docPath, { settingsDir });
+  const settingsDir = await fakeConfig();
+  const opened = await openTestDoc(docPath, { settingsDir, buddies });
   try {
     await fn({ ...opened, docPath, settingsDir });
   } finally {
@@ -132,8 +132,8 @@ test('a v1 sidecar opens with a notice, and its bytes are unchanged', async () =
   const v1 = '{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": [],\n  "participants": []\n}\n';
   const docPath = await tempDoc();
   await writeFile(`${docPath}.opendoc.json`, v1);
-  const settingsDir = await fakeConfig({ buddies: PILOT });
-  const { doc, call, state } = await openTestDoc(docPath, { settingsDir });
+  const settingsDir = await fakeConfig();
+  const { doc, call, state } = await openTestDoc(docPath, { settingsDir, buddies: PILOT });
   try {
     const now = await state();
     assert.deepEqual(now.threads, []);
@@ -181,7 +181,7 @@ test('a doc renamed while open is found at its new path, with its comments', asy
     assert.equal(moved, newPath);
     assert.equal(doc.docPath(), newPath);
     assert.ok(!saved.conflict);
-    assert.deepEqual((await readdir(dirname(docPath))).sort(), ['launch.md', 'launch.md.opendoc.jsonl']);
+    assert.deepEqual((await readdir(dirname(docPath))).filter((f) => f !== '.opendoc').sort(), ['launch.md', 'launch.md.opendoc.jsonl']);
     assert.match(await readFile(newPath, 'utf8'), /Q1 Launch Plan/);
     const after = await state();
     assert.equal(after.doc, 'launch.md');
@@ -236,8 +236,8 @@ test('an @name typed in the doc text is plain text: it asks no one', { timeout: 
 });
 
 test('several docs open at once: each saves, comments and runs its buddies', { timeout: 30_000 }, async () => {
-  const settingsDir = await fakeConfig({ buddies: PILOT });
-  const opened = await Promise.all([0, 1, 2].map(async () => openTestDoc(await tempDoc(), { settingsDir })));
+  const settingsDir = await fakeConfig();
+  const opened = await Promise.all([0, 1, 2].map(async () => openTestDoc(await tempDoc(), { settingsDir, buddies: PILOT })));
   try {
     await Promise.all(opened.map(async ({ call, state }, i) => {
       await call('saveDoc', { markdown: SAMPLE.replace('Q4', `Q${i}`), baseHash: (await state()).docHash });

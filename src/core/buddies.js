@@ -1,11 +1,19 @@
-// A buddy (spec/PROJECT.md §2): a `<Name>.md` file. The file name is its
-// name, the first line its persona, the rest its instructions. Its avatar
-// is drawn from its name (web/faces.js), so everyone sees the same face.
-// Pure, so the doc host and the page check them the same way.
+// A buddy (spec/PROJECT.md §2): Clippy, built into the app, or a project's
+// `<Name>.md` file. The file name is its name, the first line its persona,
+// the rest its instructions. Pure, so the doc host and the page check them
+// the same way.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 
 export const MAX_PERSONA = 120;
+
+/** Clippy: in every doc, and no one can change it. */
+export const CLIPPY = Object.freeze({
+  name: 'Clippy',
+  persona: 'A general writing assistant that helps draft and edit docs',
+  instructions: '',
+  where: 'app',
+});
 
 export const BUDDY_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
@@ -41,9 +49,8 @@ export function buddyText({ persona = '', instructions = '' }) {
   return instructions.trim() ? `${persona.trim()}\n\n${instructions.trim()}\n` : `${persona.trim()}\n`;
 }
 
-/** The buddies a doc reaches: the project's, then the user's whose name the project has not taken. */
-export function buddiesHere(user, project) {
-  const mine = project.map((b) => ({ ...b, where: 'project' }));
-  for (const b of user) if (!mine.some((m) => sameName(m.name, b.name))) mine.push({ ...b, where: 'user' });
-  return mine.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+/** The buddies a doc reaches: Clippy, then the project's by name. A project's `Clippy.md` is not one. */
+export function buddiesHere(project) {
+  const theirs = project.filter((b) => !sameName(b.name, CLIPPY.name)).map((b) => ({ ...b, where: 'project' }));
+  return [CLIPPY, ...theirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))];
 }

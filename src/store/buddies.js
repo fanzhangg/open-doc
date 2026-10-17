@@ -1,25 +1,12 @@
-// Buddy files (spec/PROJECT.md): the user's in the config folder's
-// `buddies/`, a project's in its `.opendoc/buddies/`. `Clippy.md` is made
-// in the user's on first run, when that folder does not exist yet.
+// Buddy files (spec/PROJECT.md): a project's, in its `.opendoc/buddies/`.
 
 import { mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BuddyError, buddyText, parseBuddy } from '../core/buddies.js';
 import { NAME_PATTERN, sameName } from '../core/mentions.js';
-import { exists, writeAtomic } from './files.js';
+import { writeAtomic } from './files.js';
 
-export const userBuddiesDir = (configDir) => join(configDir, 'buddies');
 export const projectBuddiesDir = (folder) => join(folder, '.opendoc', 'buddies');
-
-const CLIPPY = { persona: 'A general writing assistant that helps draft and edit docs', instructions: '' };
-
-/** Make `buddies/` with Clippy in it, unless the user has the folder already. */
-export async function installClippy(configDir) {
-  const dir = userBuddiesDir(configDir);
-  if (await exists(dir)) return;
-  await mkdir(dir, { recursive: true });
-  await writeAtomic(join(dir, 'Clippy.md'), buddyText(CLIPPY));
-}
 
 /** The buddies in `dir`, by name; none when it does not exist. A name twice (in another case) counts once. */
 export async function readBuddies(dir) {

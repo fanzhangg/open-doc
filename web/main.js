@@ -178,6 +178,7 @@ async function start() {
     setName,
     openSettings: (section, name) => (section === 'agents' ? chrome.openAgent(name) : chrome.command('settings')),
     newAgent: () => chrome.newAgent(),
+    project: () => inProject,
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
   createNameCards({

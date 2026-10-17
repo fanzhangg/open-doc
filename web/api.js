@@ -32,8 +32,8 @@ export const api = {
   scripts: () => call('scripts'),
   /** Write shipped agent script `name` again as it came. */
   resetScript: (name) => call('resetScript', { name }),
-  /** A new buddy, `where` 'user' or 'project': { agents }. */
-  createBuddy: (buddy, where) => call('createBuddy', { buddy, where }),
+  /** A new buddy, the project's: { agents }. */
+  createBuddy: (buddy) => call('createBuddy', { buddy }),
   /** Change buddy `name` here: { agents }. */
   updateBuddy: (name, patch) => call('updateBuddy', { name, patch }),
   /** Delete buddy `name`'s file: { agents }. */

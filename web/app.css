@@ -254,7 +254,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-inline-input[aria-invalid="true"] { outline-color: var(--danger); }
 .od-profile-who { flex: 1; }
 .od-profile + .od-input-error { margin-top: 6px; }
-.od-agent-keep { margin: 0 0 8px; }
 [data-presence="working"] .od-presence-dot, [data-presence="queued"] .od-presence-dot { background: var(--success); }
 
 /* the @ menu and who-will-reply line under a comment box */
@@ -815,7 +814,7 @@ label.od-setting { cursor: pointer; }
 /* a new agent's draft: Create and Cancel in place of Delete, kept in view */
 .od-agent-draft-actions { display: none; gap: 8px; }
 .od-agent-editor[data-draft] .od-agent-draft-actions { display: flex; }
-.od-agent-editor[data-draft] [data-action="delete-agent"] { display: none; }
+.od-agent-editor:is([data-draft], [data-fixed]) [data-action="delete-agent"] { display: none; }
 .od-agent-editor[data-draft] .od-agent-foot { position: sticky; bottom: -28px; margin-bottom: -28px; padding-bottom: 28px; background: var(--bg); }
 
 /* in a browser tab: where a Command agent's command goes in settings.json */

@@ -31,14 +31,11 @@ const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fa
 
 /**
  * A config folder whose agent script `fake` runs the fake agent
- * (fixtures/fake-agent.js), with `buddies` ({ name: file text }) and
- * `settings` over the user fzhan's. The fake
+ * (fixtures/fake-agent.js), with `settings` over the user fzhan's. The fake
  * logs its runs to `runs.log` there.
  */
-export async function fakeConfig({ buddies = {}, ...settings } = {}) {
+export async function fakeConfig(settings = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
-  await mkdir(join(dir, 'buddies'));
-  for (const [name, text] of Object.entries(buddies)) await writeFile(join(dir, 'buddies', `${name}.md`), text);
   await mkdir(join(dir, 'agents'));
   await writeFile(join(dir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
   await writeFile(join(dir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
@@ -54,10 +51,16 @@ export async function fakeRuns(dir) {
 
 /**
  * Open `docPath` as a window would: `call(type, arg)` asks the doc,
- * `events` holds what it said ([name, data], oldest first).
+ * `events` holds what it said ([name, data], oldest first). With `buddies`
+ * ({ name: file text }), the doc's folder is a project holding them.
  */
-export async function openTestDoc(docPath, options = {}) {
+export async function openTestDoc(docPath, { buddies = null, ...options } = {}) {
   const events = [];
+  if (buddies) {
+    options.folder ??= dirname(docPath);
+    await mkdir(join(options.folder, '.opendoc', 'buddies'), { recursive: true });
+    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.opendoc', 'buddies', `${name}.md`), text);
+  }
   const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
   return { doc, events, call: (type, arg) => doc.call(type, arg), state: () => doc.call('state') };
 }

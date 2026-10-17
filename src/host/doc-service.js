@@ -13,14 +13,14 @@ import { basename, dirname } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
-import { BuddyError, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
+import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
 import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
-import { installClippy, projectBuddiesDir, readBuddies, removeBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
+import { projectBuddiesDir, readBuddies, removeBuddy, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { splice } from './splice.js';
@@ -136,7 +136,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       defaultName: defaultName(),
       me: await me(),
       agents: agentStatuses(),
-      project: folder !== null, // whether a new buddy may be the project's
+      project: folder !== null, // whether buddies can be made here
     };
   }
 
@@ -213,10 +213,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- the doc's buddies ----
 
-  // The user's buddies and the project's; the project's wins a name both have.
+  // Clippy and the project's buddies.
   async function buddies() {
     currentAgent = (await readSettings(settingsDir)).settings.agent;
-    return buddiesHere(await readBuddies(userBuddiesDir(settingsDir)), folder ? await readBuddies(projectBuddiesDir(folder)) : []);
+    return buddiesHere(folder ? await readBuddies(projectBuddiesDir(folder)) : []);
   }
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
@@ -324,20 +324,27 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- buddy files ----
 
-  const dirOf = (where) => {
-    if (where === 'user') return userBuddiesDir(settingsDir);
-    if (where === 'project' && folder) return projectBuddiesDir(folder);
-    throw new DocError('bad_input', where === 'project' ? 'not in a project' : 'where is user or project');
+  const projectDir = () => {
+    if (!folder) throw new DocError('bad_input', 'buddies other than Clippy belong to a project');
+    return projectBuddiesDir(folder);
   };
 
-  // A buddy can be called anything but its owner's name.
+  // A buddy can be called anything but Clippy or its owner's name.
   async function checkBuddy(fields) {
     try {
       checkBuddyPatch(fields);
     } catch (error) {
       throw new DocError(error.code, error.message);
     }
-    if (fields.name !== undefined && sameName(fields.name, (await me()).name)) throw new DocError('bad_input', `the name ${fields.name} is taken`);
+    if (fields.name !== undefined && [CLIPPY.name, (await me()).name].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
+  }
+
+  // A project buddy here named `name`; Clippy cannot be changed.
+  async function projectBuddy(name) {
+    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
+    if (!found) throw new DocError('not_found', 'no such buddy');
+    if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be changed`);
+    return found;
   }
 
   // Write buddy files; a folder watch tells every window.
@@ -352,30 +359,27 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return { agents: agentStatuses() };
   }
 
-  // A new buddy: `where` 'user' (every doc) or 'project' (this folder's
-  // .opendoc/buddies/, made if missing).
-  async function createBuddy({ buddy, where = 'user' } = {}) {
+  // A new buddy, in this project's .opendoc/buddies/ (made if missing).
+  async function createBuddy({ buddy } = {}) {
     const fields = { persona: '', instructions: '', ...buddy };
     await checkBuddy(fields);
     if (!fields.name) throw new DocError('bad_input', 'a buddy needs a name');
-    const dir = dirOf(where);
+    const dir = projectDir();
     return changeBuddies(() => writeBuddy(dir, fields));
   }
 
   // Change buddy `name` here: its name (renames its file), persona or instructions.
   async function updateBuddy({ name, patch = {} } = {}) {
-    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
-    if (!found) throw new DocError('not_found', 'no such buddy');
+    const found = await projectBuddy(name);
     await checkBuddy(patch);
     const { where, ...was } = found;
-    return changeBuddies(() => writeBuddy(dirOf(where), { ...was, ...patch }, found.name));
+    return changeBuddies(() => writeBuddy(projectDir(), { ...was, ...patch }, found.name));
   }
 
   // Delete buddy `name`'s file. Its comments stay.
   async function deleteBuddy({ name } = {}) {
-    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
-    if (!found) throw new DocError('not_found', 'no such buddy');
-    return changeBuddies(() => removeBuddy(dirOf(found.where), found.name));
+    const found = await projectBuddy(name);
+    return changeBuddies(() => removeBuddy(projectDir(), found.name));
   }
 
   // Add the doc as it now reads to its history (one version at a time, in
@@ -473,7 +477,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   await installAgents(settingsDir).catch((error) => console.error('Could not write the agent scripts:', error));
-  await installClippy(settingsDir).catch((error) => console.error('Could not write Clippy:', error));
   const opened = await readDoc(docPath);
   lastDocHash = opened.hash;
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
@@ -481,7 +484,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
-  const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
   let stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
   await syncAgents();
 
@@ -550,7 +552,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     async close() {
       stopWatching();
       stopWatchingSettings();
-      stopWatchingUserBuddies();
       stopWatchingProjectBuddies();
       closed = true;
       await runner.stop();

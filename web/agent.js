@@ -23,9 +23,9 @@ export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting wit
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
  *           setName: (name: string) => boolean, openSettings: (section: string, name?: string) => void,
- *           newAgent: () => void }} options
+ *           newAgent: () => void, project?: () => boolean }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, openSettings, newAgent }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, openSettings, newAgent, project = () => false }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
   let showing = null; // 'me' | 'people' | 'agent:<name>' | 'person:<name>' | null
@@ -240,7 +240,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       close();
       newAgent();
     });
-    inDoc.append(create);
+    if (project()) inDoc.append(create); // buddies other than Clippy are a project's
 
     return [head, people, el('div', 'od-card-subtitle', 'Buddies in this doc'), inDoc];
   }
@@ -285,7 +285,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const pic = el('span', 'od-profile-face');
     pic.append(avatar(name, 'agent'));
     const who = el('div', 'od-profile-who');
-    if (status && !viewOnly) {
+    if (status && !viewOnly && status.where !== 'app') {
       // Click the name or the persona line to edit it right there.
       who.append(inPlace(status, 'name', 'od-profile-name', 'Name'));
       who.append(inPlace(status, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
@@ -295,7 +295,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     }
     who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
-    if (status && !viewOnly) {
+    if (status && !viewOnly && status.where !== 'app') {
       const tools = el('div', 'od-profile-tools');
       tools.append(iconButton('settings', 'More settings, such as instructions', () => editProfile(status.name)));
       head.append(tools);
@@ -466,7 +466,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
 // Where a buddy stands in this doc, on its card under its name.
 const STANDING = { working: 'Working…', away: 'Not running here' };
-const WHERE = { user: 'Yours, in every doc', project: "This project's" };
+const WHERE = { app: 'Built in, in every doc', project: "This project's" };
 
 const LABELS = { working: 'Working…', away: 'Not here' };
 

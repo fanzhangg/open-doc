@@ -14,16 +14,14 @@ import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './hel
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const CLIPPY = { Clippy: 'Helps with docs\n\nBe brief.\n' };
-
-async function withDoc(fn, { buddies = CLIPPY, folder = null, content = SAMPLE } = {}) {
+async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE } = {}) {
   const docPath = await tempDoc(content);
-  const settingsDir = await fakeConfig({ buddies });
-  let opened = await openTestDoc(docPath, { settingsDir, folder });
+  const settingsDir = await fakeConfig();
+  let opened = await openTestDoc(docPath, { settingsDir, folder, buddies });
   const release = (buddy) => writeFile(join(settingsDir, `release-${buddy}`), '');
   const restart = async () => {
     await opened.doc.close();
-    opened = await openTestDoc(docPath, { settingsDir, folder });
+    opened = await openTestDoc(docPath, { settingsDir, folder, buddies });
   };
   try {
     await fn({
@@ -54,12 +52,11 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     const [run] = await runs();
     assert.deepEqual(run.files, ['plan.md'], 'its folder holds only the copy');
     assert.notEqual(run.cwd, dirname(docPath));
-    assert.equal(run.doc, join(run.cwd, 'plan.md'));
+    assert.equal(join(basename(dirname(run.doc)), basename(run.doc)), join(basename(run.cwd), 'plan.md'), 'the copy, in its folder (macOS may name /var as /private/var)');
     assert.equal(run.buddy, 'Clippy');
     assert.equal(run.project, '');
     assert.equal(run.opendoc, false, 'no opendoc to call');
-    assert.match(run.prompt, /Helps with docs/);
-    assert.match(run.prompt, /Be brief\./);
+    assert.match(run.prompt, /A general writing assistant/, 'Clippy is built in');
     assert.match(run.prompt, /fzhan: @Clippy replace/);
     await until(() => !existsSync(run.cwd), 'the folder to be gone after', 5000);
   });

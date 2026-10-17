@@ -5,8 +5,8 @@
 //
 // Changes save to the buddy's file as they are made. A new buddy is a draft
 // until Create: nothing is saved before it has a name, so one left half
-// made (the panel closed, Esc, another buddy picked) leaves no trace. In a
-// project, a new buddy may be the project's instead of yours.
+// made (the panel closed, Esc, another buddy picked) leaves no trace. New
+// buddies are the project's; Clippy is built in and cannot be changed.
 
 import { api } from './api.js';
 import { avatar } from './threads.js';
@@ -25,9 +25,9 @@ export function createAgentsPanel({ buddies, project, onResult }) {
   const nameError = form.querySelector('.od-input-error');
   const createButton = form.querySelector('[data-action="create-agent"]');
   const where = form.querySelector('.od-agent-where');
-  const inProject = form.querySelector('.od-agent-keep');
+  const newButton = dialog.querySelector('[data-action="new-agent"]');
   let selected = null; // the name of the buddy shown
-  let draft = null; // a new buddy not created yet: { buddy, project }
+  let draft = null; // a new buddy not created yet: { buddy }
   let creating = false;
 
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
@@ -74,23 +74,23 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     if (selected && !all.some((b) => same(b.name, selected))) selected = null;
     selected ??= all[0]?.name ?? null;
     list.replaceChildren(...(draft ? [draftRow()] : []), ...all.map((buddy) => listRow(buddy)));
-    if (all.length === 0 && !draft) list.append(el('p', 'od-agents-empty', 'No buddies yet. Make one with +.'));
 
     const buddy = current();
     form.hidden = !buddy;
     if (!buddy) return;
     form.toggleAttribute('data-draft', Boolean(draft));
+    form.toggleAttribute('data-fixed', buddy.where === 'app');
     headAvatar.replaceChildren(avatar(buddy.name || '?', 'agent'));
     createButton.disabled = creating || !draft || !draftFields();
     for (const input of form.querySelectorAll('input[data-agent], textarea[data-agent]')) {
+      input.readOnly = buddy.where === 'app';
       if (document.activeElement === input) continue;
       input.value = buddy[input.dataset.agent] ?? '';
       input.removeAttribute('aria-invalid');
     }
-    inProject.hidden = !draft || !project();
-    inProject.querySelector('input').checked = Boolean(draft?.project);
     where.hidden = Boolean(draft);
-    where.textContent = buddy.where === 'project' ? `This project's: .opendoc/buddies/${buddy.name}.md` : `Yours, in every doc: buddies/${buddy.name}.md in your config folder`;
+    where.textContent = buddy.where === 'project' ? `This project's: .opendoc/buddies/${buddy.name}.md` : 'Built into OpenDoc, in every doc. It cannot be changed.';
+    newButton.hidden = !project();
   }
 
   // The draft, first in the list and picked, under the name typed so far.
@@ -159,10 +159,6 @@ export function createAgentsPanel({ buddies, project, onResult }) {
   });
   form.addEventListener('change', (event) => {
     const input = event.target;
-    if (input.dataset.draft === 'project') {
-      draft.project = input.checked;
-      return;
-    }
     const key = input.dataset.agent;
     if (!key || (draft && key === 'name')) return; // a draft's name is taken as it is typed
     const value = key === 'instructions' ? input.value : input.value.trim();
@@ -192,9 +188,10 @@ export function createAgentsPanel({ buddies, project, onResult }) {
   // New buddy: a draft in the editor, its name to type first. Nothing is
   // saved until Create.
   function newAgent() {
+    if (!project()) return;
     if (!dialog.open) dialog.showModal();
     show();
-    draft = { buddy: { name: '', persona: '', instructions: '' }, project: false };
+    draft = { buddy: { name: '', persona: '', instructions: '' } };
     paint();
     nameInput.focus();
   }
@@ -206,7 +203,7 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     creating = true;
     paint();
     try {
-      onResult(await api.createBuddy(fields, draft.project ? 'project' : 'user'));
+      onResult(await api.createBuddy(fields));
       draft = null;
       show(fields.name);
     } catch (error) {
