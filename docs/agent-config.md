@@ -34,8 +34,9 @@ app fills in `id`, `by` and `at`.
 | `{"thread":"c_…","body":"…"}` | a reply in that thread |
 
 - `exact` quotes the doc copy as the agent left it, without markdown marks,
-  and must be found exactly once; the app makes the rest of the anchor.
-  Otherwise the thread is on the whole doc.
+  and must be found exactly once (a line break in a paragraph counts as a
+  space); the app makes the rest of the anchor. Otherwise the thread is on
+  the whole doc.
 - Any other change to the copy is ignored: changed or removed lines,
   `resolved`, lines that are not valid.
 

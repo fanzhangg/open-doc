@@ -34,6 +34,7 @@ test('appended lines are comments; changed lines, unknown threads and bad lines 
   const before = '{"opendoc":2}\n{"id":"c_first01","by":{"id":"u_1","name":"fzhan","kind":"human"},"at":"2026-10-17T09:00:00Z","body":"Hi"}\n';
   const after = before.replace('"Hi"', '"Changed"') + [
     '{"anchor":{"exact":"beta cohort"},"body":"Who is in it?"}',
+    '{"anchor":{"exact":"gather\\nfeedback"},"body":"From whom?"}',
     '{"anchor":{"exact":"the"},"body":"Everywhere."}',
     '{"body":"Fine overall."}',
     '{"thread":"c_first01","body":"Agreed.","resolved":true}',
@@ -45,10 +46,11 @@ test('appended lines are comments; changed lines, unknown threads and bad lines 
   const added = appendedComments(before, after, { text, by: BY, at: AT, threads: new Set(['c_first01']) });
   assert.deepEqual(added.map(({ id, ...c }) => c), [
     { by: BY, at: AT, body: 'Who is in it?', anchor: { exact: 'beta cohort', prefix: 'We gather feedback from the ', suffix: ' before the release.', start: 28 } },
+    { by: BY, at: AT, body: 'From whom?', anchor: { exact: 'gather feedback', prefix: 'We ', suffix: ' from the beta cohort before the', start: 3 } },
     { by: BY, at: AT, body: 'Everywhere.', anchor: null },
     { by: BY, at: AT, body: 'Fine overall.', anchor: null },
     { by: BY, at: AT, body: 'Agreed.', thread: 'c_first01' },
-  ], 'a quote found twice is on the whole doc; resolved is dropped; the changed line is not new');
+  ], 'a quote with a line break matches its spaces; a quote found twice is on the whole doc; resolved is dropped; the changed line is not new');
 });
 
 test('a run appends a thread on a quote, one on the whole doc and a reply, and prints nothing: all are the buddy\'s', { timeout: 30_000 }, async () => {

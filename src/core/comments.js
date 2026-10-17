@@ -122,9 +122,15 @@ export function appendedComments(before, after, { text, by, at, threads }) {
   return added;
 }
 
-// The anchor of `exact` when it is in `text` once, else null.
+// The anchor of `exact` when it is in `text` once, else null. An agent may
+// quote a paragraph's line breaks, which `text` has as spaces, so a quote not
+// found as it is is looked for with its whitespace collapsed.
 function quoted(text, exact) {
   if (typeof exact !== 'string' || !exact) return null;
+  return once(text, exact) ?? once(text, exact.replace(/\s+/g, ' '));
+}
+
+function once(text, exact) {
   const start = text.indexOf(exact);
   if (start < 0 || text.indexOf(exact, start + 1) >= 0) return null;
   return createAnchor(text, start, start + exact.length);
