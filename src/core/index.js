@@ -17,6 +17,7 @@ export {
   OpError,
   activeWorking,
   applyOp,
+  clearAgentClaims,
   emptySidecar,
   findThread,
   newId,

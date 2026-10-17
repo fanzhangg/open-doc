@@ -26,6 +26,10 @@ const MAX_STDERR = 64 * 1024;
 const LOG_LINES = 40;
 
 export const DEFAULT_LIMITS = { timeoutMs: 10 * 60 * 1000, runsPerHour: 20 };
+// A run refreshes its claim this often, well inside WORKING_TTL_MS (5 min), so
+// a run longer than the stale timeout is not taken as abandoned and answered
+// twice; a dead server stops refreshing and its claim frees up within the TTL.
+const HEARTBEAT_MS = 90 * 1000;
 export const EDIT_LEASE_MS = 5_000; // a guarded edit holds the floor at most this long without saying it is done
 export const GUARD_WAIT_MS = 15_000; // how long the guard waits for the floor before refusing an edit
 
@@ -145,9 +149,11 @@ export class Dispatcher {
    */
   constructor({
     docPath, name, id = null, persona = '', profile = {}, adapter, limits = {}, editMode = 'auto', presence = 'online', warning = null,
-    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = null, others = () => [], join = true, source = 'flags', participant = null,
+    onStatus = () => {}, settleMs = 300, guard = null, typingIn = async () => null, humanName = async () => null, catchUp = async () => {}, held = () => false, floor = null, others = () => [], join = true, source = 'flags', participant = null, hostId = null, heartbeatMs = HEARTBEAT_MS,
   }) {
     this.docPath = docPath;
+    this.hostId = hostId; // marks this server's claims, so a restart clears only its own
+    this.heartbeatMs = heartbeatMs;
     this.docFile = basename(docPath);
     this.name = name;
     this.id = id;
@@ -252,6 +258,7 @@ export class Dispatcher {
     clearTimeout(this.settleTimer);
     clearTimeout(this.limitTimer);
     clearTimeout(this.leaseTimer);
+    clearInterval(this.heartbeatTimer);
     if (this.run) {
       const done = this.run.done;
       killTree(this.run.child);
@@ -306,7 +313,7 @@ export class Dispatcher {
       await update(this.docPath, (s, doc) => {
         markdown = doc.markdown;
         claimed = this.#waiting(s);
-        return claimed.reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since }), s);
+        return claimed.reduce((acc, t) => applyOp(acc, { type: 'setWorking', threadId: t.id, by: this.name, since, owner: this.hostId }), s);
       });
       if (this.#wholeRun()) this.floor.before = markdown;
       if (claimed.length > 0) await this.#launch(claimed, markdown);
@@ -413,6 +420,12 @@ export class Dispatcher {
         PATH: `${this.shimDir}${delimiter}${process.env.PATH ?? ''}`,
         OPENDOC_AS: this.name,
         OPENDOC_KIND: 'agent',
+        // The run acts as this agent, never as a human: the CLI pins its
+        // identity to this and ignores a --kind human (or a different --as) a
+        // run might pass to resolve a thread or wake another agent as if it
+        // were the person. The run cannot drop this: its tools only allow
+        // `opendoc *`, so it cannot wrap the command to unset the variable.
+        OPENDOC_AGENT_RUN: '1',
         // No memory across runs: the doc and its threads are all an agent knows.
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
         ...(this.guard ? { OPENDOC_GUARD_URL: this.guard.url, OPENDOC_GUARD_TOKEN: this.guard.token } : {}),
@@ -449,6 +462,7 @@ export class Dispatcher {
     const run = { child, threadIds: threads.map((t) => t.id), done, base: this.#wholeRun() ? markdown : null, overwritten: [], avoided: 0, open };
     this.run = run;
     this.#setState('running');
+    this.#startHeartbeat(run);
 
     let over = false;
     const ended = (code) => {
@@ -463,6 +477,20 @@ export class Dispatcher {
       if (child.pid === undefined) ended(null); // never started; 'close' may not follow
     });
     child.on('close', (code) => ended(code));
+  }
+
+  // Keep this run's claims fresh while it lasts, so a run longer than the
+  // stale timeout is not taken as abandoned and answered by another agent or
+  // a chat session. Stops when the run ends (`#finish`) or the agent stops.
+  #startHeartbeat(run) {
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(() => {
+      if (this.run !== run || run.ending) return;
+      const since = new Date().toISOString();
+      update(this.docPath, (s) =>
+        run.threadIds.reduce((acc, id) => applyOp(acc, { type: 'beatWorking', threadId: id, by: this.name, since, owner: this.hostId }), s),
+      ).catch(() => {}); // the doc may be gone, or busy; the next beat tries again
+    }, this.heartbeatMs);
   }
 
   /**
@@ -587,6 +615,7 @@ export class Dispatcher {
   }
 
   async #finish({ threads, run, startedAt, stdout, stderr, code, timedOut, spawnError, runDir }) {
+    clearInterval(this.heartbeatTimer);
     let result = run.restarted ? { ok: false, error: 'stopped: the comment it was answering changed' }
       : spawnError ? { ok: false, error: `could not start the agent: ${spawnError.message}` }
       : timedOut ? { ok: false, error: `timed out after ${Math.round(this.limits.timeoutMs / 60000)} min` }

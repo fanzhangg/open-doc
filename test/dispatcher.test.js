@@ -331,6 +331,21 @@ test('a hanging run is killed at the timeout', { timeout: 30_000 }, async () => 
   }, { timeoutMs: 1500 });
 });
 
+test('a run refreshes its claim while it lasts, so a long run is not answered twice', { timeout: 30_000 }, async () => {
+  await withAgent('hang', async ({ dispatcher, sidecar, comment }) => {
+    dispatcher.heartbeatMs = 100;
+    await comment('--quote', 'extra load', '@claude quantify this');
+    const first = await until(async () => (await sidecar()).threads[0].working?.[0], { what: 'the claim' });
+    assert.ok(first.owner, 'the claim is marked as a server run');
+    // The run keeps running (hang); its claim's timestamp advances.
+    const refreshed = await until(async () => {
+      const w = (await sidecar()).threads[0].working?.[0];
+      return w && w.since !== first.since ? w : null;
+    }, { what: 'a heartbeat' });
+    assert.equal(refreshed.owner, first.owner);
+  }, { timeoutMs: 15_000 });
+});
+
 test('do not disturb answers only @mentions; back online, the rest is answered', { timeout: 30_000 }, async () => {
   await withAgent('reply', async ({ dispatcher, runs, comment, sidecar }) => {
     await until(() => dispatcher.status().state === 'ready', { what: 'ready' });

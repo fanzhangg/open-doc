@@ -9,7 +9,7 @@ import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpError, applyOp, blockAt, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
+import { OpError, applyOp, blockAt, clearAgentClaims, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
 import { AGENT_PROGRAM_KEYS, AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, leaderless, updateAgent } from '../core/agents.js';
 import { PROGRAM_KEYS, SettingsError } from '../core/settings.js';
@@ -25,6 +25,10 @@ import { agentSpec } from './agents/config.js';
 import { CLAUDE_DEFAULT_MODEL, programStatus, userCodexConfig } from './agents/adapters.js';
 
 export const DEFAULT_ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'web');
+// One id per process: it marks the claims this process's agent runs make, so
+// a server that starts over a crash can tell its predecessor's leftover
+// claims (to clear) from a chat session's (to leave).
+const HOST_ID = newId('h');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const HEARTBEAT_MS = 25_000;
 const TYPING_MS = 15_000; // the human counts as typing in a paragraph this long after their last keystroke there
@@ -95,6 +99,7 @@ export async function startServer(docPath, {
     docPath,
     onChange: broadcastAgents,
     options: (spec) => ({
+      hostId: HOST_ID,
       onStatus: broadcastAgents,
       guard: { url: `http://127.0.0.1:${actualPort}`, token: guardToken(spec.name) },
       typingIn: async () => typingIn((await readDoc(docPath)).markdown.replace(/\r\n/g, '\n'))?.quote ?? null,
@@ -1055,6 +1060,10 @@ export async function startServer(docPath, {
   actualPort = server.address().port;
   listening = true;
 
+  // No agent run exists yet, so any run's claim in the sidecar is one a
+  // previous server left when it stopped: free those threads now instead of
+  // waiting out the stale timeout. A chat session's claim (no owner) stays.
+  await update(docPath, clearAgentClaims).catch(() => {});
   await syncAgents();
 
   return {

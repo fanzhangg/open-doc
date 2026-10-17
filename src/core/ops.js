@@ -43,7 +43,8 @@ export function newId(prefix) {
  *   { type: 'addMessage', threadId, message }
  *   { type: 'resolve', threadId, by, kind?, at }   // humans only
  *   { type: 'reopen', threadId, by, kind? }        // humans only
- *   { type: 'setWorking', threadId, by, since }   // since: null clears `by`'s
+ *   { type: 'setWorking', threadId, by, since, owner? }  // since: null clears `by`'s; owner marks a server run
+ *   { type: 'beatWorking', threadId, by, since, owner? } // refresh `by`'s claim; no-op if it has none
  *   { type: 'pass', threadId, by }                 // `by` leaves an open ask to others
  *   { type: 'fail', threadId, by, error, at }      // `by`'s run on the ask failed
  *   { type: 'retry', threadId, name, by, kind? }   // humans only: `name` tries the ask again
@@ -86,7 +87,16 @@ export function applyOp(sidecar, op) {
     case 'setWorking':
       return updateThread(sidecar, op.threadId, (t) => {
         const others = workingList(t).filter((w) => !sameName(w.by, op.by));
-        return { ...t, working: listOrNull(op.since ? [...others, { by: op.by, since: op.since }] : others) };
+        return { ...t, working: listOrNull(op.since ? [...others, workingEntry(op)] : others) };
+      });
+    case 'beatWorking':
+      // Refresh an existing claim's timestamp (a server run holds a long
+      // thread longer than the stale timeout). It never creates a claim, so
+      // a heartbeat landing after the thread was answered does not re-add one.
+      return updateThread(sidecar, op.threadId, (t) => {
+        if (!workingList(t).some((w) => sameName(w.by, op.by))) return t;
+        const others = workingList(t).filter((w) => !sameName(w.by, op.by));
+        return { ...t, working: listOrNull([...others, workingEntry(op)]) };
       });
     case 'pass':
       return pass(sidecar, op);
@@ -416,9 +426,35 @@ export function workingList(thread) {
   return (Array.isArray(w) ? w : [w]).filter((e) => e && typeof e.by === 'string');
 }
 
-/** Who is working on the thread as seen at `now`: entries older than 5 minutes do not count. */
+/**
+ * Who is working on the thread as seen at `now`: entries whose `since` (set
+ * on claim and refreshed by `beatWorking` while a server run lasts) is older
+ * than the stale timeout do not count, so a crashed holder's claim frees up.
+ */
 export function activeWorking(thread, now = Date.now()) {
   return workingList(thread).filter((w) => now - Date.parse(w.since) < WORKING_TTL_MS);
+}
+
+/** A working entry; keeps `owner` (the server run that made it) when given. */
+function workingEntry({ by, since, owner }) {
+  return owner ? { by, since, owner } : { by, since };
+}
+
+/**
+ * Drop every claim a server run made (one with an `owner`), keeping claims
+ * from a chat session's `wait` (which has none). A doc server calls this when
+ * it starts: any run it would own is one a previous, now-dead server left, so
+ * its thread is free again without waiting out the stale timeout.
+ */
+export function clearAgentClaims(sidecar) {
+  let changed = false;
+  const threads = sidecar.threads.map((t) => {
+    const kept = workingList(t).filter((w) => !w.owner);
+    if (kept.length === workingList(t).length) return t;
+    changed = true;
+    return { ...t, working: listOrNull(kept) };
+  });
+  return changed ? { ...sidecar, threads } : sidecar;
 }
 
 // `working` without `name`'s entry (the same value when it had none).
