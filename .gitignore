@@ -1,7 +1,11 @@
 node_modules/
 dist/
-*.opendoc.json.lock
 release/
+.DS_Store
 .claude/*
 !.claude/skills/
-.DS_Store
+
+# OpenDoc's own comments and buddies: local only
+*.opendoc.json
+*.opendoc.jsonl
+.opendoc/

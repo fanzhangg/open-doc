@@ -34,7 +34,7 @@ const appArgs = packaged ? [] : [join(root, 'desktop', 'main.js')];
 const work = mkdtempSync(join(tmpdir(), 'opendoc-smoke-'));
 const docs = ['plan.md', 'notes.md'].map((name) => {
   const doc = join(work, name);
-  copyFileSync(join(root, 'spec', 'examples', 'plan.md'), doc);
+  copyFileSync(join(root, 'test', 'fixtures', 'plan.md'), doc);
   return doc;
 });
 // The fake agent runs every buddy: it makes the edit a comment asks for.
