@@ -933,6 +933,8 @@ export async function startServer(docPath, {
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
       team.docPath = target;
+      // A folder moved with the doc in it: the watch may have seen it go.
+      if (missing) broadcast('missing', { missing: false, doc: basename(docPath) });
       missing = false;
       stopWatching = watchDoc(docPath, onFilesChanged);
       await syncAgents(); // hooks, and so warnings, depend on the folder

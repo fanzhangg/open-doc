@@ -145,7 +145,9 @@ Agents are light, and belong to the doc unless you star them:
   (its gear, or Ctrl+,).
 - **Files.** New Doc, New Doc in This Folder, and Rename (moves the comments
   too). Opening an already open doc focuses its window. If the file is moved
-  or deleted outside the app, a banner says so and saving pauses.
+  or deleted outside the app, a banner says so and saving pauses. A folder
+  window's sidebar also makes, renames, moves (drag, or Move To…) and deletes
+  docs and folders in place; see [file management](file-management.md).
 
 ## Agents outside the app
 

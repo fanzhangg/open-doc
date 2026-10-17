@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import { access, mkdtemp, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,25 @@ test('the doc host serves a doc, renames it with its sidecar, and closes it', as
 
     await doc.close();
     assert.ok(!(await serves(doc.url)));
+  } finally {
+    await host.shutdown();
+  }
+});
+
+test('a doc whose folder moved is followed there, and says which agents are at work', async () => {
+  const { host } = await newHost();
+  try {
+    const root = await mkdtemp(join(tmpdir(), 'opendoc-folder-'));
+    await mkdir(join(root, 'drafts'));
+    const docPath = join(root, 'drafts', 'plan.md');
+    await writeFile(docPath, '# Plan\n');
+    const doc = await host.startDocServer(docPath);
+    assert.deepEqual(await doc.running(), []);
+    await rename(join(root, 'drafts'), join(root, 'archive'));
+    const target = join(root, 'archive', 'plan.md');
+    assert.equal(await doc.moveTo(target, { moved: true }), target);
+    assert.ok(await serves(doc.url));
+    await doc.close();
   } finally {
     await host.shutdown();
   }

@@ -1,7 +1,9 @@
 // window.opendocDesktop: the few things a page may ask the desktop app to do,
-// all started by the user (a click or a key). The page never passes a path;
-// the app shows its own dialog or looks the doc up in its own list (the
-// recent docs, or the docs of a folder window, which the app checks). The one
+// all started by the user (a click or a key). The page never passes a full
+// path; the app shows its own dialog or looks the doc up in its own list (the
+// recent docs, or the docs of a folder window, which the app checks). A
+// folder window's sidebar names a new doc or folder, or a new place for one,
+// inside that folder; the app makes sure it stays there. The one
 // path that reaches the app from a window is a file or folder the user
 // dropped on it, read here from the drop itself, never from the page.
 
@@ -29,8 +31,17 @@ window.addEventListener('drop', (event) => {
   ipcRenderer.invoke('opendoc:action', 'drop', paths).catch(() => {});
 }, true);
 
+// A drop that ends a drag in the sidebar leaves no user activation behind,
+// so a trusted release of the pointer just before counts too; the page
+// can't make one.
+let released = 0;
+window.addEventListener('pointerup', (event) => {
+  if (event.isTrusted) released = Date.now();
+}, true);
+
 function act(action, arg) {
-  if (!navigator.userActivation.isActive) return Promise.reject(new Error('needs a click or a key press'));
+  const user = navigator.userActivation.isActive || Date.now() - released < 1000;
+  if (!user) return Promise.reject(new Error('needs a click or a key press'));
   return ipcRenderer.invoke('opendoc:action', action, arg);
 }
 
@@ -47,6 +58,27 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   /** Show the folder's doc `path` (one of `folder().docs`) in this window. */
   openInFolder: (path) => act('openInFolder', String(path)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
+  /**
+   * A new doc ('doc', which then opens here) or folder ('folder') `name` (`/`
+   * makes folders) in the sidebar folder `parent` ('' for the top). Resolves
+   * to { rel } (its path in the folder) or { error } (why the name can't be used).
+   */
+  folderCreate: (parent, name, kind) => act('folderCreate', { parent: String(parent), name: String(name), kind: String(kind) }),
+  /** Rename or move the sidebar's doc or folder `from` to `to`; { rel } or { error }. */
+  folderMove: (from, kind, to) => act('folderMove', { from: String(from), kind: String(kind), to: String(to) }),
+  /** Delete the sidebar's doc or folder, once the user confirms; { trashed }. */
+  folderTrash: (rel, kind) => act('folderTrash', { rel: String(rel), kind: String(kind) }),
+  /**
+   * The menu of a sidebar row ('doc', 'folder') or of the blank space under
+   * the tree ('root', rel ''), at `x`, `y` in the page, or at the pointer.
+   */
+  folderMenu: (rel, kind, x = null, y = null) => act('folderMenu', {
+    rel: String(rel), kind: String(kind), x: x === null ? null : Number(x), y: y === null ? null : Number(y),
+  }),
+  /** A command from a sidebar menu: { action: 'rename' | 'move' | 'newDoc' | 'newFolder', rel, kind }. */
+  onFolderCommand: (callback) => {
+    ipcRenderer.on('opendoc:folder-command', (_event, { action, rel, kind }) => callback({ action: String(action), rel: String(rel), kind: String(kind) }));
+  },
   showSidebar: (open) => act('folderSidebar', Boolean(open)),
   /** The folder's docs changed, or this window started listing a folder. */
   onFolderChanged: (callback) => {
