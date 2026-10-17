@@ -151,9 +151,10 @@ test('the shipped scripts pass the project folder only when there is one', () =>
   assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /if defined OPENDOC_PROJECT set ADD=--add-dir "%OPENDOC_PROJECT%"/);
   assert.doesNotMatch(readFileSync(join(ROOT, 'agents', 'codex.cmd'), 'utf8'), /codex exec[^\r]*--add-dir/, 'Codex reads the project without it');
   if (process.platform === 'win32') return;
-  // A fake `claude` and `codex` on PATH print the arguments they get.
+  // A fake `claude` and `codex` on PATH read the prompt (else writing it can
+  // fail with EPIPE) and print the arguments they get.
   const bin = execFileSync('mktemp', ['-d']).toString().trim();
-  execFileSync('sh', ['-c', `printf '#!/bin/sh\\necho "$@"\\n' > "${bin}/claude"; printf '#!/bin/sh\\nwhile [ "$1" != "--output-last-message" ]; do shift; done; echo reply > "$2"\\n' > "${bin}/codex"; chmod +x "${bin}/claude" "${bin}/codex"`]);
+  execFileSync('sh', ['-c', `printf '#!/bin/sh\\ncat >/dev/null; echo "$@"\\n' > "${bin}/claude"; printf '#!/bin/sh\\ncat >/dev/null; while [ "$1" != "--output-last-message" ]; do shift; done; echo reply > "$2"\\n' > "${bin}/codex"; chmod +x "${bin}/claude" "${bin}/codex"`]);
   const run = (name, project) => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, OPENDOC_PROJECT: project }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
   assert.equal(run('claude', ''), '-p --permission-mode acceptEdits --no-session-persistence');
   assert.equal(run('claude', '/work/my project'), '-p --permission-mode acceptEdits --no-session-persistence --add-dir /work/my project --disallowedTools Edit(//work/my project/**)', 'the project is read only');
