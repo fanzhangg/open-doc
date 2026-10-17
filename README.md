@@ -176,6 +176,19 @@ are one version. History is kept on this computer, in `history/` in the config
 folder below, never next to the doc, and follows the doc when you rename it in
 OpenDoc.
 
+Export (the arrow button, Ctrl+Shift+E, or File > Export in the desktop app)
+makes a copy of the doc as saved: **PDF** to read or print, **Word** to keep
+editing in Word, or a **web page** (one `.html` file with its pictures
+inside). Pick which comments go in: none (the default), the open ones, or all.
+In Word each thread becomes a Word comment on its text, with replies under it
+and resolved threads marked done; in a PDF or web page the commented text is
+highlighted and numbered, and the threads are listed after the text (beside
+it on a wide screen). PDF and Word use A4 or Letter (your region's by
+default). The desktop app asks where to save the copy, next to the doc by
+default, and offers to open it or show it in its folder; in a browser tab Word
+and web pages download, and PDF goes through the browser's print dialog. The
+doc and its comments file are only read. The dialog remembers your choices.
+
 Settings (your name, theme, font, width, outline, word count, focus mode) are
 saved for every doc in `settings.json` in your config folder
 (`%APPDATA%\OpenDoc` on Windows, `~/Library/Application Support/OpenDoc` on

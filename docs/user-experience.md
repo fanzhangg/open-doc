@@ -140,6 +140,10 @@ Agents are light, and belong to the doc unless you star them:
 - **Version history** (clock button): every version with who made it, a diff
   against the one before, and Restore. Kept in the config folder, not in the
   doc's folder.
+- **Export** (arrow button, Ctrl+Shift+E, File > Export): a copy of the doc
+  as PDF, Word or a web page, with no comments, the open ones, or all. In
+  Word they are real Word comments; in PDF and HTML the text is highlighted
+  and numbered, and the threads are listed after it. The doc is only read.
 - **Settings** (name, theme, font, width, outline, word count, focus mode)
   are global and apply at once to every open window, the start window too
   (its gear, or Ctrl+,).

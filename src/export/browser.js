@@ -1,6 +1,6 @@
 // Print an exported HTML page to PDF with an installed Chrome, Edge or
 // Chromium, run headless (the page's own policy keeps scripts off). Used by
-// `opendoc export --to pdf`.
+// `opendoc export --to pdf`; the desktop app prints with its own engine.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';

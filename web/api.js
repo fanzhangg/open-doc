@@ -73,6 +73,15 @@ export const api = {
   version: async (id) => (await request('GET', `/api/history/version?id=${encodeURIComponent(id)}`)).data,
   /** Put the doc back to version `id`; 409 when the doc is no longer at `baseHash`. */
   restoreVersion: (id, baseHash) => request('POST', '/api/history/restore', { id, baseHash }),
+  /** The doc as saved in another format ({ format, comments, paper }): the fetch Response. */
+  async exportDoc(params) {
+    const response = await fetch(`/api/export?${new URLSearchParams(params)}`, { headers: { 'x-opendoc-token': token } });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw Object.assign(new Error(data.error ?? `HTTP ${response.status}`), { code: data.code, status: response.status });
+    }
+    return response;
+  },
   async saveSettings(patch) {
     const { status, data } = await request('PUT', '/api/settings', patch);
     if (status !== 200) throw Object.assign(new Error(data.error ?? 'settings are busy'), { code: data.code, status });

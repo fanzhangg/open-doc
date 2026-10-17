@@ -573,6 +573,38 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-shortcuts-body h3 { margin: 8px 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
 .od-shortcut { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
 
+/* ---- export ---- */
+
+.od-export { width: min(460px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-raised); }
+.od-export[open] { animation: od-pop 0.15s ease-out; }
+.od-export::backdrop { background: rgba(0, 0, 0, 0.32); }
+.od-export-form { padding: 16px 20px 18px; }
+.od-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.od-export-head h2 { margin: 0; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.od-export-doc { color: var(--text-soft); font-weight: 500; }
+.od-export-formats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.od-export-formats button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px 11px; border: 1px solid var(--border); border-radius: 10px; background: none; text-align: left; }
+.od-export-formats button .od-icon { width: 20px; height: 20px; margin-bottom: 6px; color: var(--text-soft); }
+.od-export-formats button:hover { background: var(--hover); }
+.od-export-formats button[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.od-export-formats button[aria-checked="true"] .od-icon { color: var(--accent); }
+.od-export-name { font-size: 13.5px; font-weight: 600; }
+.od-export-use { font-size: 12px; color: var(--text-soft); }
+.od-export .od-setting { min-height: 48px; }
+.od-export-hint { max-width: 220px; }
+.od-export-error { margin-top: 8px; font-size: 12.5px; color: var(--danger); }
+.od-export-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+.od-export-actions button { height: 32px; }
+.od-print-frame { position: fixed; width: 0; height: 0; border: 0; visibility: hidden; }
+
+.od-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 6px 6px 6px 14px; border-radius: 10px; background: var(--bg); box-shadow: var(--shadow-raised); font-size: 13px; animation: od-pop 0.15s ease-out; }
+.od-toast-icon { display: flex; color: var(--accent); }
+.od-toast[data-state="error"] .od-toast-icon { color: var(--danger); }
+.od-toast-icon .od-icon { width: 16px; height: 16px; }
+.od-toast-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.od-toast .od-icon-btn { width: 26px; height: 26px; }
+.od-toast .od-icon-btn .od-icon { width: 14px; height: 14px; }
+
 /* ---- settings ---- */
 
 .od-settings { width: min(720px, calc(100vw - 32px)); height: min(520px, calc(100vh - 64px)); padding: 0; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-raised); overflow: hidden; }

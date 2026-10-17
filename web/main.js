@@ -20,6 +20,7 @@ import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
 import { canApply, editItems, openProposal, previewItems } from './review.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
+import { createExport } from './export.js';
 import { activeWorking, newId } from '../src/core/ops.js';
 import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
 import { availableIn } from '../src/core/agents.js';
@@ -156,7 +157,8 @@ async function start() {
     settingsFile: () => initial.settingsFile ?? null,
     mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
-  window.opendocDesktop?.onCommand((name) => chrome.command(name));
+  const exporter = createExport({ settings, flushSave, sidecar: () => sidecar });
+  window.opendocDesktop?.onCommand((name) => (name === 'export' ? exporter.open() : chrome.command(name)));
   files = createFileList({
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {

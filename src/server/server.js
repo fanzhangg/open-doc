@@ -17,6 +17,7 @@ import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, editAgents, readSettings, settingsPath, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
+import { ExportError, exportDoc } from '../export/index.js';
 import { splice } from './splice.js';
 import { Team } from './agents/team.js';
 import { TextAsks } from './text-asks.js';
@@ -305,6 +306,8 @@ export async function startServer(docPath, {
         const body = await readJson(req);
         return sendJson(...(await serial(() => restoreVersion(body))));
       }
+      case 'GET /api/export':
+        return sendExport(res, url.searchParams);
       default:
         throw new HttpError(404, 'not_found', 'not found');
     }
@@ -406,6 +409,35 @@ export async function startServer(docPath, {
       throw new HttpError(403, 'forbidden', "outside the doc's folder");
     }
     return { path: real[1], type };
+  }
+
+  // The doc as saved, in another format (src/export). html and docx come as
+  // a download; pdf comes as the page to print, shown in a frame the page
+  // prints, where nothing in the doc can run.
+  async function sendExport(res, params) {
+    await writes; // a save in progress lands first
+    const { font } = await currentSettings();
+    const format = params.get('format');
+    const result = await exportDoc(docPath, {
+      format, comments: params.get('comments') ?? undefined, paper: params.get('paper') ?? undefined, font,
+    });
+    if (format === 'pdf') {
+      res.writeHead(200, {
+        'content-type': result.type,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'referrer-policy': 'no-referrer',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:; sandbox allow-same-origin allow-modals",
+      });
+    } else {
+      res.writeHead(200, {
+        'content-type': result.type,
+        'content-disposition': `attachment; filename="${result.name.replace(/[^ -~]|["\\]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(result.name)}`,
+        'cache-control': 'no-store',
+        ...SECURITY_HEADERS,
+      });
+    }
+    res.end(result.bytes);
   }
 
   async function state() {
@@ -1182,7 +1214,7 @@ function sendJson(res, status, body) {
 }
 
 function statusFor(error) {
-  if (error instanceof OpError || error instanceof SettingsError) return 400;
+  if (error instanceof OpError || error instanceof SettingsError || error instanceof ExportError) return 400;
   if (error instanceof StoreError) return error.code === 'lock_timeout' ? 409 : 404;
   return 500;
 }

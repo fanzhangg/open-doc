@@ -137,8 +137,10 @@ same core library, so any of them can work without the others.
   Word into `commentRangeStart` / `commentRangeEnd` / `commentReference`.
 - HTML is one self-contained page: pictures from the doc's folder are inlined,
   and a `script-src 'none'` policy keeps raw HTML in the doc from running.
-- PDF is that page printed by a browser engine: `opendoc export` runs an
-  installed Chrome or Edge headless.
+- PDF is that page printed. Whoever has a browser engine prints it: the
+  desktop app in a hidden window with JavaScript off, the browser tab in a
+  sandboxed frame through its print dialog, the CLI with an installed Chrome
+  or Edge run headless.
 - Word comes from the `docx` package: headings, lists, tables, links,
   footnotes, PNG/JPEG/GIF pictures, and threads as Word comments (replies
   threaded, resolved ones done).

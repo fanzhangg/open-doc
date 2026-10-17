@@ -1,7 +1,8 @@
 // Export a doc to another format: a one-way copy of the doc as saved on disk,
 // with the comment threads the user picks. The doc and its sidecar are only
-// read. PDF is the HTML page printed by a browser engine (for the CLI, an
-// installed Chrome or Edge: src/export/browser.js).
+// read. PDF is the HTML page printed, by whoever holds a browser engine: the
+// desktop app (Electron), the browser tab (its print dialog) or the CLI (an
+// installed Chrome or Edge, src/export/browser.js).
 
 import { basename } from 'node:path';
 import { refreshSidecar } from '../core/anchor.js';
