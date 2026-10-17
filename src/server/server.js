@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OpError, applyOp, blockAt, createAnchor, locate, newId, project, sourceRange } from '../core/index.js';
 import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
@@ -35,6 +35,17 @@ const ASSETS = {
   '/assets/icon.svg': ['icon.svg', 'image/svg+xml'],
 };
 const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/;
+// Images next to the doc or below it, by their path from the doc: /files/<path>.
+const FILES_PREFIX = '/files/';
+const IMAGE_TYPES = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.avif': 'image/avif',
+};
 const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen', 'retry', 'cancel']);
 const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
 
@@ -107,6 +118,10 @@ export async function startServer(docPath, {
     if (!guardTokens.has(key)) guardTokens.set(key, randomBytes(16).toString('hex'));
     return guardTokens.get(key);
   };
+  // The key an <img> in the page sends (it cannot send a header): it reads
+  // the images by the doc and nothing else, so an image URL copied out of
+  // the page does not carry the page's token.
+  const filesToken = randomBytes(16).toString('hex');
   const guardedAgent = (given) => {
     for (const [key, value] of guardTokens) if (tokenMatches(given, value)) return team.get(key);
     return null;
@@ -153,6 +168,20 @@ export async function startServer(docPath, {
         throw new HttpError(404, 'not_found', 'not found');
       }
       res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'max-age=86400', ...SECURITY_HEADERS });
+      res.end(body);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith(FILES_PREFIX)) {
+      if (!tokenMatches(url.searchParams.get('t'), filesToken)) throw new HttpError(403, 'forbidden', 'missing or wrong token');
+      const { path, type } = await docImage(url.pathname.slice(FILES_PREFIX.length));
+      let body;
+      try {
+        body = await readFile(path);
+      } catch {
+        throw new HttpError(404, 'not_found', 'not found');
+      }
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', ...SECURITY_HEADERS, 'content-security-policy': FILES_CSP });
       res.end(body);
       return;
     }
@@ -352,6 +381,33 @@ export async function startServer(docPath, {
     }
   }
 
+  // The image at `encoded` (a URL path, relative to the doc's folder):
+  // { path, type }. Only images, and only in the doc's folder or below it,
+  // also after following links.
+  async function docImage(encoded) {
+    let rel;
+    try {
+      rel = decodeURIComponent(encoded);
+    } catch {
+      throw new HttpError(400, 'bad_input', 'invalid path');
+    }
+    const type = IMAGE_TYPES[extname(rel).toLowerCase()];
+    if (!type || rel.includes('\0')) throw new HttpError(403, 'forbidden', 'only images are served');
+    const folder = resolve(dirname(docPath));
+    const path = resolve(folder, rel);
+    if (!inside(folder, path)) throw new HttpError(403, 'forbidden', "outside the doc's folder");
+    let real;
+    try {
+      real = await Promise.all([realpath(folder), realpath(path)]);
+    } catch {
+      throw new HttpError(404, 'not_found', 'not found');
+    }
+    if (!inside(...real) || IMAGE_TYPES[extname(real[1]).toLowerCase()] !== type) {
+      throw new HttpError(403, 'forbidden', "outside the doc's folder");
+    }
+    return { path: real[1], type };
+  }
+
   async function state() {
     const { doc, sidecar } = await load(docPath);
     const { settings, saved } = await readSettings(settingsDir);
@@ -367,6 +423,7 @@ export async function startServer(docPath, {
       docKey: docKey(), // which of the user's unstarred agents are this doc's own
       folder: folder && basename(folder), // the folder the agents may read, if any
       settingsFile: settingsPath(settingsDir), // where a browser tab says to set an agent's command
+      filesToken, // for the doc's images (/files/)
     };
   }
 
@@ -1000,6 +1057,15 @@ const SECURITY_HEADERS = {
   'referrer-policy': 'no-referrer',
   'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
 };
+// An image of the doc's opened on its own (an SVG can hold scripts) runs
+// nothing and is no page of this server's.
+const FILES_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+
+// Whether `path` is `folder` or below it (both resolved the same way).
+function inside(folder, path) {
+  const rel = relative(folder, path);
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
 
 // DNS rebinding: only answer requests addressed to the loopback name we serve.
 function checkHost(req, port) {

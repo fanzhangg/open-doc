@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { Readable } from 'node:stream';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +93,60 @@ test('the app icon is served as the editor favicon', async () => {
   } finally {
     await server.close();
   }
+});
+
+test("images by the doc are served by their path from it, with the token for them; nothing outside its folder is", async () => {
+  await withServer(async ({ server, docPath }) => {
+    const folder = dirname(docPath);
+    const outside = await mkdtemp(join(tmpdir(), 'opendoc-outside-'));
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+    await mkdir(join(folder, 'img'));
+    await writeFile(join(folder, 'pic.png'), png);
+    await writeFile(join(folder, 'img', 'my pic.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    await writeFile(join(folder, 'notes.txt'), 'not an image');
+    await writeFile(join(outside, 'secret.png'), png);
+    const { filesToken } = (await call(server, 'GET', '/api/state')).body;
+    assert.match(filesToken, /^[0-9a-f]{32}$/);
+    assert.notEqual(filesToken, server.token);
+    const get = (path, t = filesToken) => new Promise((resolve, reject) => {
+      request({ port: server.port, path: `${path}?t=${t}`, headers: { host: `127.0.0.1:${server.port}` } }, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+      }).on('error', reject).end();
+    });
+
+    const pic = await get('/files/pic.png');
+    assert.equal(pic.status, 200);
+    assert.equal(pic.headers['content-type'], 'image/png');
+    assert.deepEqual(pic.body, png);
+    const svg = await get('/files/img/my%20pic.svg');
+    assert.equal(svg.status, 200);
+    assert.equal(svg.headers['content-type'], 'image/svg+xml');
+    assert.match(svg.headers['content-security-policy'], /sandbox/); // opened on its own, it runs nothing
+
+    // The page's token is not the images' one, and none is no token.
+    assert.equal((await get('/files/pic.png', server.token)).status, 403);
+    assert.equal((await get('/files/pic.png', '')).status, 403);
+    assert.equal((await get('/files/missing.png')).status, 404);
+    // Not images: the doc, its sidecar, anything else.
+    for (const path of ['/files/notes.txt', `/files/${basename(docPath)}`, `/files/${basename(sidecarPath(docPath))}`, '/files/img']) {
+      assert.equal((await get(path)).status, 403, path);
+    }
+    // Out of the doc's folder, by .. or by an absolute path.
+    for (const path of [`/files/..%2F${basename(outside)}%2Fsecret.png`, `/files/img%2F..%2F..%2F${basename(outside)}%2Fsecret.png`, `/files/${encodeURIComponent(join(outside, 'secret.png'))}`]) {
+      assert.equal((await get(path)).status, 403, path);
+    }
+    if (process.platform === 'win32') assert.equal((await get(`/files/..%5C${basename(outside)}%5Csecret.png`)).status, 403);
+    // Or by a link in it (a junction needs no rights on Windows).
+    await symlink(outside, join(folder, 'linked'), 'junction');
+    assert.equal((await get('/files/linked/secret.png')).status, 403);
+    let fileLink = true;
+    await symlink(join(outside, 'secret.png'), join(folder, 'alias.png'), 'file').catch(() => { fileLink = false; });
+    if (fileLink) assert.equal((await get('/files/alias.png')).status, 403);
+    await symlink(join(folder, 'notes.txt'), join(folder, 'notes.png'), 'file').catch(() => { fileLink = false; });
+    if (fileLink) assert.equal((await get('/files/notes.png')).status, 403); // a link to something not an image
+  });
 });
 
 test('state returns the doc, its hash and the sidecar', async () => {

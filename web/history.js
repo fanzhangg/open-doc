@@ -45,7 +45,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     root.setAttribute('data-history', '');
     toggleButton.setAttribute('aria-pressed', 'true');
     view ??= await createDocEditor({
-      stage, markdown: '', editable: false, onChange() {}, onSelectThread() {}, onCommentRequest() {},
+      stage, markdown: '', editable: false, imageSrc: api.imageSrc, onChange() {}, onSelectThread() {}, onCommentRequest() {},
     });
     await refresh();
     await select(latest()?.id ?? null);
