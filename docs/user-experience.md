@@ -22,9 +22,9 @@ How a person writes with buddies in OpenDoc. For why, see the
 
 ## Buddies
 
-A buddy is someone you @mention: a name, a one-line **persona** and optional
-**instructions**, all in one markdown file, `<Name>.md`. The file name is its
-name, the first line its persona, the rest its instructions.
+A buddy is someone you @mention: a name and who it is, in one markdown file,
+`<Name>.md`. The file name is its name; its text, given to its agent as is,
+says who it is, and the first line shows next to its name.
 
 - **Clippy**, a general writing assistant, is built in and answers in every
   doc. It cannot be edited or deleted.
@@ -36,9 +36,8 @@ name, the first line its persona, the rest its instructions.
   is yellow, and up to seven project buddies get seven other colors.
 
 **New buddy** (People panel, or + in the Buddies panel) starts a draft: type a
-name, then a persona and instructions, and Create; it is the project's. On
-a buddy's card, click its name
-or persona to edit it in place; the Buddies panel holds its instructions and
+name, then who it is, and Create; it is the project's. On a buddy's card,
+click its name to edit it in place; the Buddies panel holds who it is and
 Delete. Editing the files by hand works too: the app picks up changes at once.
 
 What runs every buddy is the agent picked in Settings > Agent (Claude Code or
@@ -54,7 +53,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   text.
 - A comment that mentions several buddies asks each of them; they work at
   the same time.
-- Every run starts fresh with the doc, its persona and the thread. Nothing
+- Every run starts fresh with the doc, who the buddy is and the thread. Nothing
   is remembered in private; anything worth keeping is written in the doc or
   the thread.
 

@@ -1,7 +1,7 @@
 # opendoc buddies and projects
 
-A **buddy** is someone you @mention in a doc: a name, a persona and
-instructions, in a markdown file. What does the work is an agent CLI
+A **buddy** is someone you @mention in a doc: a name and who it is, in a
+markdown file. What does the work is an agent CLI
 (Claude Code, Codex) chosen on each machine
 ([agent config](../docs/agent-config.md)); a buddy only says who it is.
 
@@ -31,8 +31,8 @@ A **project** is a folder opened from the app's home page.
   or digit, then letters, digits, `.`, `_`, `-`; unique in its folder,
   compared case-insensitively; not `Clippy`. Renaming the file renames
   the buddy.
-- **The first line is its persona**, shown in the @ menu.
-- **The rest is its instructions.**
+- **The text says who it is**, given to its agent as is. The first line
+  shows next to its name: on its card and in the @ menu.
 
 ```markdown
 Checks every claim against the code.
@@ -40,8 +40,8 @@ Checks every claim against the code.
 Read the project before you answer. Quote the file and line you rely on.
 ```
 
-A doc reaches Clippy and, in a project, the project's buddies. Clippy's
-persona, instructions, face and color are the app's and cannot be changed;
+A doc reaches Clippy and, in a project, the project's buddies. Who Clippy
+is, its face and color are the app's and cannot be changed;
 its color is the yellow of eight, evenly apart in hue. A project buddy's
 face is made from its name. Its color is one of the other seven: the one
 its name picks or, when a buddy before it by name has that one, the next

@@ -78,7 +78,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 
 ### Buddy files — unit, integration
 
-- `<Name>.md`: the file name is the name, the first line the persona; a
+- `<Name>.md`: the file name is the name, the text who it is; a
   renamed file is a renamed buddy; a `Clippy.md` is not a buddy;
   `.opendoc/` created with the first buddy; only the opened folder's counts.
 - Doc mode reaches Clippy only, also inside a project folder.

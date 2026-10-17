@@ -18,7 +18,7 @@ const RUN_TIMEOUT_MS = 30 * 60 * 1000; // no one can stop a run by hand: one tha
 export class Runner {
   /**
    * `asks()` resolves to the asks waiting now: [{ threadId, thread, buddy:
-   * { name, persona, instructions } }]. `doc()` to { name, markdown,
+   * { name, about } }]. `doc()` to { name, markdown,
    * comments }, `comments` the sidecar's text or null.
    * `script()` is the path of the agent script, `folder()` the project
    * folder or null, `human()` the user's name. `finish(result)` takes a run
@@ -189,8 +189,7 @@ export function buildPrompt({ buddy, docName, sidecarName = `${docName}${SIDECAR
   const said = thread.comments.map((c) => `${c.by.name}${c.by.kind === 'ai' ? ' (buddy)' : ''}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
   return [
     `You are ${buddy.name}, co-authoring the markdown doc ${docName} in your working folder with ${human ?? 'a person'}. You are answering a comment on it.`,
-    ...(buddy.persona.trim() ? [`Who you are: ${buddy.persona.trim()}`] : []),
-    ...(buddy.instructions.trim() ? [`Your instructions:\n\n${buddy.instructions.trim()}`] : []),
+    ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
     `The comment thread, oldest first, ${quote ? `on the text "${quote}"` : 'on the whole doc'}:\n\n<thread>\n${said}\n</thread>`,
     `Do what the latest comment asks of you. Where it asks for a change to the doc, edit ${docName} in place.${folder ? ` The project folder is ${folder}: read what the comment needs there, but edit nothing in it.` : ''}`,
     `${sidecarName} holds the doc's comments, one JSON object per line. To comment as a reviewer would, append lines to it, one per comment: {"anchor":{"exact":"<text of the doc, without markdown marks, found once>"},"body":"..."} on a passage, {"body":"..."} on the whole doc, or {"thread":"<id of a thread's first comment>","body":"..."} to reply in a thread. Comment only where the person has something to decide; fix small things in the doc instead. Change no other line, and edit no other file.`,

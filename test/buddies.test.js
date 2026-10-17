@@ -6,12 +6,12 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLIPPY, buddiesHere, buddyText, colorSlots, parseBuddy } from '../src/core/buddies.js';
+import { CLIPPY, buddiesHere, buddyText, colorSlots, parseBuddy, tagline } from '../src/core/buddies.js';
 import { readSettings } from '../src/store/settings.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, until } from './helpers.js';
 
 const refused = (code) => (error) => error.code === code;
-const who = async (opened) => (await opened.state()).agents.map((a) => [a.name, a.persona, a.where]);
+const who = async (opened) => (await opened.state()).agents.map((a) => [a.name, a.about, a.where]);
 
 // A project folder with plan.md and the buddies `files` ({ name: text }) in .opendoc/buddies/.
 async function projectFolder(files = {}) {
@@ -31,19 +31,19 @@ async function opening(docPath, options, fn) {
   }
 }
 
-test('a buddy file: the name is the file name, the first line the persona, the rest the instructions', () => {
-  assert.deepEqual(parseBuddy('Critic', 'Checks every claim.\r\n\r\nQuote the line.\nBe brief.\n'),
-    { name: 'Critic', persona: 'Checks every claim.', instructions: 'Quote the line.\nBe brief.' });
-  assert.deepEqual(parseBuddy('Empty', ''), { name: 'Empty', persona: '', instructions: '' });
-  const text = buddyText({ persona: 'Checks every claim.', instructions: 'Quote the line.' });
-  assert.equal(text, 'Checks every claim.\n\nQuote the line.\n');
-  assert.deepEqual(parseBuddy('Critic', text), { name: 'Critic', persona: 'Checks every claim.', instructions: 'Quote the line.' });
-  const here = buddiesHere([{ name: 'critic', persona: 'project' }, { name: 'clippy', persona: 'theirs' }, { name: 'Ada', persona: 'project' }]);
+test('a buddy file: the name is the file name, the text who it is, its first line the tagline', () => {
+  const critic = parseBuddy('Critic', 'Checks every claim.\r\n\r\nQuote the line.\nBe brief.\n');
+  assert.deepEqual(critic, { name: 'Critic', about: 'Checks every claim.\n\nQuote the line.\nBe brief.' });
+  assert.equal(tagline(critic), 'Checks every claim.');
+  assert.deepEqual(parseBuddy('Empty', ''), { name: 'Empty', about: '' });
+  assert.equal(buddyText(critic), 'Checks every claim.\n\nQuote the line.\nBe brief.\n');
+  assert.deepEqual(parseBuddy('Critic', buddyText(critic)), critic);
+  const here = buddiesHere([{ name: 'critic', about: 'project' }, { name: 'clippy', about: 'theirs' }, { name: 'Ada', about: 'project' }]);
   assert.deepEqual(here.map((b) => [b.name, b.where]), [['Clippy', 'app'], ['Ada', 'project'], ['critic', 'project']], "Clippy first, then by name; a project's Clippy is not one");
   assert.equal(here[0], CLIPPY);
 });
 
-const CLIPPY_ROW = ['Clippy', CLIPPY.persona, 'app'];
+const CLIPPY_ROW = ['Clippy', CLIPPY.about, 'app'];
 
 test('buddy colors: Clippy has its own; up to seven others get different ones, the same in any order', () => {
   // Seven names that would all pick the same color on their own.
@@ -62,7 +62,7 @@ test('Clippy is built in: in every doc, and nothing can change it', async () => 
   const folder = await projectFolder();
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     assert.deepEqual(await who(opened), [CLIPPY_ROW]);
-    await assert.rejects(opened.call('updateBuddy', { name: 'clippy', patch: { persona: 'Mine now.' } }), refused('bad_input'));
+    await assert.rejects(opened.call('updateBuddy', { name: 'clippy', patch: { about: 'Mine now.' } }), refused('bad_input'));
     await assert.rejects(opened.call('deleteBuddy', { name: 'Clippy' }), refused('bad_input'));
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'clippy' } }), /the name clippy is taken/);
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
@@ -85,7 +85,7 @@ test('a folder opened from the home page reaches Clippy and its own; its Clippy.
   const settingsDir = await fakeConfig();
   const folder = await projectFolder({ critic: 'Checks every claim.\n\nQuote the line you rely on.\n', Clippy: 'An impostor.\n' });
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
-    assert.deepEqual(await who(opened), [CLIPPY_ROW, ['critic', 'Checks every claim.', 'project']]);
+    assert.deepEqual(await who(opened), [CLIPPY_ROW, ['critic', 'Checks every claim.\n\nQuote the line you rely on.', 'project']]);
     const { id } = await opened.call('comment', { anchor: null, body: '@Critic look' });
     await until(async () => (await opened.state()).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
@@ -99,7 +99,7 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
   const folder = await projectFolder();
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     await assert.rejects(readdir(join(folder, '.opendoc')), { code: 'ENOENT' });
-    await opened.call('createBuddy', { buddy: { name: 'Critic', persona: 'Checks claims.', instructions: 'Quote lines.' } });
+    await opened.call('createBuddy', { buddy: { name: 'Critic', about: 'Checks claims.\n\nQuote lines.' } });
     assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'utf8'), 'Checks claims.\n\nQuote lines.\n');
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
 
@@ -108,10 +108,10 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'Bob', face: 'x' } }), refused('bad_input'), 'no stored faces');
     await assert.rejects(opened.call('createBuddy', { buddy: { name: '../evil' } }), refused('bad_input'));
 
-    const renamed = await opened.call('updateBuddy', { name: 'critic', patch: { name: 'Reviewer', persona: 'Reviews.' } });
+    const renamed = await opened.call('updateBuddy', { name: 'critic', patch: { name: 'Reviewer' } });
     assert.deepEqual(renamed.agents.map((a) => a.name), ['Clippy', 'Ada', 'Reviewer']);
     assert.deepEqual((await readdir(join(folder, '.opendoc', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
-    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), 'Reviews.\n\nQuote lines.\n');
+    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), 'Checks claims.\n\nQuote lines.\n');
     await opened.call('deleteBuddy', { name: 'Reviewer' });
     assert.deepEqual(await readdir(join(folder, '.opendoc', 'buddies')), ['Ada.md']);
     await assert.rejects(opened.call('deleteBuddy', { name: 'Reviewer' }), refused('not_found'));
@@ -142,7 +142,7 @@ test('a project cloned on another machine, or moved, has the same buddies and th
   const cloned = await opening(join(clone, 'plan.md'), { settingsDir: there, folder: clone }, (opened) => opened.state());
   assert.deepEqual(cloned.agents, seen.agents);
   // A face is drawn from the name alone: a buddy carries nothing else to draw it from.
-  assert.deepEqual(Object.keys(seen.agents[1]).sort(), ['instructions', 'name', 'persona', 'state', 'threadIds', 'where']);
+  assert.deepEqual(Object.keys(seen.agents[1]).sort(), ['about', 'name', 'state', 'threadIds', 'where']);
 
   const moved = `${folder}-moved`;
   await rename(folder, moved);
@@ -157,7 +157,7 @@ test('settings.json holds no buddy; a v1 settings.json is discarded', async () =
   assert.equal((await readSettings(settingsDir)).settings.name, null, 'v1 is not read');
   const folder = await projectFolder();
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
-    await opened.call('createBuddy', { buddy: { name: 'Ada', persona: 'Mine.' } });
+    await opened.call('createBuddy', { buddy: { name: 'Ada', about: 'Mine.' } });
     await opened.call('saveSettings', { font: 'serif' });
   });
   const stored = JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8'));

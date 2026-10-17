@@ -240,16 +240,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile-tools { margin-left: auto; align-self: flex-start; display: flex; gap: 2px; }
 .od-profile-tools .od-icon-button { width: 28px; height: 28px; }
 .od-profile-tools .od-icon { width: 16px; height: 16px; }
-/* name and persona on an agent card: text you click to edit, then a field in its place */
+/* a name on a card: text you click to edit, then a field in its place */
 .od-editable { margin-left: -4px; padding: 1px 4px; border-radius: 4px; cursor: text; }
 .od-editable:hover, .od-editable:focus-visible { background: var(--hover); outline: none; }
-.od-profile-slogan.od-editable { min-height: 1.4em; }
-.od-editable-empty { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 500; }
-.od-editable-empty .od-icon { width: 13px; height: 13px; }
 .od-profile-standing { margin-top: 4px; color: var(--text-faint); font-size: 12px; }
 .od-inline-input { display: block; width: 100%; margin: 0 0 0 -4px; padding: 1px 4px; border: 0; border-radius: 4px; background: var(--hover); color: inherit; font: inherit; outline: 1px solid var(--accent); }
 .od-inline-input.od-profile-name { font-size: 15px; font-weight: 600; }
-.od-inline-input.od-profile-slogan { margin-top: 2px; font-size: 13px; color: var(--text); }
 .od-inline-input::placeholder { color: var(--text-faint); font-weight: 400; }
 .od-inline-input[aria-invalid="true"] { outline-color: var(--danger); }
 .od-profile-who { flex: 1; }
@@ -275,7 +271,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-mention-sub { overflow: hidden; color: var(--text-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Settings > Agents */
-.od-persona { min-height: 110px; resize: vertical; font: 13px/1.5 var(--ui-font); }
+.od-about { min-height: 110px; resize: vertical; font: 13px/1.5 var(--ui-font); }
 .od-settings-subhead { margin: 22px 0 4px; color: var(--text-soft); font-size: 13px; font-weight: 600; }
 
 /* ---- toolbar ---- */
@@ -768,12 +764,10 @@ label.od-setting { cursor: pointer; }
 .od-agent-head { display: flex; align-items: flex-start; gap: 14px; padding-right: 32px; }
 .od-agent-head .od-avatar { --size: 48px; }
 .od-agent-head-fields { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
-.od-agent-name, .od-agent-intro { width: 100%; margin-left: -6px; padding: 2px 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text); font: inherit; }
-.od-agent-name { font-size: 20px; font-weight: 600; }
-.od-agent-intro { color: var(--text-soft); font-size: 14px; }
-.od-agent-name:hover, .od-agent-intro:hover { border-color: var(--border); }
-.od-agent-name:focus, .od-agent-intro:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--page); }
-.od-agent-name[aria-invalid="true"], .od-agent-intro[aria-invalid="true"] { border-color: var(--danger); }
+.od-agent-name { width: 100%; margin-left: -6px; padding: 2px 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 20px; font-weight: 600; }
+.od-agent-name:hover { border-color: var(--border); }
+.od-agent-name:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--page); }
+.od-agent-name[aria-invalid="true"] { border-color: var(--danger); }
 .od-agent-problem { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 10%, var(--bg-soft)); font-size: 13px; }
 .od-agent-problem-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .od-agent-where { margin: 10px 0 0; color: var(--text-faint); font-size: 12.5px; }

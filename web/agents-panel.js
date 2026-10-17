@@ -1,7 +1,7 @@
 // The Buddies panel: the buddies this doc reaches, in a dialog of their own.
-// On the left, the list; on the right, the one picked: who it is (name,
-// persona), where its file is, and its instructions. What runs every buddy
-// is the agent picked in Settings.
+// On the left, the list; on the right, the one picked: its name, where its
+// file is, and who it is. What runs every buddy is the agent picked in
+// Settings.
 //
 // Changes save to the buddy's file as they are made. A new buddy is a draft
 // until Create: nothing is saved before it has a name, so one left half
@@ -11,7 +11,7 @@
 import { api } from './api.js';
 import { avatar } from './threads.js';
 import { NAME_RULE } from './agent.js';
-import { BUDDY_RULES, checkBuddyPatch } from '../src/core/buddies.js';
+import { BUDDY_RULES, checkBuddyPatch, tagline } from '../src/core/buddies.js';
 
 /**
  * @param {{ buddies: () => object[], project: () => boolean, onResult: (result: { agents? }) => void }} options
@@ -115,7 +115,7 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     const face = el('span', 'od-profile-face');
     face.append(avatar(buddy.name, 'agent', true));
     const who = el('span', 'od-agents-who');
-    who.append(el('span', 'od-agents-name', buddy.name), el('span', 'od-agents-sub', buddy.persona));
+    who.append(el('span', 'od-agents-name', buddy.name), el('span', 'od-agents-sub', tagline(buddy)));
     row.append(face, who);
     return row;
   }
@@ -161,7 +161,7 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     const input = event.target;
     const key = input.dataset.agent;
     if (!key || (draft && key === 'name')) return; // a draft's name is taken as it is typed
-    const value = key === 'instructions' ? input.value : input.value.trim();
+    const value = key === 'about' ? input.value : input.value.trim();
     if (key === 'name' && value === '') return paint();
     if (!valid({ [key]: value })) {
       input.setAttribute('aria-invalid', 'true');
@@ -191,7 +191,7 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     if (!project()) return;
     if (!dialog.open) dialog.showModal();
     show();
-    draft = { buddy: { name: '', persona: '', instructions: '' } };
+    draft = { buddy: { name: '', about: '' } };
     paint();
     nameInput.focus();
   }
