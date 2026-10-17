@@ -2,6 +2,7 @@
 // the CLI opened.
 
 const token = new URLSearchParams(location.search).get('t') ?? '';
+let filesToken = ''; // from /api/state, for the doc's images
 
 async function request(method, path, body) {
   const response = await fetch(path, {
@@ -23,7 +24,22 @@ function okData({ status, data }) {
 }
 
 export const api = {
-  state: async () => (await request('GET', '/api/state')).data,
+  state: async () => {
+    const { data } = await request('GET', '/api/state');
+    filesToken = data.filesToken ?? filesToken;
+    return data;
+  },
+  /**
+   * Where the page loads image `src` from: a path relative to the doc comes
+   * from the server's /files/ (an <img> cannot send the token header); any
+   * other src is left as it is.
+   */
+  imageSrc(src) {
+    if (!src || /^([a-z][a-z0-9+.-]*:|[/\\#?])/i.test(src)) return src;
+    const url = new URL(src, `${location.origin}/files/`);
+    if (url.origin !== location.origin || !url.pathname.startsWith('/files/')) return src;
+    return `${url.pathname}?t=${encodeURIComponent(filesToken)}`;
+  },
   saveDoc: (markdown, baseHash, { recreate = false } = {}) => request('PUT', '/api/doc', { markdown, baseHash, ...(recreate ? { recreate } : {}) }),
   op: async (op) => (await request('POST', '/api/ops', { op })).data,
   events: () => new EventSource(`/api/events?t=${encodeURIComponent(token)}`),

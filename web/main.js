@@ -127,6 +127,7 @@ async function start() {
   editor = await createDocEditor({
     stage: document.querySelector('.od-stage'),
     markdown: initial.markdown,
+    imageSrc: api.imageSrc,
     onChange: () => {
       dirty = true;
       version++;

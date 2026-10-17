@@ -16,7 +16,7 @@ import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
+import { $prose, $view, callCommand, replaceAll } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
 import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
@@ -25,7 +25,7 @@ import { locate } from '../src/core/anchor.js';
 import { activeWorking } from '../src/core/ops.js';
 import { MENTION_TOKEN } from '../src/core/mentions.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
-import { markdownPlugins } from './markdown-schema.js';
+import { image, markdownPlugins } from './markdown-schema.js';
 import { createReplayer, diffBlocks } from './replay.js';
 
 const FLASH_MS = 6000;
@@ -156,13 +156,36 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
   },
 }));
 
+// An image shows from where `imageSrc` says, while the doc (and what is
+// copied out of it) keeps the src as the markdown has it.
+const imageView = (imageSrc) => $view(image.node, () => (initial) => {
+  const dom = document.createElement('img');
+  const show = (node) => {
+    const src = imageSrc(node.attrs.src);
+    if (dom.getAttribute('src') !== src) dom.setAttribute('src', src);
+    dom.alt = node.attrs.alt;
+    if (node.attrs.title) dom.title = node.attrs.title;
+    else dom.removeAttribute('title');
+  };
+  show(initial);
+  return {
+    dom,
+    update(node) {
+      if (node.type !== initial.type) return false;
+      show(node);
+      return true;
+    },
+  };
+});
+
 /**
  * @param {{ stage: HTMLElement, markdown: string,
  *           onChange: () => void, onSelectThread: (id: string) => void,
  *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc.
-export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
+// `imageSrc(src)` is where an image in the doc is loaded from.
+export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true, imageSrc = (src) => src }) {
   // The doc as last loaded or applied; an update back to it is an echo, not a
   // local edit. Compared as a doc: serializing the whole doc on every change
   // costs a long doc tens of milliseconds each time.
@@ -196,7 +219,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     })
     .use(markdownPlugins).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(mentionPlugin).use(uiPlugin(hooks))
-    .use($prose(() => replayer.plugin))
+    .use($prose(() => replayer.plugin)).use(imageView(imageSrc))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);

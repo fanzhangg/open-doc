@@ -16,7 +16,7 @@ const cjkFriendly = $remark('cjkFriendly', () => remarkCjkFriendly);
 // takes a string, so it would leave the image out of the document and the
 // next save would delete it from the file. An empty title writes back as no
 // title.
-const image = imageSchema.extendSchema((schema) => (ctx) => {
+export const image = imageSchema.extendSchema((schema) => (ctx) => {
   const base = schema(ctx);
   return {
     ...base,
