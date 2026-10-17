@@ -533,9 +533,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
    * Show `next`, a change made by `by`. With `animate`, `by`'s caret types
    * the change in; otherwise only the top-level blocks that differ are
    * replaced and the new text glows, labelled `by`. A replay still running
-   * from an earlier change is completed first.
+   * from an earlier change is completed first. With `undoable`, the human
+   * can undo the change (it was their choice).
    */
-  function applyMarkdown(next, by, { animate = false } = {}) {
+  function applyMarkdown(next, by, { animate = false, undoable = false } = {}) {
     replayer.finish();
     const v = view();
     const current = v.state.doc;
@@ -556,7 +557,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       for (let k = h.b0; k < h.b1; k++) nodes.push(target.child(k));
       tr.replaceWith(childPos(current, h.a0), childPos(current, h.a1), Fragment.from(nodes));
     }
-    tr.setMeta('addToHistory', false);
+    if (!undoable) tr.setMeta('addToHistory', false);
     v.dispatch(tr);
     baselineDoc = v.state.doc;
     flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by);

@@ -74,6 +74,35 @@ test('preferring ours keeps our side of a conflict and reports theirs as dropped
   });
 });
 
+test('preferring theirs keeps their side of a conflict and our other edits', () => {
+  const ours = BASE.replace('Middle.', 'Mine.').replace('End.', 'End!');
+  const theirs = BASE.replace('Middle.', 'Theirs.').replace('Intro.', 'Intro, agent.');
+  assert.deepEqual(merge3(BASE, ours, theirs, { prefer: 'theirs' }), {
+    text: doc('# Plan', '', 'Intro, agent.', '', 'Theirs.', '', 'End!'),
+    conflict: false,
+    dropped: [{ at: 4, count: 1, base: 'Middle.', ours: 'Mine.', theirs: 'Theirs.' }],
+  });
+});
+
+test('edits to neighbouring table rows merge row by row', () => {
+  const base = doc('| a | b |', '| --- | --- |', '| 1 | 2 |', '| 3 | 4 |');
+  const ours = base.replace('| 3 | 4 |', '| 3 | 4! |');
+  const theirs = base.replace('| 1 | 2 |', '| 1! | 2 |');
+  assert.deepEqual(merge3(base, ours, theirs), { text: doc('| a | b |', '| --- | --- |', '| 1! | 2 |', '| 3 | 4! |'), conflict: false, dropped: [] });
+});
+
+test('a conflict in one row leaves the neighbouring row\'s edit alone', () => {
+  const base = doc('- one', '- two', '- three');
+  const ours = doc('- mine', '- two, edited', '- three');
+  const theirs = doc('- theirs', '- two', '- three');
+  assert.deepEqual(merge3(base, ours, theirs), { text: null, conflict: true });
+  assert.deepEqual(merge3(base, ours, theirs, { prefer: 'theirs' }), {
+    text: doc('- theirs', '- two, edited', '- three'),
+    conflict: false,
+    dropped: [{ at: 0, count: 1, base: '- one', ours: '- mine', theirs: '- theirs' }],
+  });
+});
+
 test('a character merge that would change how the line renders conflicts', () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
   assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*'), { text: null, conflict: true });
