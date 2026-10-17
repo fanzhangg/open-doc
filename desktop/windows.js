@@ -98,7 +98,7 @@ async function createDocWindow(docPath, folder) {
     webPreferences: securePreferences(),
   });
   const entry = {
-    win, view: null, server, docPath, folder: null, listing: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null,
+    win, view: null, server, docPath, folder: null, listing: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
   };
   entry.view = createView(entry, server);
   win.contentView.addChildView(entry.view);
@@ -259,6 +259,7 @@ export async function folderView(win, contents) {
   return {
     name: basename(entry.folder),
     docs: entry.listing.docs,
+    folders: entry.listing.empty,
     truncated: entry.listing.truncated,
     current: relativeDoc(entry.folder, docPath),
     expanded: [...entry.expanded],
@@ -285,6 +286,56 @@ export function setExpanded(win, rel, open) {
 export async function folderDocs(entry) {
   entry.listing ??= await listDocs(entry.folder);
   return entry.listing.docs;
+}
+
+/** The folder's docs and empty folders as last listed. */
+export async function folderListing(entry) {
+  entry.listing ??= await listDocs(entry.folder);
+  return entry.listing;
+}
+
+/**
+ * List the folder of `entry` again now, rather than when the watch notices,
+ * and tell its page: the sidebar shows a change it made at once.
+ */
+export async function relist(entry) {
+  if (!entry.folder || entry.win.isDestroyed()) return;
+  entry.listing = await listDocs(entry.folder);
+  for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.send('opendoc:folder-changed');
+}
+
+/**
+ * The subfolder `from` of the sidebar of `entry` is now `to` (`/` between
+ * folders): whichever of it and its subfolders were open stay open.
+ */
+export function moveExpanded(entry, from, to) {
+  for (const rel of [...entry.expanded]) {
+    if (rel !== from && !rel.startsWith(`${from}/`)) continue;
+    entry.expanded.delete(rel);
+    entry.expanded.add(to + rel.slice(from.length));
+  }
+}
+
+/** Open subfolder `rel` and the folders above it in the sidebar of `entry`. */
+export function expandFolder(entry, rel) {
+  const parts = rel ? rel.split('/') : [];
+  for (let i = 1; i <= parts.length; i++) entry.expanded.add(parts.slice(0, i).join('/'));
+}
+
+/**
+ * Close the window of `entry` once its page has saved its last edit; throws
+ * (and the window stays) when it can't save.
+ */
+export async function closeDocWindow(entry) {
+  const { win } = entry;
+  if (win.isDestroyed()) return;
+  await entry.switching?.catch(() => {});
+  await leave(entry.view);
+  entry.left = true;
+  await new Promise((resolve) => {
+    win.once('closed', resolve);
+    win.close();
+  });
 }
 
 // A single-doc window starts listing `folder`: its server learns the folder
@@ -318,11 +369,11 @@ function expandTo(entry, docPath = entry.docPath) {
 /**
  * Rename the doc open in `entry` and its sidecar to `toPath` (`.md` added
  * if missing), never over another file; its server switches to the new path
- * and the page shows the new name.
+ * and the page shows the new name. With `moved`, the doc is already there
+ * (its folder was moved) and the server only follows it.
  */
-export async function renameOpenDoc(entry, toPath) {
-  const moved = await entry.server.moveTo(toPath);
-  const docPath = await realpath(moved);
+export async function renameOpenDoc(entry, toPath, { moved = false } = {}) {
+  const docPath = await realpath(await entry.server.moveTo(toPath, { moved }));
   docs.delete(entry.docPath);
   entry.docPath = docPath;
   docs.set(docPath, entry);
@@ -435,7 +486,7 @@ function closeAfterLeaving(entry) {
   let left = false;
   let leaving = false;
   win.on('close', (event) => {
-    if (left) {
+    if (left || entry.left) {
       hooks.onBounds(win.getNormalBounds());
       return;
     }

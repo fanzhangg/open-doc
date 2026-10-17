@@ -71,6 +71,7 @@ let shownSidecar = ''; // the sidecar on screen, as JSON
 let overwritten = null;
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 let files; // the folder sidebar (desktop folder windows)
+let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
 // The desktop app swaps one doc's page for another without a blank frame: it
 // shows this page once `opendocReady` resolves (the doc and the sidebar are
@@ -156,6 +157,7 @@ async function start() {
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
       if (carry.commentsHidden) showComments(false);
+      if (carry.startTyping) startTyping = true;
     },
   });
 
@@ -278,6 +280,7 @@ async function start() {
     else if (!missing) setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
   });
   await files.ready;
+  if (startTyping) editor.focus();
 }
 
 // ---- saving ----

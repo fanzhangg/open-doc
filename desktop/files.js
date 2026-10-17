@@ -1,8 +1,8 @@
-// Creating and renaming docs for the desktop app. Plain Node (no Electron),
+// Creating, renaming, moving and trashing docs and folders for the desktop app. Plain Node (no Electron),
 // so the tests run under `node --test`.
 
-import { mkdir, realpath, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { mkdir, readdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { SIDECAR_SUFFIX, moveDoc, sidecarPath } from '../src/store/files.js';
 
 export const DOC_EXTENSIONS = ['.md', '.markdown'];
@@ -10,7 +10,7 @@ const UNTITLED = 'Untitled';
 const MAX_UNTITLED = 10_000;
 
 export class DocFileError extends Error {
-  /** @param {'exists'} code */
+  /** @param {'exists' | 'inside'} code */
   constructor(code, message, path) {
     super(message);
     this.code = code;
@@ -105,6 +105,112 @@ export async function renameDoc(fromPath, toPath) {
   }
   await moveDoc(fromPath, target);
   return target;
+}
+
+// Characters Windows refuses in a name; elsewhere only `/` (a folder) and NUL.
+const WINDOWS_RESERVED = /[<>:"|?*\\]/;
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
+
+/**
+ * Why `name` (one part of a path, as typed in the sidebar) can't be a doc or
+ * folder name, or null when it can. A leading `.` is refused: hidden files
+ * are not listed, so the new one would vanish from the sidebar.
+ */
+export function nameProblem(name, platform = process.platform) {
+  if (!name.trim()) return 'Enter a name.';
+  if (name === '.' || name === '..') return `"${name}" can't be a name.`;
+  if (name.startsWith('.')) return 'Names starting with "." are hidden; pick another.';
+  if (/[\u0000-\u001f]/.test(name)) return 'Names can\'t contain control characters.';
+  if (Buffer.byteLength(name) > 255) return 'That name is too long.';
+  if (platform === 'win32') {
+    const bad = name.match(WINDOWS_RESERVED);
+    if (bad) return `Names can't contain ${bad[0]} on Windows.`;
+    if (WINDOWS_DEVICE.test(name)) return `Windows keeps "${name}" for itself; pick another.`;
+    if (/[. ]$/.test(name)) return 'Names can\'t end with a dot or a space on Windows.';
+  }
+  return null;
+}
+
+/**
+ * The parts of a sidebar path (`/` between folders, as typed), trimmed, or
+ * a problem with one of them.
+ * @returns {{ parts: string[] } | { problem: string }}
+ */
+export function nameParts(typed, platform = process.platform) {
+  const parts = String(typed).split('/').map((part) => part.trim());
+  for (const part of parts) {
+    const problem = nameProblem(part, platform);
+    if (problem) return { problem };
+  }
+  return { parts };
+}
+
+/** Make the folder `path` (and its parents). Never reuses one that exists. */
+export async function createFolder(path) {
+  if (await exists(path)) throw new DocFileError('exists', `${basename(path)} is already here`, path);
+  await mkdir(path, { recursive: true });
+  return path;
+}
+
+/**
+ * Move or rename the folder `fromPath` to `toPath`, with everything in it.
+ * Never overwrites, never into itself; a change of case only works on
+ * case-insensitive disks too.
+ */
+export async function moveFolder(fromPath, toPath) {
+  if (toPath === fromPath) return fromPath;
+  if (isInside(fromPath, toPath)) throw new DocFileError('inside', `${basename(fromPath)} can't go inside itself`, toPath);
+  await mkdir(dirname(toPath), { recursive: true });
+  if (await exists(toPath)) {
+    if (!(await sameFile(fromPath, toPath))) throw new DocFileError('exists', `${basename(toPath)} is already there`, toPath);
+    const temp = join(dirname(toPath), `.${basename(toPath)}.${process.pid}.renaming`);
+    await rename(fromPath, temp);
+    await rename(temp, toPath);
+    return toPath;
+  }
+  await rename(fromPath, toPath);
+  return toPath;
+}
+
+/** Whether `path` is `folder` or inside it. */
+export function isInside(folder, path) {
+  const rel = relative(folder, path);
+  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+/**
+ * What a folder holds, for the delete confirm: its docs, and every other
+ * file (sidecars aside), hidden ones and those in hidden folders included.
+ * @returns {Promise<{ docs: number, others: number }>}
+ */
+export async function countFolder(path) {
+  const count = { docs: 0, others: 0 };
+  async function walk(dir) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) await walk(join(dir, entry.name));
+      else if (entry.name.endsWith(SIDECAR_SUFFIX) && isDocName(entry.name.slice(0, -SIDECAR_SUFFIX.length))) continue;
+      else if (isDocName(entry.name) && !entry.name.startsWith('.')) count.docs++;
+      else count.others++;
+    }
+  }
+  await walk(path);
+  return count;
+}
+
+/**
+ * Put the doc `docPath` and its sidecar in the Trash with `trashItem`
+ * (Electron's shell.trashItem): the doc first, so a failure leaves the
+ * comments with a doc that is still there.
+ */
+export async function trashDoc(docPath, trashItem) {
+  await trashItem(docPath);
+  if (await exists(sidecarPath(docPath))) await trashItem(sidecarPath(docPath));
 }
 
 async function sameFile(a, b) {
