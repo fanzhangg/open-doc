@@ -63,7 +63,7 @@ export function documentIcon(faceSeed) {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
     node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
-    node('path', { d: 'M28 27V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V86', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    node('path', { d: 'M28 88V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
@@ -186,15 +186,38 @@ function smooth(points) {
 // About one agent in ten is a swirl: a wide coil with big eyes either side and
 // brows above them, the coil standing in for nose and mouth.
 const SWIRLS = 0.1;
-const COIL = 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50';
+
+// An Archimedean spiral around (50, 50), where the body spins, so it turns
+// without wobbling: two turns from the tail at the lower left, winding
+// anticlockwise in. A swirl spins the way it winds in (app.css), so the coil
+// seems to wind itself up.
+function coilPath() {
+  const [outer, inner, turns, start] = [35, 4, 2, Math.PI * 3 / 4];
+  const steps = turns * 48;
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = start - t * turns * Math.PI * 2;
+    const r = outer - (outer - inner) * t;
+    points.push([50 + r * Math.cos(a), 50 + r * Math.sin(a)]);
+  }
+  // Curve through each point, ending on the midpoints between them.
+  let d = `M${f(points[0][0])} ${f(points[0][1])}`;
+  for (let i = 1; i < steps; i++) {
+    const [p, q] = [points[i], points[i + 1]];
+    d += `Q${f(p[0])} ${f(p[1])} ${f((p[0] + q[0]) / 2)} ${f((p[1] + q[1]) / 2)}`;
+  }
+  return `${d}L${f(points[steps][0])} ${f(points[steps][1])}`;
+}
 
 function swirlFace(svg, defs, id, rand) {
+  svg.classList.add('od-swirl');
   const flip = rand() < 0.5; // which way it coils
   const x = (v) => (flip ? 100 - v : v);
   // The flip sits on a group: the working spin animates the body's own transform.
   const coil = node('g', flip ? { transform: 'matrix(-1 0 0 1 100 0)' } : {});
   coil.append(node('path', {
-    class: 'od-face-body', d: COIL, fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
+    class: 'od-face-body', d: coilPath(), fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
     'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   }));
   const look = node('g', { class: 'od-face-look' });
