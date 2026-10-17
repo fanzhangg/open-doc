@@ -1,6 +1,6 @@
 // The sidecar, version 2 (spec/SPEC.md): `X.md.opendoc.jsonl`, a first
 // line `{"opendoc":2}` and then one comment per line. A comment never
-// changes; resolving is a comment, deleting removes lines. Threads, who is
+// changes or goes; resolving is a comment. Threads, who is
 // mentioned and who is asked are read from the comments, never stored.
 // Pure, so the doc host and the page read a sidecar the same way.
 
@@ -177,11 +177,6 @@ export function askedOf(thread, me) {
     for (const name of c.mentions) add(theirs, name);
   });
   return asked;
-}
-
-/** `lines` with comment `id` deleted, and its replies when it is a first comment (§5). */
-export function deleteComment(lines, id) {
-  return lines.filter((l) => l.comment?.id !== id && l.comment?.thread !== id);
 }
 
 /**

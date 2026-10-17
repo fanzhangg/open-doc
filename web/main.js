@@ -157,7 +157,6 @@ async function start() {
     onReply: (thread, body) => send(api.reply(thread, body)),
     onResolve: (thread) => send(api.resolve(thread)),
     onReopen: (thread) => send(api.reopen(thread)),
-    onDelete: (id) => send(api.deleteComment(id)),
     onUndo: undoReply,
     onLight: (hash) => editor.lightEdits(hash),
     onSelect: (id) => {

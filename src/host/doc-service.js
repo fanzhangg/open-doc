@@ -11,7 +11,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { FormatError, appendedComments, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { FormatError, appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { project } from '../core/project.js';
@@ -198,18 +198,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       return [...lines, { comment: added }];
     }));
     return { ...(await commentsView((await readDoc(docPath)).markdown)), id: added.id };
-  }
-
-  // Delete a comment (a first comment takes its replies): your own, or a buddy's.
-  async function removeComment({ id } = {}) {
-    const mine = (await me()).id;
-    await serial(() => changeComments((lines) => {
-      const found = lines.find((l) => l.comment?.id === id)?.comment;
-      if (!found) throw new DocError('not_found', 'no such comment');
-      if (found.by.kind !== 'ai' && found.by.id !== mine) throw new DocError('bad_input', "only your own comments and buddies' can be deleted");
-      return deleteComment(lines, id);
-    }));
-    return commentsView((await readDoc(docPath)).markdown);
   }
 
   // ---- the doc's buddies ----
@@ -508,7 +496,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     reply: (body) => comment({ thread: body?.thread, body: body?.body }),
     resolve: (body) => comment({ thread: body?.thread, body: '', resolved: true }),
     reopen: (body) => comment({ thread: body?.thread, body: 'Reopened.' }),
-    deleteComment: removeComment,
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
       try {

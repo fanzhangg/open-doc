@@ -34,8 +34,8 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
   test). This is what makes `merge=union` safe.
 - Unknown major refused; a v1 sidecar not read and left byte for byte; a bad
   line reported, skipped and kept on rewrite; unknown fields kept.
-- Writing (§5): the file replaced whole, never torn; a deleted first
-  comment takes its replies; only a human sets `resolved`.
+- Writing (§5): the file replaced whole, never torn; only a human sets
+  `resolved`.
 - Mentions (§6): `@name` matches a buddy's name, case-insensitively.
 - Anchors: rendered text, then exact → context → fuzzy → detached.
 
