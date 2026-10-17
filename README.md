@@ -2,9 +2,9 @@
 
 A markdown editor to co-author docs with multiple AI buddies. 
 
-The app gives you an intuitive and none-intrusive way to write with multiple personalized AI buddies in the same text editor. Docs stay plain markdown files on your machine, with comments in a sidecar file next to them. A few principles:
+The app gives you an intuitive and non-intrusive way to write with multiple personalized AI buddies in the same text editor. Docs stay plain markdown files on your machine, with comments in a sidecar file next to them. A few principles:
 
-- **You are in control:** AI buddies never take over the doc. They make only small, scoped changes to what you asked about and explain the intent behind each one.
+- **You are in control:** AI buddies never take over the doc. They make only small, scoped changes to what you asked about; the app shows what each run changed, and you can undo it in one click.
 - **Real-time collaboration:** No handing the doc back and forth between you and an AI agent. You and your AI buddies edit and comment in the doc at the same time without blocking each other.
 - **Many AI buddies, not just one:** The magic happens when many personalized AI buddies see the same doc and threads you do, and act through the same edits and comments. Just see how they interact with you and with each other.
 - **Familiar experience:** Just like your favorite doc collaboration app: edit, comment and @mention. You already know how to use it.
