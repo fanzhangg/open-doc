@@ -11,7 +11,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { FormatError, appendedComments, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { project } from '../core/project.js';
@@ -52,7 +52,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
-    doc: async () => ({ name: basename(docPath), markdown: (await readDoc(docPath)).markdown }),
+    doc: async () => ({ name: basename(docPath), markdown: (await readDoc(docPath)).markdown, comments: await readSidecarText(docPath) }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
     human: async () => (await me()).name,
@@ -260,7 +260,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // three-way from the copy as it started, then post its reply. Where the
   // human changed the same text meanwhile, theirs stays, the buddy's change
   // there is dropped and the reply says `conflict`. Run in `serial`.
-  async function finishRun({ threadId, name, base, edited, body, failed }) {
+  async function finishRun({ threadId, name, base, edited, comments, body, failed }) {
     let conflict = false;
     const id = newId('c');
     if (edited !== null && edited !== base) {
@@ -276,12 +276,20 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
       }
     }
+    const by = { id: name, name, kind: 'ai' };
+    const now = Date.now();
     const reply = {
-      id, thread: threadId, by: { id: name, name, kind: 'ai' }, at: new Date().toISOString(), body,
+      id, thread: threadId, by, at: new Date(now + 1).toISOString(), body, // after its comments, so it ends its thread
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
-    await changeComments((lines) => (lines.some((l) => l.comment?.id === threadId) ? [...lines, { comment: reply }] : lines))
-      .catch((error) => console.error(`Could not post ${name}'s reply:`, error));
+    // Its comments are on the doc as it is now, its edit merged in.
+    const text = comments ? project((await readDoc(docPath).catch(() => null))?.markdown ?? base).text : '';
+    await changeComments((lines) => {
+      if (!lines.some((l) => l.comment?.id === threadId)) return lines;
+      const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
+      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(now).toISOString(), threads }) : [];
+      return [...lines, ...added.map((comment) => ({ comment })), { comment: reply }];
+    }).catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
 
   // ---- undo ----

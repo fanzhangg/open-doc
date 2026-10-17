@@ -5,6 +5,7 @@
 // Pure, so the doc host and the page read a sidecar the same way.
 
 import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
+import { createAnchor } from './anchor.js';
 
 export const FORMAT_VERSION = 2;
 export const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
@@ -84,9 +85,49 @@ function invalid(c) {
   if (c.anchor !== undefined && c.anchor !== null && !validAnchor(c.anchor)) return 'bad anchor';
   if (!isObject(c.by) || typeof c.by.id !== 'string' || !c.by.id || !NAME_PATTERN.test(c.by.name ?? '') || !['human', 'ai'].includes(c.by.kind)) return 'bad by';
   if (typeof c.at !== 'string' || !AT.test(c.at)) return 'bad at';
-  if (typeof c.body !== 'string' || (c.body.trim() === '' && c.resolved !== true)) return 'bad body';
+  if (typeof c.body !== 'string' || (c.body.trim() === '' && c.resolved !== true && !(c.by.kind === 'ai' && c.thread))) return 'bad body';
   for (const key of ['resolved', 'conflict', 'failed']) if (c[key] !== undefined && c[key] !== true) return `bad ${key}`;
   return null;
+}
+
+/**
+ * The comments a buddy's run appended to its copy of the sidecar
+ * (docs/agent-config.md, Comments): lines in `after` that were not in
+ * `before` and have no `id` (a changed comment has one), each `{ anchor: { exact }, body }`, `{ body }` or `{ thread,
+ * body }`, made comments `by` the buddy `at` a time. A reply needs a thread
+ * of `threads`; a quote found other than once in `text` (the doc's rendered
+ * text) is on the whole doc. Anything else is ignored.
+ */
+export function appendedComments(before, after, { text, by, at, threads }) {
+  const had = new Set(before.split('\n'));
+  const added = [];
+  for (const raw of after.split('\n')) {
+    if (!raw.trim() || had.has(raw)) continue;
+    let line;
+    try {
+      line = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!isObject(line) || line.id !== undefined || typeof line.body !== 'string' || !line.body.trim()) continue;
+    const comment = { id: newId('c'), by, at, body: line.body.trim() };
+    if (line.thread !== undefined) {
+      if (!threads.has(line.thread)) continue;
+      comment.thread = line.thread;
+    } else {
+      comment.anchor = quoted(text, line.anchor?.exact);
+    }
+    added.push(comment);
+  }
+  return added;
+}
+
+// The anchor of `exact` when it is in `text` once, else null.
+function quoted(text, exact) {
+  if (typeof exact !== 'string' || !exact) return null;
+  const start = text.indexOf(exact);
+  if (start < 0 || text.indexOf(exact, start + 1) >= 0) return null;
+  return createAnchor(text, start, start + exact.length);
 }
 
 /** Whether `anchor` is `{ exact, prefix, suffix, start }` (§3). */

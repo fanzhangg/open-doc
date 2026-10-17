@@ -50,7 +50,7 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     assert.match(await readFile(docPath, 'utf8'), /the extra peak load\./);
 
     const [run] = await runs();
-    assert.deepEqual(run.files, ['plan.md'], 'its folder holds only the copy');
+    assert.deepEqual(run.files.sort(), ['plan.md', 'plan.md.opendoc.jsonl'], 'its folder holds only the copies');
     assert.notEqual(run.cwd, dirname(docPath));
     assert.equal(join(basename(dirname(run.doc)), basename(run.doc)), join(basename(run.cwd), 'plan.md'), 'the copy, in its folder (macOS may name /var as /private/var)');
     assert.equal(run.buddy, 'Clippy');
