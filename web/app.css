@@ -152,8 +152,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 @keyframes od-fade-pulse { 50% { opacity: 0.35; } }
 /* working (in the header, and on the card it is working on): the body rolls under the face, which bobs along; waiting for its turn: it breathes */
 [data-presence="working"] .od-face-body, .od-typing .od-face-body { animation: od-spin 2.4s linear infinite; }
-/* Clippy's coil winds anticlockwise in; turning that way, it winds itself up */
-[data-presence="working"] .od-clippy .od-face-body, .od-typing .od-clippy .od-face-body { animation-direction: reverse; }
 [data-presence="working"] .od-face-look, .od-typing .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
 @keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
 [data-state="queued"] .od-face-body { animation: od-fade-pulse 1.6s ease-in-out infinite; }

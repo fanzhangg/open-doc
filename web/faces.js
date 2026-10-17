@@ -57,7 +57,7 @@ export const personFace = (seed) => face(seed, true);
 // A warm yellow coil, eyes on either side and asymmetric brows. The coil is a
 // true spiral centred where the body spins, so it turns without wobbling.
 export function clippyFace() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face od-clippy', role: 'img', 'aria-label': 'OpenDoc' });
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
   const id = `od-clippy-${++ids}`;
   const defs = node('defs', {});
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
@@ -86,8 +86,7 @@ export function clippyFace() {
 }
 
 // An Archimedean spiral around (50, 50): two turns from the tail at the lower
-// left, winding anticlockwise in. Clippy spins anticlockwise (app.css), so the
-// coil seems to wind itself up.
+// left, winding anticlockwise in.
 function coil() {
   const [outer, inner, turns, start] = [35, 4, 2, Math.PI * 3 / 4];
   const steps = turns * 48;
