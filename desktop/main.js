@@ -17,7 +17,7 @@ import { readSidecar } from '../src/store/files.js';
 import { moveHistory } from '../src/store/history.js';
 import {
   cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
-  moveFolder, nameParts, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
+  moveFolder, nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc } from './folder.js';
@@ -229,19 +229,12 @@ async function newDocDialog(parent) {
   await show(path, parent);
 }
 
-/**
- * File > New Doc in This Folder: in a folder window, a new doc named in the
- * sidebar; elsewhere `Untitled.md` (or the next free name) next to the open doc.
- */
-async function newDocHere(win) {
+/** File > New Doc: in a folder window, a doc named in the sidebar, next to the open doc; elsewhere the dialog. */
+function newDoc(win) {
   const entry = windows.docFor(win);
-  if (!entry) return newDocDialog(win);
-  if (entry.folder) return void entry.view.webContents.send('opendoc:folder-command', { action: 'newDoc', rel: '', kind: 'here' });
-  try {
-    await show(await createUntitled(dirname(entry.docPath)), win);
-  } catch (error) {
-    await failed(win, 'Could not create a doc in this folder.', error);
-  }
+  if (!entry?.folder) return newDocDialog(win);
+  entry.view.webContents.send('opendoc:folder-command', { action: 'newDoc', rel: '', kind: 'here' });
+  return undefined;
 }
 
 /** File > Rename: the doc and its comments move together, and the window stays open. */
@@ -373,8 +366,7 @@ function buildMenu() {
     {
       label: isMac ? 'File' : '&File',
       submenu: [
-        { label: 'New Doc…', accelerator: 'CmdOrCtrl+N', click: (_item, win) => newDocDialog(win) },
-        { label: 'New Doc in This Folder', accelerator: 'CmdOrCtrl+Alt+N', enabled: Boolean(doc), click: (_item, win) => newDocHere(win) },
+        { label: 'New Doc…', accelerator: 'CmdOrCtrl+N', click: (_item, win) => newDoc(win) },
         { type: 'separator' },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: (_item, win) => openDialog(win) },
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: (_item, win) => openFolderDialog(win) },
@@ -558,9 +550,8 @@ async function checkListed(entry, rel, kind) {
 const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
 
 /**
- * A new doc or folder named `name` (as typed; `/` makes folders) in the
- * sidebar folder `parent`. An empty doc name takes the next free Untitled.
- * A new doc opens in this window.
+ * A new doc or folder named `name` in the sidebar folder `parent`. A new doc
+ * opens in this window.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
 async function sidebarCreate(win, { parent, name, kind } = {}) {
@@ -568,17 +559,12 @@ async function sidebarCreate(win, { parent, name, kind } = {}) {
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const dir = await checkListed(entry, parent, parent ? 'folder' : 'root');
   const typed = String(name ?? '').trim();
-  let path;
+  const problem = nameProblem(typed);
+  if (problem) return { error: problem };
+  let path = join(dir, typed);
   try {
-    if (kind === 'doc' && !typed) {
-      path = await createUntitled(dir);
-    } else {
-      const named = nameParts(typed);
-      if (named.problem) return { error: named.problem };
-      path = join(dir, ...named.parts);
-      if (kind === 'doc') path = await createDoc(withDocExtension(path));
-      else await createFolder(path);
-    }
+    if (kind === 'doc') path = await createDoc(withDocExtension(path));
+    else await createFolder(path);
   } catch (error) {
     if (error.code === 'exists') return { error: `${basename(error.path)} is already here.` };
     throw error;
@@ -591,19 +577,21 @@ async function sidebarCreate(win, { parent, name, kind } = {}) {
 }
 
 /**
- * Rename or move the sidebar's doc or folder `from` to `to` (its new place,
- * as typed; a doc keeps its extension unless `to` names one). Its comments,
- * history and own agents go with each doc, and any window showing one
- * follows it.
+ * Rename or move the sidebar's doc or folder `from`: into the sidebar folder
+ * `folder` ('' for the top), as `name` (a doc keeps its extension unless
+ * `name` has one). Its comments, history and own agents go with each doc,
+ * and any window showing one follows it.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
-async function sidebarMove(win, { from, kind, to } = {}) {
+async function sidebarMove(win, { from, kind, folder, name } = {}) {
   const entry = await sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const fromPath = await checkListed(entry, from, kind);
-  const named = nameParts(String(to ?? ''));
-  if (named.problem) return { error: named.problem };
-  let toPath = join(entry.folder, ...named.parts);
+  const dir = await checkListed(entry, folder, folder ? 'folder' : 'root');
+  const typed = String(name ?? '').trim();
+  const problem = nameProblem(typed);
+  if (problem) return { error: problem };
+  let toPath = join(dir, typed);
   if (kind === 'doc' && !isDocName(toPath)) toPath += extname(fromPath);
   if (toPath === fromPath) return { rel: from };
   try {
@@ -711,10 +699,6 @@ async function sidebarTrash(win, { rel, kind } = {}) {
     const parts = [docs && count(docs, 'doc'), others && count(others, docs ? 'other file' : 'file')].filter(Boolean);
     detail = parts.length ? `Its ${parts.join(' and ')} go to the Trash.` : 'It is empty. It goes to the Trash.';
   }
-  const working = (await Promise.all(open.map((other) => other.server.running().catch(() => [])))).flat();
-  if (working.length) {
-    detail += `\n\n${listNames(working)} ${working.length === 1 ? 'is' : 'are'} working on ${kind === 'doc' ? name : 'a doc in it'}; that work stops.`;
-  }
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning', message: `Delete "${name}"?`, detail, buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1,
   });
@@ -760,7 +744,6 @@ async function sidebarTrash(win, { rel, kind } = {}) {
 }
 
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /**
  * The menu of a sidebar row (`kind` 'doc' or 'folder') or of the blank space
@@ -791,10 +774,7 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
       click: () => report(sidebarTrash(win, { rel, kind })),
     },
   ];
-  const shown = path === entry.docPath || (await realpath(path).catch(() => path)) === entry.docPath;
-  const template = kind === 'doc'
-    ? [{ label: 'Open in New Window', enabled: !shown, click: () => report(windows.openDoc(path)) }, { type: 'separator' }, ...place]
-    : kind === 'folder' ? [...create, { type: 'separator' }, ...place] : create;
+  const template = kind === 'doc' ? place : kind === 'folder' ? [...create, { type: 'separator' }, ...place] : create;
   const at = Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : {};
   Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }

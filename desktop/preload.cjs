@@ -59,13 +59,13 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   openInFolder: (path) => act('openInFolder', String(path)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
   /**
-   * A new doc ('doc', which then opens here) or folder ('folder') `name` (`/`
-   * makes folders) in the sidebar folder `parent` ('' for the top). Resolves
-   * to { rel } (its path in the folder) or { error } (why the name can't be used).
+   * A new doc ('doc', which then opens here) or folder ('folder') `name` in
+   * the sidebar folder `parent` ('' for the top). Resolves to { rel } (its
+   * path in the folder) or { error } (why the name can't be used).
    */
   folderCreate: (parent, name, kind) => act('folderCreate', { parent: String(parent), name: String(name), kind: String(kind) }),
-  /** Rename or move the sidebar's doc or folder `from` to `to`; { rel } or { error }. */
-  folderMove: (from, kind, to) => act('folderMove', { from: String(from), kind: String(kind), to: String(to) }),
+  /** Rename or move the sidebar's doc or folder `from` into `folder` as `name`; { rel } or { error }. */
+  folderMove: (from, kind, folder, name) => act('folderMove', { from: String(from), kind: String(kind), folder: String(folder), name: String(name) }),
   /** Delete the sidebar's doc or folder, once the user confirms; { trashed }. */
   folderTrash: (rel, kind) => act('folderTrash', { rel: String(rel), kind: String(kind) }),
   /**

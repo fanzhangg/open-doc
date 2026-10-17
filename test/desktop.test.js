@@ -7,7 +7,7 @@ import { applyOp, newId } from '../src/core/index.js';
 import { readSidecar, sidecarPath, update } from '../src/store/files.js';
 import {
   cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
-  nameParts, nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
+  nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc, watchFolder } from '../desktop/folder.js';
@@ -197,7 +197,7 @@ test('neighbourDoc: the next doc in the same folder, else the one above, else th
   assert.equal(neighbourDoc(['only.md'], 'only.md'), null);
 });
 
-test('nameProblem refuses empty, hidden and, on Windows, reserved names', () => {
+test('nameProblem refuses empty, hidden, slashed and, on Windows, reserved names', () => {
   assert.equal(nameProblem('plan', 'darwin'), null);
   assert.equal(nameProblem('plan: v2', 'darwin'), null);
   assert.match(nameProblem('  ', 'darwin'), /Enter a name/);
@@ -207,9 +207,7 @@ test('nameProblem refuses empty, hidden and, on Windows, reserved names', () => 
   assert.match(nameProblem('con', 'win32'), /Windows keeps/);
   assert.match(nameProblem('plan.', 'win32'), /end with a dot/);
   assert.match(nameProblem('x'.repeat(256), 'linux'), /too long/);
-  assert.deepEqual(nameParts(' notes / kickoff ', 'linux'), { parts: ['notes', 'kickoff'] });
-  assert.match(nameParts('notes//kickoff', 'linux').problem, /Enter a name/);
-  assert.match(nameParts('notes/.hidden', 'linux').problem, /hidden/);
+  assert.match(nameProblem('notes/kickoff', 'darwin'), /can't contain \//);
 });
 
 test('isInside: a path in a folder, or the folder itself, but not a sibling with a longer name', () => {

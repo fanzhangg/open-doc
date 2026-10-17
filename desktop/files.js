@@ -112,13 +112,14 @@ const WINDOWS_RESERVED = /[<>:"|?*\\]/;
 const WINDOWS_DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 
 /**
- * Why `name` (one part of a path, as typed in the sidebar) can't be a doc or
- * folder name, or null when it can. A leading `.` is refused: hidden files
+ * Why `name` (as typed in the sidebar) can't be a doc or folder name, or
+ * null when it can. A leading `.` is refused: hidden files
  * are not listed, so the new one would vanish from the sidebar.
  */
 export function nameProblem(name, platform = process.platform) {
   if (!name.trim()) return 'Enter a name.';
   if (name === '.' || name === '..') return `"${name}" can't be a name.`;
+  if (name.includes('/')) return 'Names can\'t contain /.';
   if (name.startsWith('.')) return 'Names starting with "." are hidden; pick another.';
   if (/[\u0000-\u001f]/.test(name)) return 'Names can\'t contain control characters.';
   if (Buffer.byteLength(name) > 255) return 'That name is too long.';
@@ -129,20 +130,6 @@ export function nameProblem(name, platform = process.platform) {
     if (/[. ]$/.test(name)) return 'Names can\'t end with a dot or a space on Windows.';
   }
   return null;
-}
-
-/**
- * The parts of a sidebar path (`/` between folders, as typed), trimmed, or
- * a problem with one of them.
- * @returns {{ parts: string[] } | { problem: string }}
- */
-export function nameParts(typed, platform = process.platform) {
-  const parts = String(typed).split('/').map((part) => part.trim());
-  for (const part of parts) {
-    const problem = nameProblem(part, platform);
-    if (problem) return { problem };
-  }
-  return { parts };
 }
 
 /** Make the folder `path` (and its parents). Never reuses one that exists. */
