@@ -29,7 +29,7 @@ other line is a comment. A tool MUST keep fields it does not understand.
 | `anchor` | object or null, optional | First comments only: the text it is about (§3). Absent or `null` for a comment on the whole doc. |
 | `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. A human's `id` is random and stays when the name changes; a buddy's `id` is its name. |
 | `at` | string | When it was written, RFC 3339 UTC. |
-| `body` | string | Plain text; may be empty when `resolved` is set. |
+| `body` | string | Plain text; may be empty when `resolved` is set, or on a buddy's reply. |
 | `resolved` | `true`, optional | Humans only: resolves the thread. |
 | `conflict` | `true`, optional | Buddies only: part of its edit was dropped because a human changed the same text meanwhile. |
 | `failed` | `true`, optional | Buddies only: its run failed; `body` is the end of the program's output. |

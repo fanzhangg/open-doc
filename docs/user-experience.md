@@ -15,8 +15,8 @@ How a person writes with buddies in OpenDoc. For why, see the
 3. **Comment.** Select text and click the comment button at the page edge
    (Ctrl+Alt+M). The comment sits in the margin beside its text and follows
    it as the text changes.
-4. **A buddy answers.** `@Clippy` in a comment asks Clippy. It edits the doc
-   and replies in the thread.
+4. **A buddy answers.** `@Clippy` in a comment asks Clippy. It edits the doc,
+   may comment on other passages, and replies in the thread.
 5. **You decide.** Keep the edit, undo it from the reply, reply again, or
    resolve the thread. Only people resolve threads.
 
@@ -24,21 +24,20 @@ How a person writes with buddies in OpenDoc. For why, see the
 
 A buddy is someone you @mention: a name, a one-line **persona** and optional
 **instructions**, all in one markdown file, `<Name>.md`. The file name is its
-name, the first line its persona, the rest its instructions. Its face is
-drawn from its name, so everyone sees the same one.
+name, the first line its persona, the rest its instructions.
 
-- **Yours** live in `buddies/` in your config folder and answer in every doc.
-  `Clippy.md`, a general writing assistant, is made there the first time the
-  app runs; edit or delete it like any other.
-- **A project's** live in its `.opendoc/buddies/` and travel with the folder
-  (commit them). They answer only in that project's docs. When both have a
-  name, the project's buddy gets it.
-- A doc opened on its own (from Finder, say) reaches only yours, even if it
+- **Clippy**, a general writing assistant, is built in and answers in every
+  doc. It cannot be edited or deleted.
+- **A project's** buddies live in its `.opendoc/buddies/` and travel with the
+  folder (commit them). They answer only in that project's docs.
+- A doc opened on its own (from Finder, say) reaches only Clippy, even if it
   sits inside a project folder.
+- Each buddy has its own face and color, the same on every machine: Clippy
+  is yellow, and up to seven project buddies get seven other colors.
 
 **New buddy** (People panel, or + in the Buddies panel) starts a draft: type a
-name, then a persona and instructions, and Create. In a project, switch on
-"In this project" to make it the project's. On a buddy's card, click its name
+name, then a persona and instructions, and Create; it is the project's. On
+a buddy's card, click its name
 or persona to edit it in place; the Buddies panel holds its instructions and
 Delete. Editing the files by hand works too: the app picks up changes at once.
 
@@ -60,13 +59,20 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 ## Buddies always edit, and every edit can be undone
 
 - A buddy edits a copy of the doc; when it is done, its changes are merged
-  into the doc as it is then, and typed into the page with its name.
+  into the doc as it is then, at once, underlined in its color until you
+  next type.
+- A buddy comments as you do: on any passage, or in any thread. It cannot
+  resolve or delete. Its comments ask no one.
+- Under its reply the app shows what the run did: how many edits and
+  comments, and how many edits were dropped. The reply only says why, or
+  what you need to decide, and may be empty.
 - **Your text wins.** Where you changed the same text while it worked, yours
   stays, its change there is dropped, and its reply says so. @mention it
   again to redo it.
-- **Undo its edit** on the reply takes that buddy's change back, keeping
-  everything written since; where you changed its text since, yours stays.
-  It works on the computer that ran the buddy.
+- **Undo** on the reply takes the run's edits back, all at once, keeping
+  everything written since; where you or another buddy changed its text
+  since, that text stays. Its comments stay. It works on the computer that
+  ran the buddy.
 - **Cmd+Z** (Ctrl+Z) undoes only your own typing, never a buddy's edit.
 - **A failed run** replies with the end of its output, marked failed.
   @mention the buddy again to retry.
@@ -75,7 +81,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 
 - **Presence.** People's avatars are circles; each buddy's is a soft blob
   with a face. They sit side by side in the header. While a buddy works its
-  body rolls under its face and the thread shows it typing.
+  body rolls under its face and the thread shows it working.
 - **People** button (after the avatars): you, the people who commented, and
   the buddies here, with New buddy.
 

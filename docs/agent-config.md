@@ -10,15 +10,38 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 
 | | |
 | --- | --- |
-| Working folder | new and private; holds only a copy of the doc, under the doc's name |
+| Working folder | new and private; holds only copies of the doc and its sidecar, under their names |
 | stdin | the prompt: the buddy's persona and instructions, the thread, the rules |
-| `OPENDOC_DOC` | the copy's path |
+| `OPENDOC_DOC` | the doc copy's path |
+| `OPENDOC_COMMENTS` | the sidecar copy's path |
 | `OPENDOC_PROJECT` | the project folder; empty in doc mode |
 | `OPENDOC_BUDDY` | the buddy's name |
-| stdout | the reply |
-| Exit 0 | success; the app merges the copy's edits into the doc. Otherwise the reply is marked `failed`, with the end of the output. |
+| stdout | the reply; may be empty |
+| Exit 0 | success; the app merges the doc copy's edits into the doc and adds the appended comments. Otherwise the reply is marked `failed`, with the end of the output. |
 
-The program needs no OpenDoc tool: it reads a file, edits it and prints.
+The program needs no OpenDoc tool: it reads files, edits them and prints.
+
+## Comments
+
+The sidecar copy holds every thread of the doc
+([SPEC](../spec/SPEC.md)). To comment, the agent appends lines; the
+app fills in `id`, `by` and `at`.
+
+| Line | Makes |
+| --- | --- |
+| `{"anchor":{"exact":"…"},"body":"…"}` | a thread on that text |
+| `{"body":"…"}` | a thread on the whole doc |
+| `{"thread":"c_…","body":"…"}` | a reply in that thread |
+
+- `exact` quotes the doc copy as the agent left it, without markdown marks,
+  and must be found exactly once; the app makes the rest of the anchor.
+  Otherwise the thread is on the whole doc.
+- Any other change to the copy is ignored: changed or removed lines,
+  `resolved`, lines that are not valid.
+
+The rules on stdin tell the agent to comment only where the user has
+something to decide, and not to repeat in its reply what the app shows: its
+edits and comments.
 
 ## Agent scripts
 

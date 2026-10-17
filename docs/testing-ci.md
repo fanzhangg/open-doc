@@ -44,8 +44,8 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - Three-way merge, fuzzed: **the human's text always survives**; the
   buddy's overlapping change is dropped and reported as a conflict;
   disjoint edits merge; the result is deterministic.
-- Reverse merge (Undo): a buddy's edit is removed; later text by anyone
-  else stays.
+- Undo: each change of a run whose new text is still found is put back;
+  text changed since, by anyone, stays.
 - The inbox: a thread waits on X only after a comment by this user that
   @mentions X; another user id, or no mention, asks no one.
 - Same fixtures, same output in Node and the browser.
@@ -78,12 +78,13 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 ### Buddy files — unit, integration
 
 - `<Name>.md`: the file name is the name, the first line the persona; a
-  renamed file is a renamed buddy; a project's buddy wins a shared name;
+  renamed file is a renamed buddy; a `Clippy.md` is not a buddy;
   `.opendoc/` created with the first buddy; only the opened folder's counts.
-- Doc mode reaches the user's buddies only, also inside a project folder.
+- Doc mode reaches Clippy only, also inside a project folder.
 - One agent script runs every buddy, with `OPENDOC_BUDDY` set;
   **nothing in `.opendoc/` or a sidecar chooses a program**.
-- An avatar is the same for the same name everywhere.
+- The same project's buddies have the same faces and colors everywhere;
+  Clippy and up to seven buddies all have different colors.
 
 ### App — e2e
 

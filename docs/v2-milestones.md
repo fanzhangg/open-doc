@@ -15,8 +15,12 @@ script, and no test runs a model.
 ```
 M1 ──> M2 ──> M3 ──> M4
   └──> M5
-                         all ──> M6
+                         all ──> M6 ──> M7 ──> M8
+                                    └──> M9 ──> M10 ──> M11
 ```
+
+M7–M11 add what came after M6: Clippy built in, distinct colors, buddies
+that comment, the app's receipt and marks, and undo by changes.
 
 ## M1. An agent is a filter
 
@@ -131,3 +135,81 @@ loses, and its version is saved.
 - The v2 docs replace `architecture.md` and `spec/SPEC.md`.
 - `user-experience.md` and `README.md` describe v2.
 - No doc but this plan mentions a concept in architecture v2's Removed list.
+
+## M7. Clippy built in, buddies in the project
+
+**In:** Clippy in the app, in every doc, its persona and instructions the
+app's; every other buddy only in a project's `.opendoc/buddies/`; a
+`Clippy.md` there is not a buddy; New buddy makes a project buddy; Clippy's
+card is read only.
+
+**Removed:** the user's `buddies/`, `installClippy`, "In this project",
+a project's buddy winning a shared name.
+
+**Done when:**
+- A doc opened from Finder reaches Clippy only, even inside a project.
+- A project reaches Clippy and its own buddies; `Clippy.md` in it is
+  skipped.
+- Clippy cannot be renamed, edited or deleted, from the page or the doc
+  host.
+
+## M8. Distinct colors
+
+**In:** eight colors evenly apart in OKLCH hue; Clippy the yellow one; a
+project buddy the one its name picks, or the next free one after the
+buddies before it by name; faces keep being made from the name.
+
+**Done when:**
+- Seven buddies whose names pick the same color get seven different ones,
+  none Clippy's.
+- The same buddies get the same colors in every window and on every
+  machine.
+
+## M9. Buddies comment
+
+**In:** the sidecar copied into the run's folder, `OPENDOC_COMMENTS`; lines
+the agent appends added as the buddy's: a thread on a quote, on the whole
+doc, or a reply ([agent config](agent-config.md#comments)); a quote not
+found exactly once makes a thread on the whole doc; any other change to
+the copy ignored; the reply may be empty; the prompt's rules on comments.
+
+**Done when:**
+- A fake script that appends a thread on a quote, one on the whole doc and
+  a reply, and prints nothing: all three are the buddy's, the anchor is
+  found, and the reply is empty.
+- A script that rewrites a line, sets `resolved` or quotes text found
+  twice: the line is ignored, the thread stays open, the quote becomes a
+  thread on the whole doc.
+- A buddy's comment that @mentions a buddy runs nothing.
+
+## M10. Receipt and marks
+
+**In:** under a buddy's reply, on the machine that ran it, the run's edits,
+comments and dropped edits, counted by the app and kept with the version
+saved after it; the run's edits land at once, underlined in the buddy's
+color until the user types; hovering the receipt shows them again.
+
+**Removed:** replaying an edit as typing (`web/replay.js`), the buddy's
+caret.
+
+**Done when:**
+- The counts match the run's diff, appended comments and drops, and show
+  only on the machine that ran it.
+- A run's edits are underlined in its color when it lands; typing anywhere
+  removes the underlines.
+- No code replays an edit.
+
+## M11. Undo by changes
+
+**In:** Undo on a reply turns the diff between the versions before and
+after the run into changes; each change whose new text is still found, the
+way an anchor is, is put back; the rest are skipped; all at once; the
+run's comments stay.
+
+**Removed:** the reverse three-way merge for Undo.
+
+**Done when:**
+- Undo removes the run's edits and keeps a later human edit and a later
+  buddy's edit elsewhere.
+- A change you or another buddy changed since is skipped, and nothing asks.
+- Every undo can itself be restored.

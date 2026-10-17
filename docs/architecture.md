@@ -14,8 +14,9 @@ Codex). A buddy runs on an agent.
    lost.
 2. **Only the app writes them.** An agent gets only a copy. Any other
    change (other editors, `git pull`) is seen and merged.
-3. **An agent is a filter:** prompt on stdin, a doc copy to edit, reply on
-   stdout. It knows nothing of OpenDoc and remembers nothing.
+3. **An agent is a filter:** prompt on stdin, copies of the doc and its
+   comments to edit, reply on stdout. It knows nothing of OpenDoc and
+   remembers nothing.
 4. **No one resolves a conflict by hand.** The person typing always wins.
    What loses is redone (ask the buddy again) or restored (history).
 5. **Buddies always edit, and every edit can be undone.** See
@@ -25,10 +26,9 @@ Codex). A buddy runs on an agent.
 
 ## Buddies and folders
 
-A window has a doc and, in project mode, a folder. Its buddies are the
-user's (`<config>/buddies/`) and the folder's (`.opendoc/buddies/`); each
-is a `<Name>.md` file ([PROJECT](../spec/PROJECT.md)). A folder's
-buddy wins a name both have.
+A window has a doc and, in project mode, a folder. Its buddies are Clippy,
+built into the app, and the folder's (`.opendoc/buddies/`), each a
+`<Name>.md` file ([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
 | --- | --- | --- |
@@ -60,17 +60,30 @@ on docs open in a window.
 
 ## A run
 
-1. Runner copies the doc into a new private folder and runs the
-   [agent script](agent-config.md) there, with the prompt (persona,
+1. Runner copies the doc and its sidecar into a new private folder and runs
+   the [agent script](agent-config.md) there, with the prompt (persona,
    instructions, the thread, the rules) on stdin and the buddy's name in
    `OPENDOC_BUDDY`.
-2. The agent edits the copy and prints its reply on stdout.
-3. On exit 0, DocService saves versions before and after, merges the copy's
-   diff into the doc, three-way from the copy as it started, and writes the
-   reply as the buddy's comment. Where the human changed the same text
-   meanwhile, the buddy's change is dropped and the reply is marked
-   `conflict`.
+2. The agent edits the doc copy, appends comments to the sidecar copy, and
+   prints its reply on stdout.
+3. On exit 0, DocService saves versions before and after, merges the doc
+   copy's diff into the doc, three-way from the copy as it started, adds
+   the appended comments as the buddy's, and writes the reply as the
+   buddy's comment. Where the human changed the same text meanwhile, the
+   buddy's change is dropped and the reply is marked `conflict`.
 4. The private folder is deleted.
+
+A buddy comments as a human does: new threads, replies in any thread. It
+cannot resolve or delete; anything but appended comments is ignored
+([agent config](agent-config.md#comments)). Its comments start no runs
+(principle 6).
+
+What the app knows, the app shows, not the buddy's reply: under the reply,
+how many edits and comments the run made and how many edits were dropped.
+The reply says only what the app cannot (why, what to decide), and may be
+empty. The run's edits land at once, underlined in the buddy's color until
+the user next types. Both are on the machine that ran it only: the counts
+are kept with the version saved after the run.
 
 A run that fails is answered too: the buddy's comment is marked `failed`,
 with the end of the program's output. One ask, one reply; to retry, or to
@@ -81,10 +94,11 @@ the same time; their merges are applied one at a time.
 ## Undo
 
 1. **Your own edits:** Cmd+Z, which undoes only yours, as in shared docs.
-2. **A buddy's edit:** Undo on its reply. DocService reverses the diff
-   between the versions saved before and after it, merged three-way into
-   the doc as it is now; where you changed the same text since, yours
-   stays.
+2. **A buddy's run:** Undo on its reply. The diff between the versions
+   saved before and after the run is its changes. Each change whose new
+   text is still in the doc, found the way an anchor is, is put back; the
+   rest are skipped: text belongs to whoever changed it last. All at once,
+   never one change; its comments stay.
 3. **Anything else:** restore a version from history.
 
 Each of them saves a version first. Undo on a reply works only on the
@@ -106,7 +120,6 @@ written only by the app.
 | File | Holds |
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; which agent runs buddies |
-| `buddies/` | the user's buddies; `Clippy.md` is made here on first run |
 | `agents/` | agent scripts; Claude Code and Codex ship as two |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
