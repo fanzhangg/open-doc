@@ -76,7 +76,7 @@ test('deleting a comment removes its line; deleting a first comment takes its re
   assert.deepEqual(deleteComment(lines, 'c_first01'), []);
 });
 
-test('who is asked: a buddy my comment @mentions, until it replies; another user\'s comment asks no one', () => {
+test('who is asked: whom my comment @mentions, or with no mention the thread\'s buddies, until each replies; another user\'s comment asks no one', () => {
   const by = (id, name, kind = 'human') => ({ id, name, kind });
   const me = by('u_me000001', 'me');
   const other = by('u_other001', 'other');
@@ -90,5 +90,11 @@ test('who is asked: a buddy my comment @mentions, until it replies; another user
   assert.deepEqual(askedOf(thread([me, 'no one']), 'u_me000001'), []);
   assert.deepEqual(askedOf(thread([me, '@Clippy @Ada'], [clippy, 'Mine']), 'u_me000001'), ['Ada']);
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [me, '', { resolved: true }]), 'u_me000001'), [], 'a resolved thread asks no one');
+  const ada = by('Ada', 'Ada', 'ai');
+  assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [me, 'and now this']), 'u_me000001'), ['Clippy'], 'a follow-up with no mention asks the thread\'s buddies');
+  assert.deepEqual(askedOf(thread([me, '@Clippy @Ada look'], [clippy, 'A'], [ada, 'B'], [me, '@Ada only you']), 'u_me000001'), ['Ada'], 'a mention asks only whom it names');
+  assert.deepEqual(askedOf(thread([me, '@Clippy @Ada look'], [clippy, 'A'], [ada, 'B'], [me, '@Ada only you'], [ada, 'C'], [me, 'both again']), 'u_me000001'), ['Clippy', 'Ada']);
+  assert.deepEqual(askedOf(thread([ada, 'This is stale.'], [me, 'Update it']), 'u_me000001'), ['Ada'], 'the buddy that opened the thread is one of its buddies');
+  assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [other, 'and this']), 'u_me000001'), [], "another user's follow-up asks no one");
   assert.deepEqual(peopleOf([...thread([me, 'a'], [{ ...me, name: 'me2' }, 'b']).comments]), [{ id: 'u_me000001', name: 'me2' }], 'a human goes by the name in their latest comment');
 });

@@ -158,18 +158,23 @@ export function threadsOf(comments, mentionable = []) {
 
 /**
  * The buddies the open `thread` (from threadsOf) waits on: each X that a
- * comment by user `me` (an id) @mentions, newer than X's last comment there
- * (docs/architecture.md, Who answers).
+ * comment by user `me` (an id) asks, newer than X's last comment there. A
+ * comment asks whom it @mentions; one that mentions no one asks the
+ * thread's buddies: the one that opened it and each that `me` @mentioned
+ * there before (docs/architecture.md, Who answers).
  */
 export function askedOf(thread, me) {
   if (thread.resolved) return [];
+  const add = (list, name) => { if (!list.some((n) => sameName(n, name))) list.push(name); };
+  const theirs = thread.comments[0].by.kind === 'ai' ? [thread.comments[0].by.id] : [];
   const asked = [];
   thread.comments.forEach((c, i) => {
     if (c.by.kind !== 'human' || c.by.id !== me) return;
-    for (const name of c.mentions) {
+    for (const name of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && sameName(r.by.id, name));
-      if (!answered && !asked.some((n) => sameName(n, name))) asked.push(name);
+      if (!answered) add(asked, name);
     }
+    for (const name of c.mentions) add(theirs, name);
   });
   return asked;
 }
