@@ -47,7 +47,8 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - Undo: each change of a run whose new text is still found is put back;
   text changed since, by anyone, stays.
 - The inbox: a thread waits on X only after a comment by this user that
-  @mentions X; another user id, or no mention, asks no one.
+  @mentions X, or mentions no one in a thread X opened or was @mentioned in;
+  another user id asks no one.
 - Same fixtures, same output in Node and the browser.
 
 ### DocService — integration

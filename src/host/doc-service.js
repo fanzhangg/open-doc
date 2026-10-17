@@ -231,7 +231,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map((b) => b.name));
     return threads.flatMap((thread) => askedOf(thread, mine).map((name) => ({
       threadId: thread.id, thread, buddy: here.find((b) => sameName(b.name, name)),
-    })));
+    })).filter((ask) => ask.buddy)); // a thread's opener may be gone
   }
 
   // The buddies the doc reaches, and which are at work.

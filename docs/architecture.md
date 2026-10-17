@@ -54,9 +54,10 @@ Windows reach it over Electron message ports.
 ## Who answers
 
 A thread waits on buddy X when a comment by this machine's user, newer than
-X's last comment there, @mentions X. That is computed from the sidecar and
-the user's id. A comment that mentions no one asks no one. Buddies run only
-on docs open in a window.
+X's last comment there, asks X. A comment asks whom it @mentions; one that
+mentions no one asks the thread's buddies: the one that opened it, and each
+the user @mentioned there before. That is computed from the sidecar and the
+user's id. Buddies run only on docs open in a window.
 
 ## A run
 

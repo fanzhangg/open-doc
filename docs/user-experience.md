@@ -47,9 +47,11 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 
 ## Who answers what
 
-- Only your own comments ask. A comment that @mentions a buddy asks it; one
-  that mentions no one asks no one. A buddy's reply asks no one, and neither
-  does an `@name` typed in the doc's text.
+- Only your own comments ask. A comment that @mentions a buddy asks only
+  it. One that mentions no one asks the thread's buddies: the one that
+  opened it, and each you @mentioned there. To stop, resolve the thread. A
+  buddy's reply asks no one, and neither does an `@name` typed in the doc's
+  text.
 - A comment that mentions several buddies asks each of them; they work at
   the same time.
 - Every run starts fresh with the doc, its persona and the thread. Nothing
