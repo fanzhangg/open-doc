@@ -670,5 +670,6 @@ function setStatus(text, state = 'saved') {
   status.title = problem ? text : '';
 }
 
-// Ready once drawn: two frames after the page is built.
-start().finally(() => requestAnimationFrame(() => requestAnimationFrame(markReady)));
+// Ready once drawn: two frames after the page is built. A hidden page (a new
+// window, shown only once ready) draws no frames, so it is ready once built.
+start().finally(() => (document.hidden ? markReady() : requestAnimationFrame(() => requestAnimationFrame(markReady))));

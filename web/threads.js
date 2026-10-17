@@ -85,8 +85,9 @@ export function createCommentMargin(margin, handlers) {
     card.classList.toggle('od-card-active', active);
     card.classList.toggle('od-card-working', working.length > 0);
     card.classList.toggle('od-card-resolved', thread.resolved);
+    // A click that ends selecting the card's text leaves the selection, to copy.
     card.addEventListener('click', (event) => {
-      if (!event.target.closest('textarea, button, a')) handlers.onSelect(thread.id);
+      if (!event.target.closest('textarea, button, a') && getSelection().isCollapsed) handlers.onSelect(thread.id);
     });
 
     if (thread.anchor && thread.detached) card.append(el('div', 'od-card-note', 'The text this was about was deleted.'));
