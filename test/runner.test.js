@@ -147,18 +147,16 @@ test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async
 });
 
 test('the shipped scripts pass the project folder only when there is one', () => {
-  for (const name of ['claude', 'codex']) {
-    const cmd = readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8');
-    assert.match(cmd, /if defined OPENDOC_PROJECT set ADD=--add-dir "%OPENDOC_PROJECT%"/, `${name}.cmd`);
-    assert.match(cmd, /\r\n/, `${name}.cmd has Windows line ends`);
-  }
+  for (const name of ['claude', 'codex']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
+  assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /if defined OPENDOC_PROJECT set ADD=--add-dir "%OPENDOC_PROJECT%"/);
+  assert.doesNotMatch(readFileSync(join(ROOT, 'agents', 'codex.cmd'), 'utf8'), /codex exec[^\r]*--add-dir/, 'Codex reads the project without it');
   if (process.platform === 'win32') return;
   // A fake `claude` and `codex` on PATH print the arguments they get.
   const bin = execFileSync('mktemp', ['-d']).toString().trim();
   execFileSync('sh', ['-c', `printf '#!/bin/sh\\necho "$@"\\n' > "${bin}/claude"; printf '#!/bin/sh\\nwhile [ "$1" != "--output-last-message" ]; do shift; done; echo reply > "$2"\\n' > "${bin}/codex"; chmod +x "${bin}/claude" "${bin}/codex"`]);
   const run = (name, project) => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, OPENDOC_PROJECT: project }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
   assert.equal(run('claude', ''), '-p --permission-mode acceptEdits --no-session-persistence');
-  assert.equal(run('claude', '/work/my project'), '-p --permission-mode acceptEdits --no-session-persistence --add-dir /work/my project');
+  assert.equal(run('claude', '/work/my project'), '-p --permission-mode acceptEdits --no-session-persistence --add-dir /work/my project --disallowedTools Edit(//work/my project/**)', 'the project is read only');
   assert.equal(run('codex', ''), 'reply', 'codex prints only its last message');
 });
 

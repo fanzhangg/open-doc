@@ -59,14 +59,16 @@ edits and comments.
 ```sh
 #!/bin/sh
 exec claude -p --permission-mode acceptEdits --no-session-persistence \
-  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT"}
+  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
 ```
 
 ## Permissions
 
 OpenDoc sets only what the contract needs: the working folder, the copy,
 the project folder in project mode. The script makes the run unattended and
-lets it edit the copy.
+lets it edit the copy. The shipped scripts keep the project read only: its
+files are the user's, and an edit there would skip the merge, the receipt
+and Undo.
 
 Everything else (web, shell, which files it may read or write) is the CLI's
 own config (`~/.claude/settings.json`, `~/.codex/config.toml`), as when you

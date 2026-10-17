@@ -1,5 +1,6 @@
 #!/bin/sh
 # Runs a buddy on Claude Code (docs/agent-config.md): the prompt on stdin,
 # the doc's copy in the working folder, the reply on stdout. Yours to change.
+# The project is read only: its files are the user's, not the copy.
 exec claude -p --permission-mode acceptEdits --no-session-persistence \
-  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT"}
+  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
