@@ -288,6 +288,11 @@ export async function folderDocs(entry) {
   return entry.listing.docs;
 }
 
+/** Once no window is half way through opening or showing another doc. */
+export async function settled() {
+  await Promise.allSettled([...openDocs().map((entry) => entry.switching), ...opening.values()]);
+}
+
 /** The folder's docs and empty folders as last listed. */
 export async function folderListing(entry) {
   entry.listing ??= await listDocs(entry.folder);
