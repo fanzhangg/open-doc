@@ -73,6 +73,7 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'clippy' } }), /the name clippy is taken/);
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
     await assert.rejects(opened.call('updateBuddy', { name: 'Ada', patch: { name: 'Clippy' } }), /the name Clippy is taken/);
+    for (const name of ['clippy', 'ada']) await assert.rejects(opened.call('saveSettings', { name }), /is taken/, 'your name is no buddy\'s');
   });
   // Any other doc has the same Clippy, and its runs say who it is now.
   const doc = join(await mkdtemp(join(tmpdir(), 'opendoc-doc-')), 'notes.md');

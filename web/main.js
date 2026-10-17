@@ -136,8 +136,7 @@ async function start() {
   });
   synced = editor.getMarkdown();
   chrome = createChrome({
-    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
-    buddies: () => people?.statuses() ?? [], project: () => inProject,
+    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -177,9 +176,8 @@ async function start() {
     getName: () => me,
     getId: () => settings.get().id,
     setName,
-    openSettings: (section, name) => (section === 'agents' ? chrome.openAgent(name) : chrome.command('settings')),
-    newAgent: () => chrome.newAgent(),
     project: () => inProject,
+    onResult: takeAgentResult,
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
   createNameCards({
@@ -190,7 +188,6 @@ async function start() {
   });
   setBuddies(initial.agents.map((a) => a.name));
   people.render({ agents: initial.agents });
-  chrome.refreshAgents();
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
@@ -406,7 +403,6 @@ function showAgents(next) {
   shownAgents = json;
   setBuddies(next.map((a) => a.name));
   people.render({ agents: next });
-  chrome.refreshAgents();
   margin.setAgents(next);
 }
 

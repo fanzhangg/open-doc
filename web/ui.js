@@ -5,7 +5,6 @@
 
 import { hydrateIcons, icon } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
-import { createAgentsPanel } from './agents-panel.js';
 import { api } from './api.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
@@ -26,10 +25,9 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
- *           getName: () => string, setName: (name: string) => boolean,
- *           buddies: () => object[], project: () => boolean, onAgentResult: (result: { agents? }) => void }} options
+ *           getName: () => string, setName: (name: string) => boolean }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, buddies, project, onAgentResult }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -49,7 +47,6 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       showFolder: window.opendocDesktop && (() => window.opendocDesktop.showAgents()),
     },
   });
-  const agentsPanel = createAgentsPanel({ buddies, project, onResult: onAgentResult });
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
@@ -165,26 +162,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     hideBubble() {
       bubble.hidden = true;
     },
-    /** Open the Buddies panel on buddy `name` (or the one shown last). */
-    openAgent(name) {
-      agentsPanel.open(name);
-    },
-    /** The buddies changed. */
-    refreshAgents() {
-      agentsPanel.refresh();
-    },
-    /** Open the Buddies panel on a new buddy's draft. */
-    newAgent() {
-      agentsPanel.newAgent();
-    },
-    /** A command from the desktop app's menu: 'settings', 'agent-settings', 'shortcuts', 'undo' or 'redo'. */
+    /** A command from the desktop app's menu: 'settings', 'shortcuts', 'undo' or 'redo'. */
     command(name) {
       // Undo in the doc is the editor's own history (your edits only); in a field, the field's.
       if (name === 'undo' || name === 'redo') {
         if (document.activeElement?.closest('.ProseMirror')) editor.run(name);
         else document.execCommand(name);
       } else if (name === 'settings') settings.toggle('general');
-      else if (name === 'agent-settings') agentsPanel.toggle();
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },
   };

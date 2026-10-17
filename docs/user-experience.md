@@ -37,10 +37,12 @@ says who it is, and the first line shows next to its name.
 - Each buddy has its own face and color, the same on every machine: Clippy
   is yellow, and up to seven project buddies get seven other colors.
 
-**New buddy** (People panel, or + in the Buddies panel) starts a draft: type a
-name, then who it is, and Create; it is the project's. On a buddy's card,
-click its name to edit it in place; the Buddies panel holds who it is and
-Delete. Editing the files by hand works too: the app picks up changes at once.
+A card is where anyone is changed. Click a face for its card: a buddy's
+name edits in place (not Clippy's), and who it is is a field right under it,
+saved when you leave it; a project buddy's card also deletes it. Your own
+card edits your name, which can be no buddy's here. **New buddy** (People
+panel, in a project) is a name to type: Enter makes it and opens its card.
+Editing the files by hand works too: the app picks up changes at once.
 
 What runs every buddy is the agent picked in Settings > Agent (Claude Code or
 Codex): a script in `agents/` in your config folder that you may edit (see
@@ -102,7 +104,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 - **Settings** (name, theme, font, width, outline, word count, focus mode,
   agent) are the same dialog in every window, the home page too, and a
   change applies at once to all of them. Buddies are not in Settings: they
-  are in a doc's People panel.
+  are changed on their cards.
 - **Files.** New Doc, New Doc in This Folder, and Rename (the comments move
   too). Opening an already open doc focuses its window. If the file is moved
   or deleted outside the app, a banner says so and saving pauses. A project's

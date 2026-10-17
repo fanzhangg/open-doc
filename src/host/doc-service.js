@@ -503,6 +503,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     reopen: (body) => comment({ thread: body?.thread, body: 'Reopened.' }),
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
+      // Your name is no buddy's here, as no buddy's is yours.
+      if (typeof patch?.name === 'string' && (await buddies()).some((b) => sameName(b.name, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
       try {
         return { settings: await updateSettings(patch, settingsDir) };
       } catch (error) {
