@@ -45,9 +45,50 @@ function act(action, arg) {
   return ipcRenderer.invoke('opendoc:action', action, arg);
 }
 
+// window.opendocHost: a doc page's line to its doc in the doc host
+// (src/host/doc-service.js), over a message port the app hands the page
+// (windows.connectPage). `call(type, arg)` resolves to { result } or
+// { error: { message, code } }; `onEvent(fn)` hears the doc's events, and
+// those that came before it. The start window has no doc: its ask goes
+// unanswered.
+let port = null;
+let unsent = [];
+let nextCall = 0;
+const calls = new Map();
+let listener = null;
+let early = [];
+ipcRenderer.on('opendoc:port', (event) => {
+  port = event.ports[0];
+  port.onmessage = ({ data }) => {
+    if (data.event) {
+      if (listener) listener(data.event, data.data);
+      else early.push([data.event, data.data]);
+      return;
+    }
+    const resolve = calls.get(data.id);
+    calls.delete(data.id);
+    resolve?.(data.error ? { error: data.error } : { result: data.result });
+  };
+  for (const message of unsent.splice(0)) port.postMessage(message);
+});
+ipcRenderer.send('opendoc:connect');
+
+contextBridge.exposeInMainWorld('opendocHost', {
+  call: (type, arg) => new Promise((resolve) => {
+    const id = ++nextCall;
+    calls.set(id, resolve);
+    const message = { id, type: String(type), arg };
+    if (port) port.postMessage(message);
+    else unsent.push(message);
+  }),
+  onEvent: (fn) => {
+    listener = fn;
+    for (const [event, data] of early.splice(0)) fn(event, data);
+  },
+});
+
 contextBridge.exposeInMainWorld('opendocDesktop', {
-  newDoc: () => act('new'),
-  open: () => act('open'),
+  /** The home page: a folder, picked or made in the OS dialog, opens as a project. */
   openFolder: () => act('openFolder'),
   /**
    * The folder window's sidebar: { name, docs (paths in the folder, `/`
@@ -59,13 +100,13 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   openInFolder: (path) => act('openInFolder', String(path)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
   /**
-   * A new doc ('doc', which then opens here) or folder ('folder') `name` in
-   * the sidebar folder `parent` ('' for the top). Resolves to { rel } (its
-   * path in the folder) or { error } (why the name can't be used).
+   * A new doc ('doc', which then opens here) or folder ('folder') `name` (`/`
+   * makes folders) in the sidebar folder `parent` ('' for the top). Resolves
+   * to { rel } (its path in the folder) or { error } (why the name can't be used).
    */
   folderCreate: (parent, name, kind) => act('folderCreate', { parent: String(parent), name: String(name), kind: String(kind) }),
-  /** Rename or move the sidebar's doc or folder `from` into `folder` as `name`; { rel } or { error }. */
-  folderMove: (from, kind, folder, name) => act('folderMove', { from: String(from), kind: String(kind), folder: String(folder), name: String(name) }),
+  /** Rename or move the sidebar's doc or folder `from` to `to`; { rel } or { error }. */
+  folderMove: (from, kind, to) => act('folderMove', { from: String(from), kind: String(kind), to: String(to) }),
   /** Delete the sidebar's doc or folder, once the user confirms; { trashed }. */
   folderTrash: (rel, kind) => act('folderTrash', { rel: String(rel), kind: String(kind) }),
   /**
@@ -85,21 +126,11 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
     ipcRenderer.on('opendoc:folder-changed', () => callback());
   },
   rename: () => act('rename'),
-  /**
-   * Export the doc ({ format: 'pdf' | 'docx' | 'html', comments: 'none' | 'open' | 'all', paper: 'a4' | 'letter' })
-   * where the user picks in a Save dialog; resolves to { name } of the file, or null when cancelled.
-   */
-  exportDoc: (options) => act('export', { format: String(options?.format), comments: String(options?.comments), paper: String(options?.paper) }),
-  /** Open the file exported last, or show it in its folder. */
-  openExport: () => act('openExport'),
-  revealExport: () => act('revealExport'),
-  /**
-   * Set agent `id`'s `command`, or `claudeBin` or `codexBin` for every agent, after the user
-   * confirms it; resolves to whether it was set.
-   */
-  setAgentProgram: (key, value, id = null) => act('agentProgram', { key: String(key), value: value === null ? null : String(value), id: id === null ? null : String(id) }),
-  /** Pick where Claude Code ('claudeBin') or Codex ('codexBin') is in a native dialog. */
-  chooseProgram: (key) => act('chooseProgram', String(key)),
+  /** Show the folder of the agent scripts. */
+  showAgents: () => act('showAgents'),
+  /** The start window's Settings > Agent: { agents, shipped, folder }, and resetting a shipped script. */
+  agentScripts: () => ipcRenderer.invoke('opendoc:action', 'agentScripts'),
+  resetAgentScript: (name) => act('resetAgentScript', String(name)),
   openRecent: (index) => act('openRecent', Number(index)),
   recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
   onRecentChanged: (callback) => {

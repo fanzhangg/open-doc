@@ -1,10 +1,10 @@
 // The main process's side of the doc host (doc-host.js): it starts the host,
-// hands it the docs to serve and keeps track of them, so that a host that
-// stops serves them again from a new one. Plain Node (no Electron): main.js
+// hands it the docs to open and keeps track of them, so that a host that
+// stops opens them again in a new one. Plain Node (no Electron): main.js
 // passes in how to start the host, so the tests run under `node --test`.
 
 /**
- * @typedef {{ url: string, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, setFolder: (folder: string | null) => Promise<void>, onRestart: ((url: string) => void) | null }} DocServer
+ * @typedef {{ attach: (port: object) => Promise<void>, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, running: () => Promise<string[]>, setFolder: (folder: string | null) => Promise<void>, onRestart: (() => void) | null }} HostedDoc
  */
 
 const SHUTDOWN_PATIENCE_MS = 5000;
@@ -17,12 +17,14 @@ const RESTART_WINDOW_MS = 60_000;
  * returns it as `{ postMessage(message), on('message' | 'exit', fn), kill() }`
  * (an Electron UtilityProcess). Requests wait until the host is ready.
  *
- * `startDocServer(docPath, { folder })` serves a doc and resolves to a
- * DocServer: `url`, `close()`, `moveTo(toPath, { moved })` (renames the doc
+ * `openHostedDoc(docPath, { folder })` opens a doc and resolves to a
+ * HostedDoc: `attach(port)` (a window's page talks to the doc over the
+ * message port), `close()`, `moveTo(toPath, { moved })` (renames the doc
  * and its sidecar, never over another file, or with `moved` follows a doc
- * already there; resolves to the final path), `setFolder(folder)`, and `onRestart`, called with the new `url` once a
- * host that stopped serves the doc again. `shutdown()` closes every doc and
- * stops the host, for quitting.
+ * already there; resolves to the final path), `running()` (the names of
+ * the doc's buddies at work), `setFolder(folder)`, and `onRestart`, called
+ * once a host that stopped has the doc open again (its pages attach again).
+ * `shutdown()` closes every doc and stops the host, for quitting.
  */
 export function createDocHost({ fork, log = console.error }) {
   let child = null;
@@ -30,7 +32,7 @@ export function createDocHost({ fork, log = console.error }) {
   let queue = [];
   const pending = new Map();
   let nextId = 0;
-  const served = new Set(); // DocServers open, to serve again after a restart
+  const served = new Set(); // HostedDocs open, to serve again after a restart
   const stops = [];
   let shuttingDown = null;
   let gaveUp = false;
@@ -50,7 +52,7 @@ export function createDocHost({ fork, log = console.error }) {
   function onMessage(message) {
     if (message?.type === 'ready') {
       ready = true;
-      for (const queued of queue.splice(0)) child.postMessage(queued);
+      for (const queued of queue.splice(0)) child.postMessage(...queued);
       return;
     }
     const call = pending.get(message?.id);
@@ -81,52 +83,59 @@ export function createDocHost({ fork, log = console.error }) {
     for (const doc of served) doc.restart();
   }
 
-  function request(type, arg = {}) {
+  // `transfer`: message ports that go with the request.
+  function request(type, arg = {}, transfer = []) {
     if (gaveUp) return Promise.reject(new Error('The doc host keeps stopping. Restart OpenDoc.'));
+    if (shuttingDown && !child) return Promise.reject(new Error('OpenDoc is quitting.'));
     if (!child) launch();
     return new Promise((resolve, reject) => {
       const id = ++nextId;
       pending.set(id, { resolve, reject });
-      const message = { id, type, ...arg };
-      if (ready) child.postMessage(message);
+      const message = [{ id, type, ...arg }, transfer];
+      if (ready) child.postMessage(...message);
       else queue.push(message);
     });
   }
 
-  async function startDocServer(docPath, { folder = null } = {}) {
+  async function openHostedDoc(docPath, { folder = null } = {}) {
     if (shuttingDown) throw new Error('OpenDoc is quitting.');
-    const first = await request('start', { docPath, folder });
-    let serverId = first.serverId;
+    let docId = (await request('open', { docPath, folder })).docId;
     let started = Promise.resolve();
     let closed = false;
     const doc = {
-      url: first.url,
       onRestart: null,
+      async attach(port) {
+        await started;
+        await request('attach', { docId }, [port]);
+      },
       async close() {
         if (closed) return;
         closed = true;
         served.delete(doc);
         await started.catch(() => {});
-        if (serverId !== null) await request('close', { serverId });
+        if (docId !== null) await request('close', { docId });
       },
       async moveTo(toPath, { moved = false } = {}) {
         await started;
-        docPath = await request('moveTo', { serverId, toPath, moved });
+        docPath = await request('moveTo', { docId, toPath, moved });
         return docPath;
+      },
+      async running() {
+        await started;
+        return request('running', { docId });
       },
       async setFolder(next) {
         await started;
         folder = next;
-        await request('setFolder', { serverId, folder });
+        await request('setFolder', { docId, folder });
       },
-      // Serve the doc again from a new host; the page then loads the new url.
+      // Open the doc again in a new host; its pages then attach again.
       restart() {
-        serverId = null;
-        started = request('start', { docPath, folder }).then((result) => {
-          serverId = result.serverId;
+        docId = null;
+        started = request('open', { docPath, folder }).then((result) => {
+          docId = result.docId;
           if (closed) return; // close() closes it once this is done
-          doc.url = result.url;
-          doc.onRestart?.(result.url);
+          doc.onRestart?.();
         });
         started.catch((error) => log(error));
       },
@@ -152,7 +161,7 @@ export function createDocHost({ fork, log = console.error }) {
   }
 
   launch();
-  return { startDocServer, shutdown };
+  return { openHostedDoc, shutdown };
 }
 
 // An error as the host sent it, with the fields the app's dialogs read.

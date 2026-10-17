@@ -15,16 +15,14 @@ extraMetadata:
 files:
   - package.json
   - desktop/**
-  - bin/**
   - src/**
-  - skills/**
+  - agents/**
   - dist/web/**
   - build/icon.png
   - build/icon.svg
   - build/document.ico
 
-# No asar archive: agent runs read the skill file and run the bundled CLI
-# (`opendoc`) from these files directly, outside the app.
+# No asar archive: the shipped agent scripts are copied from agents/.
 asar: false
 
 win:
@@ -42,8 +40,7 @@ nsis:
 mac:
   target: dmg
   category: public.app-category.productivity
-  # A full tile, not a bare mark: macOS 26 puts a bare mark on a grey plate.
-  icon: build/icon.icns
+  icon: build/icon.png
   # Ad-hoc signature until there is a Developer ID. Without one the bundle's
   # signature is broken, and a downloaded copy shows as "damaged".
   identity: "-"
@@ -52,7 +49,6 @@ mac:
     - ext: [md, markdown]
       name: Markdown Document
       role: Editor
-      icon: document # build/document.icns; Linux has no document icons
 
 linux:
   target: AppImage

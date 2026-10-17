@@ -1,16 +1,17 @@
 // Windows of the desktop app: one per open doc, keyed by the doc's real path,
-// each with its own local server (src/server/server.js, run in the doc host,
+// each with its doc open in the doc host (src/host/doc-service.js, run in
 // doc-host.js, so its work never holds up the windows), plus the start
-// window shown when no doc is open. A window opened on a folder lists the
-// folder's docs in a sidebar and switches between them in place: it starts a
-// server for the next doc and closes the last one, so each server still
-// works on one doc, and the agents of the doc left behind stop.
+// window shown when no doc is open. A doc's page is a file (dist/web) that
+// talks to its doc over a message port (`connectPage`). A window opened on
+// a folder lists the folder's docs in a sidebar and switches between them in
+// place: it opens the next doc and closes the last one, and the buddies of
+// the doc left behind stop.
 //
 // A doc's page lives in a view filling its window, not in the window itself,
 // so a switch draws the next doc out of sight, under the one shown, and
 // swaps it in only once it is drawn: the window never shows a blank page.
 
-import { BrowserWindow, WebContentsView, dialog, screen, shell } from 'electron';
+import { BrowserWindow, MessageChannelMain, WebContentsView, dialog, screen, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -18,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { listDocs, relativeDoc, watchFolder } from './folder.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const PAGE = join(here, '..', 'dist', 'web', 'index.html');
 const DEFAULT_SIZE = { width: 1180, height: 820 };
 const MIN_SIZE = { minWidth: 480, minHeight: 360 };
 const CASCADE = 26;
@@ -35,17 +37,18 @@ const WINDOW_ICON = existsSync(ICON) ? { icon: ICON } : {};
  * the sidebar shows, and `carry` how the last page left it (the sidebar's
  * scroll, hidden comments), for the next. `pending` is the next doc's page
  * while it loads during a switch.
- * @type {Map<string, { win: BrowserWindow, view: WebContentsView, server: import('./doc-host-client.js').DocServer, docPath: string, folder: string | null, listing: { docs: string[], truncated: boolean } | null, expanded: Set<string>, sidebar: boolean, carry: object | null, pending: { view: WebContentsView, docPath: string } | null, stopWatching: (() => void) | null, switching: Promise<object> | null }>}
+ * @type {Map<string, { win: BrowserWindow, view: WebContentsView, hosted: import('./doc-host-client.js').HostedDoc, docPath: string, folder: string | null, listing: { docs: string[], truncated: boolean } | null, expanded: Set<string>, sidebar: boolean, carry: object | null, pending: { view: WebContentsView, docPath: string } | null, stopWatching: (() => void) | null, switching: Promise<object> | null }>}
  */
 const docs = new Map();
 const opening = new Map();
+const hostedDocs = new WeakMap(); // a page's webContents → the HostedDoc of its doc
 let startWindow = null;
 let hooks = {
-  startDocServer: null, onBounds: () => {}, onClosed: () => {}, lastBounds: () => null, background: () => '#ffffff',
+  openHostedDoc: null, onBounds: () => {}, onClosed: () => {}, lastBounds: () => null, background: () => '#ffffff',
 };
 
 /**
- * `startDocServer(docPath, { folder })` serves a doc (doc-host-client.js),
+ * `openHostedDoc(docPath, { folder })` opens a doc in the doc host (doc-host-client.js),
  * `onBounds(bounds)` hears where a doc window was when it closed,
  * `lastBounds()` gives them back for the first window, `onClosed()` runs
  * after any window closed, and `background()` is the page's background
@@ -87,7 +90,7 @@ export async function openDoc(path, { folder = null } = {}) {
 }
 
 async function createDocWindow(docPath, folder) {
-  const server = await hooks.startDocServer(docPath, { folder });
+  const hosted = await hooks.openHostedDoc(docPath, { folder });
   const win = new BrowserWindow({
     ...nextBounds(),
     ...MIN_SIZE,
@@ -98,9 +101,9 @@ async function createDocWindow(docPath, folder) {
     webPreferences: securePreferences(),
   });
   const entry = {
-    win, view: null, server, docPath, folder: null, listing: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
+    win, view: null, hosted, docPath, folder: null, listing: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
   };
-  entry.view = createView(entry, server);
+  entry.view = createView(entry, hosted);
   win.contentView.addChildView(entry.view);
   docs.set(docPath, entry);
   if (folder) watch(entry, folder);
@@ -114,29 +117,31 @@ async function createDocWindow(docPath, folder) {
     docs.delete(entry.docPath);
     entry.stopWatching?.();
     for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.close();
-    entry.server.close().catch((error) => console.error(error));
+    entry.hosted.close().catch((error) => console.error(error));
     hooks.onClosed();
   });
   try {
-    await entry.view.webContents.loadURL(server.url);
+    await entry.view.webContents.loadFile(PAGE);
   } catch (error) {
     win.destroy();
     throw error;
   }
+  await drawn(entry.view); // shown once drawn, in the user's theme
   win.show();
   closeStartWindow();
   return entry;
 }
 
-// A view for a doc page served by `server`, the size of the window. It takes
-// the window's title while it is the one shown, and loads the page again
-// from where the server is once a doc host that stopped serves it again.
-function createView(entry, server) {
+// A view for the page of the doc `hosted`, the size of the window.
+// It takes the window's title while it is the one shown, and loads the page
+// again once a doc host that stopped has the doc open again.
+function createView(entry, hosted) {
   const view = new WebContentsView({ webPreferences: securePreferences() });
   view.setBackgroundColor(hooks.background());
-  restrictNavigation(view.webContents, () => new URL(server.url).origin);
-  server.onRestart = (url) => {
-    if (!view.webContents.isDestroyed()) view.webContents.loadURL(url).catch((error) => console.error(error));
+  restrictNavigation(view.webContents, PAGE);
+  hostedDocs.set(view.webContents, hosted);
+  hosted.onRestart = () => {
+    if (!view.webContents.isDestroyed()) view.webContents.reload();
   };
   view.webContents.on('page-title-updated', (_event, title) => {
     if (entry.view === view) entry.win.setTitle(title);
@@ -152,10 +157,10 @@ function fit(win, view) {
 
 /**
  * Show `path` in the folder window `entry` in place of its doc. The shown
- * page saves its last edit and stops taking input; the next doc's server
- * starts and its page loads under the shown one; once that page has drawn
- * the doc and the sidebar, it is uncovered and the last doc's page and
- * server close. A doc open in another window is shown there instead.
+ * page saves its last edit and stops taking input; the next doc opens and
+ * its page loads under the shown one; once that page has drawn the doc and
+ * the sidebar, it is uncovered and the last doc's page closes, and the doc
+ * with it. A doc open in another window is shown there instead.
  * @returns {Promise<object>} the entry that shows the doc
  */
 export async function switchDoc(entry, path) {
@@ -177,37 +182,37 @@ export async function switchDoc(entry, path) {
 async function switchTo(entry, docPath) {
   const { win } = entry;
   entry.carry = await leave(entry.view);
-  let server = null;
+  let hosted = null;
   let view = null;
   try {
-    server = await hooks.startDocServer(docPath, { folder: entry.folder });
-    view = createView(entry, server);
+    hosted = await hooks.openHostedDoc(docPath, { folder: entry.folder });
+    view = createView(entry, hosted);
     entry.pending = { view, docPath };
     expandTo(entry, docPath);
     win.contentView.addChildView(view, 0); // under the page shown, until it is drawn
-    await view.webContents.loadURL(server.url);
+    await view.webContents.loadFile(PAGE);
     await drawn(view);
   } catch (error) {
     if (view) {
       win.contentView.removeChildView(view);
       view.webContents.close();
     }
-    await server?.close().catch(() => {});
+    await hosted?.close().catch(() => {});
     stay(entry.view);
     throw error;
   } finally {
     entry.pending = null;
   }
-  const previous = { view: entry.view, server: entry.server };
+  const previous = { view: entry.view, hosted: entry.hosted };
   docs.delete(entry.docPath);
-  Object.assign(entry, { view, server, docPath });
+  Object.assign(entry, { view, hosted, docPath });
   docs.set(docPath, entry);
   win.contentView.removeChildView(previous.view);
   previous.view.webContents.close();
   win.setTitle(view.webContents.getTitle());
   if (process.platform === 'darwin') win.setRepresentedFilename(docPath);
   if (win.isFocused()) view.webContents.focus();
-  previous.server.close().catch((error) => console.error(error));
+  previous.hosted.close().catch((error) => console.error(error));
   return entry;
 }
 
@@ -288,11 +293,6 @@ export async function folderDocs(entry) {
   return entry.listing.docs;
 }
 
-/** Once no window is half way through opening or showing another doc. */
-export async function settled() {
-  await Promise.allSettled([...openDocs().map((entry) => entry.switching), ...opening.values()]);
-}
-
 /** The folder's docs and empty folders as last listed. */
 export async function folderListing(entry) {
   entry.listing ??= await listDocs(entry.folder);
@@ -343,10 +343,10 @@ export async function closeDocWindow(entry) {
   });
 }
 
-// A single-doc window starts listing `folder`: its server learns the folder
+// A single-doc window starts listing `folder`: its doc learns the folder
 // (the agents may read it) and the page shows the sidebar.
 async function attachFolder(entry, folder) {
-  await entry.server.setFolder(folder);
+  await entry.hosted.setFolder(folder);
   watch(entry, folder);
   entry.view.webContents.send('opendoc:folder-changed');
 }
@@ -373,12 +373,12 @@ function expandTo(entry, docPath = entry.docPath) {
 
 /**
  * Rename the doc open in `entry` and its sidecar to `toPath` (`.md` added
- * if missing), never over another file; its server switches to the new path
+ * if missing), never over another file; its doc switches to the new path
  * and the page shows the new name. With `moved`, the doc is already there
- * (its folder was moved) and the server only follows it.
+ * (its folder was moved) and the doc only follows it.
  */
 export async function renameOpenDoc(entry, toPath, { moved = false } = {}) {
-  const docPath = await realpath(await entry.server.moveTo(toPath, { moved }));
+  const docPath = await realpath(await entry.hosted.moveTo(toPath, { moved }));
   docs.delete(entry.docPath);
   entry.docPath = docPath;
   docs.set(docPath, entry);
@@ -399,8 +399,8 @@ export function showStartWindow() {
     return startWindow;
   }
   startWindow = new BrowserWindow({
-    width: 560,
-    height: 700,
+    width: 440,
+    height: 420,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -451,11 +451,23 @@ function securePreferences() {
   };
 }
 
-// A page stays on its own server (at `origin()`); links elsewhere open in
-// the default browser, and nothing opens a second Electron window.
-function restrictNavigation(contents, origin) {
+/**
+ * A doc page (`contents`) asks for its doc: it gets a message port to it.
+ * Asked again after a reload, it gets a new one.
+ */
+export async function connectPage(contents) {
+  const hosted = hostedDocs.get(contents);
+  if (!hosted) return;
+  const { port1, port2 } = new MessageChannelMain();
+  await hosted.attach(port1);
+  if (!contents.isDestroyed()) contents.postMessage('opendoc:port', null, [port2]);
+}
+
+// A page stays on its own file (`page`); links elsewhere open in the
+// default browser, and nothing opens a second Electron window.
+function restrictNavigation(contents, page) {
   const away = (event, url) => {
-    if (origin && sameOrigin(url, origin())) return;
+    if (page && samePage(url, page)) return;
     event.preventDefault();
     openExternal(url);
   };
@@ -467,9 +479,10 @@ function restrictNavigation(contents, origin) {
   });
 }
 
-function sameOrigin(url, origin) {
+function samePage(url, page) {
   try {
-    return new URL(url).origin === origin;
+    const at = new URL(url);
+    return at.protocol === 'file:' && fileURLToPath(at) === page;
   } catch {
     return false;
   }

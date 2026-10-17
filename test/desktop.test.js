@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { applyOp, newId } from '../src/core/index.js';
-import { readSidecar, sidecarPath, update } from '../src/store/files.js';
+import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import {
   cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
-  nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
+  nameParts, nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc, watchFolder } from '../desktop/folder.js';
@@ -15,13 +14,15 @@ import { tempDoc } from './helpers.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
 
+const SIDECAR = '{"opendoc":2}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
+
 test('docPathFor opens docs and sidecars and refuses other files', () => {
   assert.equal(docPathFor('/a/plan.md'), '/a/plan.md');
   assert.equal(docPathFor('/a/Notes.MARKDOWN'), '/a/Notes.MARKDOWN');
-  assert.equal(docPathFor('/a/plan.md.opendoc.json'), '/a/plan.md');
+  assert.equal(docPathFor('/a/plan.md.opendoc.jsonl'), '/a/plan.md');
   assert.equal(docPathFor('/a/plan.txt'), null);
   assert.equal(docPathFor('/a/data.json'), null);
-  assert.equal(docPathFor('/a/plan.txt.opendoc.json'), null);
+  assert.equal(docPathFor('/a/plan.txt.opendoc.jsonl'), null);
 });
 
 test('withDocExtension adds .md only when missing', () => {
@@ -57,22 +58,20 @@ test('new docs in a folder take the next free Untitled name', async () => {
 
 test('a leftover sidecar keeps its name from being reused', async () => {
   const dir = await tempDir();
-  await writeFile(join(dir, 'Untitled.md.opendoc.json'), '{}');
+  await writeFile(join(dir, 'Untitled.md.opendoc.jsonl'), '{"opendoc":2}\n');
   assert.equal(await freeUntitledPath(dir), join(dir, 'Untitled 2.md'));
 });
 
 test('renameDoc moves the doc and its sidecar together', async () => {
   const from = await tempDoc('# Plan\n\nShip it.\n');
-  await update(from, (s) => applyOp(s, { type: 'join', participant: { name: 'fzhan', kind: 'human' } }));
+  await writeFile(sidecarPath(from), SIDECAR);
   const to = join(dirname(from), 'launch');
 
   const moved = await renameDoc(from, to);
   assert.equal(moved, `${to}.md`);
-  assert.deepEqual((await readdir(dirname(from))).sort(), ['launch.md', 'launch.md.opendoc.json']);
+  assert.deepEqual((await readdir(dirname(from))).sort(), ['launch.md', 'launch.md.opendoc.jsonl']);
   assert.equal(await readFile(moved, 'utf8'), '# Plan\n\nShip it.\n');
-  const sidecar = await readSidecar(moved);
-  assert.equal(sidecar.doc, 'launch.md');
-  assert.equal(sidecar.participants[0].name, 'fzhan');
+  assert.equal(await readSidecarText(moved), SIDECAR);
 });
 
 test('renameDoc without a sidecar moves only the doc', async () => {
@@ -93,15 +92,11 @@ test('renameDoc never overwrites another doc', async () => {
 
 test('renameDoc can change only the case of the name', async () => {
   const from = await tempDoc('mine');
-  await update(from, (s) => applyOp(s, {
-    type: 'addThread', id: newId('t'), anchor: null,
-    message: { id: newId('m'), author: { name: 'fzhan', kind: 'human' }, body: 'hi', createdAt: new Date().toISOString() },
-  }));
+  await writeFile(sidecarPath(from), SIDECAR);
   const moved = await renameDoc(from, join(dirname(from), 'Plan.md'));
   assert.equal(moved, join(dirname(from), 'Plan.md'));
-  assert.deepEqual((await readdir(dirname(from))).sort(), ['Plan.md', 'Plan.md.opendoc.json']);
-  assert.equal((await readSidecar(moved)).threads.length, 1);
-  assert.equal(JSON.parse(await readFile(sidecarPath(moved), 'utf8')).doc, 'Plan.md');
+  assert.deepEqual((await readdir(dirname(from))).sort(), ['Plan.md', 'Plan.md.opendoc.jsonl']);
+  assert.equal(await readSidecarText(moved), SIDECAR);
 });
 
 test('state round-trips and survives a missing or corrupt file', async () => {
@@ -159,7 +154,7 @@ test('the doc last open in a folder: newest first, one per folder, at most fifty
 test('listDocs: the docs in a folder and its subfolders, subfolders first, hidden folders and packages left out', async () => {
   const dir = await tempDir();
   const files = [
-    'README.md', 'b.markdown', 'a 10.md', 'a 2.md', 'notes.txt', 'plan.md.opendoc.json', '.hidden.md',
+    'README.md', 'b.markdown', 'a 10.md', 'a 2.md', 'notes.txt', 'plan.md.opendoc.jsonl', '.hidden.md',
     'guides/intro.md', 'guides/deep/more.md', 'empty/nothing.txt', '.git/HEAD.md', 'node_modules/pkg/readme.md',
   ];
   for (const file of files) {
@@ -197,7 +192,7 @@ test('neighbourDoc: the next doc in the same folder, else the one above, else th
   assert.equal(neighbourDoc(['only.md'], 'only.md'), null);
 });
 
-test('nameProblem refuses empty, hidden, slashed and, on Windows, reserved names', () => {
+test('nameProblem refuses empty, hidden and, on Windows, reserved names', () => {
   assert.equal(nameProblem('plan', 'darwin'), null);
   assert.equal(nameProblem('plan: v2', 'darwin'), null);
   assert.match(nameProblem('  ', 'darwin'), /Enter a name/);
@@ -207,7 +202,9 @@ test('nameProblem refuses empty, hidden, slashed and, on Windows, reserved names
   assert.match(nameProblem('con', 'win32'), /Windows keeps/);
   assert.match(nameProblem('plan.', 'win32'), /end with a dot/);
   assert.match(nameProblem('x'.repeat(256), 'linux'), /too long/);
-  assert.match(nameProblem('notes/kickoff', 'darwin'), /can't contain \//);
+  assert.deepEqual(nameParts(' notes / kickoff ', 'linux'), { parts: ['notes', 'kickoff'] });
+  assert.match(nameParts('notes//kickoff', 'linux').problem, /Enter a name/);
+  assert.match(nameParts('notes/.hidden', 'linux').problem, /hidden/);
 });
 
 test('isInside: a path in a folder, or the folder itself, but not a sibling with a longer name', () => {
@@ -229,10 +226,10 @@ test('moveFolder moves a folder with everything in it, never over another or int
   const dir = await tempDir();
   await mkdir(join(dir, 'drafts', 'deep'), { recursive: true });
   await writeFile(join(dir, 'drafts', 'deep', 'plan.md'), '# Plan\n');
-  await writeFile(join(dir, 'drafts', 'deep', 'plan.md.opendoc.json'), '{}');
+  await writeFile(join(dir, 'drafts', 'deep', 'plan.md.opendoc.jsonl'), '{}');
   await mkdir(join(dir, 'archive'));
   await moveFolder(join(dir, 'drafts'), join(dir, 'archive', 'drafts'));
-  assert.deepEqual((await readdir(join(dir, 'archive', 'drafts', 'deep'))).sort(), ['plan.md', 'plan.md.opendoc.json']);
+  assert.deepEqual((await readdir(join(dir, 'archive', 'drafts', 'deep'))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
   await mkdir(join(dir, 'taken'));
   await assert.rejects(moveFolder(join(dir, 'archive'), join(dir, 'taken')), { code: 'exists' });
   await assert.rejects(moveFolder(join(dir, 'archive'), join(dir, 'archive', 'drafts', 'archive')), { code: 'inside' });
@@ -242,7 +239,7 @@ test('moveFolder moves a folder with everything in it, never over another or int
 
 test('countFolder counts docs and other files, sidecars aside', async () => {
   const dir = await tempDir();
-  for (const file of ['a.md', 'a.md.opendoc.json', 'sub/b.markdown', 'sub/pic.png', '.hidden/x.txt', 'notes.txt']) {
+  for (const file of ['a.md', 'a.md.opendoc.jsonl', 'sub/b.markdown', 'sub/pic.png', '.hidden/x.txt', 'notes.txt']) {
     await mkdir(dirname(join(dir, file)), { recursive: true });
     await writeFile(join(dir, file), '');
   }

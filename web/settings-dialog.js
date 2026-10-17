@@ -2,9 +2,9 @@
 // show shortcuts, and how shortcuts are written: shared by the editor
 // (web/ui.js) and the desktop start window (desktop/start.js), so both look
 // and behave the same. Settings are saved for every doc and window (see
-// settings.js); a change made in another window shows up here too. In a doc,
-// Agents at the foot of the list opens the Agents panel: agents are set up
-// there, not twice.
+// settings.js); a change made in another window shows up here too. Every
+// window shows the same sections, Agent among them (the agent script that
+// runs every buddy); buddies are not here: they belong to a doc's People.
 
 import { hydrateIcons } from './icons.js';
 
@@ -12,7 +12,7 @@ const SHORTCUTS = [
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
   ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Strikethrough', 'Mod+Alt+X'], ['Inline code', 'Mod+E'], ['Link', 'Mod+K']]],
   ['Blocks', [['Insert block', '/'], ['Normal text', 'Mod+Alt+0'], ['Heading 1–3', 'Mod+Alt+1…3'], ['Bulleted list', 'Mod+Alt+8'], ['Numbered list', 'Mod+Alt+7'], ['Quote', 'Mod+Shift+B'], ['Code block', 'Mod+Alt+C']]],
-  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Export', 'Mod+Shift+E'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
+  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];
 
 // The dialog itself, put into the page by setupSettings: static, no user text.
@@ -24,7 +24,7 @@ const DIALOG = `
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
-    <button type="button" class="od-settings-agents" data-action="agents" data-icon="users" hidden>Agents</button>
+    <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
   </nav>
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
@@ -97,6 +97,21 @@ const DIALOG = `
       </label>
     </section>
 
+    <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
+      <h2>Agent</h2>
+      <div class="od-setting">
+        <div class="od-setting-text">
+          <label for="od-agent-script">Runs every buddy</label>
+          <span class="od-setting-hint">A script in <code class="od-agents-folder"></code>: the prompt on stdin, the reply on stdout. Edit it to change the program, model or flags.</span>
+        </div>
+        <select id="od-agent-script" class="od-input"></select>
+      </div>
+      <div class="od-setting-row">
+        <button type="button" class="od-secondary" data-action="reset-agent">Reset to Default</button>
+        <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
+      </div>
+    </section>
+
     <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
       <h2>Keyboard shortcuts</h2>
       <div class="od-shortcuts-body"></div>
@@ -117,11 +132,12 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. With `openAgents`, the list has Agents, which opens that.
+ * one page shows. `scripts` ({ list() → { agents, shipped, folder }, reset(name),
+ * showFolder? }) backs Agent, which picks the agent script.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, openAgents?: () => void }} options
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, openAgents = null }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   hydrateIcons(dialog);
@@ -131,7 +147,29 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
   const nameError = dialog.querySelector('.od-input-error');
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
-  dialog.querySelector('[data-action="agents"]').hidden = !openAgents;
+  dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
+  const scriptSelect = dialog.querySelector('#od-agent-script');
+  let shipped = [];
+
+  // The scripts are read again each time the section shows: the user may add one.
+  async function paintScripts() {
+    let found;
+    try {
+      found = await scripts.list();
+    } catch {
+      return;
+    }
+    shipped = found.shipped;
+    dialog.querySelector('.od-agents-folder').textContent = found.folder;
+    const names = found.agents.includes(store.get().agent) ? found.agents : [...found.agents, store.get().agent];
+    scriptSelect.replaceChildren(...names.map((name) => Object.assign(document.createElement('option'), { value: name, textContent: name })));
+    scriptSelect.value = store.get().agent;
+    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
+  }
+  scriptSelect.addEventListener('change', () => {
+    set({ agent: scriptSelect.value });
+    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
+  });
 
   function apply() {
     const settings = store.get();
@@ -158,6 +196,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
     for (const panel of sections) panel.hidden = panel.dataset.section !== section;
+    if (section === 'agent') paintScripts();
   }
 
   function open(section = 'general') {
@@ -184,10 +223,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.action === 'close') dialog.close();
-    else if (button.dataset.action === 'agents') {
-      dialog.close();
-      openAgents();
-    } else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    else if (button.dataset.action === 'reset-agent') {
+      const name = scriptSelect.value;
+      if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
+    } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
     else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
     else if (button.dataset.width) set({ width: button.dataset.width });

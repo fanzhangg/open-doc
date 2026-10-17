@@ -95,41 +95,6 @@ export function locate(text, anchor) {
   return null;
 }
 
-/**
- * Re-find every anchored thread in new rendered text. Threads are returned as
- * new objects; unknown fields are preserved. Deterministic.
- *
- * @returns {{ threads: object[], changed: boolean }}
- */
-export function reanchorThreads(text, threads) {
-  let changed = false;
-  const next = threads.map((thread) => {
-    if (!thread.anchor) return thread;
-    const found = locate(text, thread.anchor);
-    if (!found) {
-      if (thread.detached === true) return thread;
-      changed = true;
-      return { ...thread, detached: true };
-    }
-    const anchor = createAnchor(text, found.start, found.end);
-    if (thread.detached === false && sameAnchor(anchor, thread.anchor)) return thread;
-    changed = true;
-    return { ...thread, anchor, detached: false };
-  });
-  return { threads: next, changed };
-}
-
-/**
- * Bring a sidecar's anchors up to date with a doc (SPEC.md §3.5). The caller
- * computes `docHash` (it needs a hash function, which differs between Node
- * and the browser). Returns the same object when nothing changed.
- */
-export function refreshSidecar(sidecar, markdown, docHash) {
-  if (sidecar.docHash === docHash) return sidecar;
-  const { threads } = reanchorThreads(project(markdown).text, sidecar.threads);
-  return { ...sidecar, docHash, threads };
-}
-
 // Context bracket (SPEC.md §3.3 step 2): when the full prefix and suffix both
 // survive unchanged, the anchor is whatever now sits between them.
 function bracket(text, anchor) {
@@ -198,6 +163,3 @@ function occurrences(text, needle) {
   return starts;
 }
 
-function sameAnchor(a, b) {
-  return a.exact === b.exact && a.prefix === b.prefix && a.suffix === b.suffix && a.start === b.start;
-}

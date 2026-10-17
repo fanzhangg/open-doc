@@ -1,12 +1,14 @@
-// Avatars: a face drawn from a seed, the name unless one is saved (yours
-// and your agents', so a new name keeps the face; see threads.js avatar).
-// Everyone gets their own colour and expression, a little personality, and
-// keeps it wherever they show up (the header, threads, history).
+// Avatars: a face drawn from the name. Everyone gets their own expression,
+// a little personality, and keeps it wherever they show up (the header,
+// threads, history). A buddy's colour is one of eight, different from the
+// other buddies in the doc (colorSlots); a person's is drawn from the name.
 // People are round; agents are soft blobs that stay close to a circle, so
 // they still read as avatars but are told apart from people at a glance.
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
 // legible down to the 18px faces in a thread's footer.
+
+import { colorSlots } from '../src/core/buddies.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const INK = '#1f1d24';
@@ -28,78 +30,98 @@ const COLORS = [
   [36, 90, 70], // apricot
 ];
 
+// A buddy's colour: eight hues evenly apart in OKLCH, Clippy's yellow first.
+const BUDDY_HUES = [90, 135, 180, 225, 270, 315, 0, 45];
+let slots = colorSlots([]);
+
+/** The buddies in this doc, so each gets a colour no other one has. */
+export function setBuddies(names) {
+  slots = colorSlots(names);
+}
+
+/** Buddy `name`'s colour, a little lighter (`lift` > 0) or darker. */
+export function buddyColor(name, lift = 0) {
+  const key = name.toLowerCase();
+  const slot = slots.get(key) ?? colorSlots([key]).get(key);
+  return `oklch(${(0.78 + lift).toFixed(2)} 0.14 ${BUDDY_HUES[slot]})`;
+}
+
 let ids = 0; // gradient ids, unique per page
 
 /** @param {string} seed */
-export const agentFace = (seed) => face(seed, false);
+export const agentFace = (seed) => seed.trim().toLowerCase() === 'clippy' ? clippyFace() : face(seed, false);
 
 /** @param {string} seed */
 export const personFace = (seed) => face(seed, true);
 
-// The app icon: the face drawn from `faceSeed` (Clippy's) on a paper tile, the
-// shape and size of Apple's icon grid (824 of 1024). macOS 26 shrinks an icon
-// that does not fill this shape onto a grey plate.
-export function appIcon(faceSeed) {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
+// Follow the original sketch: a wide warm yellow coil, eyes on either side and
+// asymmetric brows. Rounded arcs and a soft gaze gently refine its expression.
+export function clippyFace() {
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
+  const id = `od-clippy-${++ids}`;
   const defs = node('defs', {});
-  const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
-  gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
+  const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
+  for (const [offset, color] of [[0, '#ffe9a3'], [0.55, '#ffd05b'], [1, '#edac38']]) {
+    gradient.append(node('stop', { offset, 'stop-color': color }));
+  }
   defs.append(gradient);
-  // A faint ink edge keeps the tile apart from white backgrounds (Windows, browser tabs).
-  svg.append(defs, node('rect', {
-    x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
-    fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
+  const body = node('g', {});
+  svg.append(defs, body);
+  body.append(node('path', {
+    class: 'od-face-body',
+    d: 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50',
+    fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   }));
-  const mark = node('g', { transform: 'translate(50 50) scale(0.6) translate(-50 -50)' });
-  mark.append(...agentFace(faceSeed).childNodes);
-  svg.append(mark);
+  const features = node('g', { class: 'od-face-look' });
+  drawEye(features, 'big', 23, 46, -1, 1.55, [0.8, -0.3]);
+  drawEye(features, 'big', 77, 43, 1, 1.55, [-0.8, -0.3]);
+  // A small highlight softens the gaze without adding another facial feature.
+  for (const [x, y] of [[22, 43], [74, 40]]) {
+    features.append(node('circle', { cx: x, cy: y, r: '1.7', fill: '#fff' }));
+  }
+  features.append(stroke('M13 26Q22 22 31 25', 3.5), stroke('M68 21Q76 16 84 18', 3.5));
+  svg.append(features);
   return svg;
 }
 
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
-// A doc: a folded page with the same face over its corner, ringed in white.
-export function documentIcon(faceSeed) {
+// A large warm yellow coil overlaps the folded page, following the original sketch.
+export function documentIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
     node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
-    node('path', { d: 'M28 88V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    node('path', { d: 'M28 27V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V86', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
-  const avatar = agentFace(faceSeed);
-  // The ring is a copy of the body, with the group a swirl's flip sits on.
-  const body = avatar.querySelector('.od-face-body');
-  const halo = (body.parentNode === avatar ? body : body.parentNode).cloneNode(true);
-  const ring = halo.matches('.od-face-body') ? halo : halo.querySelector('.od-face-body');
-  if (ring.getAttribute('fill') !== 'none') ring.setAttribute('fill', '#fff');
-  ring.setAttribute('stroke', '#fff');
-  ring.setAttribute('stroke-width', '16');
-  const mark = node('g', { transform: 'translate(4 40) scale(0.56)' });
-  mark.append(halo, ...avatar.childNodes);
+  const avatar = clippyFace();
+  svg.append(avatar.querySelector('defs'));
+  const coil = avatar.querySelector('.od-face-body');
+  const halo = coil.cloneNode(true);
+  halo.setAttribute('stroke', '#fff');
+  halo.setAttribute('stroke-width', '16');
+  const mark = node('g', { transform: 'translate(-1 20) scale(0.73)' });
+  mark.append(halo, coil);
   svg.append(mark);
   return svg;
 }
 
 function face(name, round) {
   const rand = random(seed(name));
-  const [hue, sat, light] = pick(rand, COLORS);
-  // Whether an agent is a swirl is a draw of its own, so a face that is not
-  // one stays as it was before swirls.
-  const swirl = !round && random(seed(`${name}\0swirl`))() < SWIRLS;
-  const body = round ? CIRCLE : swirl ? null : bodyShape(rand);
+  const [hue, sat, light] = pick(rand, COLORS); // drawn for buddies too, so their faces stay as they were
+  const body = round ? CIRCLE : bodyShape(rand);
 
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
   const id = `od-face-${++ids}`;
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  gradient.append(
-    node('stop', { offset: '0', 'stop-color': `hsl(${hue} ${sat}% ${Math.min(light + 14, 90)}%)` }),
-    node('stop', { offset: '0.55', 'stop-color': `hsl(${hue} ${sat}% ${light}%)` }),
-    node('stop', { offset: '1', 'stop-color': `hsl(${hue} ${sat}% ${light - 9}%)` }),
-  );
+  const stops = round
+    ? [`hsl(${hue} ${sat}% ${Math.min(light + 14, 90)}%)`, `hsl(${hue} ${sat}% ${light}%)`, `hsl(${hue} ${sat}% ${light - 9}%)`]
+    : [buddyColor(name, 0.08), buddyColor(name), buddyColor(name, -0.07)];
+  gradient.append(...[0, 0.55, 1].map((offset, i) => node('stop', { offset: String(offset), 'stop-color': stops[i] })));
   const defs = node('defs', {});
   defs.append(gradient);
-  if (swirl) return swirlFace(svg, defs, id, rand);
   svg.append(defs, node('path', { class: 'od-face-body', d: body.d, fill: `url(#${id})` }));
 
   // The face sits a little off centre, as if glancing somewhere, and tilts a touch.
@@ -179,60 +201,6 @@ function smooth(points) {
     d += `Q${f(p[0])} ${f(p[1])} ${f(m[0])} ${f(m[1])}`;
   });
   return `${d}Z`;
-}
-
-// ---- the swirl ----
-
-// About one agent in ten is a swirl: a wide coil with big eyes either side and
-// brows above them, the coil standing in for nose and mouth.
-const SWIRLS = 0.1;
-
-// An Archimedean spiral around (50, 50), where the body spins, so it turns
-// without wobbling: two turns from the tail at the lower left, winding
-// anticlockwise in. A swirl spins the way it winds in (app.css), so the coil
-// seems to wind itself up.
-function coilPath() {
-  const [outer, inner, turns, start] = [35, 4, 2, Math.PI * 3 / 4];
-  const steps = turns * 48;
-  const points = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const a = start - t * turns * Math.PI * 2;
-    const r = outer - (outer - inner) * t;
-    points.push([50 + r * Math.cos(a), 50 + r * Math.sin(a)]);
-  }
-  // Curve through each point, ending on the midpoints between them.
-  let d = `M${f(points[0][0])} ${f(points[0][1])}`;
-  for (let i = 1; i < steps; i++) {
-    const [p, q] = [points[i], points[i + 1]];
-    d += `Q${f(p[0])} ${f(p[1])} ${f((p[0] + q[0]) / 2)} ${f((p[1] + q[1]) / 2)}`;
-  }
-  return `${d}L${f(points[steps][0])} ${f(points[steps][1])}`;
-}
-
-function swirlFace(svg, defs, id, rand) {
-  svg.classList.add('od-swirl');
-  const flip = rand() < 0.5; // which way it coils
-  const x = (v) => (flip ? 100 - v : v);
-  // The flip sits on a group: the working spin animates the body's own transform.
-  const coil = node('g', flip ? { transform: 'matrix(-1 0 0 1 100 0)' } : {});
-  coil.append(node('path', {
-    class: 'od-face-body', d: coilPath(), fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  }));
-  const look = node('g', { class: 'od-face-look' });
-  svg.append(defs, coil, look);
-  const size = range(rand, 1.4, 1.6);
-  const glance = [range(rand, -1, 1), range(rand, -0.6, 0.3)];
-  for (const [ex, ey, side] of [[23, 46, -1], [77, 43, 1]]) {
-    drawEye(look, 'big', x(ex), ey, side, size, glance);
-    // A highlight on the pupil, and a brow at a height of its own.
-    look.append(node('circle', { cx: f(x(ex) + glance[0] * 1.4 - 2), cy: f(ey + glance[1] * 1.4 - 2.6), r: '1.7', fill: '#fff' }));
-    const y = ey - 20 - range(rand, 0, 5);
-    const tilt = range(rand, -2, 2);
-    look.append(stroke(`M${f(x(ex - 9))} ${f(y + tilt)}Q${f(x(ex))} ${f(y - 4)} ${f(x(ex + 8))} ${f(y - tilt)}`, 3.5));
-  }
-  return svg;
 }
 
 // ---- the face ----

@@ -1,9 +1,9 @@
 /* ---- fonts: Inter (OFL-1.1), bundled and served locally ---- */
 
-@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(/assets/fonts/inter-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Inter"; font-style: italic; font-display: swap; font-weight: 100 900; src: url(/assets/fonts/inter-latin-wght-italic.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
-@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(/assets/fonts/inter-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-@font-face { font-family: "Inter"; font-style: italic; font-display: swap; font-weight: 100 900; src: url(/assets/fonts/inter-latin-ext-wght-italic.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Inter"; font-style: italic; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-wght-italic.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: "Inter"; font-style: normal; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: "Inter"; font-style: italic; font-display: swap; font-weight: 100 900; src: url(fonts/inter-latin-ext-wght-italic.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 
 /* ---- tokens ---- */
 
@@ -152,8 +152,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 @keyframes od-fade-pulse { 50% { opacity: 0.35; } }
 /* working: the body rolls under the face, which bobs along; waiting for its turn: it breathes */
 [data-presence="working"] .od-face-body { animation: od-spin 2.4s linear infinite; }
-/* a swirl turns the way its coil winds in, so it winds itself up */
-[data-presence="working"] .od-swirl .od-face-body { animation-direction: reverse; }
 [data-presence="working"] .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
 @keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
 [data-state="queued"] .od-face-body { animation: od-fade-pulse 1.6s ease-in-out infinite; }
@@ -166,14 +164,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile { display: flex; align-items: center; gap: 12px; }
 .od-profile .od-avatar { --size: 44px; }
 /* on an editable card, the face is a button that draws a new one */
-.od-face-picker { flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; transition: transform 0.15s ease; }
-.od-face-picker:hover { transform: scale(1.08) rotate(-4deg); }
-.od-face-picker:active { transform: scale(0.94); }
-.od-face-picker:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .od-profile-who { min-width: 0; }
 .od-profile-name { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .od-profile-sub { margin-top: 2px; color: var(--text-soft); }
 .od-profile-problem { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--danger) 9%, var(--bg-soft)); color: var(--text); overflow-wrap: anywhere; }
+.od-profile-note { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--bg-soft); color: var(--text-soft); font-size: 12px; overflow-wrap: anywhere; }
 .od-profile-actions { display: flex; gap: 8px; margin-top: 12px; }
 .od-profile-problem .od-profile-actions { margin-top: 10px; }
 .od-profile-log { margin-top: 8px; color: var(--text-faint); font-size: 12px; }
@@ -234,6 +229,8 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-people-row .od-icon-button .od-icon { width: 15px; height: 15px; }
 .od-people-row .od-on-hover { opacity: 0; }
 .od-people-row:hover .od-on-hover, .od-people-row .od-on-hover:focus-visible { opacity: 1; }
+.od-msg .od-on-hover { opacity: 0; }
+.od-msg:hover .od-on-hover, .od-msg .od-on-hover:focus-visible { opacity: 1; }
 .od-people-row .od-profile-face .od-presence-dot { width: 9px; height: 9px; border-width: 2px; border-color: var(--bg); }
 /* the People button: a circle the size of an avatar, next to them */
 .od-invite { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px dashed var(--border-strong); border-radius: 50%; background: var(--bg); color: var(--text-soft); }
@@ -243,8 +240,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-profile-tools { margin-left: auto; align-self: flex-start; display: flex; gap: 2px; }
 .od-profile-tools .od-icon-button { width: 28px; height: 28px; }
 .od-profile-tools .od-icon { width: 16px; height: 16px; }
-.od-star[aria-pressed="true"] { color: #e8a400; }
-.od-star[aria-pressed="true"] .od-icon { fill: currentColor; }
 /* name and persona on an agent card: text you click to edit, then a field in its place */
 .od-editable { margin-left: -4px; padding: 1px 4px; border-radius: 4px; cursor: text; }
 .od-editable:hover, .od-editable:focus-visible { background: var(--hover); outline: none; }
@@ -259,13 +254,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-inline-input[aria-invalid="true"] { outline-color: var(--danger); }
 .od-profile-who { flex: 1; }
 .od-profile + .od-input-error { margin-top: 6px; }
-.od-agent-keep { margin: 0 0 8px; }
 [data-presence="working"] .od-presence-dot, [data-presence="queued"] .od-presence-dot { background: var(--success); }
 
 /* the @ menu and who-will-reply line under a comment box */
 .od-mentions { position: absolute; left: 0; right: 0; top: 100%; z-index: 6; max-height: 320px; overflow-y: auto; list-style: none; margin: 4px 0 0; padding: 4px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); }
 /* the same menu after an @ in the doc's text, at the caret */
-.od-mentions-doc { right: auto; top: 0; z-index: 12; width: 300px; margin: 0; font-family: var(--ui-font); animation: od-pop 0.12s ease-out; }
 .od-mentions-group { padding: 6px 8px 2px; color: var(--text-faint); font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 /* an @name in the doc or a comment: a chip; hovering it shows the name card */
 .od-at { margin: 0 1px; padding: 1px 6px; border-radius: 999px; font-weight: 600; color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent); box-decoration-break: clone; -webkit-box-decoration-break: clone; cursor: default; transition: background 0.12s, box-shadow 0.12s; }
@@ -392,7 +385,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 /* a selection inside commented text has to read over its grey */
 .od-editor .od-hl::selection, .od-editor .od-hl *::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .od-hl-active { background: var(--highlight-active); }
-.od-hl-working { background: var(--agent-soft); animation: od-shimmer 1.6s ease-in-out infinite; }
 /* a proposal or a past edit shown in the text; .od-replay plays it once: removal first, then the new text */
 .od-mark-del { color: var(--del); text-decoration: line-through; text-decoration-color: var(--del); background: color-mix(in srgb, var(--del) 8%, transparent); }
 .od-mark-ins { color: var(--ins); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--ins) 50%, transparent); background: color-mix(in srgb, var(--ins) 10%, transparent); }
@@ -403,33 +395,24 @@ del.od-mark-del { margin-right: 0.15em; }
 @keyframes od-replay-del { from { text-decoration-color: transparent; background: transparent; color: var(--text); } }
 @keyframes od-replay-ins { from { opacity: 0; background: color-mix(in srgb, var(--ins) 35%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .od-replay { animation: none !important; } }
-@keyframes od-shimmer { 50% { background: var(--agent-glow); } }
 
 /* text the agent just changed, labelled with its name, fading out */
 .od-flash { animation: od-flash 6s ease-out forwards; border-radius: 2px; }
 .od-flash-block { animation: od-flash 6s ease-out forwards; border-radius: 4px; }
 @keyframes od-flash { 0%, 40% { background: var(--agent-glow); } 100% { background: transparent; } }
 .od-flag { position: relative; display: inline; }
-.od-flag-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--agent); color: #fff; font: 600 11px/1.6 var(--ui-font); white-space: nowrap; pointer-events: none; animation: od-fade 6s ease-out forwards; }
-.od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); animation: od-fade 6s ease-out forwards; }
+.od-flag-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--buddy, var(--agent)); color: var(--buddy-ink, #fff); font: 600 11px/1.6 var(--ui-font); white-space: nowrap; pointer-events: none; animation: od-fade 6s ease-out forwards; }
+.od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--buddy, var(--agent)); animation: od-fade 6s ease-out forwards; }
 @keyframes od-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
-/* the agent's caret while it types a change in (web/replay.js), and after */
-.od-agent-caret { position: relative; display: inline; }
-.od-agent-caret::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); }
-.od-agent-caret-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--agent); color: #fff; font: 600 11px/1.6 var(--ui-font); white-space: nowrap; user-select: none; }
-.od-agent-caret[data-mode="active"] .od-agent-caret-label { cursor: pointer; }
-.od-agent-caret[data-mode="looking"] .od-agent-caret-label::after { content: '…'; animation: od-blink 1.2s steps(2) infinite; }
-.od-agent-caret[data-mode="looking"]::before { animation: od-blink 1.2s steps(2) infinite; }
-.od-agent-caret[data-mode="idle"] .od-agent-caret-label { opacity: 0.85; }
-.od-agent-caret[data-mode="faded"] { opacity: 0.35; transition: opacity 1.5s; }
-.od-agent-caret[data-mode="faded"] .od-agent-caret-label { display: none; }
-@keyframes od-blink { 50% { opacity: 0.35; } }
-.od-replay-select { background: var(--agent-glow); border-radius: 2px; }
-.od-review { background: var(--agent-soft); border-radius: 2px; }
-.od-agent-offscreen { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translateX(-50%); padding: 6px 14px; border: 0; border-radius: 999px; background: var(--agent); color: #fff; font: 600 12px/1.4 var(--ui-font); box-shadow: var(--shadow-raised); cursor: pointer; }
-.od-agent-offscreen[data-side="above"] { top: 72px; bottom: auto; }
-@media (prefers-reduced-motion: reduce) { .od-agent-caret, .od-agent-caret * { animation: none !important; } }
+/* a buddy's edit: underlined in its colour until you type, then faded; its receipt lights it again */
+.od-buddy-edit { background: color-mix(in oklch, var(--buddy) 16%, transparent); box-shadow: inset 0 -2px 0 var(--buddy); border-radius: 2px; transition: background 0.4s, box-shadow 0.4s; }
+.od-buddy-edit.od-faded { background: transparent; box-shadow: none; }
+.od-receipt { display: flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 28px; padding: 0 2px 0 8px; border: 1px solid color-mix(in oklch, var(--buddy) 45%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--buddy) 8%, transparent); color: var(--text-soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.od-receipt > .od-icon { width: 14px; height: 14px; flex: none; color: var(--buddy); }
+.od-receipt-text { flex: 1; min-width: 0; }
+.od-receipt-undone { border-color: var(--border); background: none; }
+.od-receipt-undone > .od-icon { color: var(--text-faint); }
 
 /* ---- selection bubble ---- */
 
@@ -503,7 +486,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-msg + .od-msg-failed, .od-quote + .od-msg-failed { margin-top: 14px; }
 .od-msg-actions { display: flex; gap: 2px; margin-left: auto; }
 .od-msg-failed .od-body { color: var(--danger); }
-.od-request-cancelled { margin: 10px 0 0; }
 .od-body-folded { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .od-card:not(.od-card-active) .od-body-folded { -webkit-line-clamp: 3; }
 /* Show more / less and folded replies: quiet text with a chevron that flips; the comment text stays the focus */
@@ -540,27 +522,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-resolved-row span { flex: 1; }
 .od-link-button { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
 .od-link-button:hover { background: var(--accent-soft); }
-.od-change { margin-top: 8px; padding: 4px 6px 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); font-size: 12.5px; }
-.od-change-head { display: flex; align-items: center; gap: 6px; min-height: 26px; }
-.od-change-label { flex: 1; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
-.od-change-actions { display: flex; gap: 2px; }
-.od-change-button { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; transition: background 0.15s, color 0.15s; }
-.od-change-button .od-icon { width: 16px; height: 16px; stroke-width: 2; }
-.od-change-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.od-change-apply { color: var(--accent); }
-.od-change-apply:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
-.od-change-line { margin-top: 3px; padding-right: 4px; line-height: 1.55; color: var(--text-soft); overflow-wrap: anywhere; }
-.od-change-context { color: var(--text-faint); }
-.od-change-del { color: var(--del); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--del) 60%, transparent); background: color-mix(in srgb, var(--del) 8%, transparent); border-radius: 3px; padding: 0 2px; }
-.od-change-ins { color: var(--ins); text-decoration: none; background: color-mix(in srgb, var(--ins) 10%, transparent); border-radius: 3px; padding: 0 2px; }
-.od-change-lines { max-height: 7.75em; overflow: hidden; }
-.od-change-clipped { -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent); mask-image: linear-gradient(to bottom, #000 65%, transparent); }
-.od-change-reviewable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-.od-change-reviewable:hover { border-color: var(--border-strong); }
-.od-change-reviewing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft)); }
-.od-change-more { margin-top: 3px; color: var(--text-faint); }
-.od-change-error { margin-top: 4px; color: var(--del); }
-.od-change-muted .od-change-line { opacity: 0.55; }
 
 .od-composer { position: relative; margin-top: 10px; }
 .od-composer textarea { display: block; width: 100%; resize: none; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--bg); color: var(--text); padding: 7px 14px; font: inherit; font-size: 14px; line-height: 1.4; transition: border-color 0.15s, box-shadow 0.15s; }
@@ -579,38 +540,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-shortcuts-body section { break-inside: avoid; margin-bottom: 14px; }
 .od-shortcuts-body h3 { margin: 8px 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
 .od-shortcut { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
-
-/* ---- export ---- */
-
-.od-export { width: min(460px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-raised); }
-.od-export[open] { animation: od-pop 0.15s ease-out; }
-.od-export::backdrop { background: rgba(0, 0, 0, 0.32); }
-.od-export-form { padding: 16px 20px 18px; }
-.od-export-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.od-export-head h2 { margin: 0; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.od-export-doc { color: var(--text-soft); font-weight: 500; }
-.od-export-formats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
-.od-export-formats button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px 11px; border: 1px solid var(--border); border-radius: 10px; background: none; text-align: left; }
-.od-export-formats button .od-icon { width: 20px; height: 20px; margin-bottom: 6px; color: var(--text-soft); }
-.od-export-formats button:hover { background: var(--hover); }
-.od-export-formats button[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.od-export-formats button[aria-checked="true"] .od-icon { color: var(--accent); }
-.od-export-name { font-size: 13.5px; font-weight: 600; }
-.od-export-use { font-size: 12px; color: var(--text-soft); }
-.od-export .od-setting { min-height: 48px; }
-.od-export-hint { max-width: 220px; }
-.od-export-error { margin-top: 8px; font-size: 12.5px; color: var(--danger); }
-.od-export-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
-.od-export-actions button { height: 32px; }
-.od-print-frame { position: fixed; width: 0; height: 0; border: 0; visibility: hidden; }
-
-.od-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 6px 6px 6px 14px; border-radius: 10px; background: var(--bg); box-shadow: var(--shadow-raised); font-size: 13px; animation: od-pop 0.15s ease-out; }
-.od-toast-icon { display: flex; color: var(--accent); }
-.od-toast[data-state="error"] .od-toast-icon { color: var(--danger); }
-.od-toast-icon .od-icon { width: 16px; height: 16px; }
-.od-toast-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.od-toast .od-icon-btn { width: 26px; height: 26px; }
-.od-toast .od-icon-btn .od-icon { width: 14px; height: 14px; }
 
 /* ---- settings ---- */
 
@@ -731,14 +660,24 @@ label.od-setting { cursor: pointer; }
 .od-files-row { cursor: default; user-select: none; -webkit-user-select: none; outline: none; }
 .od-files-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .od-files-row > .od-files-label { flex: 1; }
-.od-files-new-doc { margin-left: auto; margin-right: -6px; width: 26px; height: 26px; border-radius: 6px; }
-.od-files-new-doc:hover { background: var(--hover); color: var(--text); }
-.od-files-new-doc .od-icon { width: 16px; height: 16px; }
+.od-files-tools { margin-left: auto; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+.od-files-tools .od-icon-btn { width: 26px; height: 26px; border-radius: 6px; }
+.od-files-tools .od-icon-btn:hover { background: var(--hover); color: var(--text); }
+.od-files-tools .od-icon { width: 16px; height: 16px; }
+.od-files:hover .od-files-tools, .od-files-tools:focus-within { opacity: 1; }
+.od-files-actions { display: none; margin: -2px -4px -2px 0; padding: 2px; border-radius: 4px; color: var(--text-soft); }
+.od-files-actions .od-icon { stroke-width: 2.5; }
+.od-files-actions:hover { background: var(--hover); color: var(--text); }
+.od-files-row:hover > .od-files-actions, .od-files-row:focus-visible > .od-files-actions { display: flex; }
+.od-files-dragging .od-files-actions, .od-files-editing > .od-files-actions, .od-files-new > .od-files-actions { display: none !important; }
 .od-files-input { flex: 1; min-width: 0; height: 22px; margin: -2px 0; padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; outline: none; }
 .od-files-input[aria-invalid="true"] { border-color: var(--danger); }
 .od-files-editing, .od-files-editing:hover { background: none; }
 .od-files-row[aria-busy="true"] { opacity: 0.6; }
 .od-files-error { margin: 2px 8px 4px 28px; color: var(--danger); font-size: 12px; line-height: 1.4; }
+.od-files-empty-folder { padding: 3px 8px 3px 28px; color: var(--text-faint); font-size: 12px; }
+.od-files-link { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.od-files-link:hover { text-decoration: underline; }
 .od-files-dragging, .od-files-dragging * { cursor: grabbing !important; }
 .od-files-nodrop, .od-files-nodrop * { cursor: not-allowed !important; }
 .od-files-dragging .od-files-row:hover:not(.od-files-drop) { background: none; }
@@ -867,7 +806,7 @@ label.od-setting { cursor: pointer; }
 /* a new agent's draft: Create and Cancel in place of Delete, kept in view */
 .od-agent-draft-actions { display: none; gap: 8px; }
 .od-agent-editor[data-draft] .od-agent-draft-actions { display: flex; }
-.od-agent-editor[data-draft] [data-action="delete-agent"] { display: none; }
+.od-agent-editor:is([data-draft], [data-fixed]) [data-action="delete-agent"] { display: none; }
 .od-agent-editor[data-draft] .od-agent-foot { position: sticky; bottom: -28px; margin-bottom: -28px; padding-bottom: 28px; background: var(--bg); }
 
 /* in a browser tab: where a Command agent's command goes in settings.json */

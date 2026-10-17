@@ -1,5 +1,5 @@
 // The user's settings file: `settings.json` in the per-user config folder,
-// shared by every doc, window and `opendoc serve` run. Writes use the same
+// shared by every doc and window. Writes use the same
 // lock and atomic rename as the sidecar, so two windows changing different
 // settings at once both keep their change.
 
@@ -7,7 +7,7 @@ import { mkdir, readFile, rename } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { SETTINGS_VERSION, USER_ID, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
-import { newId } from '../core/ops.js';
+import { newId } from '../core/comments.js';
 import { lockFile, writeAtomic } from './files.js';
 import { watchFiles } from './watch.js';
 
@@ -57,21 +57,6 @@ export async function updateSettings(patch, dir = configDir()) {
   return change(() => patch, dir);
 }
 
-/**
- * Change the agents under the settings lock: `edit(agents, settings)`
- * returns the new roster (or throws), so two windows editing different
- * agents at once both keep their change.
- * @returns {Promise<object>} the complete settings after the change
- */
-export async function editAgents(edit, dir = configDir()) {
-  return change((stored) => {
-    const current = resolveSettings(stored);
-    const patch = { agents: edit(current.agents, current) };
-    checkSettingsPatch(patch);
-    return patch;
-  }, dir);
-}
-
 async function change(patchFor, dir) {
   await mkdir(dir, { recursive: true });
   const path = settingsPath(dir);
@@ -102,7 +87,8 @@ async function readStored(dir) {
   }
   try {
     const stored = JSON.parse(text);
-    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored;
+    // A version 1 file (agents and faces in it) is discarded: the next write replaces it.
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored.version < SETTINGS_VERSION ? null : stored;
   } catch {
     // fall through
   }

@@ -1,51 +1,33 @@
 // The people in the header, laid out like a shared doc's: avatars of the
-// doc's agents, a People button, then yours.
+// buddies the doc reaches, a People button, then yours.
 //
-// Agents are light: on an agent's card, a click on its name or its persona
-// (one line) edits it in place; the Agents panel holds the finer settings,
-// such as instructions. New agent opens a draft there, which joins the doc
-// once it is created. A new agent is this doc's own: it shows only here and
-// comes back with the doc. Starring it puts it in your agents, for every doc;
-// removing a doc's own agent deletes it.
+// Buddies are light: on a buddy's card, a click on its name or its persona
+// (one line) edits it in place; the Buddies panel holds its instructions.
+// New buddy opens a draft there. Faces are drawn from names.
 //
-// Agents with **Auto Commenter** answer the new comments that fit their
-// persona in the docs they are in; the others answer only when @mentioned, and mentioning
-// one brings it into the doc. The People panel works like Docs' share
-// dialog: who is here, what each may do, Remove, and the agents you can bring
-// in. Clicking an avatar opens that agent's card: its name, introduction and
-// permissions, each a switch you can flip right there. Your own card works
-// the same way: a click on your name edits it in place. On either, a click
-// on the face draws a new one; a new name keeps the face.
+// A buddy answers when @mentioned. The People panel lists who commented
+// and the buddies here. Clicking an avatar opens that buddy's card: its
+// name and persona, each editable right there. Your own card works
+// the same way: a click on your name edits it in place.
 //
 // The comment box asks this module what to offer after @.
 
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar, namecardFor } from './threads.js';
-import { MAX_PERSONA, PERMISSIONS, availableIn, introOf, permissionPatch, permissionsOf } from '../src/core/agents.js';
+import { MAX_PERSONA } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
-const OFFLINE = new Set(['error', 'unavailable', 'limited', 'stopped']);
-const ME = 'me'; // your card's id for its name field: no agent's (theirs start with a_)
 export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
-// A seed for a new face (web/faces.js).
-const newFace = () => Math.random().toString(36).slice(2, 10);
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void,
- *           newAgent: () => void, onSidecar: (sidecar: object) => void,
- *           onSettings: (settings: object) => void, onError: (message: string) => void,
- *           onPeople?: () => void }} options   onPeople: who is here or what they are changed
+ *           setName: (name: string) => boolean, openSettings: (section: string, name?: string) => void,
+ *           newAgent: () => void, project?: () => boolean }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, newAgent, onSidecar, onSettings, onError, onPeople = () => {} }) {
-  let statuses = []; // the agents running here (server)
-  let participants = []; // the doc's participants: [{ name, kind }]
-  let saved = []; // the user's agents, as the settings have them
-  let roster = []; // the same, with the switches flipped on a card and not yet saved
-  const flipped = new Map(); // agent id → the fields its card changed, until saved
-  let flips = Promise.resolve(); // the changes from cards, saved one at a time
-  let unsaved = 0;
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, openSettings, newAgent, project = () => false }) {
+  let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
+  let writers = []; // the people who commented: [{ id, name }]
   let showing = null; // 'me' | 'people' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
   // name on the page, or editable, opened by a click (or a click on the card
@@ -53,8 +35,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let viewOnly = false;
   let hovered = false; // opened by hovering: goes when the pointer leaves, until a click or a field keeps it
   let anchor = null; // the name on the page the card opened next to; null: under the header
-  let log = null; // the shown agent's last run log, fetched when its card opens
-  let busy = false;
   let editing = null; // the field of the shown agent being edited in place: 'name' | 'persona'
 
   invite.addEventListener('click', () => toggle('people'));
@@ -83,25 +63,15 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   window.addEventListener('scroll', () => anchor && !panel.hidden && place(), true);
 
-  async function toggle(which, from = null) {
+  function toggle(which, from = null) {
     // A click on the face whose card its hover opened keeps the card; a second closes it.
     if (showing === which && !viewOnly && !hovered) return close();
     if (showing !== which) anchor = from;
     showing = which;
     viewOnly = false;
     hovered = false;
-    log = null;
     panel.hidden = false;
     paintCard();
-    const name = agentShown();
-    if (name && OFFLINE.has(statusOf(name)?.state)) {
-      try {
-        log = (await api.agentDetails(name)).log;
-      } catch {
-        log = '';
-      }
-      if (agentShown() === name) paintCard();
-    }
   }
 
   function close() {
@@ -125,7 +95,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     hovered = true;
     editing = null;
     anchor = header ? null : from;
-    log = null;
     panel.hidden = false;
     paintCard();
     return true;
@@ -143,9 +112,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   function keyOf(name, kind) {
     if (kind !== 'agent' && same(name, getName())) return 'me';
-    const agent = agentsHere().find((n) => same(n, name)) ?? profileOf(name)?.name;
+    const agent = agentsHere().find((n) => same(n, name));
     if (agent || kind === 'agent') return `agent:${agent ?? name}`;
-    return `person:${participants.find((p) => same(p.name, name))?.name ?? name}`;
+    return `person:${writers.find((p) => same(p.name, name))?.name ?? name}`;
   }
 
   // Only another person's card has nothing to change.
@@ -170,20 +139,12 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   const agentShown = () => (showing?.startsWith('agent:') ? showing.slice(6) : null);
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  // You, in the doc's participants: by your id, or by name in a doc from before ids.
-  const isMe = (p, myName) => (p.id && getId() ? p.id === getId() : same(p.name, myName));
+  const isMe = (p) => p.id === getId();
   const statusOf = (name) => statuses.find((s) => same(s.name, name)) ?? null;
-  const profileOf = (name) => roster.find((a) => same(a.name, name)) ?? null;
-  // Everything known about an agent: its profile, or else what its status says.
-  const infoOf = (name) => profileOf(name) ?? statusOf(name) ?? { name };
-  const onAutoComment = (name) => Boolean(statusOf(name)?.autoComment ?? profileOf(name)?.autoComment);
+  const introOf = (name) => statusOf(name)?.persona ?? '';
 
-  // The agents of the doc: those with Auto Commenter first, then the others as they joined.
-  function agentsHere() {
-    const names = participants.filter((p) => p.kind === 'agent').map((p) => p.name);
-    for (const s of statuses) if (!names.some((n) => same(n, s.name))) names.push(s.name);
-    return names.sort((a, b) => Number(onAutoComment(b)) - Number(onAutoComment(a)));
-  }
+  // The buddies the doc reaches.
+  const agentsHere = () => statuses.map((s) => s.name);
 
   // ---- the avatars in the header ----
 
@@ -205,7 +166,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       return wrap;
     }));
     // A renamed agent's card stays open while the doc catches up with the new name.
-    if (agentShown() && !names.some((n) => same(n, agentShown())) && !profileOf(agentShown())) close();
+    if (agentShown() && !names.some((n) => same(n, agentShown())) && !editing) close();
   }
 
   // ---- the cards ----
@@ -233,31 +194,21 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return head;
   }
 
-  // Yours works as an agent's does: editable, a click on your name edits it
-  // in place and a click on your face draws a new one.
+  // Yours works as an agent's does: a click on your name edits it in place.
   function meCard() {
     if (viewOnly) return [personHead(getName(), 'You')];
     const head = el('div', 'od-profile');
+    const pic = el('span', 'od-profile-face');
+    pic.append(avatar(getName(), 'human'));
     const who = el('div', 'od-profile-who');
-    who.append(inPlace({ id: ME, name: getName() }, 'name', 'od-profile-name', 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
+    who.append(inPlace({ me: true, name: getName() }, 'name', 'od-profile-name', 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
     const tools = el('div', 'od-profile-tools');
     tools.append(iconButton('settings', 'More settings', () => {
       close();
       openSettings('general');
     }));
-    head.append(facePicker(getName(), 'human', () => setFace(newFace())), who, tools);
+    head.append(pic, who, tools);
     return [head];
-  }
-
-  // A face to click for a new one.
-  function facePicker(name, kind, pick) {
-    const face = avatar(name, kind);
-    face.removeAttribute('title');
-    const node = button('', 'od-profile-face od-face-picker', pick);
-    node.title = 'Change avatar';
-    node.setAttribute('aria-label', 'Change avatar');
-    node.append(face);
-    return node;
   }
 
   function personCard(name) {
@@ -269,45 +220,29 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // agent may do is on its card, a click away.
   function peopleCard() {
     const head = el('div', 'od-card-head');
-    head.append(el('div', 'od-card-title', 'People'), button('Manage agents', 'od-link-button', () => {
+    head.append(el('div', 'od-card-title', 'People'), button('Manage buddies', 'od-link-button', () => {
       close();
       openSettings('agents');
     }));
     const people = el('div', 'od-people-list');
     people.append(personRow(getName(), 'You'));
-    for (const p of participants.filter((p) => p.kind === 'human' && !isMe(p, getName()))) people.append(personRow(p.name, 'Commenter'));
+    for (const p of writers.filter((p) => !isMe(p))) people.append(personRow(p.name, 'Commenter'));
 
-    // The agents in this doc, then a row to make a new one.
-    const here = agentsHere();
+    // The buddies here, then a row to make a new one.
     const inDoc = el('div', 'od-people-list');
-    for (const name of here) {
-      // Any agent can go, except one started with --agent.
-      const removable = statusOf(name)?.source !== 'flags';
-      // One that cannot be removed keeps the slot, so the stars line up.
-      const removal = removable ? iconButton('close', `Remove ${name} from this doc`, () => remove(name)) : el('span', 'od-tool-slot');
-      removal.classList.add('od-on-hover');
-      inDoc.append(agentRow(name, [starButton(name), removal], true));
-    }
+    for (const name of agentsHere()) inDoc.append(agentRow(name));
     const create = el('button', 'od-people-row od-people-new');
     create.type = 'button';
     const plus = el('span', 'od-people-new-face');
     plus.append(icon('plus'));
-    create.append(plus, el('span', 'od-people-name', 'New agent'));
+    create.append(plus, el('span', 'od-people-name', 'New buddy'));
     create.addEventListener('click', () => {
       close();
       newAgent();
     });
-    inDoc.append(create);
+    if (project()) inDoc.append(create); // buddies other than Clippy are a project's
 
-    // Your starred agents, to bring in. (This doc's own are always in it.)
-    const others = roster.filter((a) => !here.some((n) => same(n, a.name)) && a.starred);
-    const parts = [head, people, el('div', 'od-card-subtitle', 'Agents in this doc'), inDoc];
-    if (others.length > 0) {
-      const list = el('div', 'od-people-list');
-      for (const agent of others) list.append(agentRow(agent.name, [starButton(agent.name), iconButton('plus', `Add ${agent.name} to this doc`, () => add(agent.id))], false));
-      parts.push(el('div', 'od-card-subtitle', 'Your agents'), list);
-    }
-    return parts;
+    return [head, people, el('div', 'od-card-subtitle', 'Buddies in this doc'), inDoc];
   }
 
   function personRow(name, role) {
@@ -316,106 +251,53 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return row;
   }
 
-  // An agent on one line: avatar, name, persona, then `actions`. The row
-  // opens its card. Only an agent in the doc shows its state (greyed out
-  // when it cannot answer here).
-  function agentRow(name, actions, inDoc) {
+  // A buddy on one line: avatar, name, persona. The row opens its card.
+  function agentRow(name) {
     const row = el('div', 'od-people-row od-people-agent');
     row.dataset.openAgent = name;
-    const status = statusOf(name);
     const face = el('span', 'od-profile-face');
-    if (inDoc) face.dataset.presence = modeOf(status);
+    face.dataset.presence = modeOf(statusOf(name));
     face.append(avatar(name, 'agent', true));
     const who = el('span', 'od-people-who');
     who.append(el('span', 'od-people-name', name));
-    const intro = profileOf(name) || status ? introOf(infoOf(name)) : 'Not one of your agents';
-    if (intro) who.append(el('span', 'od-people-sub', intro));
-    const tools = el('span', 'od-people-tools');
-    tools.append(...actions.filter(Boolean));
-    row.append(face, who, tools);
+    if (introOf(name)) who.append(el('span', 'od-people-sub', introOf(name)));
+    row.append(face, who);
     return row;
   }
 
-  // Star or unstar one of your agents from its row. A starred agent shows
-  // its star; an unstarred one shows it on hover.
-  function starButton(name) {
-    const profile = profileOf(name);
-    if (!profile) return el('span', 'od-tool-slot'); // not one of yours: nothing to star
-    const star = iconButton('star', profile.starred ? `Unstar ${name}` : `Star ${name} to use it in every doc`, () => toggleStar(profile));
-    star.classList.add('od-star');
-    star.setAttribute('aria-pressed', String(profile.starred));
-    if (!profile.starred) star.classList.add('od-on-hover');
-    return star;
-  }
-
-  // An agent's card: who it is, and its permissions as switches. Problems
-  // (it cannot run, its last run failed) show only when there is one.
+  // A buddy's card: who it is. A name in the doc that is no buddy here says
+  // it does not answer here.
   function agentCard(name) {
-    const status = statusOf(name);
-    const profile = profileOf(name);
-    const info = infoOf(name);
-    const parts = [];
-
-    parts.push(cardHead(name));
-
-    if (info.editMode) parts.push(permissionSwitches(info, profile));
-
-    if (!status && !profile) {
-      // In the doc, but not run here: someone else's agent, or one you deleted.
+    const parts = [cardHead(name)];
+    if (!statusOf(name)) {
       const problem = el('div', 'od-profile-problem');
-      problem.append(el('div', 'od-profile-problem-text', `None of your agents is called ${name}, so it does not answer here. It may answer from elsewhere, such as a chat session running opendoc wait.`));
-      if (!viewOnly) {
-        const actions = el('div', 'od-profile-actions');
-        actions.append(button(`Set up ${name}`, 'od-primary', () => setUp(name)));
-        problem.append(actions);
-      }
-      parts.push(problem);
-    } else if (status && OFFLINE.has(status.state)) {
-      const problem = el('div', 'od-profile-problem');
-      problem.append(el('div', 'od-profile-problem-text', offlineReason(status)));
-      if (status.state !== 'limited' && !viewOnly) {
-        const actions = el('div', 'od-profile-actions');
-        actions.append(button('Try again', 'od-primary', () => retry(name)));
-        problem.append(actions);
-      }
-      if (log) {
-        const details = el('details', 'od-profile-log');
-        details.append(el('summary', '', 'Run log'), el('pre', '', plain(log)));
-        problem.append(details);
-      }
+      problem.append(el('div', 'od-profile-problem-text', `None of your buddies is called ${name}, so it does not answer here.`));
       parts.push(problem);
     }
     return parts;
   }
 
-  // The top of an agent's card: its face, name, introduction, star and edit.
+  // The top of a buddy's card: its face, name, persona, and edit.
   function cardHead(name) {
     const status = statusOf(name);
-    const profile = profileOf(name);
-    const info = infoOf(name);
     const head = el('div', 'od-profile');
     head.dataset.presence = modeOf(status);
-    let pic = el('span', 'od-profile-face');
+    const pic = el('span', 'od-profile-face');
     pic.append(avatar(name, 'agent'));
-    if (profile && !viewOnly) pic = facePicker(name, 'agent', () => changeFace(profile));
     const who = el('div', 'od-profile-who');
-    if (profile && !viewOnly) {
+    if (status && !viewOnly && status.where !== 'app') {
       // Click the name or the persona line to edit it right there.
-      who.append(inPlace(profile, 'name', 'od-profile-name', 'Name'));
-      who.append(inPlace(profile, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
+      who.append(inPlace(status, 'name', 'od-profile-name', 'Name'));
+      who.append(inPlace(status, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
     } else {
-      who.append(el('div', 'od-profile-name', profile?.name ?? name));
-      if (introOf(info)) who.append(el('div', 'od-profile-slogan', introOf(info)));
+      who.append(el('div', 'od-profile-name', name));
+      if (introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
     }
-    const here = agentsHere().some((n) => same(n, name));
-    who.append(el('div', 'od-profile-sub od-profile-standing', here ? (STANDING[modeOf(status)] ?? 'In this doc') : 'Not in this doc'));
+    who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
-    if (profile && !viewOnly) {
+    if (status && !viewOnly && status.where !== 'app') {
       const tools = el('div', 'od-profile-tools');
-      const star = iconButton('star', profile.starred ? `Unstar ${name}` : `Star ${name} to use it in every doc`, () => toggleStar(profile));
-      star.classList.add('od-star');
-      star.setAttribute('aria-pressed', String(profile.starred));
-      tools.append(star, iconButton('settings', 'More settings, such as instructions', () => editProfile(profile.id)));
+      tools.append(iconButton('settings', 'More settings, such as instructions', () => editProfile(status.name)));
       head.append(tools);
     }
     return head;
@@ -426,7 +308,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // as an empty line, still there to click.
   function inPlace(agent, key, className, placeholder) {
     if (editing !== key) {
-      const value = key === 'name' ? agent.name : introOf(agent);
+      const value = key === 'name' ? agent.name : agent.persona;
       const text = el('div', `${className} od-editable`, value || undefined);
       // No persona yet: say so, where it would go.
       if (!value) text.append(icon('plus'), el('span', '', 'Add a persona'));
@@ -472,11 +354,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   async function commit(agent, key, field) {
     const value = field.value.trim();
-    if (agent.id === ME) return commitMyName(field, value);
+    if (agent.me) return commitMyName(field, value);
     if (value === (key === 'name' ? agent.name : agent.persona)) return settle();
     if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, key);
     try {
-      const result = await api.updateAgent(agent.id, { [key]: value });
+      const result = await api.updateBuddy(agent.name, { [key]: value });
       if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
       take(result);
       settle();
@@ -510,114 +392,22 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     again.focus();
   }
 
-  // The permissions as switches. One of your agents' switches change it at
-  // once; an agent from `serve` flags shows them read-only.
-  function permissionSwitches(info, profile) {
-    const has = permissionsOf(info);
-    const codex = (info.runtime ?? info.kind) === 'codex';
-    const row = el('div', 'od-perms');
-    row.setAttribute('role', 'group');
-    row.setAttribute('aria-label', 'Permissions');
-    for (const p of PERMISSIONS) {
-      const chip = el('button', 'od-perm', p.label);
-      chip.type = 'button';
-      chip.setAttribute('aria-pressed', String(has[p.key]));
-      // Codex reads the whole disk, so it cannot be kept to the doc: no File Searcher.
-      const unsupported = p.key === 'files' && codex;
-      chip.disabled = viewOnly || !profile || unsupported;
-      chip.title = unsupported ? 'Codex agents cannot be kept to your files' : profile ? p.hint : `${p.hint} Set with opendoc serve flags.`;
-      if (!chip.disabled) chip.addEventListener('click', () => flip(profile, p.key, !has[p.key]));
-      row.append(chip);
-    }
-    return row;
-  }
-
-  // ---- actions ----
-
-  async function act(work, failure) {
-    if (busy) return;
-    busy = true;
-    panel.setAttribute('aria-busy', 'true');
-    try {
-      await work();
-    } catch (error) {
-      onError(`${failure}: ${error.message}`);
-    } finally {
-      busy = false;
-      panel.removeAttribute('aria-busy');
-    }
-  }
-
-  // The answer of every agent request: whatever changed, at once.
   function take(result) {
-    if (result.settings) onSettings(result.settings);
-    if (result.sidecar) onSidecar(result.sidecar);
     if (result.agents) render({ agents: result.agents });
   }
 
-  // A switch flips at once and is saved in order behind any other; a change
-  // that fails is undone when the rest are saved.
-  function flip(agent, key, on) {
-    if (on && !confirmAccess(agent, key)) return;
-    const patch = permissionPatch(agent, key, on);
-    flipped.set(agent.id, { ...flipped.get(agent.id), ...patch });
-    unsaved++;
-    render({});
-    flips = flips
-      .then(() => api.updateAgent(agent.id, patch))
-      .then(take, (error) => onError(`Could not change ${agent.name}: ${error.message}`))
-      .finally(() => {
-        if (--unsaved > 0) return;
-        flipped.clear();
-        render({});
-      });
-  }
-
-  const add = (id) => act(async () => take(await api.invite(id)), 'Could not add the agent');
-
-  // Unstarring an agent that is not in this doc takes it out of your agents
-  // (docs that use it keep it), so that asks first.
-  const toggleStar = (agent) => act(async () => {
-    const here = agentsHere().some((n) => same(n, agent.name));
-    if (agent.starred && !here && !window.confirm(`Unstar ${agent.name}?\n\nIt leaves your agents. Docs that use it keep it as their own.`)) return;
-    take(await api.updateAgent(agent.id, { starred: !agent.starred }));
-  }, 'Could not change the agent');
-
-  const setUp = (name) => act(async () => {
-    take(await api.createAgent({ name }, { invite: false }));
-  }, 'Could not set up the agent');
-
-  const remove = (name) => act(async () => {
-    if (!window.confirm(`Remove ${name} from this doc?\n\nIt stops answering here until you @mention it again. Its comments stay.`)) return;
-    take(await api.removeAgent(name));
-    if (showing === `agent:${name}`) close(); // not a card opened meanwhile
-  }, 'Could not remove the agent');
-
-  const changeFace = (agent) => act(async () => {
-    take(await api.updateAgent(agent.id, { face: newFace() }));
-  }, 'Could not change the avatar');
-
-  const retry = (name) => act(async () => {
-    const next = await api.agentAction(name, 'retry');
-    render({ agents: statuses.map((s) => (same(s.name, name) ? next : s)) });
-  }, 'Could not restart the agent');
-
-  function editProfile(id) {
+  function editProfile(name) {
     close();
-    openSettings('agents', id);
+    openSettings('agents', name);
   }
 
-  /** Any of: `agents` (statuses), `participants` (the sidecar's), `roster` (settings.agents). */
-  function render({ agents, participants: nextParticipants, roster: nextRoster }) {
+  /** Any of: `agents` (the buddies here, with their statuses), `people` (who commented). */
+  function render({ agents, people: nextWriters }) {
     if (agents) statuses = agents;
-    if (nextParticipants) participants = nextParticipants;
-    if (nextRoster) saved = nextRoster;
-    // Only the agents that can work here: starred ones and this doc's own.
-    roster = saved.filter((a) => availableIn(a, docKey())).map((a) => (flipped.has(a.id) ? { ...a, ...flipped.get(a.id) } : a));
+    if (nextWriters) writers = nextWriters;
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !(editing && panel.contains(document.activeElement))) paintCard();
-    onPeople();
   }
 
   // ---- @names in the text ----
@@ -629,9 +419,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       if (!found.some((p) => same(p.name, name))) found.push({ name, kind });
     };
     for (const name of agentsHere()) add(name, 'agent');
-    for (const agent of roster) add(agent.name, 'agent');
     add(getName(), 'human');
-    for (const p of participants) add(p.name, p.kind);
+    for (const p of writers) add(p.name, 'human');
     return found;
   }
 
@@ -643,24 +432,18 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // ---- the comment box ----
 
   /**
-   * What @`query` may address, grouped: agents in the doc, agents to bring in
-   * (matched by name, or by their introduction for two letters or more), and
-   * people.
+   * What @`query` may address, grouped: the buddies here (matched by name,
+   * or by their persona for two letters or more), and the people who
+   * commented.
    */
-  function mentionChoices(query, myName) {
+  function mentionChoices(query) {
     const q = query.toLowerCase();
     const matches = (name, intro = '') => name.toLowerCase().startsWith(q) || (q.length >= 2 && intro.toLowerCase().includes(q));
     const here = agentsHere();
-    const agentChoice = (name, group) => {
-      const info = infoOf(name);
-      return { name, kind: 'agent', group, tagline: introOf(info) };
-    };
-    const inDoc = here.filter((n) => matches(n, introOf(infoOf(n)))).map((n) => agentChoice(n, 'Agents in this doc'));
-    const bring = roster.filter((a) => !here.some((n) => same(n, a.name)) && matches(a.name, introOf(a)))
-      .map((a) => agentChoice(a.name, 'Bring in'));
-    const people = participants.filter((p) => p.kind === 'human' && !isMe(p, myName) && matches(p.name))
+    const inDoc = here.filter((n) => matches(n, introOf(n))).map((name) => ({ name, kind: 'agent', group: 'Buddies', tagline: introOf(name) }));
+    const people = writers.filter((p) => !isMe(p) && matches(p.name))
       .map((p) => ({ name: p.name, kind: 'human', group: 'People' }));
-    return [...inDoc, ...bring, ...people].slice(0, 12);
+    return [...inDoc, ...people].slice(0, 12);
   }
 
   return {
@@ -672,75 +455,26 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     unpeek,
     pin,
     statuses: () => statuses,
-    /** The agent whose run is in progress, if any (only one runs at a time). */
+    /** An agent whose run is in progress, if any. */
     running: () => statuses.find((s) => s.state === 'running') ?? null,
     /** Your name changed: repaint your card if it is open. */
     renameMe() {
       if (showing === 'me' || showing === 'people') paintCard();
-      onPeople();
     },
   };
 }
 
-/**
- * Asks before giving `agent` Web Searcher or File Searcher (`key` 'web' or
- * 'files'); true for any other permission. With both, a web page could trick
- * it into sending your files to a website.
- */
-export function confirmAccess(agent, key) {
-  const risk = ACCESS_RISKS[key];
-  if (!risk) return true;
-  const both = key === 'web' ? agent.fileAccess : agent.webAccess;
-  return window.confirm(`${risk.replace('%s', agent.name)}${both ? `\n\n${BOTH_RISK}` : ''}`);
-}
+// Where a buddy stands in this doc, on its card under its name.
+const STANDING = { working: 'Working…', away: 'Not running here' };
+const WHERE = { app: 'Built in, in every doc', project: "This project's" };
 
-const ACCESS_RISKS = {
-  web: 'Let %s search the web and open web pages?\n\nA web page can hide instructions that trick it into sending this doc to a website.',
-  files: 'Let %s read your other files?\n\nIt can read files on this computer except keys and .env files, and a file can hide instructions it then follows.',
-};
-const BOTH_RISK = 'It can also use the other one. With both, it could be tricked into sending your files to a website.';
+const LABELS = { working: 'Working…', away: 'Not here' };
 
-// Only what needs your attention: no label for an agent that is fine.
-// Where an agent in the doc stands, for its name card.
-// Where an agent stands in this doc, on its card under its name.
-const STANDING = {
-  working: 'Working…',
-  queued: 'Waiting for its turn', offline: 'Offline', connecting: 'Connecting…', away: 'Not running here',
-};
-
-const LABELS = { autocomment: 'Auto Commenter', working: 'Working…', queued: 'Waiting for its turn', offline: 'Offline', connecting: 'Connecting…', away: 'Not here' };
-
-/**
- * 'autocomment' (ready, with Auto Commenter), 'idle' (ready, answers when
- * @mentioned), 'working', 'queued', 'offline', 'connecting', or 'away' (no
- * status: not run here).
- */
+/** 'working', 'idle' (answers when @mentioned), or 'away' (no status: not run here). */
 export function modeOf(status) {
   if (!status) return 'away';
-  if (status.state === 'starting') return 'connecting';
-  if (OFFLINE.has(status.state)) return 'offline';
-  if (status.state === 'running') return 'working';
-  if (status.state === 'queued') return 'queued';
-  return status.autoComment ? 'autocomment' : 'idle';
+  return status.state === 'running' ? 'working' : 'idle';
 }
-
-// Why the agent is offline, in a sentence: the first line of its error.
-function offlineReason(status) {
-  if (status.state === 'limited') {
-    const back = status.retryAt ? ` It is back at ${time(status.retryAt)}.` : '';
-    return `It reached its limit of runs per hour.${back} You can raise the limit in its profile.`;
-  }
-  const error = plain(status.error ?? '').split('\n').map((l) => l.trim()).find(Boolean);
-  if (status.state === 'unavailable') return error ?? 'It could not start.';
-  const sentence = (text) => (/[.!?。！？]$/.test(text) ? text : `${text}.`);
-  if (status.state === 'error') return `The last run failed${error ? `: ${sentence(clip(error, 160))}` : '.'} Unfinished comments wait until you try again or reply.`;
-  return 'It stopped.';
-}
-
-const time = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-// Terminal colour codes do not belong on the page.
-const plain = (text) => text.replace(/\u001b\[[0-9;]*m/g, '');
-const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
 
 function button(text, className, onClick) {
   const node = el('button', className, text);

@@ -1,8 +1,9 @@
 import { mkdtempSync } from 'node:fs';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { openDoc } from '../src/host/doc-service.js';
 
 // Keep tests away from the real user's settings file.
 process.env.OPENDOC_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'opendoc-config-'));
@@ -26,24 +27,51 @@ export async function tempDoc(content = SAMPLE, name = 'plan.md') {
   return path;
 }
 
-const FAKE_PROGRAM = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-program.cjs');
+const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-agent.js');
 
 /**
- * Runs `fn` with node (process.execPath) standing in for Claude Code and
- * Codex: it answers their sign-in checks as signed in or not (`signedIn`).
- * Pass the returned `set` a new answer to change it mid-test.
+ * A config folder whose agent script `fake` runs the fake agent
+ * (fixtures/fake-agent.js), with `settings` over the user fzhan's. The fake
+ * logs its runs to `runs.log` there.
  */
-export async function withFakeProgram(signedIn, fn) {
-  const saved = { NODE_OPTIONS: process.env.NODE_OPTIONS, FAKE_PROGRAM: process.env.FAKE_PROGRAM };
-  const set = (yes) => { process.env.FAKE_PROGRAM = yes ? 'signed-in' : 'signed-out'; };
-  process.env.NODE_OPTIONS = `--require "${FAKE_PROGRAM.replaceAll('\\', '/')}"`;
-  set(signedIn);
-  try {
-    return await fn({ program: process.execPath, set });
-  } finally {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+export async function fakeConfig(settings = {}) {
+  const dir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  await mkdir(join(dir, 'agents'));
+  await writeFile(join(dir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
+  await writeFile(join(dir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
+  await writeFile(join(dir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', ...settings }));
+  process.env.FAKE_DIR = dir;
+  return dir;
+}
+
+/** The fake agent's runs logged in config folder `dir`, oldest first. */
+export async function fakeRuns(dir) {
+  return (await readFile(join(dir, 'runs.log'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+}
+
+/**
+ * Open `docPath` as a window would: `call(type, arg)` asks the doc,
+ * `events` holds what it said ([name, data], oldest first). With `buddies`
+ * ({ name: file text }), the doc's folder is a project holding them.
+ */
+export async function openTestDoc(docPath, { buddies = null, ...options } = {}) {
+  const events = [];
+  if (buddies) {
+    options.folder ??= dirname(docPath);
+    await mkdir(join(options.folder, '.opendoc', 'buddies'), { recursive: true });
+    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.opendoc', 'buddies', `${name}.md`), text);
+  }
+  const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
+  return { doc, events, call: (type, arg) => doc.call(type, arg), state: () => doc.call('state') };
+}
+
+/** Wait until `check()` resolves to a truthy value, which it returns. */
+export async function until(check, what = 'a condition', timeout = 20_000) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }

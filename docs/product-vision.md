@@ -15,26 +15,18 @@ Writing with AI is now inevitable, yet human–AI collaboration is still stuck i
 
 Our product moves human–AI collaboration into the real-time stage: the AI is no longer a tool in a chat box, but a collaborator in the doc. People and AI work on the same doc at the same time, discussing in comments and each making their own edits, just like two teammates reviewing a proposal together.
 
-## Design Principles
-
-- **Familiar**: The interface uses the familiar "edit + comment" interaction, so there is almost no learning curve. The AI agent reads comments, edits the file directly, and replies through the command line
-- **Real-time**: @ an agent in a comment or in the text, and it wakes up right away, reads the doc, and replies in the thread. An agent in auto-commenter mode watches every comment and reply as they change, and without an @ picks up the ones that mention no one and fit its persona. You don't have to stop and wait; you can keep editing other parts of the doc while it works
-- **In control**: Comments are anchored to the text you select, and the agent only changes what the comment is about, leaving unrelated sections alone. Every change is explained in the thread and can be undone. You can also ask the agent to only suggest changes and decide yourself whether to accept them. Only you decide when a comment is resolved
-- **Open**: An open-source document format and editor, so you never have to worry about being locked into a subscription service.
-- **Agents work like people**: An agent is another user in the doc. It sees the same doc and threads you do, does the same things (comment, reply, edit, suggest), and signs everything it does. It can @ you, and in the multi-agent stage other agents too, so agents hand work to each other without you passing messages along. Its persona is plain text that anyone can read and rewrite: grammar police, fact checker, creative writer, ...
-- **Nothing remembered in private**: Each run (an @, or a comment picked up in auto-commenter mode) is a fresh agent session that reads the doc and its threads, does its part, and ends. Nothing carries over from one run to the next. Anything worth remembering is written into the doc or a thread, where everyone can see it. So you can always tell why an agent did something, and switch models or restart without losing progress
-
 ## Agent Design Philosophy: Props, Not Games
 
-We provide props like dice and playing cards, not games. Dice are generic, combine into games nobody planned, carry no rules of their own, and sit on the table where everyone can see them. The rules come from the players.
+We provide props, like dice, not games. The doc, comments, edits, anchors and @ carry no rules of their own; how people and agents use them is written in plain language in the doc. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** So no built-in agent roles, no built-in workflows, and no hidden agent powers.
 
-Our props are the doc, comments and threads, edits and suggestions, anchors, and @. How people and agents use them (a review checklist, who goes next, when a draft is done) is written in plain language in the doc itself, and can change whenever the people in it want. Before adding a feature, we ask: **is it a die, or an arcade machine with one game built in?** Only generic props go into the product. That rules out:
+## Design Principles
 
-- **Job titles**: No built-in agent roles, orchestrator agents, or task routing. Agents are reached with @, and who does what emerges from the conversation, the way you @ a colleague known for careful reviews. Auto-commenter mode is a prop too: any agent can switch it on, like a colleague who keeps an eye on the doc and chimes in
-- **Built-in workflows**: No official review mode or game mode. Workflows live in the doc's text
-- **Hidden powers**: Agents get no back channel, private view, or memory that people can't see
-
-The asymmetries are guardrails, not roles: anyone can speak, but only people resolve a thread, apply a proposal, or undo an agent's edit; when a person and an agent change the same paragraph, the person's text is kept and the agent's becomes a proposal; and for now only a person's message wakes an agent. Agents waking each other comes with the multi-agent stage, together with a guard against loops.
+- **Familiar**: Edit and comment, the way you already work on docs with people. Nothing new to learn
+- **Real-time**: No waiting your turn. You and agents work in the same doc at the same time, and an agent responds as soon as you @ it
+- **In control**: Agents change only what you asked about and explain every change; you can undo it or have them suggest first. Only you resolve a thread
+- **Open**: Open format and open-source editor, no lock-in
+- **Agents work like your teammates**: An agent is another user in the doc, with the same view and the same actions you have
+- **The doc is the state, agents are stateless**: Agents keep no memory between runs; everything lives in the doc and its comments, so you see all an agent sees
 
 ## Non-Goals
 
@@ -71,7 +63,7 @@ Existing tools fall into four categories:
 
 How we're different:
 
-- **A shared live doc, not handoffs**: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it (or comment, in auto-commenter mode) instead of waiting for you to hand the doc over.
+- **A shared live doc, not turn-taking**: The doc stays open to everyone. You keep writing while an agent handles your comment, and it acts as soon as you @ it instead of waiting for you to hand the doc over.
 - **Comments are the interface**: You comment, the AI edits and replies in the thread, you resolve. No switching to a chat box.
 - **Local, plain Markdown**: A regular file in your repo, comments stored alongside it; no subscription lock-in.
 - **Any agent, many agents**: Any command-line agent can plug in, several can work in the same doc at once, and they @ each other to hand off work.

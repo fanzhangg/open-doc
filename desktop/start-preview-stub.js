@@ -1,14 +1,14 @@
 // A stand-in for desktop/preload.cjs so the start window opens in a plain
-// browser (scripts/start-preview.js). Sample recent docs and folders and
-// default settings, kept in memory: Settings works; New doc, Open…, Open
-// Folder… and the recent list only log, since there is no app to open them.
+// browser (scripts/start-preview.js). Sample recent projects and default
+// settings, kept in memory: Settings works; Open Project and
+// the recent list only log, since there is no app to open them.
 
 (() => {
-  let settings = { name: 'you', face: null, theme: 'system', font: 'sans', width: 'normal', outline: true, wordCount: false, focus: false };
+  let settings = { name: 'you', theme: 'system', font: 'sans', width: 'normal', outline: true, wordCount: false, focus: false, agent: 'claude' };
   const recent = [
-    { name: 'plan.md', folder: '/Users/you/Documents/launch', kind: 'doc' },
-    { name: 'docs', folder: '/Users/you/Workplace/open-doc', kind: 'folder' },
-    { name: 'weekly-notes.md', folder: '/Users/you/Documents/notes', kind: 'doc' },
+    { name: 'open-doc', folder: '~/Workplace' },
+    { name: 'docs', folder: '~/Workplace/open-doc' },
+    { name: 'Board Games', folder: '~/Library/CloudStorage/GoogleDrive/My Drive/2026' },
   ];
 
   const log = (what) => {
@@ -17,12 +17,10 @@
   };
 
   window.opendocDesktop = {
-    newDoc: () => log('New doc'),
-    open: () => log('Open…'),
-    openFolder: () => log('Open Folder…'),
-    rename: () => log('Rename'),
-    setAgentProgram: () => Promise.resolve(false),
-    chooseProgram: () => Promise.resolve(null),
+    openFolder: () => log('Open project…'),
+    agentScripts: () => Promise.resolve({ agents: ['claude', 'codex'], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents' }),
+    resetAgentScript: (name) => log(`Reset ${name}`),
+    showAgents: () => log('Show folder'),
     openRecent: (index) => log(`Open ${recent[index]?.name}`),
     recent: () => Promise.resolve(recent.map((doc) => ({ ...doc }))),
     onRecentChanged: () => {},

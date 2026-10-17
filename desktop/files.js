@@ -20,7 +20,7 @@ export class DocFileError extends Error {
 
 export const isDocName = (path) => DOC_EXTENSIONS.includes(extname(path).toLowerCase());
 
-/** The doc a path opens: X.md for X.md or its sidecar X.md.opendoc.json, null for any other file. */
+/** The doc a path opens: X.md for X.md or its sidecar X.md.opendoc.jsonl, null for any other file. */
 export function docPathFor(path) {
   const doc = path.endsWith(SIDECAR_SUFFIX) ? path.slice(0, -SIDECAR_SUFFIX.length) : path;
   return isDocName(doc) ? doc : null;
@@ -112,14 +112,13 @@ const WINDOWS_RESERVED = /[<>:"|?*\\]/;
 const WINDOWS_DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 
 /**
- * Why `name` (as typed in the sidebar) can't be a doc or folder name, or
- * null when it can. A leading `.` is refused: hidden files
+ * Why `name` (one part of a path, as typed in the sidebar) can't be a doc or
+ * folder name, or null when it can. A leading `.` is refused: hidden files
  * are not listed, so the new one would vanish from the sidebar.
  */
 export function nameProblem(name, platform = process.platform) {
   if (!name.trim()) return 'Enter a name.';
   if (name === '.' || name === '..') return `"${name}" can't be a name.`;
-  if (name.includes('/')) return 'Names can\'t contain /.';
   if (name.startsWith('.')) return 'Names starting with "." are hidden; pick another.';
   if (/[\u0000-\u001f]/.test(name)) return 'Names can\'t contain control characters.';
   if (Buffer.byteLength(name) > 255) return 'That name is too long.';
@@ -130,6 +129,20 @@ export function nameProblem(name, platform = process.platform) {
     if (/[. ]$/.test(name)) return 'Names can\'t end with a dot or a space on Windows.';
   }
   return null;
+}
+
+/**
+ * The parts of a sidebar path (`/` between folders, as typed), trimmed, or
+ * a problem with one of them.
+ * @returns {{ parts: string[] } | { problem: string }}
+ */
+export function nameParts(typed, platform = process.platform) {
+  const parts = String(typed).split('/').map((part) => part.trim());
+  for (const part of parts) {
+    const problem = nameProblem(part, platform);
+    if (problem) return { problem };
+  }
+  return { parts };
 }
 
 /** Make the folder `path` (and its parents). Never reuses one that exists. */

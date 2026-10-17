@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { project } from '../src/core/project.js';
-import {
-  AnchorError, createAnchor, findQuote, locate, reanchorThreads, refreshSidecar,
-} from '../src/core/anchor.js';
+import { AnchorError, createAnchor, findQuote, locate } from '../src/core/anchor.js';
 
 const BASE = `# Q4 Launch Plan
 
@@ -135,49 +133,14 @@ test('findQuote: markdown in the quote, whitespace, ambiguity, missing', () => {
   assert.throws(() => findQuote(text, 'Risks', { occurrence: 3 }), (e) => e.code === 'not_found');
 });
 
-test('reanchorThreads: updates, detaches, re-attaches, keeps unknown fields, deterministic', () => {
-  const text = project(BASE).text;
-  const anchorFor = (q) => { const r = findQuote(text, q); return createAnchor(text, r.start, r.end); };
-  const threads = [
-    { id: 't_aaaaaa', anchor: anchorFor('extra load'), detached: false, 'x-acme': { keep: true } },
-    { id: 't_bbbbbb', anchor: anchorFor('Grow weekly active users by 20%'), detached: false },
-    { id: 't_cccccc', anchor: null, detached: false },
-  ];
-  const edited = project(BASE.replace('extra load', 'extra peak load').replace('- Grow weekly active users by 20%\n', '')).text;
-
-  const first = reanchorThreads(edited, threads);
-  assert.equal(first.changed, true);
-  assert.equal(first.threads[0].detached, false);
-  assert.equal(first.threads[0].anchor.exact, 'extra peak load');
-  assert.deepEqual(first.threads[0]['x-acme'], { keep: true });
-  assert.equal(first.threads[1].detached, true);
-  assert.deepEqual(first.threads[1].anchor, threads[1].anchor, 'detached threads keep their last anchor');
-  assert.equal(first.threads[2], threads[2], 'doc-level threads are untouched');
-
-  const again = reanchorThreads(edited, first.threads);
-  assert.equal(again.changed, false);
-  assert.deepEqual(again.threads, first.threads);
-
-  const restored = reanchorThreads(text, first.threads);
-  assert.equal(restored.threads[1].detached, false, 'text that comes back re-attaches');
-});
-
-test('refreshSidecar skips work when docHash matches', () => {
-  const sidecar = { opendoc: 1, doc: 'plan.md', docHash: 'sha256:aa', participants: [], threads: [] };
-  assert.equal(refreshSidecar(sidecar, BASE, 'sha256:aa'), sidecar);
-  const next = refreshSidecar(sidecar, BASE, 'sha256:bb');
-  assert.equal(next.docHash, 'sha256:bb');
-  assert.notEqual(next, sidecar);
-});
-
-test('performance: 100 KB doc with 200 threads re-anchors quickly', () => {
+test('performance: 200 anchors are found again in a 100 KB doc quickly', () => {
   const paragraphs = Array.from({ length: 700 }, (_, i) =>
     `Paragraph ${i} discusses milestone ${i * 7} and the risk register entry R-${i}, owned by team ${i % 9}, with notes on scope, budget and timeline for item ${i}.`);
   const doc = paragraphs.join('\n\n') + '\n';
   const text = project(doc).text;
   const threads = Array.from({ length: 200 }, (_, i) => {
     const r = findQuote(text, `risk register entry R-${i * 2},`);
-    return { id: `t_perf${String(i).padStart(4, '0')}`, anchor: createAnchor(text, r.start, r.end), detached: false };
+    return createAnchor(text, r.start, r.end);
   });
   // Edit the context around every quote and the quote itself, so every thread
   // takes the fuzzy path.
@@ -186,12 +149,11 @@ test('performance: 100 KB doc with 200 threads re-anchors quickly', () => {
     .replace(/risk register entry/g, 'risk-register entry')).text;
 
   const started = performance.now();
-  const { threads: next } = reanchorThreads(edited, threads);
+  const found = threads.map((anchor) => locate(edited, anchor));
   const elapsed = performance.now() - started;
 
   assert.ok(doc.length > 100_000);
-  assert.equal(next.filter((t) => t.detached).length, 0);
-  assert.ok(next.every((t, i) => t.anchor.exact === `risk-register entry R-${i * 2},`));
-  assert.ok(elapsed < 1000, `re-anchoring took ${elapsed.toFixed(0)} ms`);
-  console.log(`  re-anchored 200 threads in a ${(doc.length / 1024).toFixed(0)} KB doc: ${elapsed.toFixed(1)} ms`);
+  assert.ok(found.every((f, i) => f && edited.slice(f.start, f.end) === `risk-register entry R-${i * 2},`));
+  assert.ok(elapsed < 1000, `finding the anchors took ${elapsed.toFixed(0)} ms`);
+  console.log(`  found 200 anchors in a ${(doc.length / 1024).toFixed(0)} KB doc: ${elapsed.toFixed(1)} ms`);
 });

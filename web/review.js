@@ -1,33 +1,14 @@
-// Changes on the page: proposals (SPEC.md §2.6), whether one can still be
-// applied, and how a proposal or a recorded edit (§2.5) shows in the text.
+// How a change between two versions of the doc (web/history.js) shows in
+// the text.
 //
-// A preview item is { anchor, mark, widget } in rendered-text terms:
-// `anchor` is the span to mark ('del' strikes it, 'ins' highlights it as new,
-// null leaves it alone), and `widget` ({ side, kind, text }) is text that is
-// not in the doc, shown before or after the span: the new text of a
-// proposal, or the old text an edit removed.
+// An item is { anchor, mark, widget } in rendered-text terms: `anchor` is
+// the span to mark ('ins' highlights it as new, null leaves it alone), and
+// `widget` ({ side, kind, text }) is text that is not in the doc, shown
+// before or after the span: the old text an edit removed.
 
 import { createAnchor } from '../src/core/anchor.js';
-import { applyProposal, findEdit, findProposal } from '../src/core/diff.js';
+import { findEdit } from '../src/core/diff.js';
 import { project } from '../src/core/project.js';
-
-/**
- * A proposal as a suggestion: its `before` struck through and its `after`
- * inserted next to it. Changes no longer found in `markdown` (the doc on
- * disk) are left out, and so is one whose `before` renders to nothing.
- */
-export function previewItems(markdown, changes) {
-  const projection = project(markdown);
-  const items = [];
-  for (const change of changes) {
-    const range = findProposal(markdown, change);
-    const span = range && renderedSpan(projection, range);
-    if (!span || span.start === span.end) continue;
-    const text = project(change.after).text;
-    items.push({ anchor: createAnchor(projection.text, span.start, span.end), mark: 'del', widget: text ? { side: 'after', kind: 'ins', text } : null });
-  }
-  return items;
-}
 
 /**
  * Recorded edits as a revision: the text they added highlighted as new, the
@@ -69,16 +50,3 @@ function renderedSpan({ text, offsets }, range) {
   if (start === -1) return { start: text.length, end: text.length };
   return { start, end: Math.max(start, end) };
 }
-
-/** The apply notice for `message`'s proposal that is still in effect (not undone), or null. */
-export function appliedBy(thread, message) {
-  return thread.messages.findLast((m) => m.applies === message.id && !thread.messages.some((u) => u.undoes === m.id)) ?? null;
-}
-
-/** The proposal in `thread` the human may still act on: the latest one not applied, or null. */
-export function openProposal(thread) {
-  return thread.messages.findLast((m) => m.proposal?.length && !appliedBy(thread, m)) ?? null;
-}
-
-/** Whether every change of `message`'s proposal can still be found in `markdown`. */
-export const canApply = (markdown, message) => applyProposal(markdown, message.proposal) !== null;

@@ -3,68 +3,43 @@
 // file itself is handled by src/store/settings.js.
 
 import { NAME_PATTERN } from './mentions.js';
-import { AgentError, DEFAULT_AGENTS, FACE_RULE, checkAgentPatch, MAX_AGENTS, resolveAgent, resolveRoster } from './agents.js';
 
-export { EDIT_MODES } from './agents.js';
-
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
 /**
  * `id` is who the user is in every doc's comments, whatever their name
- * (`u_…`, made once by the server; null until then). `name: null` means
- * "not chosen yet": the server suggests one. `face` is
- * the seed the human's face is drawn from (web/faces.js); null draws it from
- * the name, until the name first changes. `agents` is
- * the user's roster of agents (src/core/agents.js), the default one until
- * the user changes it: an agent with Auto Commenter works in every doc, any other
- * in the docs where it was @mentioned. `claudeBin` and `codexBin` are where
- * Claude Code and Codex are, for every agent that runs on them (null: found
- * automatically). `export*` are the choices last made in the Export dialog
- * (`exportPaper: null`: the paper size of the user's region).
+ * (`u_…`, made once by the doc host; null until then). `name: null` means
+ * "not chosen yet": the doc host suggests one. `agent` names the agent
+ * script that runs every buddy (src/store/agents.js). Buddies are files
+ * (src/store/buddies.js), never settings.
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
   name: null,
-  face: null,
   theme: 'system',
   font: 'sans',
   width: 'normal',
   outline: true,
   wordCount: false,
   focus: false,
-  agents: DEFAULT_AGENTS,
-  claudeBin: null,
-  codexBin: null,
-  exportFormat: 'pdf',
-  exportComments: 'none',
-  exportPaper: null,
+  agent: 'claude',
 });
-
-/** Settings that choose the program to run: set only in the desktop app or settings.json. */
-export const PROGRAM_KEYS = Object.freeze(['claudeBin', 'codexBin']);
 
 const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
-const text = (max) => (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= max && !/[\0\r\n]/.test(v);
 
 export const USER_ID = /^u_[A-Za-z0-9_-]{6,40}$/;
 
 const RULES = {
   id: (v) => v === null || (typeof v === 'string' && USER_ID.test(v)),
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
-  face: (v) => v === null || FACE_RULE(v),
   theme: oneOf('system', 'light', 'dark'),
   font: oneOf('sans', 'serif', 'mono'),
   width: oneOf('normal', 'wide'),
   outline: boolean,
   wordCount: boolean,
   focus: boolean,
-  agents: validRoster,
-  claudeBin: (v) => v === null || text(2000)(v),
-  codexBin: (v) => v === null || text(2000)(v),
-  exportFormat: oneOf('pdf', 'docx', 'html'),
-  exportComments: oneOf('none', 'open', 'all'),
-  exportPaper: (v) => v === null || oneOf('a4', 'letter')(v),
+  agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
 
 export class SettingsError extends Error {
@@ -74,10 +49,7 @@ export class SettingsError extends Error {
   }
 }
 
-/**
- * Throws a SettingsError unless every key of `patch` is a known setting with
- * an allowed value. `agents`, when given, is the whole roster.
- */
+/** Throws a SettingsError unless every key of `patch` is a known setting with an allowed value. */
 export function checkSettingsPatch(patch) {
   if (!isObject(patch)) throw new SettingsError('settings must be an object');
   for (const [key, value] of Object.entries(patch)) {
@@ -93,39 +65,17 @@ export function mergeSettings(stored, patch) {
 }
 
 /**
- * Settings as stored (possibly from an older or newer app, or hand-edited)
- * → a complete, valid set: known keys with allowed values are kept, the rest
- * fall back to the defaults. Until the user changes the roster, it is the
- * default agent. Settings from before the roster kept one agent (`agent`);
- * where Claude Code is carries over, and the default agent takes its place.
+ * Settings as stored (possibly from a newer app, or hand-edited) → a
+ * complete, valid set: known keys with allowed values are kept, the rest
+ * fall back to the defaults.
  */
 export function resolveSettings(stored) {
-  const out = { ...DEFAULT_SETTINGS, agents: DEFAULT_AGENTS.map((a) => ({ ...a })) };
+  const out = { ...DEFAULT_SETTINGS };
   if (!isObject(stored)) return out;
   for (const key of Object.keys(RULES)) {
-    if (key === 'agents' || !Object.hasOwn(stored, key) || !RULES[key](stored[key])) continue;
-    out[key] = stored[key];
-  }
-  if (Object.hasOwn(stored, 'agents')) out.agents = resolveRoster(stored.agents);
-  if (!Object.hasOwn(stored, 'claudeBin') && isObject(stored.agent) && RULES.claudeBin(stored.agent.bin ?? null)) {
-    out.claudeBin = stored.agent.bin ?? null;
+    if (Object.hasOwn(stored, key) && RULES[key](stored[key])) out[key] = stored[key];
   }
   return out;
-}
-
-function validRoster(value) {
-  if (!Array.isArray(value) || value.length > MAX_AGENTS) return false;
-  try {
-    for (const agent of value) {
-      checkAgentPatch(agent);
-      if (!resolveAgent(agent)) return false;
-    }
-  } catch (error) {
-    if (error instanceof AgentError) return false;
-    throw error;
-  }
-  // No repeated id or name.
-  return resolveRoster(value).length === value.length;
 }
 
 function isObject(value) {

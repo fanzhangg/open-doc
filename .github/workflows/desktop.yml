@@ -3,7 +3,7 @@
 # app. Pushes to main that pass it replace the "nightly" pre-release
 # (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
 # that cannot open a doc never replaces a working one. The unit tests run
-# once, on Linux, and report without holding back the nightly; the agent
+# once, on Linux, and report without holding back the nightly; the buddy
 # concurrency stress test (npm run test:stress) does hold it back.
 #
 # A pull request that changes only docs (docs/ or a top-level *.md) skips the
@@ -115,7 +115,7 @@ jobs:
       - run: npm test
 
   stress:
-    # The agent concurrency stress test: deterministic, a couple of minutes.
+    # The buddy concurrency stress test: deterministic, a couple of minutes.
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest

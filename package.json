@@ -1,21 +1,17 @@
 {
   "name": "opendoc",
   "version": "0.1.0",
-  "description": "Co-author plain markdown with AI agents: comment threads in a sidecar file, a CLI, and a local editor.",
+  "description": "Co-author plain markdown with AI buddies: comment threads in a sidecar file and a desktop editor.",
   "author": "fanzhangg",
   "type": "module",
-  "bin": {
-    "opendoc": "./bin/opendoc.js"
-  },
   "exports": {
     ".": "./src/core/index.js"
   },
   "files": [
-    "bin/",
     "src/",
     "spec/",
     "dist/",
-    "skills/"
+    "agents/"
   ],
   "scripts": {
     "icon:desktop": "electron scripts/make-icon.cjs",
@@ -35,11 +31,8 @@
   "license": "MIT",
   "dependencies": {
     "approx-string-match": "2.0.0",
-    "docx": "9.7.1",
-    "hast-util-to-html": "9.0.5",
     "mdast-util-from-markdown": "2.0.3",
     "mdast-util-gfm": "3.1.0",
-    "mdast-util-to-hast": "13.2.1",
     "micromark-extension-cjk-friendly": "2.0.2",
     "micromark-extension-gfm": "3.0.0"
   },

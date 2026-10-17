@@ -1,30 +1,28 @@
 // The OpenDoc desktop app (Electron main process): app lifecycle, one app
 // instance for every launch, the menus, the Open / Open Folder / New Doc /
 // Rename dialogs, and the app state (recent docs and folders, last folder,
-// window bounds). Each doc window runs the same editor page and local server
-// as `opendoc serve`, the servers in a process of their own (doc-host.js);
+// window bounds). Each doc window shows the editor page (dist/web), which
+// talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
 import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSettingsPatch } from '../src/core/settings.js';
-import { checkAgentPatch, updateAgent } from '../src/core/agents.js';
-import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
-import { readSidecar } from '../src/store/files.js';
+import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
+import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
+import { readSidecarText } from '../src/store/files.js';
+import { parseSidecar } from '../src/core/comments.js';
 import { moveHistory } from '../src/store/history.js';
 import {
   cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
-  moveFolder, nameProblem, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
+  moveFolder, nameParts, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc } from './folder.js';
-import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
-import { exportFromWindow, showExport } from './export.js';
 
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
 const isMac = process.platform === 'darwin';
@@ -41,10 +39,6 @@ if (!app.requestSingleInstanceLock({ paths: launchPaths })) {
   app.exit(0);
   await new Promise(() => {}); // never go on to start a second app
 }
-
-// The user's login shell environment, for the doc host and the agents it
-// runs; read while Electron gets ready (see shell-env.js).
-const loginEnv = process.platform === 'win32' ? Promise.resolve(null) : readLoginEnv();
 
 // macOS sends docs opened from Finder, the dock or "Open With" as open-file,
 // possibly before the app is ready. Docs from launches that arrive before
@@ -81,7 +75,7 @@ watchSettings(async () => {
 let stateWrites = Promise.resolve();
 let pendingStateWrites = 0;
 let quitting = false;
-let docHost = null; // the process the doc servers run in, from start()
+let docHost = null; // the process the open docs run in, from start()
 let docHostDown = false;
 
 // ---- opening docs ----
@@ -95,7 +89,7 @@ async function openPath(path, { create = false, parent = null } = {}) {
   const docPath = docPathFor(path);
   if (!docPath) {
     await warn(parent, `OpenDoc can't open ${basename(path)}.`,
-      'It opens Markdown docs (.md or .markdown) and their comment files (.md.opendoc.json).');
+      'It opens Markdown docs (.md or .markdown) and their comment files (.md.opendoc.jsonl).');
     return false;
   }
   if (!isFile(docPath)) {
@@ -235,12 +229,19 @@ async function newDocDialog(parent) {
   await show(path, parent);
 }
 
-/** File > New Doc: in a folder window, a doc named in the sidebar, next to the open doc; elsewhere the dialog. */
-function newDoc(win) {
+/**
+ * File > New Doc in This Folder: in a folder window, a new doc named in the
+ * sidebar; elsewhere `Untitled.md` (or the next free name) next to the open doc.
+ */
+async function newDocHere(win) {
   const entry = windows.docFor(win);
-  if (!entry?.folder) return newDocDialog(win);
-  entry.view.webContents.send('opendoc:folder-command', { action: 'newDoc', rel: '', kind: 'here' });
-  return undefined;
+  if (!entry) return newDocDialog(win);
+  if (entry.folder) return void entry.view.webContents.send('opendoc:folder-command', { action: 'newDoc', rel: '', kind: 'here' });
+  try {
+    await show(await createUntitled(dirname(entry.docPath)), win);
+  } catch (error) {
+    await failed(win, 'Could not create a doc in this folder.', error);
+  }
 }
 
 /** File > Rename: the doc and its comments move together, and the window stays open. */
@@ -321,6 +322,9 @@ function forget(docPath) {
   recentChanged();
 }
 
+// The home page lists folders only: projects.
+const recentProjects = () => recentDocs().filter(isDirectory);
+
 function recentChanged() {
   buildMenu();
   windows.refreshStartWindow();
@@ -372,13 +376,13 @@ function buildMenu() {
     {
       label: isMac ? 'File' : '&File',
       submenu: [
-        { label: 'New Doc…', accelerator: 'CmdOrCtrl+N', click: (_item, win) => newDoc(win) },
+        { label: 'New Doc…', accelerator: 'CmdOrCtrl+N', click: (_item, win) => newDocDialog(win) },
+        { label: 'New Doc in This Folder', accelerator: 'CmdOrCtrl+Alt+N', enabled: Boolean(doc), click: (_item, win) => newDocHere(win) },
         { type: 'separator' },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: (_item, win) => openDialog(win) },
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: (_item, win) => openFolderDialog(win) },
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
-        { label: 'Export…', accelerator: 'CmdOrCtrl+Shift+E', ...PAGE_KEY, enabled: Boolean(doc), click: (_item, win) => pageCommand(win, 'export') },
         { label: 'Rename…', enabled: Boolean(doc), click: (_item, win) => renameDialog(win) },
         { label: REVEAL_LABEL, enabled: Boolean(doc), click: (_item, win) => revealDoc(win) },
         { type: 'separator' },
@@ -389,7 +393,17 @@ function buildMenu() {
     },
     // On Windows and Linux the page handles copy, paste and undo itself; a
     // menu accelerator would take Ctrl+Z away from the editor's own history.
-    ...(isMac ? [{ role: 'editMenu' }] : []),
+    // On macOS, Undo and Redo go to the page too: the browser's own undo
+    // loses track whenever the editor redraws text it did not type.
+    ...(isMac ? [{
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'Cmd+Z', click: (_item, win) => pageCommand(win, 'undo') },
+        { label: 'Redo', accelerator: 'Shift+Cmd+Z', click: (_item, win) => pageCommand(win, 'redo') },
+        { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' },
+      ],
+    }] : []),
     {
       label: isMac ? 'View' : '&View',
       submenu: [
@@ -445,52 +459,9 @@ function pageCommand(win, name) {
   page?.webContents.send('opendoc:command', name);
 }
 
-// ---- the agent's program ----
-
-// The programs the Agents panel can point at, for every agent of a runtime.
-const PROGRAMS = { claudeBin: 'Claude Code', codexBin: 'Codex' };
-
-// The Agents panel may set what program agent runs start: a custom agent's
-// command (`id` names the agent), or where Claude Code or Codex is
-// ('claudeBin', 'codexBin', for every agent). Pages cannot set it through the
-// local server; here the user confirms the exact command in a native dialog.
-async function setAgentProgram(win, { key, value, id } = {}) {
-  if (key !== 'command' && !Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
-  const next = typeof value === 'string' && value.trim() ? value.trim() : null;
-  const current = (await readSettings()).settings;
-  const agent = key === 'command' ? current.agents.find((a) => a.id === id) : null;
-  if (key === 'command' && !agent) throw new Error('no such agent');
-  if (key === 'command') checkAgentPatch({ command: next });
-  else checkSettingsPatch({ [key]: next });
-  const before = agent ? agent.command : current[key];
-  if (next !== null && next !== before) {
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'warning',
-      message: agent ? `Run this command for ${agent.name}?` : `Use this program as ${PROGRAMS[key]}?`,
-      detail: `${next}\n\nOpenDoc runs it in the doc's folder whenever a comment is waiting for ${agent ? agent.name : 'an agent'}.`,
-      buttons: ['Allow', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-    });
-    if (response !== 0) return false;
-  }
-  if (agent) await editAgents((agents) => updateAgent(agents, id, { command: next }));
-  else await updateSettings({ [key]: next });
-  return true;
-}
-
-// Agents > Programs > Choose…: pick the Claude Code or Codex executable in a native dialog.
-async function chooseProgram(win, key) {
-  if (!Object.hasOwn(PROGRAMS, key)) throw new Error('not allowed');
-  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-    title: `Choose ${PROGRAMS[key]}`,
-    buttonLabel: 'Choose',
-    filters: process.platform === 'win32' ? [{ name: 'Programs', extensions: ['exe', 'cmd'] }] : [],
-    properties: ['openFile'],
-  });
-  if (canceled || filePaths.length === 0) return false;
-  await updateSettings({ [key]: filePaths[0] });
-  return true;
+// Settings > Agent > Show folder: where the agent scripts are, to edit them.
+function showAgents() {
+  shell.openPath(agentsDir()).catch(() => {});
 }
 
 function revealDoc(win) {
@@ -519,9 +490,17 @@ function recentMenu() {
 
 // ---- the start window's settings ----
 
-// The settings the start window shows and changes (its Settings dialog):
-// your name and how things look, never the agents or their programs.
-const PAGE_SETTING_KEYS = ['name', 'face', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus'];
+// The settings the start window shows and changes (its Settings dialog, the
+// same as a doc's): your name, how things look and the agent, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus', 'agent'];
+
+// Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
+const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });
+
+async function resetAgentScript(name) {
+  if (!SHIPPED_AGENTS.includes(name)) throw new Error('not a shipped agent');
+  await installAgents(undefined, { reset: name });
+}
 const pageSettings = (all) => Object.fromEntries(PAGE_SETTING_KEYS.map((key) => [key, all[key]]));
 
 async function saveStartSettings(patch) {
@@ -536,10 +515,7 @@ async function saveStartSettings(patch) {
 // folder (`/` between folders, '' for the folder itself); the app checks
 // each against its own listing, or for a new name, that it stays inside.
 
-// The folder window of `win`, once no window is switching docs: an
-// operation goes by which doc each window shows.
-async function sidebarOf(win) {
-  await windows.settled();
+function sidebarOf(win) {
   const entry = windows.docFor(win);
   if (!entry?.folder) throw new Error('not allowed');
   return entry;
@@ -557,21 +533,27 @@ async function checkListed(entry, rel, kind) {
 const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
 
 /**
- * A new doc or folder named `name` in the sidebar folder `parent`. A new doc
- * opens in this window.
+ * A new doc or folder named `name` (as typed; `/` makes folders) in the
+ * sidebar folder `parent`. An empty doc name takes the next free Untitled.
+ * A new doc opens in this window.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
 async function sidebarCreate(win, { parent, name, kind } = {}) {
-  const entry = await sidebarOf(win);
+  const entry = sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const dir = await checkListed(entry, parent, parent ? 'folder' : 'root');
   const typed = String(name ?? '').trim();
-  const problem = nameProblem(typed);
-  if (problem) return { error: problem };
-  let path = join(dir, typed);
+  let path;
   try {
-    if (kind === 'doc') path = await createDoc(withDocExtension(path));
-    else await createFolder(path);
+    if (kind === 'doc' && !typed) {
+      path = await createUntitled(dir);
+    } else {
+      const named = nameParts(typed);
+      if (named.problem) return { error: named.problem };
+      path = join(dir, ...named.parts);
+      if (kind === 'doc') path = await createDoc(withDocExtension(path));
+      else await createFolder(path);
+    }
   } catch (error) {
     if (error.code === 'exists') return { error: `${basename(error.path)} is already here.` };
     throw error;
@@ -584,21 +566,19 @@ async function sidebarCreate(win, { parent, name, kind } = {}) {
 }
 
 /**
- * Rename or move the sidebar's doc or folder `from`: into the sidebar folder
- * `folder` ('' for the top), as `name` (a doc keeps its extension unless
- * `name` has one). Its comments, history and own agents go with each doc,
- * and any window showing one follows it.
+ * Rename or move the sidebar's doc or folder `from` to `to` (its new place,
+ * as typed; a doc keeps its extension unless `to` names one). Its comments,
+ * and history go with each doc, and any window showing one
+ * follows it.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
-async function sidebarMove(win, { from, kind, folder, name } = {}) {
-  const entry = await sidebarOf(win);
+async function sidebarMove(win, { from, kind, to } = {}) {
+  const entry = sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const fromPath = await checkListed(entry, from, kind);
-  const dir = await checkListed(entry, folder, folder ? 'folder' : 'root');
-  const typed = String(name ?? '').trim();
-  const problem = nameProblem(typed);
-  if (problem) return { error: problem };
-  let toPath = join(dir, typed);
+  const named = nameParts(String(to ?? ''));
+  if (named.problem) return { error: named.problem };
+  let toPath = join(entry.folder, ...named.parts);
   if (kind === 'doc' && !isDocName(toPath)) toPath += extname(fromPath);
   if (toPath === fromPath) return { rel: from };
   try {
@@ -620,7 +600,7 @@ async function sidebarMove(win, { from, kind, folder, name } = {}) {
   return { rel };
 }
 
-// A doc and its comments, history and own agents; an open doc's server does
+// A doc and its comments and history; an open doc does
 // all of that itself.
 async function moveDoc(fromPath, toPath) {
   const open = windows.windowOf(await realpath(fromPath));
@@ -656,14 +636,9 @@ async function moveFolderOf(fromPath, toPath) {
 }
 
 // What a doc that is not open leaves outside its folder, moved with it: its
-// version history, and the agents that belong to it (by its full path).
+// version history.
 async function followDoc(fromPath, toPath) {
-  const [before, after] = [resolve(fromPath), resolve(toPath)];
   try {
-    const { settings: current } = await readSettings();
-    if (current.agents.some((a) => a.doc === before)) {
-      await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: after } : a)));
-    }
     await moveHistory(fromPath, toPath, configDir());
   } catch (error) {
     console.error(`Could not move what belongs to ${basename(fromPath)}:`, error);
@@ -679,6 +654,16 @@ function movedInRecent(fromPath, toPath) {
   recentChanged();
 }
 
+// How many comments the doc at `path` has (0 when its sidecar cannot be read).
+async function countComments(path) {
+  try {
+    const text = await readSidecarText(path);
+    return text === null ? 0 : parseSidecar(text).lines.filter((l) => l.comment).length;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Put the sidebar's doc (with its comments) or folder (with everything in
  * it) in the Trash, after the user confirms. This window shows another doc
@@ -686,7 +671,7 @@ function movedInRecent(fromPath, toPath) {
  * @returns {Promise<{ trashed: boolean }>}
  */
 async function sidebarTrash(win, { rel, kind } = {}) {
-  const entry = await sidebarOf(win);
+  const entry = sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const path = await checkListed(entry, rel, kind);
   const name = basename(path);
@@ -699,12 +684,16 @@ async function sidebarTrash(win, { rel, kind } = {}) {
   const open = windows.openDocs().filter((other) => gone(other.docPath));
   let detail;
   if (kind === 'doc') {
-    const comments = (await readSidecar(path)).threads.length;
+    const comments = await countComments(path);
     detail = comments ? `It and its ${count(comments, 'comment')} go to the Trash.` : 'It goes to the Trash.';
   } else {
     const { docs, others } = await countFolder(path);
     const parts = [docs && count(docs, 'doc'), others && count(others, docs ? 'other file' : 'file')].filter(Boolean);
     detail = parts.length ? `Its ${parts.join(' and ')} go to the Trash.` : 'It is empty. It goes to the Trash.';
+  }
+  const working = (await Promise.all(open.map((other) => other.hosted.running().catch(() => [])))).flat();
+  if (working.length) {
+    detail += `\n\n${listNames(working)} ${working.length === 1 ? 'is' : 'are'} working on ${kind === 'doc' ? name : 'a doc in it'}; that work stops.`;
   }
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning', message: `Delete "${name}"?`, detail, buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1,
@@ -751,6 +740,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
 }
 
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /**
  * The menu of a sidebar row (`kind` 'doc' or 'folder') or of the blank space
@@ -759,7 +749,7 @@ const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
  * them as folder commands.
  */
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
-  const entry = await sidebarOf(win);
+  const entry = sidebarOf(win);
   const path = await checkListed(entry, rel, kind);
   const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
@@ -781,12 +771,21 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
       click: () => report(sidebarTrash(win, { rel, kind })),
     },
   ];
-  const template = kind === 'doc' ? place : kind === 'folder' ? [...create, { type: 'separator' }, ...place] : create;
+  const shown = path === entry.docPath || (await realpath(path).catch(() => path)) === entry.docPath;
+  const template = kind === 'doc'
+    ? [{ label: 'Open in New Window', enabled: !shown, click: () => report(windows.openDoc(path)) }, { type: 'separator' }, ...place]
+    : kind === 'folder' ? [...create, { type: 'separator' }, ...place] : create;
   const at = Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : {};
   Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }
 
 // ---- requests from pages (preload.cjs) ----
+
+// A doc page asks for a message port to its doc (windows.connectPage).
+ipcMain.on('opendoc:connect', (event) => {
+  if (event.senderFrame !== event.sender.mainFrame) return;
+  windows.connectPage(event.sender).catch((error) => console.error(error));
+});
 
 ipcMain.handle('opendoc:action', async (event, action, arg) => {
   // A doc's page is in a view of its window; the start window's is the window's own.
@@ -794,9 +793,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');
   const fromStart = windows.isStartWindow(win);
   const fromDoc = Boolean(windows.docFor(win));
-  if (action === 'new' && (fromStart || fromDoc)) return void (await newDocDialog(win));
-  if (action === 'open' && (fromStart || fromDoc)) return void (await openDialog(win));
-  if (action === 'openFolder' && (fromStart || fromDoc)) return void (await openFolderDialog(win));
+  if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
   if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
   if (action === 'folderExpand' && fromDoc) {
@@ -809,15 +806,11 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderMove' && fromDoc) return sidebarMove(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);
   if (action === 'folderMenu' && fromDoc) return void (await sidebarMenu(win, event.sender, arg));
-  if (action === 'agentProgram' && fromDoc) return setAgentProgram(win, arg);
-  if (action === 'chooseProgram' && fromDoc) return chooseProgram(win, arg);
-  if (action === 'export' && fromDoc) {
-    const { format, comments, paper } = arg ?? {};
-    return exportFromWindow(win, windows.docFor(win).docPath, { format, comments, paper, font: settings.font });
-  }
-  if ((action === 'openExport' || action === 'revealExport') && fromDoc) return showExport(win, action === 'openExport' ? 'open' : 'reveal');
+  if (action === 'showAgents' && (fromStart || fromDoc)) return void showAgents();
+  if (action === 'agentScripts' && fromStart) return agentScripts();
+  if (action === 'resetAgentScript' && fromStart) return void (await resetAgentScript(arg));
   if (action === 'recent' && fromStart) {
-    return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path), kind: isDirectory(path) ? 'folder' : 'doc' }));
+    return recentProjects().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
   }
   if (action === 'drop' && (fromStart || fromDoc)) {
     // Docs and folders; any other file dropped is ignored.
@@ -829,7 +822,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'settings' && fromStart) return pageSettings((await readSettings()).settings);
   if (action === 'saveSettings' && fromStart) return saveStartSettings(arg);
   if (action === 'openRecent' && fromStart) {
-    const path = recentDocs()[arg];
+    const path = recentProjects()[arg];
     if (path) await openPath(path, { parent: win });
     return undefined;
   }
@@ -863,7 +856,7 @@ app.on('activate', () => {
 });
 
 // Let the last state write (window bounds, recent docs) finish first, and the
-// doc servers close (they stop their agents' runs).
+// open docs close (they stop their buddies' runs).
 app.on('will-quit', (event) => {
   if (pendingStateWrites === 0 && (docHostDown || !docHost)) return;
   event.preventDefault();
@@ -878,17 +871,15 @@ app.on('will-quit', (event) => {
 app.whenReady().then(start);
 
 async function start() {
-  // First, as loading the server takes a while: the doc host, in a process of
-  // its own so that what the servers do never holds up the windows. It takes
-  // its environment from this process, so the login shell's goes in first.
-  Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
+  // First, as loading it takes a while: the doc host, in a process of its
+  // own so that what the docs do never holds up the windows.
   docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write');
   });
   windows.configure({
-    startDocServer: docHost.startDocServer,
+    openHostedDoc: docHost.openHostedDoc,
     lastBounds: () => state.bounds,
     onBounds: (bounds) => {
       state.bounds = bounds;

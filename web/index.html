@@ -3,17 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:">
   <title>opendoc</title>
-  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/app.css">
-  <script type="module" src="/assets/app.js"></script>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
 </head>
 <body>
   <aside class="od-files" aria-label="Docs in this folder" hidden>
     <div class="od-files-head">
       <span class="od-files-icon" data-icon="folder"></span>
       <span class="od-files-name"></span>
-      <button class="od-icon-btn od-files-new-doc" type="button" data-action="new-doc" data-icon="plus" data-tip="New doc" aria-label="New doc"></button>
+      <span class="od-files-tools">
+        <button class="od-icon-btn" type="button" data-action="new-doc" data-icon="filePlus" data-tip="New doc" aria-label="New doc"></button>
+        <button class="od-icon-btn" type="button" data-action="new-folder" data-icon="folderPlus" data-tip="New folder" aria-label="New folder"></button>
+      </span>
     </div>
     <ul class="od-files-tree" role="tree" aria-label="Docs"></ul>
     <p class="od-files-more" hidden></p>
@@ -32,10 +36,9 @@
     <span class="od-count" title="Word count" hidden></span>
     <div class="od-people">
       <button class="od-me" type="button" title="You"></button>
-      <div class="od-agents" aria-label="Agents in this doc"></div>
-      <button class="od-invite" type="button" data-icon="users" data-tip="People and agents in this doc" aria-label="People and agents" aria-haspopup="dialog"></button>
+      <div class="od-agents" aria-label="Buddies in this doc"></div>
+      <button class="od-invite" type="button" data-icon="users" data-tip="People and buddies in this doc" aria-label="People and buddies" aria-haspopup="dialog"></button>
     </div>
-    <button class="od-icon-btn od-export-toggle" type="button" data-icon="export" data-tip="Export" data-keys="Mod+Shift+E" aria-label="Export" aria-haspopup="dialog"></button>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
 
@@ -87,11 +90,9 @@
     <button type="button" class="od-primary od-history-restore" data-action="restore" hidden>Restore this version</button>
   </div>
 
-  <div class="od-banner" hidden>
+  <div class="od-banner od-notice" hidden>
     <span class="od-banner-icon" data-icon="alert"></span>
     <span class="od-banner-text"></span>
-    <button type="button" data-action="reload" data-tip="Take their version where you both changed the text. Undo brings yours back.">Use theirs</button>
-    <button type="button" data-action="keep" data-tip="Keep your version where you both changed the text">Keep mine</button>
   </div>
   <div class="od-banner od-missing" hidden>
     <span class="od-banner-icon" data-icon="alert"></span>
@@ -122,7 +123,6 @@
         <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
       </div>
       <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
-      <ul class="od-mentions od-mentions-doc" role="listbox" aria-label="Mention" hidden></ul>
     </div>
     <div class="od-stage od-history-stage">
       <article class="od-page" aria-label="Earlier version of the document">
@@ -143,66 +143,17 @@
 
   <div class="od-tip" role="tooltip" hidden></div>
 
-  <dialog class="od-export" aria-labelledby="od-export-title">
-    <form method="dialog" class="od-export-form">
-      <div class="od-export-head">
-        <h2 id="od-export-title">Export <span class="od-export-doc"></span></h2>
-        <button type="button" class="od-icon-btn" data-icon="close" data-action="close" aria-label="Close"></button>
-      </div>
-      <div class="od-export-formats" role="radiogroup" aria-label="Format">
-        <button type="button" role="radio" data-format="pdf" data-icon="printer"><span class="od-export-name">PDF</span><span class="od-export-use">To read or print</span></button>
-        <button type="button" role="radio" data-format="docx" data-icon="file"><span class="od-export-name">Word</span><span class="od-export-use">To edit in Word</span></button>
-        <button type="button" role="radio" data-format="html" data-icon="globe"><span class="od-export-name">Web page</span><span class="od-export-use">One .html file</span></button>
-      </div>
-      <div class="od-setting">
-        <span class="od-setting-text">
-          <span class="od-setting-label">Comments</span>
-          <span class="od-setting-hint od-export-hint"></span>
-        </span>
-        <div class="od-segmented" role="radiogroup" aria-label="Comments">
-          <button type="button" role="radio" data-comments="none">None</button>
-          <button type="button" role="radio" data-comments="open">Open</button>
-          <button type="button" role="radio" data-comments="all">All</button>
-        </div>
-      </div>
-      <div class="od-setting od-export-paper">
-        <span class="od-setting-text">
-          <span class="od-setting-label">Paper</span>
-        </span>
-        <div class="od-segmented" role="radiogroup" aria-label="Paper">
-          <button type="button" role="radio" data-paper="a4">A4</button>
-          <button type="button" role="radio" data-paper="letter">Letter</button>
-        </div>
-      </div>
-      <div class="od-export-error" role="alert" hidden></div>
-      <div class="od-export-actions">
-        <button type="button" class="od-secondary" data-action="close">Cancel</button>
-        <button type="submit" class="od-primary" data-action="export">Export</button>
-      </div>
-    </form>
-  </dialog>
-  <iframe class="od-print-frame" title="Export" sandbox="allow-same-origin allow-modals" tabindex="-1" aria-hidden="true" hidden></iframe>
-
-  <div class="od-toast" role="status" aria-live="polite" hidden>
-    <span class="od-toast-icon"></span>
-    <span class="od-toast-text"></span>
-    <button type="button" class="od-link-button" data-action="open" hidden>Open</button>
-    <button type="button" class="od-link-button" data-action="reveal" hidden></button>
-    <button type="button" class="od-icon-btn" data-icon="close" data-action="dismiss" aria-label="Dismiss"></button>
-  </div>
-
-  <dialog class="od-agents-dialog" aria-label="Agents">
+  <dialog class="od-agents-dialog" aria-label="Buddies">
     <aside class="od-agents-side">
       <div class="od-agents-side-head">
-        <span class="od-agents-title">Agents</span>
-        <button type="button" class="od-icon-btn" data-action="new-agent" data-icon="plus" data-tip="New agent" aria-label="New agent"></button>
+        <span class="od-agents-title">Buddies</span>
+        <button type="button" class="od-icon-btn" data-action="new-agent" data-icon="plus" data-tip="New buddy" aria-label="New buddy"></button>
       </div>
-      <div class="od-agents-list" role="listbox" aria-label="Your agents"></div>
-      <button type="button" class="od-agents-programs" data-action="programs" data-icon="settings" aria-pressed="false">Programs</button>
+      <div class="od-agents-list" role="listbox" aria-label="Your buddies"></div>
     </aside>
 
     <div class="od-agents-main">
-      <button type="button" class="od-icon-btn od-agents-close" data-icon="close" data-action="close" aria-label="Close agents"></button>
+      <button type="button" class="od-icon-btn od-agents-close" data-icon="close" data-action="close" aria-label="Close buddies"></button>
 
       <form class="od-agent-editor" autocomplete="off" hidden>
         <header class="od-agent-head">
@@ -213,152 +164,22 @@
             <div class="od-input-error" role="alert" hidden></div>
           </div>
         </header>
-        <div class="od-agent-problem" role="status" hidden>
-          <span class="od-agent-problem-text"></span>
-          <button type="button" class="od-link-button" data-action="agent-check">Check again</button>
-        </div>
         <p class="od-agent-where"></p>
-        <label class="od-setting od-agent-keep">
-          <span class="od-setting-text">
-            <span class="od-setting-label">Starred</span>
-            <span class="od-setting-hint">Kept for every doc. Not starred, it goes away when the doc it was made in closes.</span>
-          </span>
-          <input type="checkbox" class="od-switch" data-agent="starred">
-        </label>
-
-        <section class="od-agent-block od-agent-runs">
-          <div class="od-setting">
-            <span class="od-setting-text">
-              <h3>Runs on</h3>
-              <span class="od-setting-hint">The program that does its work. The persona works the same on any of them.</span>
-            </span>
-            <div class="od-segmented" role="radiogroup" aria-label="Runs on">
-              <button type="button" role="radio" data-agent-runtime="claude">Claude Code<span class="od-runtime-flag" hidden>!</span></button>
-              <button type="button" role="radio" data-agent-runtime="codex">Codex<span class="od-runtime-flag" hidden>!</span></button>
-              <button type="button" role="radio" data-agent-runtime="custom">Command</button>
-            </div>
-          </div>
-          <div class="od-program-status od-agent-program" data-for="claude codex">
-            <span class="od-program-status-text" aria-live="polite"></span>
-            <span class="od-program-actions">
-              <button type="button" class="od-link-button" data-action="open-programs" hidden>Programs</button>
-              <button type="button" class="od-secondary" data-action="check-program">Check</button>
-            </span>
-          </div>
-          <p class="od-agent-note od-runtime-note" role="status" hidden></p>
-          <div class="od-setting" data-for="claude codex">
-            <span class="od-setting-text">
-              <label for="od-agent-model">Model</label>
-              <span class="od-setting-hint" data-for="claude">Haiku is fast. Try sonnet or opus for harder work, or type a full model ID.</span>
-              <span class="od-setting-hint" data-for="codex">Empty uses the model in your Codex config.</span>
-            </span>
-            <input id="od-agent-model" class="od-input" type="text" data-agent="model" list="od-agent-models" placeholder="Default" spellcheck="false">
-            <datalist id="od-agent-models"></datalist>
-          </div>
-          <p class="od-agent-note od-agent-warning od-model-warning" data-for="claude" hidden></p>
-          <div class="od-setting od-setting-stacked" data-for="custom">
-            <span class="od-setting-text">
-              <label for="od-agent-command">Command</label>
-              <span class="od-setting-hint">Runs in the doc's folder. <code>{promptFile}</code> (the task, with the persona), <code>{threadsFile}</code> and <code>{doc}</code> are replaced; exit code 0 means it worked.</span>
-            </span>
-            <input id="od-agent-command" class="od-input od-input-full" type="text" data-agent-program="command" placeholder="mybot --prompt-file {promptFile}" spellcheck="false">
-            <div class="od-agent-note od-program-note" hidden>
-              <p class="od-program-note-draft">Once it is created, its command can be set in settings.json.</p>
-              <div class="od-program-note-saved">
-                <p>Set its command in settings.json, or in the desktop app:</p>
-                <code class="od-settings-file"></code>
-                <p>Under "agents", find <code class="od-agent-id"></code> and set its command:</p>
-                <div class="od-snippet">
-                  <code class="od-command-snippet"></code>
-                  <button type="button" class="od-secondary" data-action="copy-command">Copy</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="od-agent-block">
-          <h3>What it can do</h3>
-          <p class="od-agent-block-hint od-agent-reads">Every agent reads the doc it works on.</p>
-          <div class="od-agent-perms" role="group" aria-label="Permissions"></div>
-          <p class="od-agent-risk" hidden></p>
-        </section>
 
         <section class="od-agent-block">
           <h3><label for="od-agent-instructions">Instructions</label></h3>
           <p class="od-agent-block-hint">Details and rules behind its persona, added to its prompt: what to do, what to leave alone, how to reply. Optional.</p>
-          <textarea id="od-agent-instructions" class="od-input od-input-full od-persona" data-agent="instructions" rows="7" maxlength="4000" placeholder="Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
+          <textarea id="od-agent-instructions" class="od-input od-input-full od-persona" data-agent="instructions" rows="7" placeholder="Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
         </section>
 
-        <details class="od-agent-block od-agent-advanced">
-          <summary>Advanced</summary>
-          <p class="od-agent-note od-agent-warning od-agent-hooks" hidden></p>
-          <div class="od-setting" data-for="claude">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Effort</span>
-              <span class="od-setting-hint">How hard it thinks before it answers. Low is fastest.</span>
-            </span>
-            <div class="od-segmented" role="radiogroup" aria-label="Effort">
-              <button type="button" role="radio" data-agent-effort="low">Low</button>
-              <button type="button" role="radio" data-agent-effort="medium">Medium</button>
-              <button type="button" role="radio" data-agent-effort="high">High</button>
-            </div>
-          </div>
-          <p class="od-agent-note" data-for="codex">Codex works in its own sandbox, without your Codex settings or MCP servers. In the doc's folder it reads only the doc and its comments, and edits the doc only with Auto Editor. Elsewhere it can read files on this computer, except keys and secrets. Sign in once with <code>codex login</code> in a terminal.</p>
-          <div class="od-setting od-setting-stacked">
-            <span class="od-setting-text"><span class="od-setting-label">Limits</span></span>
-            <div class="od-limits">
-              <label data-for="claude">Turns per run <input class="od-input od-input-number" type="number" min="1" max="500" step="1" data-agent="maxTurns"></label>
-              <label>Minutes per run <input class="od-input od-input-number" type="number" min="1" max="240" step="1" data-agent="runTimeoutMinutes"></label>
-              <label>Runs per hour <input class="od-input od-input-number" type="number" min="1" max="1000" step="1" data-agent="runsPerHour"></label>
-              <label data-for="claude">Budget per run, USD <input class="od-input od-input-number" type="number" min="0.01" step="0.01" data-agent="maxBudgetUsd" placeholder="None"></label>
-            </div>
-          </div>
-          <label class="od-setting" data-for="claude">
-            <span class="od-setting-text">
-              <span class="od-setting-label">Isolated runs</span>
-              <span class="od-setting-hint">Skips your Claude Code settings and project hooks. Needs ANTHROPIC_API_KEY.</span>
-            </span>
-            <input type="checkbox" class="od-switch" data-agent="isolated">
-          </label>
-        </details>
-
         <footer class="od-agent-foot">
-          <button type="button" class="od-link-button od-danger" data-action="delete-agent">Delete agent</button>
+          <button type="button" class="od-link-button od-danger" data-action="delete-agent">Delete buddy</button>
           <span class="od-agent-draft-actions">
             <button type="button" class="od-secondary" data-action="discard-draft">Cancel</button>
             <button type="button" class="od-primary" data-action="create-agent" disabled>Create</button>
           </span>
         </footer>
       </form>
-
-      <section class="od-agents-programs-page" hidden>
-        <h2>Programs</h2>
-        <p class="od-agent-block-hint">Where the programs that run your agents are, for every agent. Empty finds them automatically.</p>
-        <p class="od-agent-block-hint od-programs-note" hidden>Paths are changed in the OpenDoc desktop app.</p>
-        <div class="od-setting od-setting-stacked">
-          <span class="od-setting-text"><label for="od-claude-bin">Claude Code</label></span>
-          <div class="od-setting-row">
-            <input id="od-claude-bin" class="od-input od-input-full" type="text" data-program="claudeBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
-            <button type="button" class="od-secondary" data-action="choose-program" data-program-key="claudeBin">Choose…</button>
-          </div>
-          <div class="od-program-status" data-program-kind="claude">
-            <span class="od-program-status-text" aria-live="polite"></span>
-            <button type="button" class="od-secondary" data-action="check-program" data-program-kind="claude">Check</button>
-          </div>
-        </div>
-        <div class="od-setting od-setting-stacked">
-          <span class="od-setting-text"><label for="od-codex-bin">Codex</label></span>
-          <div class="od-setting-row">
-            <input id="od-codex-bin" class="od-input od-input-full" type="text" data-program="codexBin" placeholder="Found automatically" autocomplete="off" spellcheck="false">
-            <button type="button" class="od-secondary" data-action="choose-program" data-program-key="codexBin">Choose…</button>
-          </div>
-          <div class="od-program-status" data-program-kind="codex">
-            <span class="od-program-status-text" aria-live="polite"></span>
-            <button type="button" class="od-secondary" data-action="check-program" data-program-kind="codex">Check</button>
-          </div>
-        </div>
-      </section>
     </div>
   </dialog>
 </body>

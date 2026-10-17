@@ -1,28 +1,6 @@
+// The format's core (spec/SPEC.md): rendered text, anchors, comments and
+// mentions. The same in Node and the browser.
 export { project, sourceRange, lineOf } from './project.js';
-export {
-  AnchorError,
-  CONTEXT_LENGTH,
-  createAnchor,
-  findQuote,
-  locate,
-  reanchorThreads,
-  refreshSidecar,
-} from './anchor.js';
-export { applyProposal, diffEdits, findEdit, findProposal, proposeChanges, revertEdits } from './diff.js';
-export { parseMentions } from './mentions.js';
-export { addedMentions, blockAt, carry, changedRanges, textMentions, tokenEnd } from './text-mentions.js';
-export {
-  FORMAT_VERSION,
-  MAX_HANDOFFS,
-  OpError,
-  activeWorking,
-  applyOp,
-  clearAgentClaims,
-  emptySidecar,
-  findThread,
-  newId,
-  workingList,
-} from './ops.js';
-export { cancelledFor, failedFor, handedTo, inbox, openAsk } from './inbox.js';
-export { FormatError, parseSidecar, serializeSidecar } from './format.js';
-export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, leaderless, PERMISSIONS, createAgent, deleteAgent, permissionLabels, permissionPatch, permissionsOf, resolveRoster, updateAgent } from './agents.js';
+export { AnchorError, CONTEXT_LENGTH, createAnchor, findQuote, locate } from './anchor.js';
+export { FORMAT_VERSION, FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from './comments.js';
+export { mentionSpans, parseMentions, sameName } from './mentions.js';

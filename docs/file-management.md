@@ -13,7 +13,7 @@ and folders, in the desktop app's folder window.
 
 Out, for now: multi-select, duplicate, sort options, dragging files in from
 Finder or Explorer, and rewriting links in other docs (see
-[Later](#later)). The browser (`opendoc serve`) has no sidebar and gets none.
+[Later](#later)).
 
 ## What others do
 
@@ -43,7 +43,7 @@ What carries over:
 ## Principles
 
 1. **A doc and its comments move as one.** Every operation carries the
-   sidecar (`plan.md.opendoc.json`), the version history and any open window
+   sidecar (`plan.md.opendoc.jsonl`), the version history and any open window
    with the doc. The user never sees a sidecar in the tree.
 2. **Nothing is created until it is named.** New doc and new folder ask for
    the name first, in the tree.
@@ -53,60 +53,53 @@ What carries over:
    itself: the renamed or moved row, focused and scrolled into view, or the
    row gone. A move or rename is undone by doing it again the other way;
    a delete is guarded by its confirm instead.
-5. **One way to see each action, nothing that appears on hover.** One `+`
-   in the header, the row's menu on right-click or Shift+F10, dragging and
-   Move To… for moves, and the keyboard. No hover buttons, no hint rows, and
-   each error said once.
+5. **Three ways to everything:** the row's `⋯` button (or right-click), the
+   keyboard, and dragging for moves.
 6. **The disk is the truth.** The tree redraws from the folder watch, as
    today; a redraw never throws away a name being typed.
 
 ## Where the actions are
 
-**Sidebar header.** Next to the folder name, one **+** (New doc), always
-shown. File > New Doc (⌘N / Ctrl+N) does the same in a folder window; in a
-window with a single doc it is still the save dialog.
+**Sidebar header.** Next to the folder name, two icon buttons that show on
+hover and on focus: **New doc** and **New folder**. Both go in the folder of
+the open doc. File > New Doc in This Folder (⌘⌥N / Ctrl+Alt+N) starts the
+same name field, in the folder focused in the tree, else the open doc's.
 
-**Where new things go.** In the folder of the open doc, except from a
-folder's menu, which makes them in that folder. New folders come from the
-menus only (a folder's, or the blank space below the tree).
-
-**Each row.** Its menu, the OS's own, on right-click or Shift+F10.
+**Each row.** A `⋯` button at the right end on hover or focus, and the same
+menu (the OS's own) on right-click or Shift+F10.
 
 | Doc row | Folder row | Blank space below the tree |
 | --- | --- | --- |
-| Rename… (F2) | New Doc | New Doc |
-| Move To… | New Folder | New Folder |
+| Open in New Window | New Doc | New Doc |
+| Rename… (F2) | New Folder | New Folder |
+| Move to… | Rename… (F2) | |
+| Reveal in Finder / Show in Explorer | Move to… | |
+| Copy Path | Reveal in Finder / Show in Explorer | |
 | — | — | |
-| Reveal in Finder / Show in Explorer | Rename… (F2) | |
-| Copy Path | Move To… | |
-| — | — | |
-| Delete… (Del / ⌘⌫) | Reveal in Finder / Show in Explorer | |
-| | Copy Path | |
-| | — | |
-| | Delete… | |
+| Delete… (Del / ⌘⌫) | Delete… | |
 
 Delete sits last, after a divider, in the text colour of danger.
 
 ## New doc
 
 1. A new row appears at the top of the folder's docs (after its subfolders),
-   with an empty name field, placeholder **Name**. The folder expands if it
-   was closed.
-2. Type a name. `.md` is added unless it ends in `.md` or `.markdown`. A
-   name is one name: `/` is refused, so a doc never lands in a folder by
-   accident.
+   with an empty name field, placeholder **Untitled**. The folder expands if
+   it was closed.
+2. Type a name. `.md` is added unless it ends in `.md` or `.markdown`.
+   A `/` in the name makes the folders too: `notes/kickoff` → `notes/kickoff.md`.
 3. **Enter** creates it, opens it in this window and puts the cursor in the
-   editor. Clicking away with a name typed creates it too.
-4. **Escape**, or Enter or clicking away with the field empty, cancels: no
-   file, and no `Untitled.md`.
+   editor. Enter on an empty field creates the next free `Untitled N.md`, as
+   the File menu does.
+4. **Escape**, or clicking away while the field is empty, cancels: no file.
+   Clicking away with a name typed creates it, as Enter does.
 
 The new doc gets Clippy the first time it opens, as every new doc does.
 
 ## New folder
 
-Same field, folder icon, placeholder **Folder name**. Enter creates it,
-expanded and empty. An empty folder shows nothing inside; its menu has New
-Doc.
+Same field, folder icon, placeholder **New folder**. Enter creates it,
+expanded and empty, and immediately offers its first doc: the empty folder
+shows one faint row, **No docs yet · New doc**.
 
 This needs one change to the list: today the tree lists only docs, so a
 folder without docs never shows. Empty folders (no entries but hidden ones)
@@ -120,7 +113,7 @@ don't, so a code repo's tree stays clean.
   `.markdown` stays `.markdown`.
 - **Enter** or clicking away saves; **Escape** cancels. An unchanged name does
   nothing; a change of case only (`plan` → `Plan`) works on every disk.
-- A `/` is refused, as in New doc: renaming never moves.
+- A `/` in the new name moves it, as in New doc.
 - The row moves to its new sorted place, stays focused and is scrolled into
   view.
 - Clicking the doc name in the page header keeps its current behaviour; in a
@@ -134,7 +127,7 @@ history, and every open window of those docs follows its doc.
 small line under it, such as *plan.md is already here* or *Names can't
 contain : on Windows*. A leading `.` is refused (hidden docs are not listed,
 so the doc would vanish). Clicking away from a name with an error closes the
-field and leaves the name as it was; nothing else reports it.
+field unchanged, and the status line says why.
 
 A folder open in a window of its own (opened as a folder, or holding one)
 can't be renamed, moved or deleted from another window's sidebar; the
@@ -189,6 +182,9 @@ ones the tree does not show:
 > Its 12 docs and 5 other files go to the Trash.
 > [Cancel] [Delete]
 
+**An agent at work** on the doc (a request in progress) adds a line:
+*Clippy is working on plan.md; its work stops.*
+
 Nothing is shown afterwards: the doc leaves the tree, and that is the
 feedback. Anything deleted can still be restored from the Trash. The
 doc's version history stays in the config folder, as for a doc deleted
@@ -197,7 +193,7 @@ outside the app.
 ## Open windows and the open doc
 
 - **Rename or move the doc this window shows:** the window stays, its
-  server follows the doc (as File > Rename does), the header name updates.
+  doc host follows the doc (as File > Rename does), the header name updates.
 - **The same for a doc open in another window:** that window follows too.
 - **Delete the doc this window shows:** the window opens its neighbour (the
   next doc below, else above, in the same folder, else the folder's first
@@ -219,7 +215,7 @@ The tree becomes a real tree (`role="tree"`): one Tab stop, then arrows.
 | F2 | Rename |
 | Delete, ⌘⌫ | Delete (asks first) |
 | Shift+F10, context-menu key | The row's menu |
-| ⌘N / Ctrl+N | New doc, in the open doc's folder |
+| ⌘⌥N / Ctrl+Alt+N | New doc in the focused folder, or the open doc's |
 
 ## Later
 
@@ -243,22 +239,22 @@ The tree becomes a real tree (`role="tree"`): one Tab stop, then arrows.
 ## How it is built
 
 - The page asks the app over the preload bridge (`desktop/preload.cjs`):
-  `folderCreate(parent, name, kind)`, `folderMove(from, kind, folder, name)`
-  (rename and move are one operation), `folderTrash(rel, kind)` and
+  `folderCreate(parent, name, kind)`, `folderMove(from, kind, to)` (rename
+  and move are one operation), `folderTrash(rel, kind)` and
   `folderMenu(rel, kind, x, y)`. Paths are relative to the folder window's
-  root; the app (`desktop/main.js`) checks each against its own listing,
-  and that a name is one name. The confirm before a delete is
+  root; the app (`desktop/main.js`) checks each against its own listing, or
+  that a new name stays inside the folder. The confirm before a delete is
   the app's own dialog, so a page cannot delete without it. Menu choices
   that happen in the page (Rename, Move To…, New Doc, New Folder) come back
   as `onFolderCommand`.
 - Like every bridge call these need a click or a key press. A drop ends a
   drag, which leaves no user activation in Chromium, so a trusted pointer
   release just before counts too.
-- Docs reuse `renameDoc` and `moveHistory`, and move the doc's own agents in
-  `settings.json`; an open doc's server does that itself. A folder move is
-  one rename of the folder (`moveFolder`); then each open doc's server
+- Docs reuse `renameDoc` and `moveHistory`; an open doc's doc host does
+  that itself. A folder move is
+  one rename of the folder (`moveFolder`); then each open doc's doc host
   follows its doc (`moveTo(path, { moved: true })`) and each other doc's
-  history and agents follow. Trash is Electron's `shell.trashItem`, doc then
+  history follows. Trash is Electron's `shell.trashItem`, doc then
   sidecar (`trashDoc`).
 - `listDocs` also returns the empty folders; the sidebar draws them.
 - While a name is being typed, a redraw of the tree waits for it.
