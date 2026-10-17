@@ -1,15 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { main } from '../src/cli/main.js';
 import { applyOp, createAnchor, emptySidecar, project, serializeSidecar } from '../src/core/index.js';
 import { parseMarkdown } from '../src/core/project.js';
+import { checkSettingsPatch } from '../src/core/settings.js';
 import { markThreads, pickThreads } from '../src/export/comments.js';
 import { ExportError, checkExportOptions, defaultPaper, exportDoc, exportName } from '../src/export/index.js';
 import { findBrowser } from '../src/export/browser.js';
 import { imageSize } from '../src/export/images.js';
+import { startServer } from '../src/server/server.js';
 import { SAMPLE, tempDoc } from './helpers.js';
 
 const human = { name: 'fzhan', kind: 'human' };
@@ -168,6 +171,38 @@ test('export options: formats, names and paper sizes', () => {
   assert.throws(() => checkExportOptions({ format: 'pdf', paper: 'a3' }), ExportError);
   assert.equal(findBrowser({ OPENDOC_BROWSER: '/opt/chrome' }), '/opt/chrome');
   assert.deepEqual(imageSize(PNG, 'image/png'), { width: 1, height: 1 });
+});
+
+test('the Export dialog choices are settings', () => {
+  assert.doesNotThrow(() => checkSettingsPatch({ exportFormat: 'docx', exportComments: 'open', exportPaper: 'letter' }));
+  assert.doesNotThrow(() => checkSettingsPatch({ exportPaper: null }));
+  assert.throws(() => checkSettingsPatch({ exportFormat: 'rtf' }));
+  assert.throws(() => checkSettingsPatch({ exportComments: 'some' }));
+});
+
+test('the server sends exports to the page that has the token', async () => {
+  const docPath = await docWithThreads(SAMPLE, [{ quote: 'extra load' }]);
+  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-settings-'));
+  const server = await startServer(docPath, { assetsDir, settingsDir });
+  const get = (query, token = server.token) => fetch(`http://127.0.0.1:${server.port}/api/export?${query}`, { headers: token ? { 'x-opendoc-token': token } : {} });
+  try {
+    assert.equal((await get('format=docx', null)).status, 403);
+    assert.equal((await get('format=rtf')).status, 400);
+
+    const docx = await get('format=docx&comments=open');
+    assert.equal(docx.status, 200);
+    assert.match(docx.headers.get('content-disposition'), /^attachment; filename="plan\.docx"/);
+    assert.equal(count(unzip(Buffer.from(await docx.arrayBuffer()))['word/comments.xml'], /<w:comment /g), 1);
+
+    const pdf = await get('format=pdf&paper=letter');
+    assert.equal(pdf.status, 200);
+    assert.match(pdf.headers.get('content-type'), /^text\/html/);
+    assert.match(pdf.headers.get('content-security-policy'), /sandbox allow-same-origin allow-modals/);
+    assert.match(await pdf.text(), /size: letter/);
+  } finally {
+    await server.close();
+  }
 });
 
 test('opendoc export writes the copy next to the doc', async () => {

@@ -19,7 +19,8 @@ export const SETTINGS_VERSION = 1;
  * the user changes it: an agent with Auto Commenter works in every doc, any other
  * in the docs where it was @mentioned. `claudeBin` and `codexBin` are where
  * Claude Code and Codex are, for every agent that runs on them (null: found
- * automatically).
+ * automatically). `export*` are the choices last made in the Export dialog
+ * (`exportPaper: null`: the paper size of the user's region).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
@@ -34,6 +35,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   agents: DEFAULT_AGENTS,
   claudeBin: null,
   codexBin: null,
+  exportFormat: 'pdf',
+  exportComments: 'none',
+  exportPaper: null,
 });
 
 /** Settings that choose the program to run: set only in the desktop app or settings.json. */
@@ -58,6 +62,9 @@ const RULES = {
   agents: validRoster,
   claudeBin: (v) => v === null || text(2000)(v),
   codexBin: (v) => v === null || text(2000)(v),
+  exportFormat: oneOf('pdf', 'docx', 'html'),
+  exportComments: oneOf('none', 'open', 'all'),
+  exportPaper: (v) => v === null || oneOf('a4', 'letter')(v),
 };
 
 export class SettingsError extends Error {

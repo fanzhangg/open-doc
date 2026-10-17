@@ -86,6 +86,14 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   },
   rename: () => act('rename'),
   /**
+   * Export the doc ({ format: 'pdf' | 'docx' | 'html', comments: 'none' | 'open' | 'all', paper: 'a4' | 'letter' })
+   * where the user picks in a Save dialog; resolves to { name } of the file, or null when cancelled.
+   */
+  exportDoc: (options) => act('export', { format: String(options?.format), comments: String(options?.comments), paper: String(options?.paper) }),
+  /** Open the file exported last, or show it in its folder. */
+  openExport: () => act('openExport'),
+  revealExport: () => act('revealExport'),
+  /**
    * Set agent `id`'s `command`, or `claudeBin` or `codexBin` for every agent, after the user
    * confirms it; resolves to whether it was set.
    */

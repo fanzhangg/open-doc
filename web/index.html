@@ -35,6 +35,7 @@
       <div class="od-agents" aria-label="Agents in this doc"></div>
       <button class="od-invite" type="button" data-icon="users" data-tip="People and agents in this doc" aria-label="People and agents" aria-haspopup="dialog"></button>
     </div>
+    <button class="od-icon-btn od-export-toggle" type="button" data-icon="export" data-tip="Export" data-keys="Mod+Shift+E" aria-label="Export" aria-haspopup="dialog"></button>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
 
@@ -141,6 +142,54 @@
   </div>
 
   <div class="od-tip" role="tooltip" hidden></div>
+
+  <dialog class="od-export" aria-labelledby="od-export-title">
+    <form method="dialog" class="od-export-form">
+      <div class="od-export-head">
+        <h2 id="od-export-title">Export <span class="od-export-doc"></span></h2>
+        <button type="button" class="od-icon-btn" data-icon="close" data-action="close" aria-label="Close"></button>
+      </div>
+      <div class="od-export-formats" role="radiogroup" aria-label="Format">
+        <button type="button" role="radio" data-format="pdf" data-icon="printer"><span class="od-export-name">PDF</span><span class="od-export-use">To read or print</span></button>
+        <button type="button" role="radio" data-format="docx" data-icon="file"><span class="od-export-name">Word</span><span class="od-export-use">To edit in Word</span></button>
+        <button type="button" role="radio" data-format="html" data-icon="globe"><span class="od-export-name">Web page</span><span class="od-export-use">One .html file</span></button>
+      </div>
+      <div class="od-setting">
+        <span class="od-setting-text">
+          <span class="od-setting-label">Comments</span>
+          <span class="od-setting-hint od-export-hint"></span>
+        </span>
+        <div class="od-segmented" role="radiogroup" aria-label="Comments">
+          <button type="button" role="radio" data-comments="none">None</button>
+          <button type="button" role="radio" data-comments="open">Open</button>
+          <button type="button" role="radio" data-comments="all">All</button>
+        </div>
+      </div>
+      <div class="od-setting od-export-paper">
+        <span class="od-setting-text">
+          <span class="od-setting-label">Paper</span>
+        </span>
+        <div class="od-segmented" role="radiogroup" aria-label="Paper">
+          <button type="button" role="radio" data-paper="a4">A4</button>
+          <button type="button" role="radio" data-paper="letter">Letter</button>
+        </div>
+      </div>
+      <div class="od-export-error" role="alert" hidden></div>
+      <div class="od-export-actions">
+        <button type="button" class="od-secondary" data-action="close">Cancel</button>
+        <button type="submit" class="od-primary" data-action="export">Export</button>
+      </div>
+    </form>
+  </dialog>
+  <iframe class="od-print-frame" title="Export" sandbox="allow-same-origin allow-modals" tabindex="-1" aria-hidden="true" hidden></iframe>
+
+  <div class="od-toast" role="status" aria-live="polite" hidden>
+    <span class="od-toast-icon"></span>
+    <span class="od-toast-text"></span>
+    <button type="button" class="od-link-button" data-action="open" hidden>Open</button>
+    <button type="button" class="od-link-button" data-action="reveal" hidden></button>
+    <button type="button" class="od-icon-btn" data-icon="close" data-action="dismiss" aria-label="Dismiss"></button>
+  </div>
 
   <dialog class="od-agents-dialog" aria-label="Agents">
     <aside class="od-agents-side">

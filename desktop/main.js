@@ -23,6 +23,7 @@ import { createDocHost } from './doc-host-client.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc } from './folder.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
+import { exportFromWindow, showExport } from './export.js';
 
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
 const isMac = process.platform === 'darwin';
@@ -372,6 +373,7 @@ function buildMenu() {
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: (_item, win) => openFolderDialog(win) },
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
+        { label: 'Export…', accelerator: 'CmdOrCtrl+Shift+E', ...PAGE_KEY, enabled: Boolean(doc), click: (_item, win) => pageCommand(win, 'export') },
         { label: 'Rename…', enabled: Boolean(doc), click: (_item, win) => renameDialog(win) },
         { label: REVEAL_LABEL, enabled: Boolean(doc), click: (_item, win) => revealDoc(win) },
         { type: 'separator' },
@@ -804,6 +806,11 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderMenu' && fromDoc) return void (await sidebarMenu(win, event.sender, arg));
   if (action === 'agentProgram' && fromDoc) return setAgentProgram(win, arg);
   if (action === 'chooseProgram' && fromDoc) return chooseProgram(win, arg);
+  if (action === 'export' && fromDoc) {
+    const { format, comments, paper } = arg ?? {};
+    return exportFromWindow(win, windows.docFor(win).docPath, { format, comments, paper, font: settings.font });
+  }
+  if ((action === 'openExport' || action === 'revealExport') && fromDoc) return showExport(win, action === 'openExport' ? 'open' : 'reveal');
   if (action === 'recent' && fromStart) {
     return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path), kind: isDirectory(path) ? 'folder' : 'doc' }));
   }
