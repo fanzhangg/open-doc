@@ -525,7 +525,7 @@ export function avatar(name, kind, small = false) {
   const agent = kind === 'agent';
   const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`);
   // Everyone's face is drawn from their name (faces.js): people round,
-  // buddies a soft blob, so several in one doc are told apart at a glance.
+  // buddies a square, triangle, pentagon or cloud, told apart at a glance.
   node.append(agent ? agentFace(name) : personFace(name));
   node.title = name;
   return node;
