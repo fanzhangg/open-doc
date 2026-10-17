@@ -1,4 +1,4 @@
-// One app, no server (docs/v2-milestones.md, M2): windows talk to the doc
+// One app, no server: windows talk to the doc
 // host over message ports, so nothing in the app opens a port, and there is
 // no CLI to install. On Linux the smoke test also checks the running app.
 

@@ -1,5 +1,5 @@
 // The sidebar of a desktop folder window: the folder's docs as a tree, the
-// open one marked, and light file management (docs/file-management.md): new
+// open one marked, and light file management: new
 // doc and new folder, rename, move (drag, or Move To…) and delete. The app
 // does each on disk and checks it; the page only names docs and folders by
 // their place in the folder. Clicking a doc asks the app to show it in this

@@ -8,7 +8,7 @@ import globals from 'globals';
 const browser = ['web/**/*.js', 'desktop/start.js', 'desktop/start-preview-stub.js'];
 
 export default [
-  { ignores: ['dist/**', 'release/**', 'node_modules/**', 'output/**', 'reports/**', 'research_notes/**'] },
+  { ignores: ['dist/**', 'release/**', 'node_modules/**'] },
   js.configs.recommended,
   {
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: globals.node },

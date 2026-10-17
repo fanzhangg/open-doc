@@ -103,8 +103,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 - **Files.** New Doc, New Doc in This Folder, and Rename (the comments move
   too). Opening an already open doc focuses its window. If the file is moved
   or deleted outside the app, a banner says so and saving pauses. A project's
-  sidebar also makes, renames, moves and deletes docs and folders; see
-  [file management](file-management.md).
+  sidebar also makes, renames, moves and deletes docs and folders.
 - **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
   they merge in git ([format](../spec/SPEC.md)). A sidecar from OpenDoc 1
   (`X.md.opendoc.json`) is not read; a banner says so and the file is left
