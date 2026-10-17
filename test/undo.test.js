@@ -36,7 +36,9 @@ async function withDoc(fn) {
 test('Undo on a reply removes that buddy\'s edit and keeps later edits, yours and another buddy\'s', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, ask, type, disk, versions }) => {
     const ada = await ask('@Ada replace "extra load" with "extra peak load"');
-    assert.equal((await state()).edits[ada.id], 'edited');
+    const run = (await state()).edits[ada.id];
+    assert.deepEqual({ ...run, hash: undefined }, { state: 'edited', by: 'Ada', changes: 1, hash: undefined }, 'the receipt: who, how many places');
+    assert.equal(run.hash, (await state()).docHash, 'the page tells the run that wrote the doc by its hash');
     await type('week one', 'week 1');
     await ask('@Ben replace "beta cohort" with "beta group"');
 
@@ -45,7 +47,7 @@ test('Undo on a reply removes that buddy\'s edit and keeps later edits, yours an
     assert.match(text, /the extra load\./);
     assert.match(text, /week 1/);
     assert.match(text, /beta group/);
-    assert.equal((await state()).edits[ada.id], 'undone');
+    assert.equal((await state()).edits[ada.id].state, 'undone');
     const last = (await versions()).at(-1);
     assert.deepEqual([last.kind, last.undid, last.author.name], ['undo', ada.id, 'fzhan']);
 

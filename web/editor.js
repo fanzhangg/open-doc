@@ -1,9 +1,10 @@
 // The page: a Milkdown (ProseMirror) WYSIWYG editor with comment highlights,
 // a suggestion-style view of a proposal or a past edit, named
 // formatting commands for the toolbar, selection bubble and "/" menu, and
-// collaborator-style application of changes made on disk: the agent's
-// changes are replayed as typing (web/replay.js); other changes replace only
-// the blocks that differ (the caret stays put) and glow with the author's name.
+// collaborator-style application of changes made on disk: only the blocks
+// that differ are replaced (the caret stays put). A buddy's edit is
+// underlined in its colour until the human types; any other change glows
+// with who made it.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
@@ -24,7 +25,8 @@ import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { markdownPlugins } from './markdown-schema.js';
-import { createReplayer, diffBlocks } from './replay.js';
+import { diffBlocks } from './blocks.js';
+import { buddyColor } from './faces.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
@@ -33,7 +35,7 @@ const linkKey = new PluginKey('opendoc-link');
 
 // A ProseMirror doc never changes, so its projection and where each anchor is
 // in it are worked out once per doc, however often the highlights, the
-// margin or an agent's caret ask. Comment and agent events that leave the
+// margin ask. Comment and agent events that leave the
 // text alone then cost next to nothing.
 const projections = new WeakMap();
 const anchorRanges = new WeakMap();
@@ -128,10 +130,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     onKeyDown: (event) => keyHandler(event),
   };
   const host = stage.querySelector('.od-editor');
-  // While a replay runs, the doc passes through states that are neither the
-  // human's nor on disk; edits are reported once it ends (onReplayEnd).
-  let replayTarget = null;
-  const replayer = createReplayer({ getView: () => view(), stage, onEnd: (done) => onReplayEnd(done) });
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
@@ -144,12 +142,14 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       // `updated` is debounced (200 ms) and fires only when the doc changed.
       ctx.get(listenerCtx).updated((_ctx, doc) => {
         onDocUpdated();
-        if (!replayer.active() && !doc.eq(baselineDoc)) onChange();
+        if (!doc.eq(baselineDoc)) {
+          fadeEdits(); // the human is typing: a buddy's edits are theirs to read now
+          onChange();
+        }
       });
     })
     .use(markdownPlugins).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
-    .use($prose(() => replayer.plugin))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
@@ -196,14 +196,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id }));
       drawn.push(from, to, id, classes);
     };
-    if (replayer.active()) {
-      // Anchors are found in the text on disk; mid-replay they would land on
-      // half-typed words (a removed phrase's context brackets whatever is
-      // being typed in its place). The highlights stay where the replay's
-      // steps carried them, restyled, and are found again once it ends; the
-      // suggestion waits until then too.
-      for (const d of highlightKey.getState(v.state).find(undefined, undefined, (spec) => spec.thread)) comment(d.from, d.to, d.spec.thread);
-    } else {
+    {
       const find = (anchor) => rangeOf(v.state.doc, anchor);
       for (const [id, thread] of open) {
         const range = find(thread.anchor);
@@ -468,28 +461,15 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   // ---- changes from disk ----
 
   /**
-   * Show `next`, a change made by `by`. With `animate`, `by`'s caret types
-   * the change in; otherwise only the top-level blocks that differ are
-   * replaced and the new text glows, labelled `by`. A replay still running
-   * from an earlier change is completed first.
+   * Show `next`, a change made by `by`: only the top-level blocks that differ
+   * are replaced. A buddy's (`buddy`) is underlined in its colour until the
+   * human types, `tag` telling its run's edits apart; any other change glows,
+   * labelled `by`.
    */
-  function applyMarkdown(next, by, { animate = false } = {}) {
-    replayer.finish();
+  function applyMarkdown(next, by, { buddy = false, tag = null } = {}) {
     const v = view();
     const current = v.state.doc;
     const target = parse(next);
-    if (animate) {
-      replayTarget = next;
-      if (replayer.start(target, by)) {
-        // The typing shows the change now. A suggestion shown for the old
-        // text (the proposal being applied, say) would be typed over, so it
-        // goes until the page sets one for the new text.
-        preview = { items: [], replay: 0 };
-        paintHighlights();
-        return;
-      }
-      replayTarget = null;
-    }
     const hunks = diffBlocks(current, target);
     if (hunks.length === 0) {
       baselineDoc = v.state.doc;
@@ -504,29 +484,42 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     tr.setMeta('addToHistory', false);
     v.dispatch(tr);
     baselineDoc = v.state.doc;
-    flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by);
+    const ranges = hunks.map((h) => changedRange(current, target, h)).filter(Boolean);
+    if (buddy) markEdits(ranges, by, tag);
+    else flash(ranges, by);
     paintHighlights();
   }
 
-  // The replay is over: what it typed stays marked until the human looks at
-  // the comments (clearReview), and typing that happened meanwhile is now
-  // reported as the human's edit.
-  function onReplayEnd({ ranges }) {
-    // Once per replay, so comparing the markdown is affordable here.
-    const target = parse(replayTarget);
-    const typedMeanwhile = currentMarkdown() !== serialize(target);
-    baselineDoc = typedMeanwhile ? target : view().state.doc;
-    replayTarget = null;
-    const decorations = ranges.map((r) => Decoration.inline(r.from, r.to, { class: 'od-review' }, { review: true }));
-    if (decorations.length > 0) updateFlashes((set, doc) => set.add(doc, decorations));
-    paintHighlights();
-    if (typedMeanwhile) onChange();
+  // A buddy's edits stay marked, in its colour, until the human types; then
+  // they fade, and hovering its reply's receipt (`lit`, its run's `tag`)
+  // shows them again. Their places follow the text as it changes.
+  let lit = null;
+  const editClass = (spec) => `od-buddy-edit${spec.faded && spec.tag !== lit ? ' od-faded' : ''}`;
+  const editDecoration = (from, to, spec) => (spec.node ? Decoration.node : Decoration.inline)(from, to, { class: editClass(spec), style: `--buddy: ${buddyColor(spec.by)}` }, spec);
+
+  function markEdits(ranges, by, tag) {
+    if (ranges.length === 0) return;
+    const flagId = Symbol('flag');
+    const decorations = ranges.map((r) => editDecoration(r.from, r.to, { buddyEdit: true, node: Boolean(r.node), by, tag, faded: false }));
+    const first = ranges[0];
+    decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddyColor(by)), { side: -1, flagId }));
+    updateFlashes((set, doc) => set.add(doc, decorations));
+    setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flagId === flagId))), FLASH_MS);
   }
 
-  function clearReview() {
-    const set = flashKey.getState(view().state);
-    const marked = set.find(undefined, undefined, (spec) => spec.review);
-    if (marked.length > 0) updateFlashes((current) => current.remove(marked));
+  // Redraw the buddies' edit marks, `change` given each one's spec.
+  function restyleEdits(change) {
+    updateFlashes((set, doc) => {
+      const marks = set.find(undefined, undefined, (spec) => spec.buddyEdit);
+      if (marks.length === 0) return set;
+      const redrawn = marks.map((d) => editDecoration(d.from, d.to, change(d.spec)));
+      return set.remove(marks).add(doc, redrawn); // remove() empties the array it is given
+    });
+  }
+
+  function fadeEdits() {
+    if (flashKey.getState(view().state).find(undefined, undefined, (spec) => spec.buddyEdit && !spec.faded).length === 0) return;
+    restyleEdits((spec) => ({ ...spec, faded: true }));
   }
 
   function flash(ranges, by) {
@@ -560,37 +553,14 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       return normal;
     },
     applyMarkdown,
-    /** Whether a change is being replayed; the doc is then between versions. */
-    replaying: () => replayer.active(),
-    /** Show the rest of a replay at once. */
-    finishReplay: () => replayer.finish(),
-    /** Resolves once no replay is running. */
-    replayDone: () => replayer.done(),
-    /** Remove the marks on text the agent typed. */
-    clearReview,
-    /**
-     * The agent `name` started on comments: put its caret at the first
-     * anchor of `anchors` that is found. Null takes the caret away.
-     */
-    agentLooking(name, anchors) {
-      if (!name) {
-        replayer.hide();
-        return;
-      }
-      const { doc } = view().state;
-      for (const anchor of anchors) {
-        const range = anchor && rangeOf(doc, anchor);
-        if (range) {
-          replayer.look(range.from, name);
-          return;
-        }
-      }
+    /** Show the edits of the run tagged `tag` again, faded or not; null hides them. */
+    lightEdits(tag) {
+      if (tag === lit) return;
+      lit = tag;
+      restyleEdits((spec) => spec);
     },
-    /** The agent stopped working: its caret stays and fades. */
-    agentResting: () => replayer.rest(),
     /** Replace the content without reporting it as a local edit. */
     setMarkdown(next) {
-      replayer.finish();
       editor.action(replaceAll(next, true));
       baselineDoc = view().state.doc;
       paintHighlights();
@@ -610,7 +580,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     setPreview(items, { replay = false } = {}) {
       preview = { items, replay: replay ? ++replays : 0 };
       paintHighlights();
-      if (!replay || items.length === 0 || replayer.active()) return;
+      if (!replay || items.length === 0) return;
       const v = view();
       const range = rangeOf(v.state.doc, items[0].anchor);
       if (!range) return;
@@ -745,9 +715,11 @@ function el(tag, className, text) {
   return node;
 }
 
-function flag(name) {
+// Who made a change, over its start; in a buddy's colour (`color`) for a buddy.
+function flag(name, color = null) {
   const wrap = document.createElement('span');
   wrap.className = 'od-flag';
+  if (color) wrap.style.cssText = `--buddy: ${color}; --buddy-ink: #1f1d24`;
   const label = document.createElement('span');
   label.className = 'od-flag-label';
   label.textContent = name;

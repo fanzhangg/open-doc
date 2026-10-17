@@ -139,10 +139,11 @@ const sameAuthor = (a, b) => Boolean(a && b) && a.kind === b.kind && a.name.toLo
 
 // Characters added and removed between two versions of the source.
 function countChanges(before, after) {
-  if (before === null) return { added: after.length, removed: 0 };
+  if (before === null) return { added: after.length, removed: 0, changes: 1 };
   let added = 0;
   let removed = 0;
-  for (const { edit } of diffEdits(before, after)) {
+  const edits = diffEdits(before, after);
+  for (const { edit } of edits) {
     // Edits are widened to whole words; count only what differs.
     const a = edit.before;
     const b = edit.after;
@@ -153,7 +154,7 @@ function countChanges(before, after) {
     added += b.length - head - tail;
     removed += a.length - head - tail;
   }
-  return { added, removed };
+  return { added, removed, changes: edits.length };
 }
 
 async function readIndex(dir) {

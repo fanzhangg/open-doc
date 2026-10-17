@@ -309,13 +309,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return { docHash: hashBytes(Buffer.from(next)), markdown: next, ...(await commentsView(next)) };
   }
 
-  // Which buddy replies edited the doc on this machine, and which of those
-  // were undone: { [replyId]: 'edited' | 'undone' }.
+  // The runs that edited the doc on this machine, by their reply: { [replyId]:
+  // { state: 'edited' | 'undone', by, changes, hash } }, `changes` how many
+  // places the run changed and `hash` the doc's right after it.
   async function replyEdits() {
+    await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
     for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = 'edited';
-      if (v.undid) edits[v.undid] = 'undone';
+      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash };
+      if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
     }
     return edits;
   }

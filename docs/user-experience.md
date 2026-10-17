@@ -63,9 +63,9 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   next type.
 - A buddy comments as you do: on any passage, or in any thread. It cannot
   resolve or delete. Its comments ask no one.
-- Under its reply the app shows what the run did: how many edits and
-  comments, and how many edits were dropped. The reply only says why, or
-  what you need to decide, and may be empty.
+- Under its reply the app shows how many places the run edited; hovering
+  it shows them again. The reply only says why, or what you need to
+  decide, and may be empty.
 - **Your text wins.** Where you changed the same text while it worked, yours
   stays, its change there is dropped, and its reply says so. @mention it
   again to redo it.

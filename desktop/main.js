@@ -415,7 +415,17 @@ function buildMenu() {
     },
     // On Windows and Linux the page handles copy, paste and undo itself; a
     // menu accelerator would take Ctrl+Z away from the editor's own history.
-    ...(isMac ? [{ role: 'editMenu' }] : []),
+    // On macOS, Undo and Redo go to the page too: the browser's own undo
+    // loses track whenever the editor redraws text it did not type.
+    ...(isMac ? [{
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'Cmd+Z', click: (_item, win) => pageCommand(win, 'undo') },
+        { label: 'Redo', accelerator: 'Shift+Cmd+Z', click: (_item, win) => pageCommand(win, 'redo') },
+        { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' },
+      ],
+    }] : []),
     {
       label: isMac ? 'View' : '&View',
       submenu: [

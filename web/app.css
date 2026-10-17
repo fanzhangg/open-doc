@@ -401,26 +401,18 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-flash-block { animation: od-flash 6s ease-out forwards; border-radius: 4px; }
 @keyframes od-flash { 0%, 40% { background: var(--agent-glow); } 100% { background: transparent; } }
 .od-flag { position: relative; display: inline; }
-.od-flag-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--agent); color: #fff; font: 600 11px/1.6 var(--ui-font); white-space: nowrap; pointer-events: none; animation: od-fade 6s ease-out forwards; }
-.od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); animation: od-fade 6s ease-out forwards; }
+.od-flag-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--buddy, var(--agent)); color: var(--buddy-ink, #fff); font: 600 11px/1.6 var(--ui-font); white-space: nowrap; pointer-events: none; animation: od-fade 6s ease-out forwards; }
+.od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--buddy, var(--agent)); animation: od-fade 6s ease-out forwards; }
 @keyframes od-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
-/* the agent's caret while it types a change in (web/replay.js), and after */
-.od-agent-caret { position: relative; display: inline; }
-.od-agent-caret::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--agent); }
-.od-agent-caret-label { position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--agent); color: #fff; font: 600 11px/1.6 var(--ui-font); white-space: nowrap; user-select: none; }
-.od-agent-caret[data-mode="active"] .od-agent-caret-label { cursor: pointer; }
-.od-agent-caret[data-mode="looking"] .od-agent-caret-label::after { content: '…'; animation: od-blink 1.2s steps(2) infinite; }
-.od-agent-caret[data-mode="looking"]::before { animation: od-blink 1.2s steps(2) infinite; }
-.od-agent-caret[data-mode="idle"] .od-agent-caret-label { opacity: 0.85; }
-.od-agent-caret[data-mode="faded"] { opacity: 0.35; transition: opacity 1.5s; }
-.od-agent-caret[data-mode="faded"] .od-agent-caret-label { display: none; }
-@keyframes od-blink { 50% { opacity: 0.35; } }
-.od-replay-select { background: var(--agent-glow); border-radius: 2px; }
-.od-review { background: var(--agent-soft); border-radius: 2px; }
-.od-agent-offscreen { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translateX(-50%); padding: 6px 14px; border: 0; border-radius: 999px; background: var(--agent); color: #fff; font: 600 12px/1.4 var(--ui-font); box-shadow: var(--shadow-raised); cursor: pointer; }
-.od-agent-offscreen[data-side="above"] { top: 72px; bottom: auto; }
-@media (prefers-reduced-motion: reduce) { .od-agent-caret, .od-agent-caret * { animation: none !important; } }
+/* a buddy's edit: underlined in its colour until you type, then faded; its receipt lights it again */
+.od-buddy-edit { background: color-mix(in oklch, var(--buddy) 16%, transparent); box-shadow: inset 0 -2px 0 var(--buddy); border-radius: 2px; transition: background 0.4s, box-shadow 0.4s; }
+.od-buddy-edit.od-faded { background: transparent; box-shadow: none; }
+.od-receipt { display: flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 28px; padding: 0 2px 0 8px; border: 1px solid color-mix(in oklch, var(--buddy) 45%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--buddy) 8%, transparent); color: var(--text-soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.od-receipt > .od-icon { width: 14px; height: 14px; flex: none; color: var(--buddy); }
+.od-receipt-text { flex: 1; min-width: 0; }
+.od-receipt-undone { border-color: var(--border); background: none; }
+.od-receipt-undone > .od-icon { color: var(--text-faint); }
 
 /* ---- selection bubble ---- */
 
@@ -822,4 +814,3 @@ label.od-setting { cursor: pointer; }
 .od-settings-file { display: block; margin: 0 0 8px; overflow-wrap: anywhere; user-select: all; }
 .od-snippet { display: flex; align-items: center; gap: 8px; }
 .od-command-snippet { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 6px; background: var(--bg-soft); color: var(--text); overflow-wrap: anywhere; }
-.od-msg-undo { margin-top: 4px; padding-left: 0; font-size: 12.5px; }

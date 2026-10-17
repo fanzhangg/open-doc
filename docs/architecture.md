@@ -79,11 +79,12 @@ cannot resolve or delete; anything but appended comments is ignored
 (principle 6).
 
 What the app knows, the app shows, not the buddy's reply: under the reply,
-how many edits and comments the run made and how many edits were dropped.
-The reply says only what the app cannot (why, what to decide), and may be
-empty. The run's edits land at once, underlined in the buddy's color until
-the user next types. Both are on the machine that ran it only: the counts
-are kept with the version saved after the run.
+how many places the run edited, with Undo; a dropped change marks the reply
+`conflict`; its comments are in the margin. The reply says only what the
+app cannot (why, what to decide), and may be empty. The run's edits land at
+once, underlined in the buddy's color until the user next types; hovering
+the count shows them again. The count, the underlines and Undo are on the
+machine that ran it only, read from the version saved after the run.
 
 A run that fails is answered too: the buddy's comment is marked `failed`,
 with the end of the program's output. One ask, one reply; to retry, or to

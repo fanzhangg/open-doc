@@ -148,7 +148,7 @@ async function undoesOwnOnly(page, doc) {
 // changed is back on disk.
 async function undoesReply(page, doc) {
   const clicked = await page.evaluate(`(() => {
-    const button = [...document.querySelectorAll('.od-msg-undo')].at(-1);
+    const button = [...document.querySelectorAll('.od-receipt-undo')].at(-1);
     button?.click();
     return Boolean(button);
   })()`);

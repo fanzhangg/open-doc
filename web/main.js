@@ -159,6 +159,7 @@ async function start() {
     onReopen: (thread) => send(api.reopen(thread)),
     onDelete: (id) => send(api.deleteComment(id)),
     onUndo: undoReply,
+    onLight: (hash) => editor.lightEdits(hash),
     onSelect: (id) => {
       select(id);
       if (narrow.matches) revealText(id);
@@ -277,11 +278,6 @@ function scheduleSave() {
 
 async function save() {
   if (saving || !dirty || missing) return;
-  if (editor.replaying()) {
-    // The text is between versions; the replay reports any typing when it ends.
-    scheduleSave();
-    return;
-  }
   saving = true;
   const savedVersion = version;
   const markdown = editor.getMarkdown();
@@ -317,7 +313,6 @@ async function save() {
 
 async function flushSave() {
   clearTimeout(saveTimer);
-  editor.finishReplay();
   while (dirty || saving) {
     if (missing) throw new Error('the doc is missing from disk');
     if (!saving) await save();
@@ -336,10 +331,8 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 // Typing the editor has not reported yet (it does so on a debounce) is an
-// edit to save too. What is on disk is the whole change: a replay still
-// running is shown first.
+// edit to save too.
 function takeUnreportedTyping() {
-  editor?.finishReplay();
   if (editor && !dirty && editor.getMarkdown() !== synced) {
     dirty = true;
     version++;
@@ -384,16 +377,14 @@ function syncFromDisk() {
 async function doSync() {
   const fresh = await api.state();
   if (fresh.docHash === baseHash) return;
-  const by = editorName(fresh);
+  // A buddy's run wrote this doc when its version is the doc on disk.
+  const run = Object.values(fresh.edits ?? {}).find((e) => e.hash === fresh.docHash && e.state === 'edited');
   const theirs = editor.normalize(fresh.markdown);
-  // A replay still running is part of what is already on disk: complete it
-  // so its partial text is not taken for the human's.
-  editor.finishReplay();
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
   const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
-  // A buddy's changes are typed in; anything else just appears.
-  editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
+  // A buddy's changes are marked in its colour; anything else glows.
+  editor.applyMarkdown(merged.text, run?.by ?? ON_DISK, { buddy: Boolean(run), tag: run?.hash });
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -414,7 +405,6 @@ function showAgents(next) {
   const json = JSON.stringify(next);
   if (json === shownAgents) return;
   shownAgents = json;
-  showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   setBuddies(next.map((a) => a.name));
   people.render({ agents: next });
   chrome.refreshAgents();
@@ -424,26 +414,6 @@ function showAgents(next) {
 // What a request about buddies answers with.
 function takeAgentResult(result) {
   if (result.agents) showAgents(result.agents);
-}
-
-// A run starting puts its agent's caret on the comment it is reading, as a
-// collaborator would scroll there; when it stops, the caret stays and fades.
-function showAgentCaret(before, after) {
-  if (after && after.name !== before?.name) {
-    const ids = after.threadIds ?? [];
-    const anchors = ids.map((id) => comments?.threads.find((t) => t.id === id)?.anchor).filter(Boolean);
-    editor.agentLooking(after.name, anchors);
-  } else if (!after && before) {
-    editor.agentResting();
-  }
-}
-
-// Who most likely changed the file: a buddy at work (its edit is merged
-// before its run ends), or the one that replied last.
-function editorName(fresh) {
-  const latest = fresh.threads.flatMap((t) => t.comments).filter((c) => c.by.kind === 'ai')
-    .sort((a, b) => a.at.localeCompare(b.at)).at(-1);
-  return people.running()?.name ?? latest?.by.name ?? ON_DISK;
 }
 
 // ---- the doc moved or deleted outside the app ----
@@ -638,7 +608,6 @@ async function restoreVersion(id) {
 }
 
 function select(id, { focus = true } = {}) {
-  if (id) editor.clearReview(); // the human is looking at the comments now
   editor.setActive(id);
   margin.setActive(id, { focus });
 }

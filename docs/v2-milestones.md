@@ -184,17 +184,18 @@ the copy ignored; the reply may be empty; the prompt's rules on comments.
 
 ## M10. Receipt and marks
 
-**In:** under a buddy's reply, on the machine that ran it, the run's edits,
-comments and dropped edits, counted by the app and kept with the version
-saved after it; the run's edits land at once, underlined in the buddy's
-color until the user types; hovering the receipt shows them again.
+**In:** under a buddy's reply, on the machine that ran it, how many places
+the run edited, counted by the app and kept with the version saved after
+it, with Undo; the run's edits land at once, underlined in the buddy's
+color until the user types; hovering the receipt shows them again. A
+comments-only run saves no version, so the receipt counts edits only.
 
 **Removed:** replaying an edit as typing (`web/replay.js`), the buddy's
 caret.
 
 **Done when:**
-- The counts match the run's diff, appended comments and drops, and show
-  only on the machine that ran it.
+- The count matches the run's diff, and shows only on the machine that ran
+  it.
 - A run's edits are underlined in its color when it lands; typing anywhere
   removes the underlines.
 - No code replays an edit.

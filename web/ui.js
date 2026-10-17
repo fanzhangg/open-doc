@@ -177,9 +177,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     newAgent() {
       agentsPanel.newAgent();
     },
-    /** A command from the desktop app's menu: 'settings', 'agent-settings' or 'shortcuts'. */
+    /** A command from the desktop app's menu: 'settings', 'agent-settings', 'shortcuts', 'undo' or 'redo'. */
     command(name) {
-      if (name === 'settings') settings.toggle('general');
+      // Undo in the doc is the editor's own history (your edits only); in a field, the field's.
+      if (name === 'undo' || name === 'redo') {
+        if (document.activeElement?.closest('.ProseMirror')) editor.run(name);
+        else document.execCommand(name);
+      } else if (name === 'settings') settings.toggle('general');
       else if (name === 'agent-settings') agentsPanel.toggle();
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },

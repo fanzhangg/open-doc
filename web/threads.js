@@ -7,7 +7,7 @@
 // threads; they delete their own comments and buddies'.
 
 import { icon } from './icons.js';
-import { agentFace, personFace } from './faces.js';
+import { agentFace, buddyColor, personFace } from './faces.js';
 import { mentionSpans } from '../src/core/mentions.js';
 
 const GAP = 10;
@@ -95,8 +95,9 @@ export function createCommentMargin(margin, handlers) {
 
     // A long thread folds its middle replies until the human opens them or
     // selects the card (setActive); Hide folds them again either way. A
-    // comment that only resolved the thread shows as the resolved line.
-    const comments = thread.comments.filter((c) => c.body.trim() !== '');
+    // comment that only resolved the thread shows as the resolved line; a
+    // buddy's reply with nothing to say still shows, for what its run did.
+    const comments = thread.comments.filter((c) => c.body.trim() !== '' || (c.by.kind === 'ai' && !c.resolved));
     const long = comments.length > 3;
     const collapse = long && !expanded.has(thread.id);
     comments.forEach((comment, i) => {
@@ -140,22 +141,40 @@ export function createCommentMargin(margin, handlers) {
     const open = unfolded.has(comment.id);
     const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
     body.append(...withMentions(comment.body, handlers.mentionable?.() ?? []));
-    row.append(head, body, foldButton(comment.id, open));
+    if (comment.body.trim()) row.append(head, body, foldButton(comment.id, open));
+    else row.append(head);
     // To retry, or to redo what was dropped, the human asks again.
     if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${comment.by.name} again to retry.`));
     if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${comment.by.name} again to redo it.`));
-    if (edits[comment.id] === 'undone') row.append(el('div', 'od-card-note od-msg-note', 'Its edit was undone.'));
-    if (edits[comment.id] === 'edited') {
-      const undo = linkButton('Undo its edit', (event) => {
-        event.stopPropagation();
-        undo.disabled = true;
-        handlers.onUndo(comment.id).catch(() => { undo.disabled = false; });
-      });
-      undo.classList.add('od-msg-undo');
-      row.append(undo);
-    }
+    if (edits[comment.id]) row.append(receipt(comment.id, edits[comment.id]));
     row.classList.toggle('od-msg-failed', Boolean(comment.failed));
     return row;
+  }
+
+  // What a run did, as the app counted it, on the machine that ran it:
+  // hovering shows its edits in the text; the icon undoes them.
+  function receipt(id, { state, by, changes, hash }) {
+    const box = el('div', `od-receipt${state === 'undone' ? ' od-receipt-undone' : ''}`);
+    box.style.setProperty('--buddy', buddyColor(by ?? ''));
+    const count = el('span', 'od-receipt-text', state === 'undone' ? `${changes === 1 ? 'Edit' : 'Edits'} undone` : `${changes} ${changes === 1 ? 'edit' : 'edits'}`);
+    box.append(icon('pencil'), count);
+    if (state === 'edited') {
+      box.addEventListener('mouseenter', () => handlers.onLight?.(hash));
+      box.addEventListener('mouseleave', () => handlers.onLight?.(null));
+      const undo = el('button', 'od-icon-button od-receipt-undo');
+      undo.type = 'button';
+      undo.title = `Undo ${changes === 1 ? 'this edit' : `these ${changes} edits`}`;
+      undo.setAttribute('aria-label', undo.title);
+      undo.append(icon('undo'));
+      undo.addEventListener('click', (event) => {
+        event.stopPropagation();
+        undo.disabled = true;
+        handlers.onLight?.(null);
+        handlers.onUndo(id).catch(() => { undo.disabled = false; });
+      });
+      box.append(undo);
+    }
+    return box;
   }
 
   // Delete, shown on hover: a first comment goes with its replies.
