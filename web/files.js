@@ -183,7 +183,9 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
 
   // ---- rows, focus and opening ----
 
-  const rows = () => [...tree.querySelectorAll('.od-files-row[data-path]')].filter((node) => !node.closest('[hidden]'));
+  // The rows not inside a closed folder; the sidebar itself may be hidden
+  // (it is while a page first draws it), and its rows still count.
+  const rows = () => [...tree.querySelectorAll('.od-files-row[data-path]')].filter((node) => !node.closest('.od-files-tree [hidden]'));
   const rowFor = (path) => tree.querySelector(`.od-files-row[data-path="${CSS.escape(path)}"]`);
   const visibleRow = (path) => rows().find((node) => node.dataset.path === path) ?? null;
   const labelOf = (node) => node.querySelector('.od-files-label').textContent;

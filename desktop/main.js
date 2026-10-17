@@ -537,7 +537,10 @@ async function saveStartSettings(patch) {
 // folder (`/` between folders, '' for the folder itself); the app checks
 // each against its own listing, or for a new name, that it stays inside.
 
-function sidebarOf(win) {
+// The folder window of `win`, once no window is switching docs: an
+// operation goes by which doc each window shows.
+async function sidebarOf(win) {
+  await windows.settled();
   const entry = windows.docFor(win);
   if (!entry?.folder) throw new Error('not allowed');
   return entry;
@@ -561,7 +564,7 @@ const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
 async function sidebarCreate(win, { parent, name, kind } = {}) {
-  const entry = sidebarOf(win);
+  const entry = await sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const dir = await checkListed(entry, parent, parent ? 'folder' : 'root');
   const typed = String(name ?? '').trim();
@@ -595,7 +598,7 @@ async function sidebarCreate(win, { parent, name, kind } = {}) {
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
 async function sidebarMove(win, { from, kind, to } = {}) {
-  const entry = sidebarOf(win);
+  const entry = await sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const fromPath = await checkListed(entry, from, kind);
   const named = nameParts(String(to ?? ''));
@@ -688,7 +691,7 @@ function movedInRecent(fromPath, toPath) {
  * @returns {Promise<{ trashed: boolean }>}
  */
 async function sidebarTrash(win, { rel, kind } = {}) {
-  const entry = sidebarOf(win);
+  const entry = await sidebarOf(win);
   if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
   const path = await checkListed(entry, rel, kind);
   const name = basename(path);
@@ -766,7 +769,7 @@ const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.
  * them as folder commands.
  */
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
-  const entry = sidebarOf(win);
+  const entry = await sidebarOf(win);
   const path = await checkListed(entry, rel, kind);
   const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
