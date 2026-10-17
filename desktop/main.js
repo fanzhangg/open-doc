@@ -21,6 +21,7 @@ import {
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
 import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc } from './folder.js';
+import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
 import { exportFromWindow, showExport } from './export.js';
@@ -40,6 +41,10 @@ if (!app.requestSingleInstanceLock({ paths: launchPaths })) {
   app.exit(0);
   await new Promise(() => {}); // never go on to start a second app
 }
+
+// The user's login shell environment, for the doc host and the agents it
+// runs; read while Electron gets ready (see shell-env.js).
+const loginEnv = process.platform === 'win32' ? Promise.resolve(null) : readLoginEnv();
 
 // macOS sends docs opened from Finder, the dock or "Open With" as open-file,
 // possibly before the app is ready. Docs from launches that arrive before
@@ -874,7 +879,9 @@ app.whenReady().then(start);
 
 async function start() {
   // First, as loading the server takes a while: the doc host, in a process of
-  // its own so that what the servers do never holds up the windows.
+  // its own so that what the servers do never holds up the windows. It takes
+  // its environment from this process, so the login shell's goes in first.
+  Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
   docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
