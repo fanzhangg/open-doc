@@ -13,7 +13,7 @@
 // next run except what it wrote in the doc or its threads.
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
@@ -51,11 +51,13 @@ export function guardSettings() {
  * The folder a run starts in when it may see only the doc: an empty one of its
  * own, emptied before each run so nothing carries over. Claude Code
  * lets read-only tools see the working folder without asking, so starting in
- * the doc's folder would expose every file next to the doc.
+ * the doc's folder would expose every file next to the doc. Its real path
+ * (macOS's temp folder is behind a symlink): Codex trusts the folder only by
+ * the path it resolves to.
  */
 export function privateWorkdir(docPath, agentName = '') {
   const id = createHash('sha256').update(resolve(docPath) + (agentName ? `:${agentName.toLowerCase()}` : '')).digest('hex').slice(0, 16);
-  return join(tmpdir(), 'opendoc-agent', id);
+  return join(realpathSync(tmpdir()), 'opendoc-agent', id);
 }
 
 /** A permission rule's path for one file: `//c/Users/...` on Windows, `//home/...` elsewhere. */
@@ -504,11 +506,10 @@ export const CODEX_DENIED_GLOBS = ['.env*', '*.pem', '*.key'];
  * `readSiblings`, for a doc opened from a folder: then they are read-only, and
  * only secret files among them are hidden), secret files in the folders
  * above, and `~/.ssh`, `~/.aws` and Codex's own folder (its sign-in). Only the doc's folder is writable, because the sandboxed
- * `opendoc reply` creates the sidecar's lock and temp files there; the doc is
- * read-only unless it may edit directly, and the sidecar is changed only by replacing it.
- * Known gaps: a file added next to the doc during a run is readable, and the
- * run could replace (not read) any file in the folder by renaming another
- * file over it.
+ * `opendoc reply` creates the sidecar's lock and temp files there and renames
+ * one over the sidecar, which Codex allows only for a writable file; the doc
+ * is read-only unless it may edit directly.
+ * Known gap: a file added next to the doc during a run is readable.
  */
 export function codexPermissions(docPath, { editMode = 'auto', siblings = [], readSiblings = false, home = homedir(), codexHome = join(home, '.codex') } = {}) {
   const doc = resolve(docPath);
@@ -527,7 +528,7 @@ export function codexPermissions(docPath, { editMode = 'auto', siblings = [], re
     ...(readSiblings ? secrets : {}),
     ...Object.fromEntries(siblings.filter((n) => !own(n)).sort().map((n) => [n, readSiblings && !isSecret(n) ? 'read' : 'deny'])),
     [name]: editMode === 'auto' ? 'write' : 'read',
-    [`${name}.opendoc.json`]: 'read',
+    [`${name}.opendoc.json`]: 'write',
   };
   for (const dir of [join(home, '.ssh'), join(home, '.aws'), resolve(codexHome)]) table[dir] = 'deny';
   return table;
