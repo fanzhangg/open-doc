@@ -1,23 +1,29 @@
-// @mentions (SPEC.md §4).
+// @mentions (spec/SPEC-v2.md §6): `@name` where the `@` starts the body or
+// follows a character that is not a letter, digit, `.`, `_` or `-`, and the
+// name is followed by none of a letter, digit, `_` or `-`. Names compare
+// case-insensitively.
 
-export const MENTION_TOKEN = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g;
 export const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
- * Participant names mentioned in `body`, canonical spelling, each once, in
- * order of first appearance. `@name` that is not a participant is ignored.
+ * Where `body` mentions one of `names`: [{ start, end, name }], `start` at
+ * the `@`, `name` spelled as in `names`; the longest name wins.
  */
-export function parseMentions(body, participants) {
-  const byLower = new Map(participants.map((p) => [p.name.toLowerCase(), p.name]));
-  const found = [];
-  for (const match of body.matchAll(MENTION_TOKEN)) {
-    let token = match[2];
-    // Sentence punctuation after a name ("@claude.") is not part of it.
-    while (!byLower.has(token.toLowerCase()) && token.endsWith('.')) token = token.slice(0, -1);
-    const name = byLower.get(token.toLowerCase());
-    if (name && !found.includes(name)) found.push(name);
+export function mentionSpans(body, names) {
+  const longestFirst = [...names].sort((a, b) => b.length - a.length);
+  const spans = [];
+  for (let at = body.indexOf('@'); at !== -1; at = body.indexOf('@', at + 1)) {
+    if (at > 0 && /[A-Za-z0-9._-]/.test(body[at - 1])) continue;
+    const rest = body.slice(at + 1);
+    const name = longestFirst.find((n) => sameName(rest.slice(0, n.length), n) && !/[A-Za-z0-9_-]/.test(rest[n.length] ?? ''));
+    if (name) spans.push({ start: at, end: at + 1 + name.length, name });
   }
-  return found;
+  return spans;
+}
+
+/** Which of `names` `body` mentions, each once, in order of first appearance. */
+export function parseMentions(body, names) {
+  return [...new Set(mentionSpans(body, names).map((s) => s.name))];
 }
 
 export function sameName(a, b) {

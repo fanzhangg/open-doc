@@ -20,7 +20,7 @@
 // seed: null draws it from the name. Renaming one keeps the face it had.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
-import { newId } from './ops.js';
+import { newId } from './comments.js';
 
 export const MAX_PERSONA = 120;
 export const MAX_INSTRUCTIONS = 4000;

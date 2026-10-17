@@ -187,7 +187,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const v = view();
     const decorations = [];
     const drawn = [];
-    const open = new Map(threads.filter((t) => t.anchor && !t.detached && t.status === 'open').map((t) => [t.id, t]));
+    const open = new Map(threads.filter((t) => t.anchor && !t.detached && !t.resolved).map((t) => [t.id, t]));
     const comment = (from, to, id) => {
       const thread = open.get(id);
       if (!thread && id !== 'draft') return;

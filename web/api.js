@@ -14,7 +14,12 @@ const saved = (result) => ({ status: result.conflict ? 409 : 200, data: result }
 export const api = {
   state: () => call('state'),
   saveDoc: async (markdown, baseHash, { recreate = false } = {}) => saved(await call('saveDoc', { markdown, baseHash, ...(recreate ? { recreate } : {}) })),
-  op: (op) => call('op', { op }),
+  /** A comment on `anchor` (or the whole doc, for null): the comments now, and its `id`. */
+  comment: (anchor, body) => call('comment', { anchor, body }),
+  reply: (thread, body) => call('reply', { thread, body }),
+  resolve: (thread) => call('resolve', { thread }),
+  reopen: (thread) => call('reopen', { thread }),
+  deleteComment: (id) => call('deleteComment', { id }),
   /** The doc's events: `on(name, fn)`, fn getting the event's data. */
   events() {
     const handlers = new Map();
@@ -27,15 +32,11 @@ export const api = {
   scripts: () => call('scripts'),
   /** Write shipped agent script `name` again as it came. */
   resetScript: (name) => call('resetScript', { name }),
-  /** Invite agent `id` (from the user's agents) into the doc: { sidecar, agents }. */
-  invite: (id) => call('invite', { id }),
-  /** Remove agent `name` from the doc: { sidecar, agents }. */
-  removeAgent: (name) => call('removeAgent', { name }),
-  /** A new agent for the user, invited into this doc with `invite`: { agent, settings, sidecar?, agents? }. */
-  createAgent: (agent, { invite = false } = {}) => call('createAgent', { agent, invite }),
+  /** A new agent for the user: { agent, settings, agents }. */
+  createAgent: (agent) => call('createAgent', { agent }),
   /** Change the user's agent `id`: { settings, agents }. */
   updateAgent: (id, patch) => call('updateAgent', { id, patch }),
-  /** Delete the user's agent `id` (it leaves this doc too): { settings, agents }. */
+  /** Delete the user's agent `id`: { settings, agents }. */
   deleteAgent: (id) => call('deleteAgent', { id }),
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await call('history')).versions,

@@ -37,21 +37,16 @@ async function withDoc(fn, { agents = CLIPPY, folder = null, content = SAMPLE } 
   }
 }
 
-let ids = 0;
-const nextId = (prefix) => `${prefix}_test${String(++ids).padStart(4, '0')}`;
-const comment = (call, body, anchor = null) => {
-  const id = nextId('t');
-  return call('op', { op: { type: 'addThread', id, anchor, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } }).then(() => id);
-};
-const reply = (call, threadId, body) => call('op', { op: { type: 'addMessage', threadId, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } });
-const threadOf = async (state, id) => (await state()).sidecar.threads.find((t) => t.id === id);
-const repliesIn = async (state, id) => (await threadOf(state, id)).messages.filter((m) => m.author.kind === 'agent');
+const comment = (call, body, anchor = null) => call('comment', { anchor, body }).then((r) => r.id);
+const reply = (call, thread, body) => call('reply', { thread, body });
+const threadOf = async (state, id) => (await state()).threads.find((t) => t.id === id);
+const repliesIn = async (state, id) => (await threadOf(state, id)).comments.filter((c) => c.by.kind === 'ai');
 
 test('a run edits its copy and prints its reply: the doc has the edit, the thread the reply; the run sees only the copy', { timeout: 30_000 }, async () => {
   await withDoc(async ({ docPath, call, state, runs }) => {
     const id = await comment(call, '@Clippy replace "extra load" with "extra peak load"');
     const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
-    assert.equal(answer.author.name, 'Clippy');
+    assert.equal(answer.by.name, 'Clippy');
     assert.equal(answer.body, 'Replaced "extra load".');
     assert.ok(!answer.conflict && !answer.failed);
     assert.match(await readFile(docPath, 'utf8'), /the extra peak load\./);

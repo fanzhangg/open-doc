@@ -171,7 +171,7 @@ export function runScript(script, { cwd, prompt, env, timeoutMs = RUN_TIMEOUT_MS
  */
 export function buildPrompt({ buddy, docName, thread, folder = null, human = null }) {
   const quote = thread.anchor?.exact;
-  const said = thread.messages.map((m) => `${m.author.name}${m.author.kind === 'human' ? '' : ' (buddy)'}: ${m.body}`).join('\n\n');
+  const said = thread.comments.map((c) => `${c.by.name}${c.by.kind === 'ai' ? ' (buddy)' : ''}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
   return [
     `You are ${buddy.name}, co-authoring the markdown doc ${docName} in your working folder with ${human ?? 'a person'}. You are answering a comment on it.`,
     ...(buddy.persona.trim() ? [`Who you are: ${buddy.persona.trim()}`] : []),

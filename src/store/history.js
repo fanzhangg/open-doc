@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { diffEdits } from '../core/diff.js';
-import { newId } from '../core/ops.js';
+import { newId } from '../core/comments.js';
 import { hashBytes, lockFile, writeAtomic } from './files.js';
 
 export const HISTORY_VERSION = 1;

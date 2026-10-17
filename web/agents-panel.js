@@ -4,7 +4,7 @@
 // buddy is the agent picked in Settings.
 //
 // Changes save through the doc host as they are made. A new agent is a draft
-// until Create: nothing is saved or invited before it has a name, so one
+// until Create: nothing is saved before it has a name, so one
 // left half made (the panel closed, Esc, another agent picked) leaves no
 // trace.
 
@@ -26,15 +26,13 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   const nameError = form.querySelector('.od-input-error');
   const createButton = form.querySelector('[data-action="create-agent"]');
   const where = form.querySelector('.od-agent-where');
-  let statuses = [];
   let selected = null; // the id of the agent shown
-  let draft = null; // a new agent not created yet: { agent, invite }, `invite` to bring it into this doc
+  let draft = null; // a new agent not created yet: { agent }
   let creating = false;
 
   // Your starred agents, and this doc's own; other docs' own stay with them.
   const agents = () => store.get().agents.filter((a) => availableIn(a, docKey()));
   const current = () => draft?.agent ?? agents().find((a) => a.id === selected) ?? null;
-  const statusOf = (agent) => statuses.find((s) => (s.id ? s.id === agent.id : s.name.toLowerCase() === agent.name.toLowerCase())) ?? null;
   const valid = (patch) => {
     try {
       checkAgentPatch(patch);
@@ -85,8 +83,7 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
       input.removeAttribute('aria-invalid');
     }
     form.querySelector('[data-agent="starred"]').checked = agent.starred;
-    if (draft) where.textContent = draft.invite ? 'Joins this doc when you create it.' : 'Not in this doc.';
-    else where.textContent = statusOf(agent) ? 'In this doc.' : 'Not in this doc.';
+    where.textContent = agent.starred ? 'In every doc.' : 'Only in this doc.';
   }
 
   // The draft, first in the list and picked, under the name typed so far.
@@ -192,23 +189,22 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
 
   // New agent: a draft in the editor, its name to type first. Nothing is
   // saved until Create.
-  function newAgent({ invite = false } = {}) {
+  function newAgent() {
     if (!dialog.open) dialog.showModal();
     show();
-    draft = { agent: draftAgent({ face: Math.random().toString(36).slice(2, 10) }), invite };
+    draft = { agent: draftAgent({ face: Math.random().toString(36).slice(2, 10) }) };
     paint();
     nameInput.focus();
   }
 
-  // One request: the agent with everything set in the draft, brought into
-  // this doc when it came from there.
+  // One request: the agent with everything set in the draft.
   async function create() {
     const fields = draft && createFields(draft.agent);
     if (!fields || creating) return;
     creating = true;
     paint();
     try {
-      const result = await api.createAgent(fields, { invite: draft.invite });
+      const result = await api.createAgent(fields);
       draft = null;
       onResult(result);
       show(result.agent.id);
@@ -237,13 +233,9 @@ export function createAgentsPanel({ store, onResult, docKey = () => null }) {
   store.subscribe(paint);
   paint();
   return {
-    showStatus(next) {
-      statuses = next ?? [];
-      paint();
-    },
     /** Open the panel on agent `id` (or the one shown last). */
     open,
-    /** Open the panel on a new agent's draft; with `invite`, Create brings it into this doc. */
+    /** Open the panel on a new agent's draft. */
     newAgent,
     /** Open the panel, or close it when it is open. */
     toggle() {

@@ -1,17 +1,15 @@
 // The people in the header, laid out like a shared doc's: avatars of the
-// doc's agents, a People button, then yours.
+// buddies the doc reaches, a People button, then yours.
 //
-// Agents are light: on an agent's card, a click on its name or its persona
-// (one line) edits it in place; the Agents panel holds the finer settings,
-// such as instructions. New agent opens a draft there, which joins the doc
-// once it is created. A new agent is this doc's own: it shows only here and
-// comes back with the doc. Starring it puts it in your agents, for every doc;
-// removing a doc's own agent deletes it.
+// Buddies are light: on a buddy's card, a click on its name or its persona
+// (one line) edits it in place; the Buddies panel holds the finer settings,
+// such as instructions. New buddy opens a draft there. A new buddy is this
+// doc's own: it shows only here. Starring it puts it in your buddies, for
+// every doc.
 //
-// An agent answers when @mentioned, and mentioning one brings it into the
-// doc. The People panel works like Docs' share dialog: who is here, Remove,
-// and the agents you can bring in. Clicking an avatar opens that agent's
-// card: its name and persona, each editable right there. Your own card works
+// A buddy answers when @mentioned. The People panel lists who commented
+// and the buddies here. Clicking an avatar opens that buddy's card: its
+// name and persona, each editable right there. Your own card works
 // the same way: a click on your name edits it in place. On either, a click
 // on the face draws a new one; a new name keeps the face.
 //
@@ -31,13 +29,11 @@ const newFace = () => Math.random().toString(36).slice(2, 10);
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
  *           setName: (name: string) => boolean, setFace: (face: string) => void, openSettings: (section: string, agentId?: string) => void,
- *           newAgent: () => void, onSidecar: (sidecar: object) => void,
- *           onSettings: (settings: object) => void, onError: (message: string) => void,
- *           onPeople?: () => void }} options   onPeople: who is here or what they are changed
+ *           newAgent: () => void, onSettings: (settings: object) => void, onError: (message: string) => void }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, newAgent, onSidecar, onSettings, onError, onPeople = () => {} }) {
-  let statuses = []; // the agents running here (server)
-  let participants = []; // the doc's participants: [{ name, kind }]
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, setFace, docKey = () => null, openSettings, newAgent, onSettings, onError }) {
+  let statuses = []; // the buddies the doc reaches, and which are at work (the doc host)
+  let writers = []; // the people who commented: [{ id, name }]
   let roster = []; // the user's agents that can work here
   let showing = null; // 'me' | 'people' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
@@ -126,7 +122,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (kind !== 'agent' && same(name, getName())) return 'me';
     const agent = agentsHere().find((n) => same(n, name)) ?? profileOf(name)?.name;
     if (agent || kind === 'agent') return `agent:${agent ?? name}`;
-    return `person:${participants.find((p) => same(p.name, name))?.name ?? name}`;
+    return `person:${writers.find((p) => same(p.name, name))?.name ?? name}`;
   }
 
   // Only another person's card has nothing to change.
@@ -151,19 +147,14 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   const agentShown = () => (showing?.startsWith('agent:') ? showing.slice(6) : null);
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  // You, in the doc's participants: by your id, or by name in a doc from before ids.
-  const isMe = (p, myName) => (p.id && getId() ? p.id === getId() : same(p.name, myName));
+  const isMe = (p) => p.id === getId();
   const statusOf = (name) => statuses.find((s) => same(s.name, name)) ?? null;
   const profileOf = (name) => roster.find((a) => same(a.name, name)) ?? null;
   // Everything known about an agent: its profile, or else what its status says.
   const infoOf = (name) => profileOf(name) ?? statusOf(name) ?? { name };
 
-  // The agents of the doc, as they joined.
-  function agentsHere() {
-    const names = participants.filter((p) => p.kind === 'agent').map((p) => p.name);
-    for (const s of statuses) if (!names.some((n) => same(n, s.name))) names.push(s.name);
-    return names;
-  }
+  // The buddies the doc reaches.
+  const agentsHere = () => statuses.map((s) => s.name);
 
   // ---- the avatars in the header ----
 
@@ -255,16 +246,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     }));
     const people = el('div', 'od-people-list');
     people.append(personRow(getName(), 'You'));
-    for (const p of participants.filter((p) => p.kind === 'human' && !isMe(p, getName()))) people.append(personRow(p.name, 'Commenter'));
+    for (const p of writers.filter((p) => !isMe(p))) people.append(personRow(p.name, 'Commenter'));
 
-    // The agents in this doc, then a row to make a new one.
-    const here = agentsHere();
+    // The buddies here, then a row to make a new one.
     const inDoc = el('div', 'od-people-list');
-    for (const name of here) {
-      const removal = iconButton('close', `Remove ${name} from this doc`, () => remove(name));
-      removal.classList.add('od-on-hover');
-      inDoc.append(agentRow(name, [starButton(name), removal], true));
-    }
+    for (const name of agentsHere()) inDoc.append(agentRow(name, [starButton(name)], true));
     const create = el('button', 'od-people-row od-people-new');
     create.type = 'button';
     const plus = el('span', 'od-people-new-face');
@@ -276,15 +262,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     });
     inDoc.append(create);
 
-    // Your starred agents, to bring in. (This doc's own are always in it.)
-    const others = roster.filter((a) => !here.some((n) => same(n, a.name)) && a.starred);
-    const parts = [head, people, el('div', 'od-card-subtitle', 'Buddies in this doc'), inDoc];
-    if (others.length > 0) {
-      const list = el('div', 'od-people-list');
-      for (const agent of others) list.append(agentRow(agent.name, [starButton(agent.name), iconButton('plus', `Add ${agent.name} to this doc`, () => add(agent.id))], false));
-      parts.push(el('div', 'od-card-subtitle', 'Your buddies'), list);
-    }
-    return parts;
+    return [head, people, el('div', 'od-card-subtitle', 'Buddies in this doc'), inDoc];
   }
 
   function personRow(name, role) {
@@ -477,25 +455,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // The answer of every agent request: whatever changed, at once.
   function take(result) {
     if (result.settings) onSettings(result.settings);
-    if (result.sidecar) onSidecar(result.sidecar);
     if (result.agents) render({ agents: result.agents });
   }
 
-  const add = (id) => act(async () => take(await api.invite(id)), 'Could not add the buddy');
-
-  // Unstarring an agent that is not in this doc takes it out of your agents
-  // (docs that use it keep it), so that asks first.
+  // Unstarred, a buddy becomes this doc's own.
   const toggleStar = (agent) => act(async () => {
-    const here = agentsHere().some((n) => same(n, agent.name));
-    if (agent.starred && !here && !window.confirm(`Unstar ${agent.name}?\n\nIt leaves your buddies. Docs that use it keep it as their own.`)) return;
     take(await api.updateAgent(agent.id, { starred: !agent.starred }));
   }, 'Could not change the buddy');
-
-  const remove = (name) => act(async () => {
-    if (!window.confirm(`Remove ${name} from this doc?\n\nIt stops answering here until you @mention it again. Its comments stay.`)) return;
-    take(await api.removeAgent(name));
-    if (showing === `agent:${name}`) close(); // not a card opened meanwhile
-  }, 'Could not remove the buddy');
 
   const changeFace = (agent) => act(async () => {
     take(await api.updateAgent(agent.id, { face: newFace() }));
@@ -506,16 +472,15 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     openSettings('agents', id);
   }
 
-  /** Any of: `agents` (statuses), `participants` (the sidecar's), `roster` (settings.agents). */
-  function render({ agents, participants: nextParticipants, roster: nextRoster }) {
+  /** Any of: `agents` (statuses), `people` (who commented), `roster` (settings.agents). */
+  function render({ agents, people: nextWriters, roster: nextRoster }) {
     if (agents) statuses = agents;
-    if (nextParticipants) participants = nextParticipants;
+    if (nextWriters) writers = nextWriters;
     // Only the agents that can work here: starred ones and this doc's own.
     if (nextRoster) roster = nextRoster.filter((a) => availableIn(a, docKey()));
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !(editing && panel.contains(document.activeElement))) paintCard();
-    onPeople();
   }
 
   // ---- @names in the text ----
@@ -527,9 +492,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       if (!found.some((p) => same(p.name, name))) found.push({ name, kind });
     };
     for (const name of agentsHere()) add(name, 'agent');
-    for (const agent of roster) add(agent.name, 'agent');
     add(getName(), 'human');
-    for (const p of participants) add(p.name, p.kind);
+    for (const p of writers) add(p.name, 'human');
     return found;
   }
 
@@ -541,11 +505,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // ---- the comment box ----
 
   /**
-   * What @`query` may address, grouped: agents in the doc, agents to bring in
-   * (matched by name, or by their introduction for two letters or more), and
-   * people.
+   * What @`query` may address, grouped: the buddies here (matched by name,
+   * or by their persona for two letters or more), and the people who
+   * commented.
    */
-  function mentionChoices(query, myName) {
+  function mentionChoices(query) {
     const q = query.toLowerCase();
     const matches = (name, intro = '') => name.toLowerCase().startsWith(q) || (q.length >= 2 && intro.toLowerCase().includes(q));
     const here = agentsHere();
@@ -553,12 +517,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       const info = infoOf(name);
       return { name, kind: 'agent', group, tagline: introOf(info) };
     };
-    const inDoc = here.filter((n) => matches(n, introOf(infoOf(n)))).map((n) => agentChoice(n, 'Buddies in this doc'));
-    const bring = roster.filter((a) => !here.some((n) => same(n, a.name)) && matches(a.name, introOf(a)))
-      .map((a) => agentChoice(a.name, 'Bring in'));
-    const people = participants.filter((p) => p.kind === 'human' && !isMe(p, myName) && matches(p.name))
+    const inDoc = here.filter((n) => matches(n, introOf(infoOf(n)))).map((n) => agentChoice(n, 'Buddies'));
+    const people = writers.filter((p) => !isMe(p) && matches(p.name))
       .map((p) => ({ name: p.name, kind: 'human', group: 'People' }));
-    return [...inDoc, ...bring, ...people].slice(0, 12);
+    return [...inDoc, ...people].slice(0, 12);
   }
 
   return {
@@ -575,7 +537,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     /** Your name changed: repaint your card if it is open. */
     renameMe() {
       if (showing === 'me' || showing === 'people') paintCard();
-      onPeople();
     },
   };
 }

@@ -49,7 +49,7 @@ test('the doc host opens a doc, renames it with its sidecar, and closes it', asy
   const { host } = await newHost();
   try {
     const docPath = await tempDoc();
-    await writeFile(sidecarPath(docPath), JSON.stringify({ opendoc: 1, doc: 'plan.md', docHash: null, threads: [], participants: [] }));
+    await writeFile(sidecarPath(docPath), '{"opendoc":2}\n');
     const doc = await host.openHostedDoc(docPath);
     assert.ok(await serves(doc));
 

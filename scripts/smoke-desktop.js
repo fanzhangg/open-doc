@@ -104,12 +104,10 @@ process.exit(failed ? 1 : 0);
 async function answers(page, from, title, doc) {
   const replied = await page.evaluate(`(async () => {
     const call = async (type, arg) => (await window.opendocHost.call(type, arg)).result;
-    const id = 't_' + Math.random().toString(36).slice(2, 12);
-    const body = '@Clippy replace "${from}" with "${title}"';
-    await call('op', { op: { type: 'addThread', id, anchor: null, message: { id: 'm_' + id.slice(2), author: { name: 'me', kind: 'human' }, body } } });
+    const { id } = await call('comment', { anchor: null, body: '@Clippy replace "${from}" with "${title}"' });
     for (let i = 0; i < 200; i++) {
-      const thread = (await call('state'))?.sidecar.threads.find((t) => t.id === id);
-      if (thread?.messages.length === 2) return !thread.messages[1].failed;
+      const thread = (await call('state'))?.threads.find((t) => t.id === id);
+      if (thread?.comments.length === 2) return !thread.comments[1].failed;
       await new Promise((r) => setTimeout(r, 100));
     }
     return false;

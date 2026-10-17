@@ -20,7 +20,7 @@ export class DocFileError extends Error {
 
 export const isDocName = (path) => DOC_EXTENSIONS.includes(extname(path).toLowerCase());
 
-/** The doc a path opens: X.md for X.md or its sidecar X.md.opendoc.json, null for any other file. */
+/** The doc a path opens: X.md for X.md or its sidecar X.md.opendoc.jsonl, null for any other file. */
 export function docPathFor(path) {
   const doc = path.endsWith(SIDECAR_SUFFIX) ? path.slice(0, -SIDECAR_SUFFIX.length) : path;
   return isDocName(doc) ? doc : null;

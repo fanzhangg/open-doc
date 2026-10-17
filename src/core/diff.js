@@ -1,10 +1,8 @@
-// Edits (SPEC.md §2.5): what changed between two versions of a doc's markdown
-// source, compact enough to show on a comment card and precise enough to undo.
-// Proposals (§2.6): changes suggested in a reply, applied later by a human.
-// Also the line alignment the browser's three-way merge is built on.
+// Edits: what changed between two versions of a doc's markdown source,
+// compact enough to show (web/history.js) and to count. Also the line
+// alignment the three-way merge is built on.
 
 import { locate } from './anchor.js';
-import { OpError } from './ops.js';
 
 export const EDIT_CONTEXT = 32;
 const MAX_DIFF_CELLS = 4_000_000;
@@ -136,74 +134,6 @@ export function findEdit(markdown, edit) {
     if (best === null || Math.abs(at - edit.start) < Math.abs(best - edit.start)) best = at;
   }
   return best === null ? null : { start: best, end: best };
-}
-
-/** `markdown` with `edits` reversed, or null when any of them can no longer be found. */
-export function revertEdits(markdown, edits) {
-  return replaceAll(markdown, edits.map((edit) => ({ range: findEdit(markdown, edit), text: edit.before })));
-}
-
-/**
- * A proposal (SPEC.md §2.6) from `{ before, after }` pairs of markdown source:
- * each `before` must occur exactly once in `markdown`, and no two may overlap.
- * Each change gets the context around its `before`, so it can be found again
- * after the doc changes elsewhere. Throws OpError('bad_input') otherwise.
- */
-export function proposeChanges(markdown, changes) {
-  if (!Array.isArray(changes) || changes.length === 0) throw new OpError('bad_input', 'a proposal needs at least one change');
-  const crlf = markdown.includes('\r\n');
-  const eol = (text) => (crlf ? text.replace(/\r?\n/g, '\r\n') : text);
-  const out = changes.map((change, i) => {
-    const n = changes.length > 1 ? ` ${i + 1}` : '';
-    if (!change || typeof change.before !== 'string' || typeof change.after !== 'string') {
-      throw new OpError('bad_input', `change${n} needs "before" and "after" strings`);
-    }
-    const before = eol(change.before);
-    const after = eol(change.after);
-    if (before === '') throw new OpError('bad_input', `change${n}: "before" is empty; quote the text next to the insertion and repeat it in "after"`);
-    if (before === after) throw new OpError('bad_input', `change${n}: "before" and "after" are the same`);
-    const start = markdown.indexOf(before);
-    if (start === -1) throw new OpError('bad_input', `change${n}: "before" does not appear in the doc; copy it exactly from the markdown source`);
-    if (markdown.indexOf(before, start + 1) !== -1) throw new OpError('bad_input', `change${n}: "before" appears more than once in the doc; quote more of the surrounding text`);
-    const end = start + before.length;
-    return {
-      before,
-      after,
-      prefix: markdown.slice(Math.max(0, start - EDIT_CONTEXT), start),
-      suffix: markdown.slice(end, end + EDIT_CONTEXT),
-      start,
-    };
-  });
-  const sorted = [...out].sort((x, y) => x.start - y.start);
-  for (let n = 1; n < sorted.length; n++) {
-    if (sorted[n].start < sorted[n - 1].start + sorted[n - 1].before.length) throw new OpError('bad_input', 'two changes overlap; merge them into one');
-  }
-  return out;
-}
-
-/**
- * Where a proposed change's `before` sits in `markdown` now, or null when that
- * text has changed or gone: the undo rule of §2.5, run the other way.
- */
-export function findProposal(markdown, change) {
-  return findEdit(markdown, { after: change.before, prefix: change.prefix, suffix: change.suffix, start: change.start });
-}
-
-/** `markdown` with a proposal applied, or null when any change can no longer be found. */
-export function applyProposal(markdown, changes) {
-  return replaceAll(markdown, changes.map((change) => ({ range: findProposal(markdown, change), text: change.after })));
-}
-
-// Replace each found range with its text; null when one is missing or two overlap.
-function replaceAll(markdown, items) {
-  if (items.some((item) => !item.range)) return null;
-  const ranges = items.map(({ range, text }) => ({ ...range, text })).sort((x, y) => y.start - x.start);
-  for (let n = 1; n < ranges.length; n++) {
-    if (ranges[n].end > ranges[n - 1].start) return null;
-  }
-  let out = markdown;
-  for (const r of ranges) out = out.slice(0, r.start) + r.text + out.slice(r.end);
-  return out;
 }
 
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].

@@ -1,15 +1,13 @@
 // The comment margin, Google Docs style: one card per thread beside the text it
 // is about, stacked so they never overlap, with the active card aligned to its
-// text. The agent shows up like any other collaborator: an avatar, its
-// replies (with what it changed in the doc and Undo, or the changes it
-// proposes and Apply), and typing dots while it works. A reply whose run
-// failed, or whose edit was partly dropped for the human's text, says so.
-// Only the human resolves threads.
+// text. A buddy shows up like any other collaborator: an avatar, its
+// replies, and typing dots while it works. A reply whose run failed, or
+// whose edit was partly dropped for the human's text, says so. Only the
+// human resolves threads; they delete their own comments and buddies'.
 
-import { appliedBy } from './review.js';
 import { icon } from './icons.js';
 import { agentFace, personFace } from './faces.js';
-import { MENTION_TOKEN } from '../src/core/mentions.js';
+import { mentionSpans } from '../src/core/mentions.js';
 
 const GAP = 10;
 const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
@@ -19,33 +17,28 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  * @param {{ onCreate: (body: string) => Promise<void>, onCancelDraft: () => void,
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
- *           onUndo: (threadId: string, message: object) => Promise<void>,
- *           onApply: (threadId: string, message: object) => Promise<void>,
- *           canApply: (message: object) => boolean,
- *           onReview: (threadId: string, message: object) => void, reviewing: () => string | null,
+ *           onDelete: (commentId: string) => Promise<void>,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
  *           mentionable?: () => { name: string, kind: string }[] }} handlers
  */
 export function createCommentMargin(margin, handlers) {
-  let sidecar = { participants: [], threads: [] };
-  let agents = []; // the agents' statuses in this doc: who works on which threads
-  let me = '';
+  let threads = [];
+  let agents = []; // the buddies' statuses in this doc: who works on which threads
+  let me = { id: null, name: '' };
   let activeId = null;
   let draft = null; // { hint } while composing a comment on the selected text
   let showResolved = false;
   const replyDrafts = new Map();
-  const busy = new Set(); // ids of messages being undone or applied
-  const errors = new Map(); // message id → why undo or apply failed
-  const unfolded = new Set(); // ids of long messages shown in full
+  const unfolded = new Set(); // ids of long comments shown in full
   const expanded = new Set(); // ids of long threads shown with every reply
   const narrow = window.matchMedia('(max-width: 900px)');
 
   // ---- rendering ----
 
   function visibleThreads() {
-    return sidecar.threads.filter((t) => t.status === (showResolved ? 'resolved' : 'open'));
+    return threads.filter((t) => t.resolved === showResolved);
   }
 
   function render() {
@@ -55,10 +48,10 @@ export function createCommentMargin(margin, handlers) {
     margin.classList.toggle('od-margin-list', showResolved);
     const cards = [];
     if (draft) cards.push(draftCard());
-    const threads = visibleThreads();
-    for (const thread of threads) cards.push(threadCard(thread));
-    if (showResolved && threads.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
-    else if (!draft && threads.length === 0) cards.push(el('p', 'od-empty od-empty-open', 'No comments yet.')); // shown only in the narrow window's sheet
+    const shown = visibleThreads();
+    for (const thread of shown) cards.push(threadCard(thread));
+    if (showResolved && shown.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
+    else if (!draft && shown.length === 0) cards.push(el('p', 'od-empty od-empty-open', 'No comments yet.')); // shown only in the narrow window's sheet
 
     // Live updates arrive while the human types: keep the card they are typing
     // in attached, updated around its text box, so text, caret and IME input survive.
@@ -86,10 +79,10 @@ export function createCommentMargin(margin, handlers) {
     const card = el('article', 'od-card');
     card.dataset.thread = thread.id;
     const active = thread.id === activeId;
-    const working = thread.status === 'open' ? agents.filter((a) => a.threadIds.includes(thread.id)).map((a) => a.name) : [];
+    const working = thread.resolved ? [] : agents.filter((a) => a.threadIds.includes(thread.id)).map((a) => a.name);
     card.classList.toggle('od-card-active', active);
     card.classList.toggle('od-card-working', working.length > 0);
-    card.classList.toggle('od-card-resolved', thread.status === 'resolved');
+    card.classList.toggle('od-card-resolved', thread.resolved);
     card.addEventListener('click', (event) => {
       if (!event.target.closest('textarea, button, a')) handlers.onSelect(thread.id);
     });
@@ -99,19 +92,15 @@ export function createCommentMargin(margin, handlers) {
     if (!thread.anchor) card.append(el('div', 'od-card-note', 'On the whole document'));
 
     // A long thread folds its middle replies until the human opens them or
-    // selects the card (setActive); Hide folds them again either way.
-    const messages = thread.messages;
-    const long = messages.length > 3;
+    // selects the card (setActive); Hide folds them again either way. A
+    // comment that only resolved the thread shows as the resolved line.
+    const comments = thread.comments.filter((c) => c.body.trim() !== '');
+    const long = comments.length > 3;
     const collapse = long && !expanded.has(thread.id);
-    messages.forEach((message, i) => {
-      if (long && i === 1) card.append(moreButton(thread.id, messages.slice(1, -1), !collapse));
-      if (collapse && i > 0 && i < messages.length - 1) return;
-      const row = messageRow(message, i === 0 && thread.status === 'open' ? resolveButton(thread) : null);
-      if (message.proposal?.length) row.append(proposalBlock(thread, message, active));
-      // An apply notice's edits are shown, and undone, on the proposal it applied.
-      const applied = message.applies && messages.some((m) => m.id === message.applies);
-      if (message.edits?.length && !applied) row.append(editBlock(thread, message, active));
-      card.append(row);
+    comments.forEach((comment, i) => {
+      if (long && i === 1) card.append(moreButton(thread.id, comments.slice(1, -1), !collapse));
+      if (collapse && i > 0 && i < comments.length - 1) return;
+      card.append(commentRow(comment, i === 0 && !thread.resolved ? resolveButton(thread) : null));
     });
 
     // Typing dots for each agent working on it; several can at once.
@@ -121,38 +110,56 @@ export function createCommentMargin(margin, handlers) {
       row.append(avatar(name, 'agent', true), dots());
       card.append(row);
     }
-    if (thread.status === 'resolved') {
+    if (thread.resolved) {
+      const by = thread.comments.at(-1).by;
       const row = el('div', 'od-resolved-row');
-      row.append(checkIcon(), el('span', '', `Resolved by ${thread.resolvedBy === me ? 'you' : thread.resolvedBy}`));
+      row.append(checkIcon(), el('span', '', `Resolved by ${by.id === me.id ? 'you' : by.name}`));
       row.append(linkButton('Reopen', () => handlers.onReopen(thread.id)));
       card.append(row);
     }
-    if (active && thread.status === 'open') card.append(composer(`reply:${thread.id}`, 'Reply…', 'Reply', async (body) => {
+    if (active && !thread.resolved) card.append(composer(`reply:${thread.id}`, 'Reply…', 'Reply', async (body) => {
       await handlers.onReply(thread.id, body);
       replyDrafts.delete(thread.id);
     }, () => handlers.onSelect(null), thread.id));
     return card;
   }
 
-  function messageRow(message, action) {
+  function commentRow(comment, action) {
     const row = el('div', 'od-msg');
     const head = el('div', 'od-msg-head');
     const who = el('div', 'od-who');
-    const name = el('span', 'od-name', message.author.name);
-    who.append(name, el('time', 'od-time', relativeTime(message.createdAt)));
-    const author = message.author;
-    namecardFor(name, author.name, author.kind, 'click');
-    head.append(namecardFor(avatar(author.name, author.kind), author.name, author.kind, 'click'), who);
+    const kind = kindOf(comment);
+    const name = el('span', 'od-name', comment.by.name);
+    who.append(name, el('time', 'od-time', relativeTime(comment.at)));
+    namecardFor(name, comment.by.name, kind, 'click');
+    head.append(namecardFor(avatar(comment.by.name, kind), comment.by.name, kind, 'click'), who);
+    if (kind === 'agent' || comment.by.id === me.id) head.append(deleteButton(comment));
     if (action) head.append(action);
-    const open = unfolded.has(message.id);
+    const open = unfolded.has(comment.id);
     const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
-    body.append(...withMentions(message.body, handlers.mentionable?.() ?? []));
-    row.append(head, body, foldButton(message.id, open));
+    body.append(...withMentions(comment.body, handlers.mentionable?.() ?? []));
+    row.append(head, body, foldButton(comment.id, open));
     // To retry, or to redo what was dropped, the human asks again.
-    if (message.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${author.name} again to retry.`));
-    if (message.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${author.name} again to redo it.`));
-    row.classList.toggle('od-msg-failed', Boolean(message.failed));
+    if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${comment.by.name} again to retry.`));
+    if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${comment.by.name} again to redo it.`));
+    row.classList.toggle('od-msg-failed', Boolean(comment.failed));
     return row;
+  }
+
+  // Delete, shown on hover: a first comment goes with its replies.
+  function deleteButton(comment) {
+    const first = comment.thread === undefined;
+    const button = el('button', 'od-icon-button od-on-hover od-delete');
+    button.type = 'button';
+    button.title = first ? 'Delete this comment and its replies' : 'Delete this reply';
+    button.setAttribute('aria-label', 'Delete');
+    button.append(icon('trash'));
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (first && !window.confirm('Delete this comment and its replies?')) return;
+      handlers.onDelete(comment.id).catch(() => {});
+    });
+    return button;
   }
 
   // The replies folded out of a long thread: who wrote them and how many,
@@ -163,7 +170,7 @@ export function createCommentMargin(margin, handlers) {
     button.setAttribute('aria-expanded', String(open));
     if (!open) {
       const faces = el('span', 'od-more-faces');
-      const authors = new Map(hidden.map((m) => [m.author.name, m.author.kind]));
+      const authors = new Map(hidden.map((c) => [c.by.name, kindOf(c)]));
       for (const [name, kind] of [...authors].slice(0, 3)) faces.append(avatar(name, kind, true));
       button.append(faces);
     }
@@ -193,111 +200,6 @@ export function createCommentMargin(margin, handlers) {
     return button;
   }
 
-  // What a reply changed in the doc: an inline diff with a little context,
-  // and an Undo icon while the change can still be reverted.
-  function editBlock(thread, message, active) {
-    const undone = thread.messages.some((m) => m.undoes === message.id);
-    const run = message.edits.some((e) => e.scope === 'run');
-    const actions = undone ? [] : [actionButton('undo', 'Undo', `Revert ${message.author.name}'s change in the doc`, message, () => handlers.onUndo(thread.id, message))];
-    return changeBlock({
-      label: undone ? 'Undone' : run ? 'Edited in this run' : 'Edited',
-      changes: message.edits,
-      active,
-      muted: undone,
-      actions,
-      error: errors.get(message.id),
-      review: undone ? null : { thread, message },
-    });
-  }
-
-  // What a reply suggests changing, with an Apply icon. Once applied, Undo
-  // reverts the apply notice's edits; Apply is off when the original text
-  // has changed since.
-  function proposalBlock(thread, message, active) {
-    const notice = appliedBy(thread, message);
-    if (notice) {
-      return changeBlock({
-        label: 'Applied',
-        changes: message.proposal,
-        active,
-        actions: [actionButton('undo', 'Undo', 'Undo applying this change', notice, () => handlers.onUndo(thread.id, notice))],
-        error: errors.get(notice.id),
-        review: notice.edits?.length ? { thread, message: notice } : null,
-      });
-    }
-    const available = handlers.canApply(message);
-    const apply = actionButton('check', 'Apply', available ? 'Apply this change to the doc' : 'The original text has changed since', message, () => handlers.onApply(thread.id, message));
-    apply.classList.add('od-change-apply');
-    apply.disabled ||= !available;
-    return changeBlock({
-      label: message.proposal.length === 1 ? 'Suggested edit' : `${message.proposal.length} suggested edits`,
-      changes: message.proposal,
-      active,
-      muted: !available,
-      actions: [apply],
-      error: errors.get(message.id) ?? (available ? null : 'The original text has changed since.'),
-      review: available ? { thread, message } : null,
-    });
-  }
-
-  // `changes` are edits (§2.5) or proposed changes (§2.6): both read as
-  // prefix + before → after + suffix. The lines are capped in height; with
-  // `review` ({ thread, message }), clicking the block shows the whole change
-  // in the doc, and clicking again hides it.
-  function changeBlock({ label, changes, active, muted = false, actions, error, review = null }) {
-    const block = el('div', 'od-change');
-    block.classList.toggle('od-change-muted', muted);
-    const head = el('div', 'od-change-head');
-    const tools = el('div', 'od-change-actions');
-    tools.append(...actions);
-    head.append(el('span', 'od-change-label', label), tools);
-    block.append(head);
-    const lines = el('div', 'od-change-lines');
-    const shown = active ? changes : changes.slice(0, 2);
-    for (const change of shown) lines.append(diffLine(change));
-    block.append(lines);
-    if (shown.length < changes.length) block.append(el('div', 'od-change-more', `${changes.length - shown.length} more`));
-    if (error) block.append(el('div', 'od-change-error', error));
-    if (review) {
-      block.classList.add('od-change-reviewable');
-      block.classList.toggle('od-change-reviewing', handlers.reviewing() === review.message.id);
-      block.title = handlers.reviewing() === review.message.id ? 'Hide this change in the doc' : 'Show this change in the doc';
-      block.addEventListener('click', (event) => {
-        if (event.target.closest('button')) return;
-        event.stopPropagation();
-        handlers.onReview(review.thread.id, review.message);
-      });
-    }
-    return block;
-  }
-
-  // A small icon button that runs `action` once at a time for `message`,
-  // keeping its error to show under the block.
-  function actionButton(name, label, title, message, action) {
-    const button = el('button', 'od-change-button');
-    button.type = 'button';
-    button.title = title;
-    button.setAttribute('aria-label', label);
-    button.append(icon(name));
-    button.disabled = busy.has(message.id);
-    button.addEventListener('click', async (event) => {
-      event.stopPropagation();
-      if (busy.has(message.id)) return;
-      busy.add(message.id);
-      errors.delete(message.id);
-      render();
-      try {
-        await action();
-      } catch (error) {
-        errors.set(message.id, error.message);
-      } finally {
-        busy.delete(message.id);
-        render();
-      }
-    });
-    return button;
-  }
-
   function resolveButton(thread) {
     const button = el('button', 'od-icon-button od-resolve');
     button.type = 'button';
@@ -313,8 +215,8 @@ export function createCommentMargin(margin, handlers) {
     card.dataset.thread = 'draft';
     const head = el('div', 'od-msg-head');
     const who = el('div', 'od-who');
-    who.append(el('span', 'od-name', me));
-    head.append(avatar(me, 'human'), who);
+    who.append(el('span', 'od-name', me.name));
+    head.append(avatar(me.name, 'human'), who);
     card.append(head);
     card.append(composer('draft', 'Comment…', 'Comment', async (body) => {
       await handlers.onCreate(body);
@@ -361,7 +263,7 @@ export function createCommentMargin(margin, handlers) {
       if (draftKey) replyDrafts.set(draftKey, box.value);
       grow();
       const match = box.value.slice(0, box.selectionStart).match(MENTION_BEFORE_CARET);
-      choices = match ? (handlers.mentionChoices?.(match[2], me) ?? []) : [];
+      choices = match ? (handlers.mentionChoices?.(match[2]) ?? []) : [];
       selected = 0;
       drawMenu();
       layout();
@@ -430,10 +332,9 @@ export function createCommentMargin(margin, handlers) {
     if (showResolved || narrow.matches) {
       for (const card of cards) card.style.top = '';
       margin.style.height = '';
-      clipChanges();
       return;
     }
-    const byId = new Map(sidecar.threads.map((t) => [t.id, t]));
+    const byId = new Map(threads.map((t) => [t.id, t]));
     const items = cards.map((card) => {
       const id = card.dataset.thread;
       // The draft card can outlive `draft` until the next render (cancelling
@@ -467,7 +368,6 @@ export function createCommentMargin(margin, handlers) {
       bottom = Math.max(bottom, item.top + item.height);
     }
     margin.style.height = `${bottom + 40}px`;
-    clipChanges();
   }
 
   // Offer Show more only on messages cut off by their line clamp.
@@ -477,22 +377,17 @@ export function createCommentMargin(margin, handlers) {
     }
   }
 
-  // Fade out the bottom of change lines taller than their cap.
-  function clipChanges() {
-    for (const lines of margin.querySelectorAll('.od-change-lines')) {
-      lines.classList.toggle('od-change-clipped', lines.scrollHeight > lines.clientHeight + 1);
-    }
-  }
   window.addEventListener('resize', layout);
   narrow.addEventListener('change', layout);
 
   return {
-    update(nextSidecar, nextMe) {
-      sidecar = nextSidecar;
+    /** Show `nextThreads` (from the doc host), as `nextMe` ({ id, name }) sees them. */
+    update(nextThreads, nextMe) {
+      threads = nextThreads;
       me = nextMe;
       render();
     },
-    /** The agents' statuses changed: show the ones that cannot start on the comments waiting on them. */
+    /** The buddies' statuses changed: who works on which threads. */
     setAgents(statuses) {
       agents = statuses ?? [];
       render();
@@ -582,22 +477,16 @@ export function fillMentionMenu(menu, choices, selected, onPick) {
  * chip that shows their name card on hover.
  */
 export function withMentions(text, people) {
-  const byLower = new Map(people.map((p) => [p.name.toLowerCase(), p]));
   const nodes = [];
   let at = 0;
-  for (const match of text.matchAll(MENTION_TOKEN)) {
-    let token = match[2];
-    // Sentence punctuation after a name ("@claude.") is not part of it.
-    while (!byLower.has(token.toLowerCase()) && token.endsWith('.')) token = token.slice(0, -1);
-    const who = byLower.get(token.toLowerCase());
-    if (!who) continue;
-    const start = match.index + match[1].length;
+  for (const { start, end, name } of mentionSpans(text, people.map((p) => p.name))) {
+    const who = people.find((p) => p.name === name);
     if (start > at) nodes.push(document.createTextNode(text.slice(at, start)));
-    const chip = el('span', `od-at od-at-${who.kind}`, `@${token}`);
+    const chip = el('span', `od-at od-at-${who.kind}`, text.slice(start, end));
     chip.dataset.mention = who.name;
     chip.dataset.mentionKind = who.kind;
     nodes.push(chip);
-    at = start + 1 + token.length;
+    at = end;
   }
   if (at < text.length) nodes.push(document.createTextNode(text.slice(at)));
   return nodes;
@@ -670,23 +559,8 @@ function el(tag, className, text) {
 
 const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
-const oneLine = (s) => s.replace(/\s+/g, ' ');
-
-// One change as it reads in the text: "…context <del>before</del><ins>after</ins> context…",
-// the context cut at line breaks and to a few words.
-function diffLine({ prefix, before, after, suffix }) {
-  const line = el('div', 'od-change-line');
-  let lead = prefix.slice(prefix.lastIndexOf('\n') + 1);
-  if (lead.length > 24) lead = `…${lead.slice(-24).replace(/^\S*\s/, '')}`;
-  const end = suffix.indexOf('\n');
-  let tail = end === -1 ? suffix : suffix.slice(0, end);
-  if (tail.length > 24) tail = `${tail.slice(0, 24).replace(/\s\S*$/, '')}…`;
-  if (lead) line.append(el('span', 'od-change-context', oneLine(lead)));
-  if (before) line.append(el('del', 'od-change-del', truncate(oneLine(before), 160)));
-  if (after) line.append(el('ins', 'od-change-ins', truncate(oneLine(after), 160)));
-  if (tail) line.append(el('span', 'od-change-context', oneLine(tail)));
-  return line;
-}
+// A comment's author as faces and name cards know them: 'agent' for a buddy.
+const kindOf = (comment) => (comment.by.kind === 'ai' ? 'agent' : 'human');
 
 function relativeTime(iso) {
   const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);

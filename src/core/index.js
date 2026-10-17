@@ -1,16 +1,6 @@
+// The format's core (spec/SPEC-v2.md): rendered text, anchors, comments and
+// mentions. The same in Node and the browser.
 export { project, sourceRange, lineOf } from './project.js';
-export {
-  AnchorError,
-  CONTEXT_LENGTH,
-  createAnchor,
-  findQuote,
-  locate,
-  reanchorThreads,
-  refreshSidecar,
-} from './anchor.js';
-export { applyProposal, diffEdits, findEdit, findProposal, proposeChanges, revertEdits } from './diff.js';
-export { parseMentions } from './mentions.js';
-export { FORMAT_VERSION, OpError, applyOp, emptySidecar, findThread, newId } from './ops.js';
-export { askedOf, inbox } from './inbox.js';
-export { FormatError, parseSidecar, serializeSidecar } from './format.js';
-export { AgentError, DEFAULT_AGENTS, availableIn, docOnly, createAgent, deleteAgent, resolveRoster, updateAgent } from './agents.js';
+export { AnchorError, CONTEXT_LENGTH, createAnchor, findQuote, locate } from './anchor.js';
+export { FORMAT_VERSION, FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from './comments.js';
+export { mentionSpans, parseMentions, sameName } from './mentions.js';

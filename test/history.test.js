@@ -123,11 +123,10 @@ test('the doc service records saves, changes on disk and restores', async () => 
 
 test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, versions }) => {
-    const message = { id: 'm_hist0001', author: me, body: '@histbot replace "extra load" with "extra peak load"' };
-    await call('op', { op: { type: 'addThread', id: 't_hist0001', anchor: null, message } });
+    const { id } = await call('comment', { anchor: null, body: '@histbot replace "extra load" with "extra peak load"' });
     await until(async () => (await versions()).length === 2, 'the buddy\'s edit to be recorded');
     const [, agentVersion] = await versions();
     assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
-    assert.deepEqual(agentVersion.threadIds, ['t_hist0001']);
+    assert.deepEqual(agentVersion.threadIds, [id]);
   });
 });

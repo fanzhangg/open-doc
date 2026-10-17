@@ -233,6 +233,8 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-people-row .od-icon-button .od-icon { width: 15px; height: 15px; }
 .od-people-row .od-on-hover { opacity: 0; }
 .od-people-row:hover .od-on-hover, .od-people-row .od-on-hover:focus-visible { opacity: 1; }
+.od-msg .od-on-hover { opacity: 0; }
+.od-msg:hover .od-on-hover, .od-msg .od-on-hover:focus-visible { opacity: 1; }
 .od-people-row .od-profile-face .od-presence-dot { width: 9px; height: 9px; border-width: 2px; border-color: var(--bg); }
 /* the People button: a circle the size of an avatar, next to them */
 .od-invite { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px dashed var(--border-strong); border-radius: 50%; background: var(--bg); color: var(--text-soft); }
@@ -499,7 +501,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-msg + .od-msg-failed, .od-quote + .od-msg-failed { margin-top: 14px; }
 .od-msg-actions { display: flex; gap: 2px; margin-left: auto; }
 .od-msg-failed .od-body { color: var(--danger); }
-.od-request-cancelled { margin: 10px 0 0; }
 .od-body-folded { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .od-card:not(.od-card-active) .od-body-folded { -webkit-line-clamp: 3; }
 /* Show more / less and folded replies: quiet text with a chevron that flips; the comment text stays the focus */
@@ -536,27 +537,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-resolved-row span { flex: 1; }
 .od-link-button { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 500; padding: 2px 6px; border-radius: 4px; }
 .od-link-button:hover { background: var(--accent-soft); }
-.od-change { margin-top: 8px; padding: 4px 6px 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); font-size: 12.5px; }
-.od-change-head { display: flex; align-items: center; gap: 6px; min-height: 26px; }
-.od-change-label { flex: 1; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
-.od-change-actions { display: flex; gap: 2px; }
-.od-change-button { border: 0; background: none; width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; transition: background 0.15s, color 0.15s; }
-.od-change-button .od-icon { width: 16px; height: 16px; stroke-width: 2; }
-.od-change-button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
-.od-change-apply { color: var(--accent); }
-.od-change-apply:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
-.od-change-line { margin-top: 3px; padding-right: 4px; line-height: 1.55; color: var(--text-soft); overflow-wrap: anywhere; }
-.od-change-context { color: var(--text-faint); }
-.od-change-del { color: var(--del); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--del) 60%, transparent); background: color-mix(in srgb, var(--del) 8%, transparent); border-radius: 3px; padding: 0 2px; }
-.od-change-ins { color: var(--ins); text-decoration: none; background: color-mix(in srgb, var(--ins) 10%, transparent); border-radius: 3px; padding: 0 2px; }
-.od-change-lines { max-height: 7.75em; overflow: hidden; }
-.od-change-clipped { -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent); mask-image: linear-gradient(to bottom, #000 65%, transparent); }
-.od-change-reviewable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-.od-change-reviewable:hover { border-color: var(--border-strong); }
-.od-change-reviewing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-soft)); }
-.od-change-more { margin-top: 3px; color: var(--text-faint); }
-.od-change-error { margin-top: 4px; color: var(--del); }
-.od-change-muted .od-change-line { opacity: 0.55; }
 
 .od-composer { position: relative; margin-top: 10px; }
 .od-composer textarea { display: block; width: 100%; resize: none; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 18px; background: var(--bg); color: var(--text); padding: 7px 14px; font: inherit; font-size: 14px; line-height: 1.4; transition: border-color 0.15s, box-shadow 0.15s; }

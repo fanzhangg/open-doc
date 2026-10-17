@@ -17,11 +17,8 @@ import { icon } from './icons.js';
 import { merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
-import { applyProposal, diffEdits, revertEdits } from '../src/core/diff.js';
-import { canApply, editItems, openProposal, previewItems } from './review.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
-import { newId } from '../src/core/ops.js';
 import { NAME_PATTERN, sameName } from '../src/core/mentions.js';
 import { availableIn } from '../src/core/agents.js';
 
@@ -36,6 +33,7 @@ const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comme
 
 const status = document.querySelector('.od-status');
 const missingBanner = document.querySelector('.od-missing');
+const noticeBanner = document.querySelector('.od-notice');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 const commentsToggle = document.querySelector('.od-tool-comment');
 // In a narrow window the comments rise from the bottom over the page: closed
@@ -50,13 +48,11 @@ let history;
 let settings;
 let defaultName;
 let docKey; // the doc's full path: which of your unstarred agents are its own
-let me;
-let sidecar;
+let me; // your name
+let myId; // your id, which your comments carry
+let comments; // the doc's threads, who wrote in them, and a notice about its sidecar (state())
 let baseHash;
 let synced; // the doc as last loaded or saved, in the editor's own markdown style
-let disk; // the doc's bytes on disk as last seen, which proposals are applied to
-let activeId = null;
-let reviewing = null; // id of the message whose change is shown in the text (clicked in its card)
 let dirty = false;
 let saving = false;
 let version = 0;
@@ -65,7 +61,7 @@ let pendingExternal = null;
 let pendingSelection = null;
 let typedAt = -Infinity; // when the human last typed in the doc
 let shownAgents = ''; // the agent statuses on screen, as JSON
-let shownSidecar = ''; // the sidecar on screen, as JSON
+let shownComments = ''; // the comments on screen, as JSON
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
@@ -99,8 +95,8 @@ async function start() {
     return;
   }
   baseHash = initial.docHash;
-  disk = initial.markdown;
   defaultName = initial.defaultName;
+  myId = initial.me.id;
   docKey = initial.docKey;
   settings = createSettings(initial.settings, {
     save: api.saveSettings,
@@ -162,20 +158,16 @@ async function start() {
       pendingSelection = null;
       editor.setDraft(null);
     },
-    onReply: (threadId, body) => sendOp({ type: 'addMessage', threadId, message: newMessage(body) }),
-    onResolve: (threadId) => sendOp({ type: 'resolve', threadId, by: me }),
-    onReopen: (threadId) => sendOp({ type: 'reopen', threadId, by: me }),
-    onUndo: undoEdit,
-    onApply: applyProposalEdit,
-    canApply: (message) => canApply(disk, message),
-    onReview: review,
-    reviewing: () => reviewing,
+    onReply: (thread, body) => send(api.reply(thread, body)),
+    onResolve: (thread) => send(api.resolve(thread)),
+    onReopen: (thread) => send(api.reopen(thread)),
+    onDelete: (id) => send(api.deleteComment(id)),
     onSelect: (id) => {
       select(id);
       if (narrow.matches) revealText(id);
     },
     anchorTops: (items) => editor.anchorTops(items),
-    mentionChoices: (query, name) => people?.mentionChoices(query, name) ?? [],
+    mentionChoices: (query) => people?.mentionChoices(query) ?? [],
     mentionable: () => people?.mentionable() ?? [],
   });
   editor.onLayout(() => margin.layout());
@@ -191,8 +183,7 @@ async function start() {
     setFace: (face) => settings.set({ face }),
     docKey: () => docKey,
     openSettings: (section, agentId) => (section === 'agents' ? chrome.openAgent(agentId) : chrome.command('settings')),
-    newAgent: () => chrome.newAgent({ invite: true }),
-    onSidecar: applySidecar,
+    newAgent: () => chrome.newAgent(),
     onSettings: (next) => settings.receive(next),
     onError: (message) => setStatus(message, 'error'),
   });
@@ -205,10 +196,9 @@ async function start() {
   });
   people.render({ agents: initial.agents, roster: settings.get().agents });
   settings.subscribe((next) => people.render({ roster: next.agents }));
-  chrome.agentStatus(initial.agents);
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
-  applySidecar(initial.sidecar);
+  applyComments(initial);
   setStatus('Saved');
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
 
@@ -247,7 +237,7 @@ async function start() {
   });
   history = createHistory({
     api,
-    commentOf: (id) => sidecar?.threads.find((t) => t.id === id)?.messages[0]?.body ?? null,
+    commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
     onClose: () => editor.focus(),
   });
@@ -313,7 +303,6 @@ async function save() {
     } else {
       baseHash = data.docHash;
       synced = markdown;
-      setDisk(data.markdown ?? disk);
       if (version === savedVersion) dirty = false;
       if (dirty) setStatus('Saving…', 'saving');
       else setStatus('Saved');
@@ -404,7 +393,7 @@ function syncFromDisk() {
 async function doSync() {
   const fresh = await api.state();
   if (fresh.docHash === baseHash) return;
-  const by = editorName(fresh.sidecar);
+  const by = editorName(fresh);
   const theirs = editor.normalize(fresh.markdown);
   // A replay still running is part of what is already on disk: complete it
   // so its partial text is not taken for the human's.
@@ -416,12 +405,7 @@ async function doSync() {
   editor.applyMarkdown(merged.text, by, { animate: by !== ON_DISK });
   synced = theirs;
   baseHash = fresh.docHash;
-  if (JSON.stringify(fresh.sidecar) !== shownSidecar) {
-    disk = fresh.markdown;
-    applySidecar(fresh.sidecar);
-  } else {
-    setDisk(fresh.markdown); // the cards change only if a proposal's fate does
-  }
+  applyComments(fresh);
   if (merged.text === theirs) {
     dirty = false;
     setStatus('Saved');
@@ -441,14 +425,12 @@ function showAgents(next) {
   shownAgents = json;
   showAgentCaret(people.running(), next.find((a) => a.state === 'running') ?? null);
   people.render({ agents: next });
-  chrome.agentStatus(next);
   margin.setAgents(next);
 }
 
-// What an agent request (invite, remove, change an agent) answers with.
+// What a request about buddies answers with.
 function takeAgentResult(result) {
   if (result.settings) settings.receive(result.settings);
-  if (result.sidecar) applySidecar(result.sidecar);
   if (result.agents) showAgents(result.agents);
 }
 
@@ -457,7 +439,7 @@ function takeAgentResult(result) {
 function showAgentCaret(before, after) {
   if (after && after.name !== before?.name) {
     const ids = after.threadIds ?? [];
-    const anchors = ids.map((id) => sidecar?.threads.find((t) => t.id === id)?.anchor).filter(Boolean);
+    const anchors = ids.map((id) => comments?.threads.find((t) => t.id === id)?.anchor).filter(Boolean);
     editor.agentLooking(after.name, anchors);
   } else if (!after && before) {
     editor.agentResting();
@@ -466,10 +448,10 @@ function showAgentCaret(before, after) {
 
 // Who most likely changed the file: a buddy at work (its edit is merged
 // before its run ends), or the one that replied last.
-function editorName(nextSidecar) {
-  const latest = nextSidecar.threads.flatMap((t) => t.messages).filter((m) => m.author.kind === 'agent')
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
-  return people.running()?.name ?? latest?.author.name ?? ON_DISK;
+function editorName(fresh) {
+  const latest = fresh.threads.flatMap((t) => t.comments).filter((c) => c.by.kind === 'ai')
+    .sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+  return people.running()?.name ?? latest?.by.name ?? ON_DISK;
 }
 
 // ---- the doc moved or deleted outside the app ----
@@ -504,7 +486,6 @@ missingBanner.querySelector('[data-action="recreate"]').addEventListener('click'
     }
     baseHash = data.docHash;
     synced = markdown;
-    setDisk(data.markdown ?? markdown);
     if (version === savedVersion) dirty = false;
     setMissing(false);
   } catch (error) {
@@ -526,11 +507,7 @@ async function refreshThreads() {
     do {
       refreshAgain = false;
       try {
-        const fresh = await api.state();
-        setDisk(fresh.markdown);
-        // A sidecar event can leave the threads as they are (an agent's
-        // working marker renewed, say); redrawing every card for that stalls typing.
-        if (JSON.stringify(fresh.sidecar) !== shownSidecar) applySidecar(fresh.sidecar);
+        applyComments(await api.state());
       } catch {
         // the next event retries
       }
@@ -539,14 +516,19 @@ async function refreshThreads() {
   return refreshing;
 }
 
-function applySidecar(next) {
-  sidecar = next;
-  shownSidecar = JSON.stringify(next);
-  editor.setThreads(sidecar.threads);
-  margin.update(sidecar, me);
-  people?.render({ participants: sidecar.participants });
-  refreshPreview();
-  const open = sidecar.threads.filter((t) => t.status === 'open').length;
+// Show the doc's comments (from state() or a comment request). Redrawing
+// every card for the same ones would stall typing.
+function applyComments({ threads, people: writers, notice }) {
+  const json = JSON.stringify({ threads, writers, notice });
+  if (json === shownComments) return;
+  shownComments = json;
+  comments = { threads, people: writers, notice };
+  editor.setThreads(threads);
+  margin.update(threads, { id: myId, name: me });
+  people?.render({ people: writers });
+  noticeBanner.hidden = !notice;
+  noticeBanner.querySelector('.od-banner-text').textContent = notice ?? '';
+  const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
 }
 
@@ -591,66 +573,6 @@ function revealText(id) {
   document.querySelector(`.od-page [data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
-// Whether a proposal can still be applied depends on the text on disk.
-function setDisk(markdown) {
-  if (markdown === disk) return;
-  disk = markdown;
-  if (sidecar?.threads.some((t) => t.messages.some((m) => m.proposal))) {
-    margin.rerender();
-    refreshPreview();
-  }
-}
-
-// ---- proposals ----
-
-// While a thread is selected, its open proposal shows in the text as a suggestion.
-// While a thread is selected, the text shows the change clicked in its card,
-// or else its open proposal, as a suggestion.
-function refreshPreview({ replay = false } = {}) {
-  const thread = sidecar?.threads.find((t) => t.id === activeId);
-  const clicked = thread?.messages.find((m) => m.id === reviewing);
-  if (reviewing && !clicked) reviewing = null;
-  const proposal = clicked ?? (thread?.status === 'open' ? openProposal(thread) : null);
-  const items = !proposal ? []
-    : proposal.proposal && !proposal.applies ? previewItems(disk, proposal.proposal)
-    : editItems(disk, proposal.edits ?? []);
-  editor.setPreview(items, { replay });
-}
-
-// Clicking a change in a card plays it in the text; clicking it again hides it.
-function review(threadId, message) {
-  const again = reviewing === message.id;
-  if (activeId !== threadId) select(threadId, { focus: false });
-  reviewing = again ? null : message.id;
-  margin.rerender();
-  refreshPreview({ replay: !again });
-}
-
-// Apply what a reply proposed (SPEC.md §2.6): only while its original text is
-// still there, saved like any edit, then post an apply notice carrying the
-// edits so it can be undone. The thread stays open for the human to resolve.
-async function applyProposalEdit(threadId, message) {
-  await flushSave();
-  let fresh = await api.state();
-  if (fresh.docHash !== baseHash) {
-    await syncFromDisk();
-    await flushSave();
-    fresh = await api.state();
-  }
-  const next = applyProposal(fresh.markdown, message.proposal);
-  if (next === null) throw new Error('Cannot apply: the original text has changed since.');
-  // Played in as if the agent typed it, then saved.
-  editor.applyMarkdown(next, message.author.name, { animate: true });
-  await editor.replayDone();
-  dirty = true;
-  version++;
-  await flushSave();
-  const edits = diffEdits(fresh.markdown, disk).map((change) => change.edit);
-  if (edits.length === 0) throw new Error('Applying the proposal changed nothing.');
-  const body = `Applied ${message.author.name}'s proposal`;
-  await sendOp({ type: 'addMessage', threadId, message: { ...newMessage(body), applies: message.id, edits } });
-}
-
 async function createThread(body) {
   await flushSave();
   // Canonical anchor: re-find the selection in the core projection of the
@@ -659,41 +581,22 @@ async function createThread(body) {
   const hint = { exact: pendingSelection.quote, prefix: pendingSelection.prefix, suffix: pendingSelection.suffix, start: pendingSelection.start };
   const found = locate(text, hint);
   const anchor = found ? createAnchor(text, found.start, found.end) : hint;
-  const id = newId('t');
-  await sendOp({ type: 'addThread', id, anchor, message: newMessage(body) });
+  const { id } = await send(api.comment(anchor, body));
   pendingSelection = null;
   editor.setDraft(null);
   select(id);
 }
 
-async function sendOp(op) {
+// A comment request: its answer shows the comments as they are now.
+async function send(request) {
   try {
-    takeAgentResult(await api.op(op)); // an @mention may have brought an agent in
+    const result = await request;
+    applyComments(result);
+    return result;
   } catch (error) {
-    setStatus(`Could not save comment: ${error.message}`, 'error');
+    setStatus(`Could not save the comment: ${error.message}`, 'error');
     throw error;
   }
-}
-
-// Revert what an agent reply changed in the doc (SPEC.md §2.5): only while its
-// text is still there, saved like any edit, then reopen the thread with a
-// notice that does not ask the agent to try again.
-async function undoEdit(threadId, message) {
-  await flushSave();
-  let fresh = await api.state();
-  if (fresh.docHash !== baseHash) {
-    await syncFromDisk();
-    await flushSave();
-    fresh = await api.state();
-  }
-  const reverted = revertEdits(fresh.markdown, message.edits);
-  if (reverted === null) throw new Error('Cannot undo: that text has changed since.');
-  editor.applyMarkdown(reverted, 'Undo');
-  dirty = true;
-  version++;
-  await flushSave();
-  const body = `Undid ${message.author.name}'s edit`;
-  await sendOp({ type: 'addMessage', threadId, message: { ...newMessage(body), undoes: message.id } });
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js). The
@@ -720,7 +623,6 @@ async function restoreVersion(id) {
   editor.applyMarkdown(markdown, 'Restore');
   synced = editor.normalize(markdown);
   baseHash = docHash;
-  setDisk(markdown);
   dirty = false;
   setStatus('Saved');
   if (pendingExternal) {
@@ -730,17 +632,10 @@ async function restoreVersion(id) {
   }
 }
 
-function newMessage(body) {
-  return { id: newId('m'), author: { name: me, kind: 'human' }, body };
-}
-
 function select(id, { focus = true } = {}) {
-  if (id !== activeId) reviewing = null;
   if (id) editor.clearReview(); // the human is looking at the comments now
-  activeId = id;
   editor.setActive(id);
   margin.setActive(id, { focus });
-  refreshPreview();
 }
 
 // ---- identity ----
@@ -805,7 +700,7 @@ function renameMe(next) {
   if (next === me) return;
   me = next;
   paintNameChip();
-  margin?.update(sidecar, me);
+  if (comments) margin?.update(comments.threads, { id: myId, name: me });
   people?.renameMe();
 }
 

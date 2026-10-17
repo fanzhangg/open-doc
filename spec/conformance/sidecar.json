@@ -1,0 +1,194 @@
+{
+  "description": "Reading a version 2 sidecar (spec/SPEC-v2.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
+  "reading": [
+    {
+      "name": "a first comment and its replies, in order of at, then id",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "{\"id\":\"c_first01\",\"anchor\":{\"exact\":\"extra load\",\"prefix\":\"cannot handle the \",\"suffix\":\".\",\"start\":150},\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Is this right?\"}",
+        "{\"id\":\"c_reply03\",\"thread\":\"c_first01\",\"by\":{\"id\":\"u_bob0001\",\"name\":\"bob\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:05:00Z\",\"body\":\"Second\"}",
+        "{\"id\":\"c_reply02\",\"thread\":\"c_first01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:02:00Z\",\"body\":\"@Clippy check it\"}",
+        "{\"id\":\"c_reply01\",\"thread\":\"c_first01\",\"by\":{\"id\":\"Clippy\",\"name\":\"Clippy\",\"kind\":\"ai\"},\"at\":\"2026-10-01T10:05:00Z\",\"body\":\"Same time, lower id\"}"
+      ],
+      "threads": [
+        {
+          "id": "c_first01",
+          "resolved": false,
+          "comments": [
+            "c_first01",
+            "c_reply02",
+            "c_reply01",
+            "c_reply03"
+          ]
+        }
+      ],
+      "bad": []
+    },
+    {
+      "name": "threads in the order of their first comments",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "{\"id\":\"c_later01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-02T09:00:00Z\",\"body\":\"Later\"}",
+        "{\"id\":\"c_early01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T09:00:00Z\",\"body\":\"Earlier\"}"
+      ],
+      "threads": [
+        {
+          "id": "c_early01",
+          "resolved": false,
+          "comments": [
+            "c_early01"
+          ]
+        },
+        {
+          "id": "c_later01",
+          "resolved": false,
+          "comments": [
+            "c_later01"
+          ]
+        }
+      ],
+      "bad": []
+    },
+    {
+      "name": "the first of two lines with one id is the comment",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "{\"id\":\"c_dupe0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Kept\"}",
+        "{\"id\":\"c_dupe0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Dropped\"}"
+      ],
+      "threads": [
+        {
+          "id": "c_dupe0001",
+          "resolved": false,
+          "comments": [
+            "c_dupe0001"
+          ]
+        }
+      ],
+      "bad": [],
+      "bodies": {
+        "c_dupe0001": "Kept"
+      }
+    },
+    {
+      "name": "a reply whose first comment is missing is hidden",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "{\"id\":\"c_orphan01\",\"thread\":\"c_gone0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Lost\"}"
+      ],
+      "threads": [],
+      "bad": []
+    },
+    {
+      "name": "resolved when the latest comment says so; a later comment reopens",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "{\"id\":\"c_res00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Fix this\"}",
+        "{\"id\":\"c_res00002\",\"thread\":\"c_res00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
+        "{\"id\":\"c_open0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Another\"}",
+        "{\"id\":\"c_open0002\",\"thread\":\"c_open0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
+        "{\"id\":\"c_open0003\",\"thread\":\"c_open0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"Not yet\"}"
+      ],
+      "threads": [
+        {
+          "id": "c_open0001",
+          "resolved": false,
+          "comments": [
+            "c_open0001",
+            "c_open0002",
+            "c_open0003"
+          ]
+        },
+        {
+          "id": "c_res00001",
+          "resolved": true,
+          "comments": [
+            "c_res00001",
+            "c_res00002"
+          ]
+        }
+      ],
+      "bad": []
+    },
+    {
+      "name": "bad lines are reported and skipped; unknown fields are kept",
+      "sidecar": [
+        "{\"opendoc\":2}",
+        "not json",
+        "{\"id\":\"c_nobody01\",\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"no by\"}",
+        "{\"id\":\"c_extra001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Hi\",\"future\":{\"x\":1}}",
+        "{\"id\":\"c_empty001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"   \"}"
+      ],
+      "threads": [
+        {
+          "id": "c_extra001",
+          "resolved": false,
+          "comments": [
+            "c_extra001"
+          ]
+        }
+      ],
+      "bad": [
+        2,
+        3,
+        5
+      ]
+    }
+  ],
+  "mentions": [
+    {
+      "body": "@Clippy and @alex.r, then @clippy again.",
+      "names": [
+        "Clippy",
+        "alex.r"
+      ],
+      "mentions": [
+        "Clippy",
+        "alex.r"
+      ]
+    },
+    {
+      "body": "thanks @Clippy.",
+      "names": [
+        "Clippy"
+      ],
+      "mentions": [
+        "Clippy"
+      ]
+    },
+    {
+      "body": "mail x@Clippy.dev or @nobody",
+      "names": [
+        "Clippy"
+      ],
+      "mentions": []
+    },
+    {
+      "body": "@Clippy-2 is not @Clippy_x nor @Clippy9",
+      "names": [
+        "Clippy"
+      ],
+      "mentions": []
+    },
+    {
+      "body": "(@Clippy) @Clippy.x",
+      "names": [
+        "Clippy"
+      ],
+      "mentions": [
+        "Clippy"
+      ]
+    },
+    {
+      "body": "@Ada.Lovelace wins over @Ada",
+      "names": [
+        "Ada",
+        "Ada.Lovelace"
+      ],
+      "mentions": [
+        "Ada.Lovelace",
+        "Ada"
+      ]
+    }
+  ]
+}

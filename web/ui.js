@@ -166,17 +166,13 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     hideBubble() {
       bubble.hidden = true;
     },
-    /** The statuses of the doc's agents changed. */
-    agentStatus(statuses) {
-      agentsPanel.showStatus(statuses);
-    },
-    /** Open the Agents panel on agent `id` (or the one shown last). */
+    /** Open the Buddies panel on buddy `id` (or the one shown last). */
     openAgent(id) {
       agentsPanel.open(id);
     },
-    /** Open the Agents panel on a new agent's draft; with `invite`, Create brings it into this doc. */
-    newAgent(options) {
-      agentsPanel.newAgent(options);
+    /** Open the Buddies panel on a new buddy's draft. */
+    newAgent() {
+      agentsPanel.newAgent();
     },
     /** A command from the desktop app's menu: 'settings', 'agent-settings' or 'shortcuts'. */
     command(name) {

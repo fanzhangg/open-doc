@@ -12,7 +12,8 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { fileURLToPath } from 'node:url';
 import { agentsDir } from '../src/store/agents.js';
 import { configDir, editAgents, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
-import { readSidecar } from '../src/store/files.js';
+import { readSidecarText } from '../src/store/files.js';
+import { parseSidecar } from '../src/core/comments.js';
 import { moveHistory } from '../src/store/history.js';
 import {
   cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
@@ -88,7 +89,7 @@ async function openPath(path, { create = false, parent = null } = {}) {
   const docPath = docPathFor(path);
   if (!docPath) {
     await warn(parent, `OpenDoc can't open ${basename(path)}.`,
-      'It opens Markdown docs (.md or .markdown) and their comment files (.md.opendoc.json).');
+      'It opens Markdown docs (.md or .markdown) and their comment files (.md.opendoc.jsonl).');
     return false;
   }
   if (!isFile(docPath)) {
@@ -637,6 +638,16 @@ function movedInRecent(fromPath, toPath) {
   recentChanged();
 }
 
+// How many comments the doc at `path` has (0 when its sidecar cannot be read).
+async function countComments(path) {
+  try {
+    const text = await readSidecarText(path);
+    return text === null ? 0 : parseSidecar(text).lines.filter((l) => l.comment).length;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Put the sidebar's doc (with its comments) or folder (with everything in
  * it) in the Trash, after the user confirms. This window shows another doc
@@ -657,7 +668,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
   const open = windows.openDocs().filter((other) => gone(other.docPath));
   let detail;
   if (kind === 'doc') {
-    const comments = (await readSidecar(path)).threads.length;
+    const comments = await countComments(path);
     detail = comments ? `It and its ${count(comments, 'comment')} go to the Trash.` : 'It goes to the Trash.';
   } else {
     const { docs, others } = await countFolder(path);

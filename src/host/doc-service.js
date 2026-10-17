@@ -10,12 +10,14 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
-import { OpError, applyOp, askedOf, newId } from '../core/index.js';
-import { NAME_PATTERN, parseMentions, sameName } from '../core/mentions.js';
-import { AGENT_SERVER_KEYS, AgentError, DEFAULT_AGENT_ID, availableIn, createAgent, deleteAgent, docOnly, updateAgent } from '../core/agents.js';
+import { createAnchor, locate } from '../core/anchor.js';
+import { FormatError, askedOf, deleteComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { sameName } from '../core/mentions.js';
+import { AGENT_SERVER_KEYS, AgentError, availableIn, createAgent, deleteAgent, updateAgent } from '../core/agents.js';
+import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
-import { StoreError, hashBytes, load, moveDoc, readDoc, readSidecar, sidecarPath, update, writeAtomic } from '../store/files.js';
+import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, editAgents, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { watchDoc } from '../store/watch.js';
@@ -23,10 +25,7 @@ import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } fro
 import { splice } from './splice.js';
 import { Runner } from './runner.js';
 
-const BROWSER_OPS = new Set(['join', 'addThread', 'addMessage', 'resolve', 'reopen']);
-const ID = { t: /^t_[A-Za-z0-9_-]{6,}$/, m: /^m_[A-Za-z0-9_-]{6,}$/ };
-
-/** A call refused: `code` says why ('bad_input', 'not_found', 'name_taken'). */
+/** A call refused: `code` says why ('bad_input', 'not_found', 'unreadable'). */
 export class DocError extends Error {
   constructor(code, message) {
     super(message);
@@ -36,30 +35,28 @@ export class DocError extends Error {
 
 /**
  * Open the doc at `docPath`. The doc's buddies are the user's agents (the
- * Agents panel) that are in it; one @mentioned in a comment answers it, in
- * a run of the agent script picked in Settings (src/store/agents.js).
- * `settingsDir` is the folder of the user's settings file (default: the
- * per-user config folder), which also holds the agent scripts. `folder` is
- * the project folder the doc was opened from, handed to runs as
- * OPENDOC_PROJECT. `emit(event, data)` hears what changed.
- * `call(type, arg)` runs a window's request (see `calls`); `moveTo(newPath,
- * move)` renames the doc while it is open (`move` defaults to moveDoc and
- * may return the final path).
+ * Agents panel) it can reach: the starred ones and its own. One @mentioned
+ * in a comment of this user's answers it, in a run of the agent script
+ * picked in Settings (src/store/agents.js). `settingsDir` is the folder of
+ * the user's settings file (default: the per-user config folder), which
+ * also holds the agent scripts. `folder` is the project folder the doc was
+ * opened from, handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
+ * what changed. `call(type, arg)` runs a window's request (see `calls`);
+ * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
+ * to moveDoc and may return the final path).
  * @returns {Promise<{ call: (type: string, arg?: object) => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
  */
 export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
   await readDoc(docPath); // fail early on a missing doc
   // An unstarred agent belongs to one doc, known by its full path.
   const docKey = () => resolve(docPath);
-  // An agent's entry among the doc's participants: its name, and who it is.
-  const asParticipant = (agent) => ({ name: agent.name, kind: 'agent', persona: agent.persona, instructions: agent.instructions });
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
     doc: async () => ({ name: basename(docPath), markdown: (await readDoc(docPath)).markdown }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
-    human: async () => (await human()).name,
+    human: async () => (await me()).name,
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
   });
@@ -82,6 +79,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   let lastWritten = null;
   let chronicle = Promise.resolve();
 
+  // ---- the doc ----
+
   // `recreate: true` writes the page's text back when the doc has gone
   // missing from disk; otherwise a save needs the doc to be there.
   async function saveDoc(body) {
@@ -96,8 +95,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       await mkdir(dirname(docPath), { recursive: true });
       lastWritten = hashBytes(Buffer.from(body.markdown));
       await writeAtomic(docPath, body.markdown);
-      await update(docPath, (s) => s); // refresh anchors if the sidecar is still there
-      await noteVersion(body.markdown, { kind: 'edit', author: await human() });
+      await noteVersion(body.markdown, { kind: 'edit', author: await me() });
       return { docHash: lastWritten, markdown: body.markdown };
     }
     if (current.hash !== body.baseHash) {
@@ -109,15 +107,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       await noteDisk(current); // whatever reached the disk since, before the human's change
       lastWritten = hashBytes(Buffer.from(next));
       await writeAtomic(docPath, next);
-      await update(docPath, (s) => s); // refresh anchors against the saved doc
-      await noteVersion(next, { kind: 'edit', author: await human() });
+      await noteVersion(next, { kind: 'edit', author: await me() });
     }
     return { docHash: hashBytes(Buffer.from(next)), markdown: next };
   }
 
   // Put the doc back the way it was in an earlier version, as the human's
   // change: a new version, so the restore can itself be undone. Comments
-  // stay; their anchors follow the restored text like after any edit.
+  // stay; readers find their anchors in the restored text.
   async function restoreVersion(body) {
     const id = versionId(body?.id);
     if (typeof body.baseHash !== 'string') throw new DocError('bad_input', 'expected { id, baseHash }');
@@ -132,65 +129,125 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       await noteDisk(current);
       lastWritten = hashBytes(Buffer.from(next));
       await writeAtomic(docPath, next);
-      await update(docPath, (s) => s);
-      await noteVersion(next, { kind: 'restore', author: await human(), restoredFrom: id });
+      await noteVersion(next, { kind: 'restore', author: await me(), restoredFrom: id });
     }
     return { docHash: hashBytes(Buffer.from(next)), markdown: next };
   }
 
   async function state() {
-    const { doc, sidecar } = await load(docPath);
+    const doc = await readDoc(docPath);
     const { settings } = await readSettings(settingsDir);
+    const comments = await commentsView(doc.markdown);
     return {
       doc: basename(docPath),
       markdown: doc.markdown,
       docHash: doc.hash,
-      sidecar,
+      ...comments,
       settings,
       defaultName: defaultName(),
+      me: await me(),
       agents: agentStatuses(),
       docKey: docKey(), // which of the user's unstarred agents are this doc's own
     };
   }
 
+  // ---- comments (spec/SPEC-v2.md) ----
+
+  // The sidecar as it is on disk: its lines, the lines it could not read,
+  // and `error` when it is not a version 2 sidecar at all.
+  async function readComments() {
+    const text = await readSidecarText(docPath);
+    if (text === null) return { lines: [], bad: [], error: null };
+    try {
+      return { ...parseSidecar(text), error: null };
+    } catch (error) {
+      if (error instanceof FormatError) return { lines: [], bad: [], error };
+      throw error;
+    }
+  }
+
+  // The threads as a window shows them: each anchor where its text is now
+  // in `markdown` (it is never rewritten in the file), or `detached`; who
+  // wrote in them; and a notice about what of the sidecar cannot be read.
+  async function commentsView(markdown) {
+    const { lines, bad, error } = await readComments();
+    const comments = lines.map((l) => l.comment).filter(Boolean);
+    const text = project(markdown).text;
+    const threads = threadsOf(comments, (await buddies()).map((b) => b.name)).map((thread) => {
+      if (!thread.anchor) return { ...thread, detached: false };
+      const found = locate(text, thread.anchor);
+      return { ...thread, anchor: found ? createAnchor(text, found.start, found.end) : thread.anchor, detached: !found };
+    });
+    const file = basename(sidecarPath(docPath));
+    const notices = [];
+    if (await exists(docPath + V1_SUFFIX)) notices.push(`The comments in ${basename(docPath + V1_SUFFIX)} are from an older OpenDoc and cannot be read here; the file is left as it is.`);
+    if (error) notices.push(`${file} cannot be read (${error.message}); it is left as it is.`);
+    if (bad.length > 0) notices.push(`${bad.length === 1 ? 'A line' : `${bad.length} lines`} of ${file} could not be read; ${bad.length === 1 ? 'it is' : 'they are'} kept as written.`);
+    return { threads, people: peopleOf(comments), notice: notices.join(' ') || null };
+  }
+
+  // Add or remove lines of the sidecar, written whole. Run in `serial`.
+  async function changeComments(change) {
+    const current = await readComments();
+    if (current.error) throw new DocError('unreadable', `${basename(sidecarPath(docPath))} cannot be read, so it is not changed`);
+    const next = change(current.lines);
+    if (next !== current.lines) await writeAtomic(sidecarPath(docPath), serializeSidecar(next));
+  }
+
+  // A comment by this user: a first comment (`anchor` on the doc's rendered
+  // text, or null for the whole doc), or a reply in `thread`.
+  async function comment({ thread, anchor = null, body, resolved = false } = {}) {
+    if (typeof body !== 'string' || (body.trim() === '' && !resolved)) throw new DocError('bad_input', 'a comment needs text');
+    if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
+    const added = {
+      id: newId('c'), ...(thread !== undefined ? { thread } : {}), ...(thread === undefined ? { anchor } : {}),
+      by: await me(), at: new Date().toISOString(), body: resolved ? '' : body, ...(resolved ? { resolved: true } : {}),
+    };
+    await serial(() => changeComments((lines) => {
+      if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
+      return [...lines, { comment: added }];
+    }));
+    return { ...(await commentsView((await readDoc(docPath)).markdown)), id: added.id };
+  }
+
+  // Delete a comment (a first comment takes its replies): your own, or a buddy's.
+  async function removeComment({ id } = {}) {
+    const mine = (await me()).id;
+    await serial(() => changeComments((lines) => {
+      const found = lines.find((l) => l.comment?.id === id)?.comment;
+      if (!found) throw new DocError('not_found', 'no such comment');
+      if (found.by.kind !== 'ai' && found.by.id !== mine) throw new DocError('bad_input', "only your own comments and buddies' can be deleted");
+      return deleteComment(lines, id);
+    }));
+    return commentsView((await readDoc(docPath)).markdown);
+  }
+
   // ---- the doc's buddies ----
 
-  // The user's agents that are in the doc: this doc's own and starred ones
-  // brought in (Clippy, whom it started with, or one @mentioned or added),
-  // this doc's own before a starred one of the same name. A person of the
-  // same name keeps the name; the agent stays out.
+  // The user's agents the doc reaches: the starred ones and this doc's own,
+  // this doc's own before a starred one of the same name.
   async function buddies() {
     const { settings } = await readSettings(settingsDir);
     currentAgent = settings.agent;
-    let participants;
-    try {
-      participants = (await readSidecar(docPath)).participants;
-    } catch {
-      return []; // a sidecar that cannot be read invites no one
-    }
     const ours = settings.agents.filter((a) => availableIn(a, docKey())).sort((a, b) => Number(a.starred) - Number(b.starred));
-    const found = [];
-    for (const agent of ours) {
-      if (found.some((b) => sameName(b.name, agent.name))) continue;
-      if (participants.some((p) => p.kind === 'human' && sameName(p.name, agent.name))) continue;
-      if (participants.some((p) => p.kind === 'agent' && sameName(p.name, agent.name))) found.push(agent);
-    }
-    return found;
+    return ours.filter((agent, i) => ours.findIndex((a) => sameName(a.name, agent.name)) === i);
   }
 
-  // The asks waiting on a buddy now (src/core/inbox.js).
+  // The asks waiting on a buddy now (docs/architecture-v2.md, Who answers):
+  // only this user's comments ask.
   async function asks() {
     if (closed) return [];
     const here = await buddies();
     if (here.length === 0) return [];
-    const sidecar = await readSidecar(docPath);
-    return sidecar.threads.flatMap((thread) => askedOf(thread).flatMap((name) => {
-      const buddy = here.find((b) => sameName(b.name, name));
-      return buddy ? [{ threadId: thread.id, thread, buddy }] : [];
-    }));
+    const { lines } = await readComments();
+    const mine = (await me()).id;
+    const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map((b) => b.name));
+    return threads.flatMap((thread) => askedOf(thread, mine).map((name) => ({
+      threadId: thread.id, thread, buddy: here.find((b) => sameName(b.name, name)),
+    })));
   }
 
-  // The buddies in the doc, and which are at work.
+  // The buddies the doc reaches, and which are at work.
   let shownBuddies = [];
   function agentStatuses() {
     const running = runner.statuses();
@@ -213,11 +270,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     await runner.notify();
   }
 
-  // A run ended (runner.js): merge what it changed in its copy
-  // into the doc, three-way from the copy as it started, then post its
-  // reply. Where the human changed the same text meanwhile, theirs stays,
-  // the buddy's change there is dropped and the reply says `conflict`.
-  // Run in `serial`.
+  // A run ended (runner.js): merge what it changed in its copy into the doc,
+  // three-way from the copy as it started, then post its reply. Where the
+  // human changed the same text meanwhile, theirs stays, the buddy's change
+  // there is dropped and the reply says `conflict`. Run in `serial`.
   async function finishRun({ threadId, name, base, edited, body, failed }) {
     let conflict = false;
     if (edited !== null && edited !== base) {
@@ -237,16 +293,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
           await noteDisk(current);
           lastWritten = hashBytes(Buffer.from(next));
           await writeAtomic(docPath, next);
-          await update(docPath, (s) => s); // refresh anchors against the merged doc
           await noteVersion(next, { kind: 'edit', author: { name, kind: 'agent' }, threadIds: [threadId] });
         }
       }
     }
-    const message = {
-      id: newId('m'), author: { name, kind: 'agent' }, body, createdAt: new Date().toISOString(),
+    const reply = {
+      id: newId('c'), thread: threadId, by: { id: name, name, kind: 'ai' }, at: new Date().toISOString(), body,
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
-    await update(docPath, (s) => (s.threads.some((t) => t.id === threadId) ? applyOp(s, { type: 'addMessage', threadId, message }) : s))
+    await changeComments((lines) => (lines.some((l) => l.comment?.id === threadId) ? [...lines, { comment: reply }] : lines))
       .catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
 
@@ -254,100 +309,43 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return (await readSettings(settingsDir)).settings;
   }
 
-  // Invite agent `id` from the user's roster: it joins the doc's participants
-  // like a person added to it, and answers when @mentioned.
-  async function invite(id) {
-    const agent = (await currentSettings()).agents.find((a) => a.id === id && availableIn(a, docKey()));
-    if (!agent) throw new DocError('not_found', 'no such agent');
-    const sidecar = await serial(() => update(docPath, (s) => {
-      const taken = s.participants.find((p) => sameName(p.name, agent.name));
-      if (taken && taken.kind !== 'agent') throw new DocError('name_taken', `${taken.name} is a person in this doc; rename the agent first`);
-      return applyOp(s, { type: 'join', participant: asParticipant(agent) });
-    }));
-    await syncAgents();
-    return { sidecar, agents: agentStatuses() };
-  }
-
-  // Remove an agent from the doc: it leaves the participants, so it is no
-  // longer offered for @mentions. A run in progress still replies. Its
-  // comments stay.
-  async function removeAgent(name) {
-    if (typeof name !== 'string' || !NAME_PATTERN.test(name)) throw new DocError('bad_input', 'invalid name');
-    const { participants } = await readSidecar(docPath);
-    if (!participants.some((p) => p.kind === 'agent' && sameName(p.name, name))) throw new DocError('not_found', `no agent ${name} in this doc`);
-    const sidecar = await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name })));
-    // This doc's own agent has nowhere else to be: removing it deletes it.
-    const own = (await currentSettings()).agents.find((a) => docOnly(a) && a.doc === docKey() && sameName(a.name, name));
-    const settings = own ? await editAgents((agents) => deleteAgent(agents, own.id), settingsDir) : null;
-    await syncAgents();
-    return { sidecar, agents: agentStatuses(), ...(settings ? { settings } : {}) };
-  }
-
-  // New agent for the user's roster, from the page. With `invite`, it joins
-  // this doc at once. A name asked for is kept or refused as taken; none gets
-  // a free one ("agent", "agent-2", …).
+  // New agent for the user's roster, from the page. A name asked for is
+  // kept or refused as taken; none gets a free one ("agent", "agent-2", …).
   async function rosterCreate(body) {
     const { id: _id, ...fields } = body?.agent ?? {};
     checkServerKeys(fields);
     // Unless starred, it is this doc's own.
     fields.doc = fields.starred === true ? null : docKey();
-    const me = (await human()).name;
+    const taken = (await me()).name;
     let created;
     const settings = await editAgents((agents) => {
-      created = createAgent(agents, fields, [me], { exact: Object.hasOwn(fields, 'name') });
+      created = createAgent(agents, fields, [taken], { exact: Object.hasOwn(fields, 'name') });
       return [...agents, created];
     }, settingsDir).catch(agentError);
-    const joined = body?.invite === true ? await invite(created.id) : {};
-    return { agent: created, settings, ...joined };
+    await syncAgents();
+    return { agent: created, settings, agents: agentStatuses() };
   }
 
-  // Change one of the user's agents. Renaming one that is in this doc keeps
-  // it here under the new name; other docs keep the old one until it is
-  // invited again.
+  // Change one of the user's agents. Starring puts it in the library, for
+  // every doc; unstarring makes it this doc's own.
   async function rosterUpdate(body) {
     const id = body?.id;
     const patch = body?.patch ?? {};
-    const before = (await currentSettings()).agents.find((a) => a.id === id);
-    if (!before) throw new DocError('not_found', 'no such agent');
+    if (!(await currentSettings()).agents.some((a) => a.id === id)) throw new DocError('not_found', 'no such agent');
     checkServerKeys(patch);
-    // Starring puts it in the library, for every doc. Unstarring keeps it in
-    // this doc as its own; one not in this doc leaves the library (the docs
-    // that use it still describe it, and set it up again when opened).
-    const here = (await readSidecar(docPath)).participants.some((p) => p.kind === 'agent' && sameName(p.name, before.name));
     if (patch.starred === true) patch.doc = null;
-    if (patch.starred === false && before.starred) {
-      if (!here) return rosterDelete({ id });
-      patch.doc = docKey();
-    }
-    const me = (await human()).name;
-    // The settings and the doc change together, so adoptDocAgents never
-    // takes this change for one made outside OpenDoc.
-    const settings = await serial(async () => {
-      const saved = await editAgents((agents) => updateAgent(agents, id, patch, [me]), settingsDir).catch(agentError);
-      const after = saved.agents.find((a) => a.id === id);
-      // The doc keeps who its agents are: their names, personas and
-      // instructions, and what its own agent is now, if it was starred.
-      const unstarred = before.starred && after && !after.starred;
-      if (after && here && (unstarred || ['name', 'persona', 'instructions'].some((k) => after[k] !== before[k]))) {
-        await update(docPath, (s) => {
-          if (!s.participants.some((p) => p.kind === 'agent' && sameName(p.name, before.name))) return s;
-          if (!sameName(after.name, before.name)) return applyOp(applyOp(s, { type: 'leave', name: before.name }), { type: 'join', participant: asParticipant(after) });
-          return applyOp(s, { type: 'describe', name: after.name, persona: after.persona, instructions: after.instructions });
-        });
-      }
-      return saved;
-    });
+    if (patch.starred === false) patch.doc = docKey();
+    const taken = (await me()).name;
+    const settings = await editAgents((agents) => updateAgent(agents, id, patch, [taken]), settingsDir).catch(agentError);
     await syncAgents();
     return { settings, agents: agentStatuses() };
   }
 
-  // Delete one of the user's agents; it leaves this doc too. Other docs keep
-  // its name among their participants, as someone not available here.
+  // Delete one of the user's agents. Its comments stay.
   async function rosterDelete(body) {
     const agent = (await currentSettings()).agents.find((a) => a.id === body?.id);
     if (!agent) throw new DocError('not_found', 'no such agent');
     const settings = await editAgents((agents) => deleteAgent(agents, agent.id), settingsDir).catch(agentError);
-    await serial(() => update(docPath, (s) => applyOp(s, { type: 'leave', name: agent.name })));
     await syncAgents();
     return { settings, agents: agentStatuses() };
   }
@@ -356,60 +354,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   function checkServerKeys(fields) {
     const key = AGENT_SERVER_KEYS.find((k) => Object.hasOwn(fields, k));
     if (key) throw new DocError('bad_input', `${key} is set by the app`);
-  }
-
-  // The first time a doc is opened with no agents in it, Clippy (the agent
-  // the app comes with, under whatever name it has now) joins it, so every
-  // new doc has someone to answer; other agents are added in the doc. A doc
-  // that has agents keeps the ones it has.
-  async function joinDefaultAgent() {
-    const clippy = (await currentSettings()).agents.find((a) => a.id === DEFAULT_AGENT_ID && a.starred);
-    if (!clippy) return; // deleted or made one doc's own: no one
-    let participants;
-    try {
-      participants = (await readSidecar(docPath)).participants;
-    } catch {
-      return; // a sidecar that cannot be read invites no one
-    }
-    if (participants.some((p) => p.kind === 'agent')) return;
-    await serial(() => update(docPath, (s) => {
-      if (s.participants.some((p) => sameName(p.name, clippy.name))) return s; // a person of that name keeps it
-      return applyOp(s, { type: 'join', participant: asParticipant(clippy) });
-    }));
-  }
-
-  // A doc carries its agents (SPEC §2.4). One that is not set up here yet (a
-  // cloned repo, another computer, or one unstarred elsewhere) is set up from
-  // the doc as this doc's own; one the doc does not describe is set up too,
-  // with no persona. A doc's own agent follows what the doc says it is.
-  // Run it in `serial`.
-  async function adoptDocAgents() {
-    let participants;
-    try {
-      participants = (await readSidecar(docPath)).participants;
-    } catch {
-      return false;
-    }
-    const me = (await human()).name;
-    const theirs = participants.filter((p) => p.kind === 'agent' && !sameName(p.name, me));
-    const adopt = (agents) => {
-      let next = agents;
-      for (const p of theirs) {
-        const persona = p.persona ?? '';
-        const instructions = p.instructions ?? '';
-        const described = Boolean(persona || instructions);
-        const mine = next.find((a) => sameName(a.name, p.name) && availableIn(a, docKey()));
-        if (!mine) next = [...next, createAgent(next, { name: p.name, persona, instructions, doc: docKey() }, [me])];
-        else if (described && docOnly(mine) && (mine.persona !== persona || mine.instructions !== instructions)) {
-          next = updateAgent(next, mine.id, { persona, instructions });
-        }
-      }
-      return next;
-    };
-    const roster = (await currentSettings()).agents;
-    if (adopt(roster) === roster) return false;
-    await editAgents(adopt, settingsDir);
-    return true;
   }
 
   // Add the doc as it now reads to its history (one version at a time, in
@@ -430,54 +374,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return noteVersion(doc.markdown, { kind: 'external', author: null });
   }
 
-  // The human, by the id that keeps them one person in the doc whatever
-  // their name (src/core/ops.js identify). `aka`: names they went by before
-  // the doc knew their id: the suggested one, and their face's seed, which
-  // keeps the name they had before their first rename.
+  // This user, as their comments name them: their id (made once, kept when
+  // the name changes) and name.
   async function me() {
     const settings = await settingsWithId(settingsDir);
-    const aka = [defaultName(), settings.face].filter((n, i, all) => typeof n === 'string' && NAME_PATTERN.test(n) && all.indexOf(n) === i);
-    return { author: { name: settings.name ?? defaultName(), kind: 'human', id: settings.id }, aka };
+    return { id: settings.id, name: settings.name ?? defaultName(), kind: 'human' };
   }
 
-  async function human() {
-    return (await me()).author;
-  }
-
-  const asHuman = (s, { author, aka }) => applyOp(s, { type: 'identify', participant: author, aka });
-
-  // The doc calls the human by the name in their settings.
-  async function renameHuman() {
-    const who = await me();
-    await serial(() => update(docPath, (s) => asHuman(s, who)));
-  }
-
-  // A comment that @mentions one of the user's agents not in the doc yet
-  // brings it in first, as mentioning a person in Docs shares the doc with
-  // them; then the mention counts, and that agent answers.
-  async function applyBrowserOp(body) {
-    const who = await me();
-    const op = validateOp(body?.op, who.author);
-    const message = op.message;
-    const roster = message ? (await currentSettings()).agents.filter((a) => availableIn(a, docKey())) : [];
-    let joined = false;
-    // Only the write holds the lock (see sendTextAsk).
-    const sidecar = await serial(() => update(docPath, (s) => {
-      let next = asHuman(s, who);
-      for (const name of parseMentions(message?.body ?? '', roster)) {
-        if (next.participants.some((p) => sameName(p.name, name))) continue;
-        next = applyOp(next, { type: 'join', participant: asParticipant(roster.find((a) => sameName(a.name, name))) });
-        joined = true;
-      }
-      return applyOp(next, op);
-    }));
-    if (joined) await syncAgents();
-    return { sidecar, ...(joined ? { agents: agentStatuses() } : {}) };
-  }
-
-  // Watch both files; refresh anchors when the doc changes (another program
-  // may have edited it) and tell the page what changed, including the
-  // doc going missing (moved or deleted outside the app) and coming back.
+  // Watch both files and tell the page what changed, including the doc
+  // going missing (moved or deleted outside the app) and coming back.
   async function onFilesChanged() {
     try {
       let doc;
@@ -498,23 +403,21 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (doc.hash !== lastDocHash) {
         lastDocHash = doc.hash;
         await noteDisk(doc);
-        await load(docPath);
         emit('doc', { docHash: doc.hash });
       }
       const sidecarHash = await fileHash(sidecarPath(docPath));
       if (sidecarHash !== lastSidecarHash) {
         lastSidecarHash = sidecarHash;
         emit('sidecar', { hash: sidecarHash });
-        // A new ask, someone invited or removed, or the doc (a git pull)
-        // bringing agents of its own.
-        serial(adoptDocAgents).catch((error) => console.error('Could not set up the doc\'s agents:', error)).finally(() => syncAgents());
+        await syncAgents(); // a new ask
       }
     } catch (error) {
       if (!(error instanceof StoreError)) console.error(error);
     }
   }
-  // Settings are shared with every other window and `serve` run: pass on
-  // changes from any of them.
+
+  // Settings are shared with every other window: pass on changes from any
+  // of them.
   async function onSettingsChanged() {
     try {
       const { settings } = await readSettings(settingsDir);
@@ -522,8 +425,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (json === lastSettings) return;
       lastSettings = json;
       emit('settings', settings);
-      syncAgents();
-      await renameHuman();
+      await syncAgents();
     } catch (error) {
       console.error(error);
     }
@@ -537,8 +439,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       await runner.stop(); // their asks run again once the doc is at its new name
       await chronicle;
       // This doc's own agents move with it.
-      if ((await currentSettings()).agents.some((a) => a.doc === before)) await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: resolve(target) } : a)), settingsDir)
-        .catch((error) => console.error('Could not move the doc\'s agents:', error));
+      if ((await currentSettings()).agents.some((a) => a.doc === before)) {
+        await editAgents((agents) => agents.map((a) => (a.doc === before ? { ...a, doc: resolve(target) } : a)), settingsDir)
+          .catch((error) => console.error('Could not move the doc\'s agents:', error));
+      }
       await moveHistory(docPath, target, settingsDir).catch((error) => console.error('Could not move the history:', error));
       docPath = target;
       // A folder moved with the doc in it: the watch may have seen it go.
@@ -557,11 +461,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   lastDocHash = opened.hash;
   await noteDisk(opened); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
-  // The agents the doc carries, set up here if they are new to this machine;
-  // a doc with none yet starts with Clippy.
-  await adoptDocAgents().catch((error) => console.error('Could not set up the doc\'s agents:', error));
-  await joinDefaultAgent().catch((error) => console.error('Could not bring in Clippy:', error));
-  await renameHuman().catch((error) => console.error('Could not put your name in the doc:', error));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
@@ -571,7 +470,11 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const calls = {
     state,
     saveDoc: (body) => serial(() => saveDoc(body ?? {})),
-    op: applyBrowserOp,
+    comment: (body) => comment({ anchor: body?.anchor ?? null, body: body?.body }),
+    reply: (body) => comment({ thread: body?.thread, body: body?.body }),
+    resolve: (body) => comment({ thread: body?.thread, body: '', resolved: true }),
+    reopen: (body) => comment({ thread: body?.thread, body: 'Reopened.' }),
+    deleteComment: removeComment,
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'agents')) throw new DocError('bad_input', 'agents are changed through createAgent and updateAgent');
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
@@ -582,8 +485,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         throw error;
       }
     },
-    invite: (body) => invite(body?.id),
-    removeAgent: (body) => removeAgent(body?.name),
     createAgent: rosterCreate,
     updateAgent: rosterUpdate,
     deleteAgent: rosterDelete,
@@ -612,7 +513,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       try {
         return await calls[type](arg);
       } catch (error) {
-        if (error instanceof OpError || error instanceof StoreError) throw new DocError(error.code, error.message);
+        if (error instanceof StoreError) throw new DocError(error.code, error.message);
         throw error;
       }
     },
@@ -633,41 +534,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   };
 }
 
-// The page speaks for the human `me`, whatever name it sends. Timestamps come from the host's clock. A
-// message may carry `edits` and `undoes` (undoing an edit) or `applies`
-// (applying a proposal); the core validates their shape.
-function validateOp(op, me) {
-  if (!op || !BROWSER_OPS.has(op.type)) throw new DocError('bad_input', `operation not allowed: ${op?.type}`);
-  const now = new Date().toISOString();
-  const message = (m) => {
-    if (!m || !ID.m.test(m.id ?? '') || typeof m.body !== 'string') throw new DocError('bad_input', 'invalid message');
-    const out = { id: m.id, author: me, body: m.body, createdAt: now };
-    for (const key of ['undoes', 'applies']) {
-      if (m[key] === undefined) continue;
-      if (!ID.m.test(m[key] ?? '')) throw new DocError('bad_input', `invalid ${key}`);
-      out[key] = m[key];
-    }
-    if (m.edits !== undefined) out.edits = m.edits;
-    return out;
-  };
-  const threadId = (id) => {
-    if (!ID.t.test(id ?? '')) throw new DocError('bad_input', 'invalid thread id');
-    return id;
-  };
-  switch (op.type) {
-    case 'join':
-      return { type: 'join', participant: me };
-    case 'addThread':
-      return { type: 'addThread', id: threadId(op.id), anchor: validAnchor(op.anchor), message: message(op.message) };
-    case 'addMessage':
-      return { type: 'addMessage', threadId: threadId(op.threadId), message: message(op.message) };
-    case 'resolve':
-      return { type: 'resolve', threadId: threadId(op.threadId), by: me.name, kind: 'human', at: now };
-    default:
-      return { type: 'reopen', threadId: threadId(op.threadId), by: me.name, kind: 'human' };
-  }
-}
-
 function agentError(error) {
   if (error instanceof AgentError) throw new DocError(error.code, error.message);
   if (error instanceof SettingsError) throw new DocError('bad_input', error.message);
@@ -677,16 +543,6 @@ function agentError(error) {
 function versionId(id) {
   if (typeof id !== 'string' || !VERSION_ID.test(id)) throw new DocError('bad_input', 'invalid version id');
   return id;
-}
-
-function validAnchor(anchor) {
-  if (anchor === null || anchor === undefined) return null;
-  const ok = typeof anchor.exact === 'string' && anchor.exact.length > 0
-    && typeof anchor.prefix === 'string' && anchor.prefix.length <= 32
-    && typeof anchor.suffix === 'string' && anchor.suffix.length <= 32
-    && Number.isInteger(anchor.start) && anchor.start >= 0;
-  if (!ok) throw new DocError('bad_input', 'invalid anchor');
-  return { exact: anchor.exact, prefix: anchor.prefix, suffix: anchor.suffix, start: anchor.start };
 }
 
 async function fileHash(path) {

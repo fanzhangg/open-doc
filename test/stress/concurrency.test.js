@@ -37,10 +37,7 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
   try {
     // Every ask at once, in a random order, while the human edits their own paragraphs.
     const order = asks.map((a) => [random(), a]).sort((x, y) => x[0] - y[0]).map(([, a]) => a);
-    const posting = Promise.all(order.map((a, i) => call('op', { op: {
-      type: 'addThread', id: `t_stress${String(i).padStart(3, '0')}`, anchor: null,
-      message: { id: `m_stress${String(i).padStart(3, '0')}`, author: { name: 'fzhan', kind: 'human' }, body: `@${a.name} replace "Para ${a.key} old." with "Para ${a.key} new."` },
-    } })));
+    const posting = Promise.all(order.map((a) => call('comment', { anchor: null, body: `@${a.name} replace "Para ${a.key} old." with "Para ${a.key} new."` })));
     for (const h of human) {
       for (;;) {
         const now = await state();
@@ -54,15 +51,15 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
     const deadline = Date.now() + 90_000;
     let threads;
     for (;;) {
-      threads = (await state()).sidecar.threads;
-      if (threads.length === asks.length && threads.every((t) => t.messages.length >= 2)) break;
+      threads = (await state()).threads;
+      if (threads.length === asks.length && threads.every((t) => t.comments.length >= 2)) break;
       if (Date.now() > deadline) throw new Error(`seed ${seed}: not every ask was answered`);
       await sleep(100);
     }
     await sleep(500); // nothing more arrives
-    threads = (await state()).sidecar.threads;
-    for (const t of threads) assert.equal(t.messages.length, 2, `seed ${seed}: ${t.id} answered once`);
-    assert.ok(threads.every((t) => !t.messages[1].failed && !t.messages[1].conflict), `seed ${seed}: no run failed or lost its edit`);
+    threads = (await state()).threads;
+    for (const t of threads) assert.equal(t.comments.length, 2, `seed ${seed}: ${t.id} answered once`);
+    assert.ok(threads.every((t) => !t.comments[1].failed && !t.comments[1].conflict), `seed ${seed}: no run failed or lost its edit`);
     const text = await readFile(docPath, 'utf8');
     for (const a of asks) assert.ok(text.includes(`Para ${a.key} new.`), `seed ${seed}: ${a.key}'s edit landed`);
     for (const h of human) assert.ok(text.includes(`Para ${h} typed.`), `seed ${seed}: ${h} kept`);
