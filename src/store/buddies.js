@@ -1,4 +1,5 @@
-// Buddy files (spec/PROJECT.md): a project's, in its `.opendoc/buddies/`.
+// Buddy files (spec/PROJECT.md): a project's, in its `.opendoc/buddies/`,
+// and the user's Clippy, in `buddies/` in their config folder.
 
 import { mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,6 +8,7 @@ import { NAME_PATTERN, sameName } from '../core/mentions.js';
 import { writeAtomic } from './files.js';
 
 export const projectBuddiesDir = (folder) => join(folder, '.opendoc', 'buddies');
+export const userBuddiesDir = (settingsDir) => join(settingsDir, 'buddies');
 
 /** The buddies in `dir`, by name; none when it does not exist. A name twice (in another case) counts once. */
 export async function readBuddies(dir) {
@@ -23,6 +25,12 @@ export async function writeBuddy(dir, buddy, was = null) {
   if (names.some((n) => sameName(n, buddy.name) && n !== old)) throw new BuddyError(`the name ${buddy.name} is taken`);
   await mkdir(dir, { recursive: true });
   if (old && old !== buddy.name) await rename(fileOf(dir, old), fileOf(dir, buddy.name));
+  await writeAtomic(fileOf(dir, buddy.name), buddyText(buddy));
+}
+
+/** Write buddy `buddy`'s file in `dir` (made if missing), new or not. */
+export async function saveBuddy(dir, buddy) {
+  await mkdir(dir, { recursive: true });
   await writeAtomic(fileOf(dir, buddy.name), buddyText(buddy));
 }
 

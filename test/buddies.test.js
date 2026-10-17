@@ -1,5 +1,6 @@
-// Buddies (spec/PROJECT.md): Clippy, built in, and a project's files in
-// .opendoc/buddies/. Runs use the fake agent script.
+// Buddies (spec/PROJECT.md): Clippy, in every doc and changed in the user's
+// config folder, and a project's files in .opendoc/buddies/. Runs use the
+// fake agent script.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -57,18 +58,34 @@ test('buddy colors: Clippy has its own; up to seven others get different ones, t
   assert.equal(colorSlots(['Ada', 'Critic']).get('ada'), colorSlots(['ada']).get('ada'), 'the first by name keeps the one its name picks');
 });
 
-test('Clippy is built in: in every doc, and nothing can change it', async () => {
+test('Clippy is in every doc: who it is is the user\'s, in their config folder; it keeps its name and stays', { timeout: 30_000 }, async () => {
   const settingsDir = await fakeConfig();
   const folder = await projectFolder();
+  const mine = ['Clippy', 'Mine now.\n\nReply in French.', 'app'];
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     assert.deepEqual(await who(opened), [CLIPPY_ROW]);
-    await assert.rejects(opened.call('updateBuddy', { name: 'clippy', patch: { about: 'Mine now.' } }), refused('bad_input'));
+    await assert.rejects(readdir(join(settingsDir, 'buddies')), { code: 'ENOENT' }, 'nothing written until it is changed');
+    await opened.call('updateBuddy', { name: 'clippy', patch: { about: 'Mine now.\n\nReply in French.' } });
+    assert.equal(await readFile(join(settingsDir, 'buddies', 'Clippy.md'), 'utf8'), 'Mine now.\n\nReply in French.\n');
+    assert.deepEqual(await who(opened), [mine]);
+    await assert.rejects(opened.call('updateBuddy', { name: 'Clippy', patch: { name: 'Clip' } }), refused('bad_input'));
     await assert.rejects(opened.call('deleteBuddy', { name: 'Clippy' }), refused('bad_input'));
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'clippy' } }), /the name clippy is taken/);
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
     await assert.rejects(opened.call('updateBuddy', { name: 'Ada', patch: { name: 'Clippy' } }), /the name Clippy is taken/);
   });
-  await assert.rejects(readdir(join(settingsDir, 'buddies')), { code: 'ENOENT' }, 'no buddies in the config folder');
+  // Any other doc has the same Clippy, and its runs say who it is now.
+  const doc = join(await mkdtemp(join(tmpdir(), 'opendoc-doc-')), 'notes.md');
+  await writeFile(doc, SAMPLE);
+  await opening(doc, { settingsDir }, async (opened) => {
+    assert.deepEqual(await who(opened), [mine]);
+    const { id } = await opened.call('comment', { anchor: null, body: '@Clippy look' });
+    await until(async () => (await opened.state()).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
+    const [run] = await fakeRuns(settingsDir);
+    assert.match(run.prompt, /Mine now\.\n\nReply in French\./);
+    await opened.call('updateBuddy', { name: 'Clippy', patch: { about: '' } });
+    assert.deepEqual(await who(opened), [CLIPPY_ROW], 'cleared: Clippy as it ships');
+  });
 });
 
 test('a doc opened from Finder reaches Clippy only, even inside a project folder', async () => {
@@ -128,6 +145,9 @@ test('a buddy file changed outside the app, or by another window, shows at once'
       await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
       await writeFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'Pulled from git.\n');
       await until(() => a.events.some(([name, data]) => name === 'agents' && data.some((x) => x.name === 'Critic')), 'Critic from the folder');
+      await mkdir(join(settingsDir, 'buddies'), { recursive: true });
+      await writeFile(join(settingsDir, 'buddies', 'Clippy.md'), 'Edited by hand.\n');
+      await until(() => a.events.some(([name, data]) => name === 'agents' && data[0].about === 'Edited by hand.'), 'Clippy from the config folder');
     });
   });
 });

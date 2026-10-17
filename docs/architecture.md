@@ -27,8 +27,9 @@ Codex). A buddy runs on an agent.
 ## Buddies and folders
 
 A window has a doc and, in project mode, a folder. Its buddies are Clippy,
-built into the app, and the folder's (`.opendoc/buddies/`), each a
-`<Name>.md` file ([PROJECT](../spec/PROJECT.md)).
+as the user's `buddies/Clippy.md` says, and the folder's
+(`.opendoc/buddies/`), each a `<Name>.md` file
+([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
 | --- | --- | --- |
