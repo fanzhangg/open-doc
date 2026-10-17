@@ -8,39 +8,62 @@
   <link rel="stylesheet" href="../dist/web/app.css">
   <style>
     body { user-select: none; }
-    .od-header { padding-left: 32px; }
-    .od-start-actions { display: flex; gap: 8px; }
-    .od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 28px; padding: 16px 32px 24px; font-size: 13px; }
-    .od-start h2 { margin: 0 0 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); }
+    .od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 28px; padding: 4px 32px 24px; }
+    .od-start h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+    .od-start h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
 
-    /* recent docs: rows like the People panel's */
+    /* the two ways in: cards, the editor's surfaces */
+    .od-start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .od-start-card { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: var(--shadow-sm); text-align: left; transition: border-color 0.15s, background 0.15s; }
+    .od-start-card:hover { border-color: var(--border-strong); background: var(--card); }
+    .od-start-card-icon { width: 36px; height: 36px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 9px; background: var(--bg-soft); color: var(--text-soft); }
+    .od-start-card-new .od-start-card-icon { background: var(--accent-soft); color: var(--accent); }
+    .od-start-card-text { display: flex; flex-direction: column; min-width: 0; }
+    .od-start-card-title { font-size: 14px; font-weight: 600; }
+    .od-start-card-hint { font-size: 12.5px; color: var(--text-soft); }
+
+    /* recent projects: rows like the docs sidebar's */
     .od-recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     .od-recent ul { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; }
-    .od-recent li button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 8px; background: none; text-align: left; }
+    .od-recent li button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 8px; border: 0; border-radius: 8px; background: none; text-align: left; font-size: 13.5px; }
     .od-recent li button:hover { background: var(--hover); }
-    .od-recent li .od-icon { width: 16px; height: 16px; flex: none; color: var(--text-faint); }
+    .od-recent li .od-icon { width: 16px; height: 16px; color: var(--text-faint); }
     .od-recent-name { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-    .od-recent-folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--text-faint); font-size: 12.5px; }
-    .od-recent-empty { margin: 0; color: var(--text-faint); }
+    .od-recent-folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: right; color: var(--text-faint); font-size: 12.5px; }
+    .od-recent-empty { margin: 0; padding: 28px 16px; border: 1px dashed var(--border-strong); border-radius: 12px; text-align: center; color: var(--text-faint); font-size: 13px; }
   </style>
   <script src="../dist/web/start.js" defer></script>
 </head>
 <body>
   <header class="od-header">
-    <div class="od-start-actions">
-      <button class="od-primary" type="button" data-action="new" data-tip="New doc" data-keys="Mod+N">New doc</button>
-      <button class="od-secondary" type="button" data-action="open" data-tip="Open a doc" data-keys="Mod+O">Open…</button>
-      <button class="od-secondary" type="button" data-action="open-folder" data-tip="Open a folder of docs" data-keys="Mod+Shift+O">Open Folder…</button>
-    </div>
     <span class="od-spacer"></span>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
 
   <main class="od-start">
+    <h1>Projects</h1>
+
+    <div class="od-start-actions">
+      <button class="od-start-card od-start-card-new" type="button" data-action="new-project">
+        <span class="od-start-card-icon" data-icon="folderPlus"></span>
+        <span class="od-start-card-text">
+          <span class="od-start-card-title">Create project</span>
+          <span class="od-start-card-hint">A new folder for docs</span>
+        </span>
+      </button>
+      <button class="od-start-card" type="button" data-action="open-project" data-tip="Open a folder as a project" data-keys="Mod+Shift+O">
+        <span class="od-start-card-icon" data-icon="folder"></span>
+        <span class="od-start-card-text">
+          <span class="od-start-card-title">Open project…</span>
+          <span class="od-start-card-hint">A folder you already have</span>
+        </span>
+      </button>
+    </div>
+
     <section class="od-recent" aria-labelledby="recent-title">
       <h2 id="recent-title">Recent</h2>
       <ul></ul>
-      <p class="od-recent-empty" hidden>No recent docs</p>
+      <p class="od-recent-empty" hidden>Projects you open show up here</p>
     </section>
   </main>
 

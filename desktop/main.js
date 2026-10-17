@@ -10,7 +10,7 @@ import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agentsDir } from '../src/store/agents.js';
+import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
@@ -204,6 +204,28 @@ async function openFolderDialog(parent) {
   await openFolder(filePaths[0], parent);
 }
 
+/**
+ * The home page's Create Project: the OS save dialog names a new folder,
+ * which opens as a project with an Untitled doc in it.
+ */
+async function newProjectDialog(parent) {
+  const { canceled, filePath } = await dialog.showSaveDialog(...withParent(parent, {
+    title: 'Create Project',
+    buttonLabel: 'Create',
+    defaultPath: join(startFolder(parent), 'Untitled Project'),
+    properties: ['createDirectory'],
+  }));
+  if (canceled || !filePath) return;
+  try {
+    await createFolder(filePath);
+    await createUntitled(filePath);
+  } catch (error) {
+    if (error.code !== 'exists') return failed(parent, `Could not create ${basename(filePath)}.`, error);
+    if (!(await ask(parent, `${basename(filePath)} already exists.`, `Open ${filePath} as a project instead?`, 'Open'))) return;
+  }
+  await openFolder(filePath, parent);
+}
+
 // ---- creating and renaming docs ----
 
 /** File > New Doc: the OS save dialog picks the folder (or makes one) and the name. */
@@ -321,6 +343,9 @@ function forget(docPath) {
   saveState();
   recentChanged();
 }
+
+// The home page lists folders only: projects.
+const recentProjects = () => recentDocs().filter(isDirectory);
 
 function recentChanged() {
   buildMenu();
@@ -477,9 +502,17 @@ function recentMenu() {
 
 // ---- the start window's settings ----
 
-// The settings the start window shows and changes (its Settings dialog):
-// your name and how things look, never buddies or agent scripts.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus'];
+// The settings the start window shows and changes (its Settings dialog, the
+// same as a doc's): your name, how things look and the agent, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus', 'agent'];
+
+// Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
+const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });
+
+async function resetAgentScript(name) {
+  if (!SHIPPED_AGENTS.includes(name)) throw new Error('not a shipped agent');
+  await installAgents(undefined, { reset: name });
+}
 const pageSettings = (all) => Object.fromEntries(PAGE_SETTING_KEYS.map((key) => [key, all[key]]));
 
 async function saveStartSettings(patch) {
@@ -772,9 +805,8 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');
   const fromStart = windows.isStartWindow(win);
   const fromDoc = Boolean(windows.docFor(win));
-  if (action === 'new' && (fromStart || fromDoc)) return void (await newDocDialog(win));
-  if (action === 'open' && (fromStart || fromDoc)) return void (await openDialog(win));
-  if (action === 'openFolder' && (fromStart || fromDoc)) return void (await openFolderDialog(win));
+  if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
+  if (action === 'newProject' && fromStart) return void (await newProjectDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
   if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
   if (action === 'folderExpand' && fromDoc) {
@@ -787,9 +819,11 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderMove' && fromDoc) return sidebarMove(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);
   if (action === 'folderMenu' && fromDoc) return void (await sidebarMenu(win, event.sender, arg));
-  if (action === 'showAgents' && fromDoc) return void showAgents();
+  if (action === 'showAgents' && (fromStart || fromDoc)) return void showAgents();
+  if (action === 'agentScripts' && fromStart) return agentScripts();
+  if (action === 'resetAgentScript' && fromStart) return void (await resetAgentScript(arg));
   if (action === 'recent' && fromStart) {
-    return recentDocs().map((path) => ({ name: basename(path), folder: shortFolder(path), kind: isDirectory(path) ? 'folder' : 'doc' }));
+    return recentProjects().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
   }
   if (action === 'drop' && (fromStart || fromDoc)) {
     // Docs and folders; any other file dropped is ignored.
@@ -801,7 +835,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'settings' && fromStart) return pageSettings((await readSettings()).settings);
   if (action === 'saveSettings' && fromStart) return saveStartSettings(arg);
   if (action === 'openRecent' && fromStart) {
-    const path = recentDocs()[arg];
+    const path = recentProjects()[arg];
     if (path) await openPath(path, { parent: win });
     return undefined;
   }

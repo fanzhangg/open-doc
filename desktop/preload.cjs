@@ -88,8 +88,8 @@ contextBridge.exposeInMainWorld('opendocHost', {
 });
 
 contextBridge.exposeInMainWorld('opendocDesktop', {
-  newDoc: () => act('new'),
-  open: () => act('open'),
+  /** The home page: a new project folder, or an existing one, picked in the OS dialog. */
+  newProject: () => act('newProject'),
   openFolder: () => act('openFolder'),
   /**
    * The folder window's sidebar: { name, docs (paths in the folder, `/`
@@ -129,6 +129,9 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   rename: () => act('rename'),
   /** Show the folder of the agent scripts. */
   showAgents: () => act('showAgents'),
+  /** The start window's Settings > Agent: { agents, shipped, folder }, and resetting a shipped script. */
+  agentScripts: () => ipcRenderer.invoke('opendoc:action', 'agentScripts'),
+  resetAgentScript: (name) => act('resetAgentScript', String(name)),
   openRecent: (index) => act('openRecent', Number(index)),
   recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
   onRecentChanged: (callback) => {
