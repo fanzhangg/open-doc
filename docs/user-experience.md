@@ -143,8 +143,7 @@ Agents are light, and belong to the doc unless you star them:
 - **Settings** (name, theme, font, width, outline, word count, focus mode)
   are global and apply at once to every open window, the start window too
   (its gear, or Ctrl+,).
-- **Files.** New Doc, New Doc in This Folder, and Rename (moves the comments
-  too). Opening an already open doc focuses its window. If the file is moved
+- **Files.** New Doc and Rename (moves the comments too). Opening an already open doc focuses its window. If the file is moved
   or deleted outside the app, a banner says so and saving pauses. A folder
   window's sidebar also makes, renames, moves (drag, or Move To…) and deletes
   docs and folders in place; see [file management](file-management.md).

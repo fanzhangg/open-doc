@@ -201,9 +201,8 @@ npm run desktop -- path/to/docs      # open a folder: its docs in a sidebar
 Each doc opens in its own window; opening a doc that is already open focuses
 its window. File > Open (Ctrl/Cmd+O) takes `.md` and `.markdown` files, or a
 doc's `.md.opendoc.json` sidecar. File > New Doc (Ctrl/Cmd+N) picks a folder
-and a name and never replaces an existing file; File > New Doc in This Folder
-(Ctrl/Cmd+Alt+N) creates `Untitled.md` (or `Untitled 2.md`, ...) next to the
-open doc (in a folder window it asks for the name in the sidebar instead). File > Rename, or clicking the doc name, renames the doc and its
+and a name and never replaces an existing file (in a folder window it asks
+for the name in the sidebar instead). File > Rename, or clicking the doc name, renames the doc and its
 sidecar together, like `opendoc mv`, and the window stays open. Closing a
 window waits for the last save. Settings are the same `settings.json` as
 above, so they apply to every window and to `opendoc serve`. Recent docs and
@@ -229,11 +228,11 @@ there could be tricked by a web page into sending them out. The sidebar button
 in the header hides and shows the list.
 
 The sidebar also manages the folder's files (see
-[docs/file-management.md](docs/file-management.md)). The buttons by the
-folder name start a new doc or folder, named in the tree before anything is
-created (`notes/kickoff` makes the folder too); a new doc opens ready to type
-in. Each row's `⋯` button, or a right-click, has Rename (F2), Move To…,
-Reveal, Copy Path and Delete; drag a row onto a folder to move it. A doc
+[docs/file-management.md](docs/file-management.md)). The `+` by the folder
+name starts a new doc, named in the tree before anything is created; a new
+doc opens ready to type in. A row's right-click menu has Rename (F2), Move
+To…, Reveal, Copy Path and Delete, and a folder's also New Doc and New
+Folder; drag a row onto a folder to move it. A doc
 always moves with its comments, history and own agents, and a window showing
 it follows. Delete asks first and puts the doc and its sidecar, or the folder
 with everything in it, in the Trash. The tree takes the arrow keys, Enter,

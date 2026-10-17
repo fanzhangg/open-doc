@@ -4,7 +4,7 @@
 // passes in how to start the host, so the tests run under `node --test`.
 
 /**
- * @typedef {{ url: string, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, running: () => Promise<string[]>, setFolder: (folder: string | null) => Promise<void>, onRestart: ((url: string) => void) | null }} DocServer
+ * @typedef {{ url: string, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, setFolder: (folder: string | null) => Promise<void>, onRestart: ((url: string) => void) | null }} DocServer
  */
 
 const SHUTDOWN_PATIENCE_MS = 5000;
@@ -20,8 +20,7 @@ const RESTART_WINDOW_MS = 60_000;
  * `startDocServer(docPath, { folder })` serves a doc and resolves to a
  * DocServer: `url`, `close()`, `moveTo(toPath, { moved })` (renames the doc
  * and its sidecar, never over another file, or with `moved` follows a doc
- * already there; resolves to the final path), `running()` (the names of
- * the doc's agents at work), `setFolder(folder)`, and `onRestart`, called with the new `url` once a
+ * already there; resolves to the final path), `setFolder(folder)`, and `onRestart`, called with the new `url` once a
  * host that stopped serves the doc again. `shutdown()` closes every doc and
  * stops the host, for quitting.
  */
@@ -114,10 +113,6 @@ export function createDocHost({ fork, log = console.error }) {
         await started;
         docPath = await request('moveTo', { serverId, toPath, moved });
         return docPath;
-      },
-      async running() {
-        await started;
-        return request('running', { serverId });
       },
       async setFolder(next) {
         await started;

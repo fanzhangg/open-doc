@@ -10,7 +10,6 @@
 //   close { serverId }
 //   moveTo { serverId, toPath, moved } → the doc's final path (renamed with
 //     its sidecar, or, with `moved`, already there)
-//   running { serverId } → the names of the doc's agents at work
 //   setFolder { serverId, folder }
 //   closeAll
 // The host says `{ type: 'ready' }` once it can take them.
@@ -46,7 +45,6 @@ const handlers = {
   },
   // `moved`: the doc is already at `toPath` (its folder moved); the server follows it.
   moveTo: ({ serverId, toPath, moved }) => server(serverId).moveTo(toPath, moved ? async () => toPath : renameDoc),
-  running: ({ serverId }) => server(serverId).team.statuses().filter((s) => s.state === 'running').map((s) => s.name),
   setFolder: ({ serverId, folder }) => server(serverId).setFolder(folder),
   async closeAll() {
     const all = [...servers.values()];
