@@ -21,7 +21,7 @@ import { revertEdits } from '../core/diff.js';
 import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
-import { projectBuddiesDir, readBuddies, removeBuddy, writeBuddy } from '../store/buddies.js';
+import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { splice } from './splice.js';
@@ -203,10 +203,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- the doc's buddies ----
 
-  // Clippy and the project's buddies.
+  // Clippy, as the user made it, and the project's buddies.
   async function buddies() {
     currentAgent = (await readSettings(settingsDir)).settings.agent;
-    return buddiesHere(folder ? await readBuddies(projectBuddiesDir(folder)) : []);
+    return buddiesHere(folder ? await readBuddies(projectBuddiesDir(folder)) : [], await readBuddies(userBuddiesDir(settingsDir)));
   }
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
@@ -341,11 +341,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (fields.name !== undefined && [CLIPPY.name, (await me()).name].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
 
-  // A project buddy here named `name`; Clippy cannot be changed.
-  async function projectBuddy(name) {
+  // The buddy here named `name`.
+  async function buddyNamed(name) {
     const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
     if (!found) throw new DocError('not_found', 'no such buddy');
-    if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be changed`);
     return found;
   }
 
@@ -371,16 +370,20 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // Change buddy `name` here: its name (renames its file) or who it is.
+  // Clippy's is the user's own Clippy.md, in every doc; it keeps its name.
   async function updateBuddy({ name, patch = {} } = {}) {
-    const found = await projectBuddy(name);
+    const found = await buddyNamed(name);
+    if (found.where === 'app' && patch.name !== undefined) throw new DocError('bad_input', `${found.name} keeps its name`);
     await checkBuddy(patch);
     const { where, ...was } = found;
+    if (where === 'app') return changeBuddies(() => saveBuddy(userBuddiesDir(settingsDir), { ...was, ...patch }));
     return changeBuddies(() => writeBuddy(projectDir(), { ...was, ...patch }, found.name));
   }
 
-  // Delete buddy `name`'s file. Its comments stay.
+  // Delete buddy `name`'s file. Its comments stay. Clippy stays.
   async function deleteBuddy({ name } = {}) {
-    const found = await projectBuddy(name);
+    const found = await buddyNamed(name);
+    if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be deleted`);
     return changeBuddies(() => removeBuddy(projectDir(), found.name));
   }
 
@@ -487,6 +490,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   let stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
+  const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
   await syncAgents();
 
   // What a window may ask. Each returns what changed, for the window that asked.
@@ -554,6 +558,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       stopWatching();
       stopWatchingSettings();
       stopWatchingProjectBuddies();
+      stopWatchingUserBuddies();
       closed = true;
       await runner.stop();
     },

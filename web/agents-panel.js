@@ -6,7 +6,8 @@
 // Changes save to the buddy's file as they are made. A new buddy is a draft
 // until Create: nothing is saved before it has a name, so one left half
 // made (the panel closed, Esc, another buddy picked) leaves no trace. New
-// buddies are the project's; Clippy is built in and cannot be changed.
+// buddies are the project's. Clippy is in every doc: who it is is yours to
+// change, its name is not.
 
 import { api } from './api.js';
 import { avatar } from './threads.js';
@@ -83,13 +84,13 @@ export function createAgentsPanel({ buddies, project, onResult }) {
     headAvatar.replaceChildren(avatar(buddy.name || '?', 'agent'));
     createButton.disabled = creating || !draft || !draftFields();
     for (const input of form.querySelectorAll('input[data-agent], textarea[data-agent]')) {
-      input.readOnly = buddy.where === 'app';
+      input.readOnly = buddy.where === 'app' && input === nameInput;
       if (document.activeElement === input) continue;
       input.value = buddy[input.dataset.agent] ?? '';
       input.removeAttribute('aria-invalid');
     }
     where.hidden = Boolean(draft);
-    where.textContent = buddy.where === 'project' ? `This project's: .opendoc/buddies/${buddy.name}.md` : 'Built into OpenDoc, in every doc. It cannot be changed.';
+    where.textContent = buddy.where === 'project' ? `This project's: .opendoc/buddies/${buddy.name}.md` : 'In all your docs: buddies/Clippy.md in your config folder. Clear it for Clippy as it ships.';
     newButton.hidden = !project();
   }
 

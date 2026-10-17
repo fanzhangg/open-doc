@@ -26,8 +26,10 @@ A buddy is someone you @mention: a name and who it is, in one markdown file,
 `<Name>.md`. The file name is its name; its text, given to its agent as is,
 says who it is, and the first line shows next to its name.
 
-- **Clippy**, a general writing assistant, is built in and answers in every
-  doc. It cannot be edited or deleted.
+- **Clippy**, a general writing assistant, answers in every doc. Who it is
+  is yours to change, once for all your docs (`buddies/Clippy.md` in your
+  config folder); clear it for Clippy as it ships. Its name stays, and it
+  cannot be deleted.
 - **A project's** buddies live in its `.opendoc/buddies/` and travel with the
   folder (commit them). They answer only in that project's docs.
 - A doc opened on its own (from Finder, say) reaches only Clippy, even if it

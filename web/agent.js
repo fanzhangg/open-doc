@@ -293,7 +293,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
     who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
-    if (status && !viewOnly && status.where !== 'app') {
+    if (status && !viewOnly) {
       const tools = el('div', 'od-profile-tools');
       tools.append(iconButton('settings', 'Edit who it is', () => editProfile(status.name)));
       head.append(tools);
@@ -459,7 +459,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
 // Where a buddy stands in this doc, on its card under its name.
 const STANDING = { working: 'Working…', away: 'Not running here' };
-const WHERE = { app: 'Built in, in every doc', project: "This project's" };
+const WHERE = { app: 'In all your docs', project: "This project's" };
 
 const LABELS = { working: 'Working…', away: 'Not here' };
 

@@ -1,11 +1,11 @@
-// A buddy (spec/PROJECT.md §2): Clippy, built into the app, or a project's
+// A buddy (spec/PROJECT.md §2): Clippy, in every doc, or a project's
 // `<Name>.md` file. The file name is its name, its text who it is (`about`),
 // the first line shown where there is room for one. Pure, so the doc host
 // and the page check them the same way.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
 
-/** Clippy: in every doc, and no one can change it. */
+/** Clippy as it ships: in every doc. Who it is is the user's to change (their own `Clippy.md`); its name is not. */
 export const CLIPPY = Object.freeze({
   name: 'Clippy',
   about: 'A general writing assistant that helps draft and edit docs',
@@ -70,8 +70,13 @@ function fnv(text) {
   return h >>> 0;
 }
 
-/** The buddies a doc reaches: Clippy, then the project's by name. A project's `Clippy.md` is not one. */
-export function buddiesHere(project) {
+/**
+ * The buddies a doc reaches: Clippy, as the user's `Clippy.md` among `mine`
+ * says (when it says anything), then the project's by name. A project's
+ * `Clippy.md` is not one.
+ */
+export function buddiesHere(project, mine = []) {
+  const about = mine.find((b) => sameName(b.name, CLIPPY.name))?.about;
   const theirs = project.filter((b) => !sameName(b.name, CLIPPY.name)).map((b) => ({ ...b, where: 'project' }));
-  return [CLIPPY, ...theirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))];
+  return [about ? { ...CLIPPY, about } : CLIPPY, ...theirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))];
 }
