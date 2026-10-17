@@ -43,7 +43,6 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       count.hidden = !next.wordCount;
       window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
     },
-    openAgents: () => agentsPanel.open(),
     scripts: {
       list: api.scripts,
       reset: api.resetScript,

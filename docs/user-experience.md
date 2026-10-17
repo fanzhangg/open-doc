@@ -6,10 +6,10 @@ How a person writes with buddies in OpenDoc. For why, see the
 
 ## The basic loop
 
-1. **Open a doc.** Any `.md` file: from the start window, File > Open, a
-   double-click in the OS, or a drag onto the app. Each doc gets its own
-   window. A folder opened from the start window is a **project**: its docs
-   in a sidebar.
+1. **Open a doc.** Any `.md` file: File > Open, a double-click in the OS,
+   or a drag onto the app. Each doc gets its own window. The home page
+   creates or opens a **project**, a folder with its docs in a sidebar, and
+   lists the recent ones.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
 3. **Comment.** Select text and click the comment button at the page edge
@@ -91,7 +91,9 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   merge with your typing. Where they overlap what you are typing, your typing
   stays and their version is in history.
 - **Settings** (name, theme, font, width, outline, word count, focus mode,
-  agent) apply at once to every open window, the start window too.
+  agent) are the same dialog in every window, the home page too, and a
+  change applies at once to all of them. Buddies are not in Settings: they
+  are in a doc's People panel.
 - **Files.** New Doc, New Doc in This Folder, and Rename (the comments move
   too). Opening an already open doc focuses its window. If the file is moved
   or deleted outside the app, a banner says so and saving pauses. A project's

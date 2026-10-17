@@ -2,9 +2,9 @@
 // show shortcuts, and how shortcuts are written: shared by the editor
 // (web/ui.js) and the desktop start window (desktop/start.js), so both look
 // and behave the same. Settings are saved for every doc and window (see
-// settings.js); a change made in another window shows up here too. In a doc,
-// Agent picks the agent script that runs every buddy, and Buddies at the
-// foot of the list opens the Buddies panel: buddies are set up there, not twice.
+// settings.js); a change made in another window shows up here too. Every
+// window shows the same sections, Agent among them (the agent script that
+// runs every buddy); buddies are not here: they belong to a doc's People.
 
 import { hydrateIcons } from './icons.js';
 
@@ -24,8 +24,7 @@ const DIALOG = `
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
-    <button type="button" role="tab" data-section="agent" data-icon="settings" hidden>Agent</button>
-    <button type="button" class="od-settings-agents" data-action="agents" data-icon="users" hidden>Buddies</button>
+    <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
   </nav>
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
@@ -133,13 +132,12 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. With `openAgents`, the list has Buddies, which opens the Buddies panel.
- * With `scripts` ({ list() → { agents, shipped, folder }, reset(name),
- * showFolder? }), it has Agent, which picks the agent script.
+ * one page shows. `scripts` ({ list() → { agents, shipped, folder }, reset(name),
+ * showFolder? }) backs Agent, which picks the agent script.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, openAgents?: () => void, scripts?: object }} options
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, openAgents = null, scripts = null }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   hydrateIcons(dialog);
@@ -149,9 +147,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
   const nameError = dialog.querySelector('.od-input-error');
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
-  dialog.querySelector('[data-action="agents"]').hidden = !openAgents;
-  dialog.querySelector('[data-section="agent"][role="tab"]').hidden = !scripts;
-  dialog.querySelector('[data-action="show-agents"]').hidden = !scripts?.showFolder;
+  dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
   const scriptSelect = dialog.querySelector('#od-agent-script');
   let shipped = [];
 
@@ -227,10 +223,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, ope
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.action === 'close') dialog.close();
-    else if (button.dataset.action === 'agents') {
-      dialog.close();
-      openAgents();
-    } else if (button.dataset.action === 'reset-agent') {
+    else if (button.dataset.action === 'reset-agent') {
       const name = scriptSelect.value;
       if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
     } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
