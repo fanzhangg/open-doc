@@ -31,46 +31,15 @@ const COLORS = [
 let ids = 0; // gradient ids, unique per page
 
 /** @param {string} seed */
-export const agentFace = (seed) => seed.trim().toLowerCase() === 'clippy' ? clippyFace() : face(seed, false);
+export const agentFace = (seed) => face(seed, false);
 
 /** @param {string} seed */
 export const personFace = (seed) => face(seed, true);
 
-// Follow the original sketch: a wide warm yellow coil, eyes on either side and
-// asymmetric brows. Rounded arcs and a soft gaze gently refine its expression.
-export function clippyFace() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
-  const id = `od-clippy-${++ids}`;
-  const defs = node('defs', {});
-  const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
-  for (const [offset, color] of [[0, '#ffe9a3'], [0.55, '#ffd05b'], [1, '#edac38']]) {
-    gradient.append(node('stop', { offset, 'stop-color': color }));
-  }
-  defs.append(gradient);
-  const body = node('g', {});
-  svg.append(defs, body);
-  body.append(node('path', {
-    class: 'od-face-body',
-    d: 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50',
-    fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
-    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-  }));
-  const features = node('g', { class: 'od-face-look' });
-  drawEye(features, 'big', 23, 46, -1, 1.55, [0.8, -0.3]);
-  drawEye(features, 'big', 77, 43, 1, 1.55, [-0.8, -0.3]);
-  // A small highlight softens the gaze without adding another facial feature.
-  for (const [x, y] of [[22, 43], [74, 40]]) {
-    features.append(node('circle', { cx: x, cy: y, r: '1.7', fill: '#fff' }));
-  }
-  features.append(stroke('M13 26Q22 22 31 25', 3.5), stroke('M68 21Q76 16 84 18', 3.5));
-  svg.append(features);
-  return svg;
-}
-
-// The app icon: Clippy on a paper tile, the shape and size of Apple's icon grid
-// (824 of 1024). macOS 26 shrinks an icon that does not fill this shape onto a
-// grey plate, which is how the bare coil showed in the Dock and Finder.
-export function appIcon() {
+// The app icon: the face drawn from `faceSeed` (Clippy's) on a paper tile, the
+// shape and size of Apple's icon grid (824 of 1024). macOS 26 shrinks an icon
+// that does not fill this shape onto a grey plate.
+export function appIcon(faceSeed) {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
   const defs = node('defs', {});
   const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
@@ -81,17 +50,16 @@ export function appIcon() {
     x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
     fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
   }));
-  const avatar = clippyFace();
-  const mark = node('g', { transform: 'translate(50 50.5) scale(0.64) translate(-50 -51)' });
-  mark.append(...avatar.childNodes);
+  const mark = node('g', { transform: 'translate(50 50) scale(0.6) translate(-50 -50)' });
+  mark.append(...agentFace(faceSeed).childNodes);
   svg.append(mark);
   return svg;
 }
 
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
-// A large warm yellow coil overlaps the folded page, following the original sketch.
-export function documentIcon() {
+// A doc: a folded page with the same face over its corner, ringed in white.
+export function documentIcon(faceSeed) {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
     node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
@@ -99,14 +67,16 @@ export function documentIcon() {
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
-  const avatar = clippyFace();
-  svg.append(avatar.querySelector('defs'));
-  const coil = avatar.querySelector('.od-face-body');
-  const halo = coil.cloneNode(true);
-  halo.setAttribute('stroke', '#fff');
-  halo.setAttribute('stroke-width', '16');
-  const mark = node('g', { transform: 'translate(-1 20) scale(0.73)' });
-  mark.append(halo, coil);
+  const avatar = agentFace(faceSeed);
+  // The ring is a copy of the body, with the group a swirl's flip sits on.
+  const body = avatar.querySelector('.od-face-body');
+  const halo = (body.parentNode === avatar ? body : body.parentNode).cloneNode(true);
+  const ring = halo.matches('.od-face-body') ? halo : halo.querySelector('.od-face-body');
+  if (ring.getAttribute('fill') !== 'none') ring.setAttribute('fill', '#fff');
+  ring.setAttribute('stroke', '#fff');
+  ring.setAttribute('stroke-width', '16');
+  const mark = node('g', { transform: 'translate(4 40) scale(0.56)' });
+  mark.append(halo, ...avatar.childNodes);
   svg.append(mark);
   return svg;
 }
@@ -114,7 +84,10 @@ export function documentIcon() {
 function face(name, round) {
   const rand = random(seed(name));
   const [hue, sat, light] = pick(rand, COLORS);
-  const body = round ? CIRCLE : bodyShape(rand);
+  // Whether an agent is a swirl is a draw of its own, so a face that is not
+  // one stays as it was before swirls.
+  const swirl = !round && random(seed(`${name}\0swirl`))() < SWIRLS;
+  const body = round ? CIRCLE : swirl ? null : bodyShape(rand);
 
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
   const id = `od-face-${++ids}`;
@@ -126,6 +99,7 @@ function face(name, round) {
   );
   const defs = node('defs', {});
   defs.append(gradient);
+  if (swirl) return swirlFace(svg, defs, id, rand);
   svg.append(defs, node('path', { class: 'od-face-body', d: body.d, fill: `url(#${id})` }));
 
   // The face sits a little off centre, as if glancing somewhere, and tilts a touch.
@@ -205,6 +179,37 @@ function smooth(points) {
     d += `Q${f(p[0])} ${f(p[1])} ${f(m[0])} ${f(m[1])}`;
   });
   return `${d}Z`;
+}
+
+// ---- the swirl ----
+
+// About one agent in ten is a swirl: a wide coil with big eyes either side and
+// brows above them, the coil standing in for nose and mouth.
+const SWIRLS = 0.1;
+const COIL = 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50';
+
+function swirlFace(svg, defs, id, rand) {
+  const flip = rand() < 0.5; // which way it coils
+  const x = (v) => (flip ? 100 - v : v);
+  // The flip sits on a group: the working spin animates the body's own transform.
+  const coil = node('g', flip ? { transform: 'matrix(-1 0 0 1 100 0)' } : {});
+  coil.append(node('path', {
+    class: 'od-face-body', d: COIL, fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+  }));
+  const look = node('g', { class: 'od-face-look' });
+  svg.append(defs, coil, look);
+  const size = range(rand, 1.4, 1.6);
+  const glance = [range(rand, -1, 1), range(rand, -0.6, 0.3)];
+  for (const [ex, ey, side] of [[23, 46, -1], [77, 43, 1]]) {
+    drawEye(look, 'big', x(ex), ey, side, size, glance);
+    // A highlight on the pupil, and a brow at a height of its own.
+    look.append(node('circle', { cx: f(x(ex) + glance[0] * 1.4 - 2), cy: f(ey + glance[1] * 1.4 - 2.6), r: '1.7', fill: '#fff' }));
+    const y = ey - 20 - range(rand, 0, 5);
+    const tilt = range(rand, -2, 2);
+    look.append(stroke(`M${f(x(ex - 9))} ${f(y + tilt)}Q${f(x(ex))} ${f(y - 4)} ${f(x(ex + 8))} ${f(y - tilt)}`, 3.5));
+  }
+  return svg;
 }
 
 // ---- the face ----

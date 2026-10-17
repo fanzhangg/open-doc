@@ -115,6 +115,9 @@ test('agents: the app comes with Clippy, starred, generic, and no built-in roles
   assert.deepEqual(permissionLabels(roster[0]), ['Editor', 'Auto Editor', 'Auto Commenter']);
   assert.equal(introOf({ persona: 'A poet' }), 'A poet', 'the persona is the line on its card');
   assert.equal(introOf({ persona: '', instructions: 'You are a poet.' }), '', 'empty until the user writes one');
+  const saved = (face) => resolveSettings({ agents: [{ id: DEFAULT_AGENT_ID, name: 'Clippy', face }, { id: 'a_will', name: 'Will', face }] }).agents.map((a) => a.face);
+  assert.deepEqual(saved(null), [roster[0].face, null], 'Clippy saved before it had a face takes the one it ships with; others keep their name');
+  assert.deepEqual(saved('x1'), ['x1', 'x1'], 'a face of its own stays');
 });
 
 test('agents: a persona is one line; instructions hold the rest; old agents are split', () => {
