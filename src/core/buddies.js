@@ -1,24 +1,20 @@
 // A buddy (spec/PROJECT.md §2): Clippy, built into the app, or a project's
-// `<Name>.md` file. The file name is its name, the first line its persona,
-// the rest its instructions. Pure, so the doc host and the page check them
-// the same way.
+// `<Name>.md` file. The file name is its name, its text who it is (`about`),
+// the first line shown where there is room for one. Pure, so the doc host
+// and the page check them the same way.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
-
-export const MAX_PERSONA = 120;
 
 /** Clippy: in every doc, and no one can change it. */
 export const CLIPPY = Object.freeze({
   name: 'Clippy',
-  persona: 'A general writing assistant that helps draft and edit docs',
-  instructions: '',
+  about: 'A general writing assistant that helps draft and edit docs',
   where: 'app',
 });
 
 export const BUDDY_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
-  persona: (v) => typeof v === 'string' && v.length <= MAX_PERSONA && !/[\0\r\n]/.test(v),
-  instructions: (v) => typeof v === 'string' && !v.includes('\0'),
+  about: (v) => typeof v === 'string' && !v.includes('\0'),
 });
 
 export class BuddyError extends Error {
@@ -40,14 +36,14 @@ export function checkBuddyPatch(patch) {
 
 /** Buddy `name` from its file's text. */
 export function parseBuddy(name, text) {
-  const [first, ...rest] = text.replace(/\r\n/g, '\n').split('\n');
-  return { name, persona: first.trim(), instructions: rest.join('\n').trim() };
+  return { name, about: text.replace(/\r\n/g, '\n').trim() };
 }
 
+/** The first line of who `buddy` is, for a name card or the @ menu. */
+export const tagline = (buddy) => buddy.about.split('\n')[0];
+
 /** A buddy's file text. */
-export function buddyText({ persona = '', instructions = '' }) {
-  return instructions.trim() ? `${persona.trim()}\n\n${instructions.trim()}\n` : `${persona.trim()}\n`;
-}
+export const buddyText = ({ about = '' }) => `${about.trim()}\n`;
 
 /**
  * Each buddy's color, one of eight (spec/PROJECT.md §2), by lower-case

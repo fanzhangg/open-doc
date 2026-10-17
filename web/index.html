@@ -160,16 +160,15 @@
           <span class="od-agent-head-avatar"></span>
           <div class="od-agent-head-fields">
             <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name" placeholder="Name, as you @mention it">
-            <input class="od-agent-intro" type="text" data-agent="persona" maxlength="120" aria-label="Persona" placeholder="Persona: who it is, in one line">
             <div class="od-input-error" role="alert" hidden></div>
           </div>
         </header>
         <p class="od-agent-where"></p>
 
         <section class="od-agent-block">
-          <h3><label for="od-agent-instructions">Instructions</label></h3>
-          <p class="od-agent-block-hint">Details and rules behind its persona, added to its prompt: what to do, what to leave alone, how to reply. Optional.</p>
-          <textarea id="od-agent-instructions" class="od-input od-input-full od-persona" data-agent="instructions" rows="7" placeholder="Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
+          <h3><label for="od-agent-about">Who it is</label></h3>
+          <p class="od-agent-block-hint">Its prompt: who it is, what to do, what to leave alone, how to reply. The first line shows next to its name.</p>
+          <textarea id="od-agent-about" class="od-input od-input-full od-about" data-agent="about" rows="9" placeholder="A copy editor.&#10;&#10;Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
         </section>
 
         <footer class="od-agent-foot">

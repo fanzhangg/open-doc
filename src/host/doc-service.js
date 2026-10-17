@@ -363,14 +363,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // A new buddy, in this project's .opendoc/buddies/ (made if missing).
   async function createBuddy({ buddy } = {}) {
-    const fields = { persona: '', instructions: '', ...buddy };
+    const fields = { about: '', ...buddy };
     await checkBuddy(fields);
     if (!fields.name) throw new DocError('bad_input', 'a buddy needs a name');
     const dir = projectDir();
     return changeBuddies(() => writeBuddy(dir, fields));
   }
 
-  // Change buddy `name` here: its name (renames its file), persona or instructions.
+  // Change buddy `name` here: its name (renames its file) or who it is.
   async function updateBuddy({ name, patch = {} } = {}) {
     const found = await projectBuddy(name);
     await checkBuddy(patch);

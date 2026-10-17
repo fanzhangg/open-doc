@@ -1,13 +1,13 @@
 // The people in the header, laid out like a shared doc's: avatars of the
 // buddies the doc reaches, a People button, then yours.
 //
-// Buddies are light: on a buddy's card, a click on its name or its persona
-// (one line) edits it in place; the Buddies panel holds its instructions.
-// New buddy opens a draft there. Faces are drawn from names.
+// Buddies are light: on a buddy's card, a click on its name edits it in
+// place; the Buddies panel holds who it is. New buddy opens a draft there.
+// Faces are drawn from names.
 //
 // A buddy answers when @mentioned. The People panel lists who commented
 // and the buddies here. Clicking an avatar opens that buddy's card: its
-// name and persona, each editable right there. Your own card works
+// name, editable right there, and the first line of who it is. Your own card works
 // the same way: a click on your name edits it in place.
 //
 // The comment box asks this module what to offer after @.
@@ -15,7 +15,7 @@
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar, namecardFor } from './threads.js';
-import { MAX_PERSONA } from '../src/core/buddies.js';
+import { tagline } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
@@ -35,7 +35,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let viewOnly = false;
   let hovered = false; // opened by hovering: goes when the pointer leaves, until a click or a field keeps it
   let anchor = null; // the name on the page the card opened next to; null: under the header
-  let editing = null; // the field of the shown agent being edited in place: 'name' | 'persona'
+  let editing = false; // whether the shown card's name is being edited in place
 
   invite.addEventListener('click', () => toggle('people'));
   me.addEventListener('click', () => toggle('me'));
@@ -79,7 +79,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     viewOnly = false;
     hovered = false;
     anchor = null;
-    editing = null;
+    editing = false;
     panel.hidden = true;
   }
 
@@ -93,7 +93,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     showing = keyOf(name, kind);
     viewOnly = !header;
     hovered = true;
-    editing = null;
+    editing = false;
     anchor = header ? null : from;
     panel.hidden = false;
     paintCard();
@@ -141,7 +141,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
   const isMe = (p) => p.id === getId();
   const statusOf = (name) => statuses.find((s) => same(s.name, name)) ?? null;
-  const introOf = (name) => statusOf(name)?.persona ?? '';
+  const introOf = (name) => {
+    const status = statusOf(name);
+    return status ? tagline(status) : '';
+  };
 
   // The buddies the doc reaches.
   const agentsHere = () => statuses.map((s) => s.name);
@@ -201,7 +204,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const pic = el('span', 'od-profile-face');
     pic.append(avatar(getName(), 'human'));
     const who = el('div', 'od-profile-who');
-    who.append(inPlace({ me: true, name: getName() }, 'name', 'od-profile-name', 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
+    who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
     const tools = el('div', 'od-profile-tools');
     tools.append(iconButton('settings', 'More settings', () => {
       close();
@@ -251,7 +254,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return row;
   }
 
-  // A buddy on one line: avatar, name, persona. The row opens its card.
+  // A buddy on one line: avatar, name, who it is. The row opens its card.
   function agentRow(name) {
     const row = el('div', 'od-people-row od-people-agent');
     row.dataset.openAgent = name;
@@ -277,7 +280,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return parts;
   }
 
-  // The top of a buddy's card: its face, name, persona, and edit.
+  // The top of a buddy's card: its face, name, who it is, and edit.
   function cardHead(name) {
     const status = statusOf(name);
     const head = el('div', 'od-profile');
@@ -285,39 +288,29 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const pic = el('span', 'od-profile-face');
     pic.append(avatar(name, 'agent'));
     const who = el('div', 'od-profile-who');
-    if (status && !viewOnly && status.where !== 'app') {
-      // Click the name or the persona line to edit it right there.
-      who.append(inPlace(status, 'name', 'od-profile-name', 'Name'));
-      who.append(inPlace(status, 'persona', 'od-profile-slogan', 'Who it is, in one line'));
-    } else {
-      who.append(el('div', 'od-profile-name', name));
-      if (introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
-    }
+    // Click the name to edit it right there.
+    who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'od-profile-name', name));
+    if (introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
     who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
     if (status && !viewOnly && status.where !== 'app') {
       const tools = el('div', 'od-profile-tools');
-      tools.append(iconButton('settings', 'More settings, such as instructions', () => editProfile(status.name)));
+      tools.append(iconButton('settings', 'Edit who it is', () => editProfile(status.name)));
       head.append(tools);
     }
     return head;
   }
 
-  // `key` of `agent` as text that turns into a field when clicked. Enter or
-  // leaving the field saves it, Escape puts it back. An empty persona shows
-  // as an empty line, still there to click.
-  function inPlace(agent, key, className, placeholder) {
-    if (editing !== key) {
-      const value = key === 'name' ? agent.name : agent.persona;
-      const text = el('div', `${className} od-editable`, value || undefined);
-      // No persona yet: say so, where it would go.
-      if (!value) text.append(icon('plus'), el('span', '', 'Add a persona'));
-      text.classList.toggle('od-editable-empty', !value);
+  // `agent`'s name as text that turns into a field when clicked. Enter or
+  // leaving the field saves it, Escape puts it back.
+  function inPlace(agent, placeholder) {
+    if (!editing) {
+      const text = el('div', 'od-profile-name od-editable', agent.name);
       text.tabIndex = 0;
       text.setAttribute('role', 'button');
-      text.setAttribute('aria-label', key === 'name' ? `Rename ${agent.name}` : `Persona of ${agent.name}`);
+      text.setAttribute('aria-label', `Rename ${agent.name}`);
       const start = () => {
-        editing = key;
+        editing = true;
         paintCard();
         const field = panel.querySelector('.od-inline-input');
         field?.focus();
@@ -327,20 +320,20 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       text.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); } });
       return text;
     }
-    const field = el('input', `${className} od-inline-input`);
+    const field = el('input', 'od-profile-name od-inline-input');
     field.type = 'text';
-    field.value = key === 'name' ? agent.name : agent.persona;
+    field.value = agent.name;
     field.placeholder = placeholder;
-    field.maxLength = key === 'name' ? 64 : MAX_PERSONA;
-    field.spellcheck = key !== 'name';
-    field.setAttribute('aria-label', key === 'name' ? 'Name' : 'Persona');
+    field.maxLength = 64;
+    field.spellcheck = false;
+    field.setAttribute('aria-label', 'Name');
     let done = false;
     const finish = (save) => {
       if (done) return;
       done = true;
-      if (save) commit(agent, key, field);
+      if (save) commit(agent, field);
       else {
-        editing = null;
+        editing = false;
         paintCard();
       }
     };
@@ -352,36 +345,36 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return field;
   }
 
-  async function commit(agent, key, field) {
+  async function commit(agent, field) {
     const value = field.value.trim();
     if (agent.me) return commitMyName(field, value);
-    if (value === (key === 'name' ? agent.name : agent.persona)) return settle();
-    if (key === 'name' && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, key);
+    if (value === agent.name) return settle();
+    if (!NAME_PATTERN.test(value)) return fail(field, NAME_RULE);
     try {
-      const result = await api.updateBuddy(agent.name, { [key]: value });
-      if (key === 'name' && showing === `agent:${agent.name}`) showing = `agent:${value}`;
+      const result = await api.updateBuddy(agent.name, { name: value });
+      if (showing === `agent:${agent.name}`) showing = `agent:${value}`;
       take(result);
       settle();
     } catch (failure) {
-      fail(field, failure.message, key);
+      fail(field, failure.message);
     }
   }
 
   function commitMyName(field, value) {
-    if (value !== getName() && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE, 'name');
+    if (value !== getName() && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE);
     settle();
     setName(value);
   }
 
   // The field is done: back to text.
   function settle() {
-    editing = null;
+    editing = false;
     paintCard();
   }
 
   // Keep the field open, with what went wrong under the card's top.
-  function fail(field, message, key) {
-    editing = key;
+  function fail(field, message) {
+    editing = true;
     paintCard();
     const again = panel.querySelector('.od-inline-input');
     if (!again) return;
@@ -433,7 +426,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   /**
    * What @`query` may address, grouped: the buddies here (matched by name,
-   * or by their persona for two letters or more), and the people who
+   * or by the first line of who they are for two letters or more), and the people who
    * commented.
    */
   function mentionChoices(query) {

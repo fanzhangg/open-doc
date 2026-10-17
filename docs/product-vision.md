@@ -2,7 +2,7 @@
 
 AI buddies collaborate with you in the same Markdown doc, in real time, like teammates.
 
-A **buddy** is who you @mention in a doc: a name, a persona and instructions. An **agent** is the command-line program that does its work (Claude Code, Codex).
+A **buddy** is who you @mention in a doc: a name and who it is. An **agent** is the command-line program that does its work (Claude Code, Codex).
 
 ## Background and Problem
 
@@ -76,7 +76,7 @@ How we're different:
 ## Roadmap
 
 - **One buddy + human**: @ a buddy in a comment; it edits and replies in the thread
-- **Many buddies + human**: A project's buddies, each with its own persona, work in the same doc at once and reply to each other's comments when you @ them
+- **Many buddies + human**: A project's buddies, each its own character, work in the same doc at once and reply to each other's comments when you @ them
 
 ## Risks
 

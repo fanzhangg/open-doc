@@ -3,8 +3,8 @@
 How OpenDoc is built, and why. No backward compatibility with OpenDoc 1: a
 version 1 sidecar is reported as unreadable.
 
-Two words: a **buddy** is who you @mention in a doc (a name, a persona,
-instructions); an **agent** is the CLI that does its work (Claude Code,
+Two words: a **buddy** is who you @mention in a doc (a name and who it
+is); an **agent** is the CLI that does its work (Claude Code,
 Codex). A buddy runs on an agent.
 
 ## Principles
@@ -62,8 +62,8 @@ user's id. Buddies run only on docs open in a window.
 ## A run
 
 1. Runner copies the doc and its sidecar into a new private folder and runs
-   the [agent script](agent-config.md) there, with the prompt (persona,
-   instructions, the thread, the rules) on stdin and the buddy's name in
+   the [agent script](agent-config.md) there, with the prompt (who the
+   buddy is, the thread, the rules) on stdin and the buddy's name in
    `OPENDOC_BUDDY`.
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.

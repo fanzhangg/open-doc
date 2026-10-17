@@ -11,7 +11,7 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | | |
 | --- | --- |
 | Working folder | new and private; holds only copies of the doc and its sidecar, under their names |
-| stdin | the prompt: the buddy's persona and instructions, the thread, the rules |
+| stdin | the prompt: who the buddy is, the thread, the rules |
 | `OPENDOC_DOC` | the doc copy's path |
 | `OPENDOC_COMMENTS` | the sidecar copy's path |
 | `OPENDOC_PROJECT` | the project folder; empty in doc mode |
