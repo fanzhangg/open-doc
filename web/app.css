@@ -160,6 +160,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 /* profile cards under the header avatars */
 .od-panel { position: fixed; top: 50px; right: 12px; z-index: 30; width: 320px; padding: 16px; background: var(--bg); border-radius: 12px; box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; font-size: 13px; }
 @keyframes od-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+@keyframes od-rise { from { opacity: 0; transform: translateY(16px); } }
 .od-profile { display: flex; align-items: center; gap: 12px; }
 .od-profile .od-avatar { --size: 44px; }
 /* on an editable card, the face is a button that draws a new one */
@@ -330,10 +331,14 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-stage { position: relative; display: grid; grid-template-columns: minmax(0, var(--page-w)) var(--margin-w); gap: var(--stage-gap); justify-content: center; padding: 16px 16px 160px clamp(16px, 100% - var(--page-w) - var(--stage-gap) - var(--margin-w) - 16px, var(--stage-gap) + var(--margin-w) + 16px); }
 .od-page { position: relative; min-height: calc(100vh - 160px); padding: 40px var(--page-pad) 120px; }
 .od-margin { position: relative; transition: opacity 0.2s; }
-/* comments hidden (the toolbar's Comments button): no margin, no highlights */
-[data-hide-comments] .od-stage { --margin-w: 0px; --stage-gap: 0px; }
-[data-hide-comments] .od-margin { display: none; }
-[data-hide-comments] .od-hl { background: none; animation: none; transition: none; }
+/* comments hidden (the toolbar's Comments button): no margin, no highlights;
+   a narrow window keeps its highlights, which open the comment sheet */
+@media (min-width: 901px) {
+  [data-hide-comments] .od-stage { --margin-w: 0px; --stage-gap: 0px; }
+  [data-hide-comments] .od-margin { display: none; }
+  [data-hide-comments] .od-hl { background: none; animation: none; transition: none; }
+  .od-empty-open { display: none; }
+}
 
 /* ---- document typography ---- */
 
@@ -762,7 +767,12 @@ label.od-setting { cursor: pointer; }
   .od-files { top: 50px; bottom: 12px; left: 8px; z-index: 25; width: min(var(--files-w), calc(100vw - 16px)); border: 0; border-radius: 12px; background: var(--bg); box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; }
   .od-stage { grid-template-columns: minmax(0, 1fr); padding: 0 0 80px; }
   .od-page { padding-top: 28px; padding-bottom: 48px; min-height: 0; }
-  .od-margin { padding: 0 16px; height: auto !important; }
+  /* the comments rise from the bottom over the page, opened by the Comments button or commented text */
+  .od-margin { position: fixed; z-index: 24; left: max(8px, 50% - 320px); right: max(8px, 50% - 320px); bottom: 8px; max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 12px 2px; border-radius: 14px; background: var(--bg); box-shadow: var(--shadow-raised); height: auto !important; animation: od-rise 0.18s ease-out; }
+  :root:not([data-comments-open]) .od-margin { display: none; }
+  [data-comments-open] .od-canvas { scroll-padding-bottom: calc(50vh + 16px); }
+  [data-comments-open] .od-stage { padding-bottom: calc(50vh + 16px); }
+  .od-margin > .od-empty { margin: 4px 4px 14px; }
   .od-card { position: static; margin-bottom: 10px; transform: none; }
   .od-card-active { transform: none; }
   .od-toolbar { margin: 0 8px 8px; }
