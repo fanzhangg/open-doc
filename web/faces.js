@@ -54,10 +54,10 @@ export const agentFace = (seed) => seed.trim().toLowerCase() === 'clippy' ? clip
 /** @param {string} seed */
 export const personFace = (seed) => face(seed, true);
 
-// Follow the original sketch: a wide warm yellow coil, eyes on either side and
-// asymmetric brows. Rounded arcs and a soft gaze gently refine its expression.
+// A warm yellow coil, eyes on either side and asymmetric brows. The coil is a
+// true spiral centred where the body spins, so it turns without wobbling.
 export function clippyFace() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face', role: 'img', 'aria-label': 'OpenDoc' });
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', class: 'od-face od-clippy', role: 'img', 'aria-label': 'OpenDoc' });
   const id = `od-clippy-${++ids}`;
   const defs = node('defs', {});
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
@@ -69,7 +69,7 @@ export function clippyFace() {
   svg.append(defs, body);
   body.append(node('path', {
     class: 'od-face-body',
-    d: 'M18 60C7 40 18 20 37 20C61 18 84 28 85 48C87 69 70 86 50 85C30 84 24 71 27 54C29 40 41 35 54 38C68 41 70 53 64 62C58 71 45 69 45 59C45 53 48 50 53 50',
+    d: coil(),
     fill: 'none', stroke: `url(#${id})`, 'stroke-width': '8',
     'stroke-linecap': 'round', 'stroke-linejoin': 'round',
   }));
@@ -85,14 +85,58 @@ export function clippyFace() {
   return svg;
 }
 
+// An Archimedean spiral around (50, 50): two turns from the tail at the lower
+// left, winding anticlockwise in. Clippy spins anticlockwise (app.css), so the
+// coil seems to wind itself up.
+function coil() {
+  const [outer, inner, turns, start] = [35, 4, 2, Math.PI * 3 / 4];
+  const steps = turns * 48;
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = start - t * turns * Math.PI * 2;
+    const r = outer - (outer - inner) * t;
+    points.push([50 + r * Math.cos(a), 50 + r * Math.sin(a)]);
+  }
+  // Curve through each point, ending on the midpoints between them.
+  let d = `M${f(points[0][0])} ${f(points[0][1])}`;
+  for (let i = 1; i < steps; i++) {
+    const [p, q] = [points[i], points[i + 1]];
+    d += `Q${f(p[0])} ${f(p[1])} ${f((p[0] + q[0]) / 2)} ${f((p[1] + q[1]) / 2)}`;
+  }
+  return `${d}L${f(points[steps][0])} ${f(points[steps][1])}`;
+}
+
+// The app icon: Clippy on a paper tile, the shape and size of Apple's icon grid
+// (824 of 1024). macOS 26 shrinks an icon that does not fill this shape onto a
+// grey plate, which is how the bare coil showed in the Dock and Finder.
+export function appIcon() {
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
+  const defs = node('defs', {});
+  const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
+  gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
+  defs.append(gradient);
+  // A faint ink edge keeps the tile apart from white backgrounds (Windows, browser tabs).
+  svg.append(defs, node('rect', {
+    x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
+    fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
+  }));
+  const avatar = clippyFace();
+  const mark = node('g', { transform: 'translate(50 50.5) scale(0.64) translate(-50 -51)' });
+  mark.append(...avatar.childNodes);
+  svg.append(mark);
+  return svg;
+}
+
 const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', lift: 0, pointyBottom: false };
 
-// A large warm yellow coil overlaps the folded page, following the original sketch.
+// A large warm yellow coil overlaps the folded page; its white halo cuts the
+// page edge where they cross.
 export function documentIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
   svg.append(
     node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
-    node('path', { d: 'M28 27V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V86', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    node('path', { d: 'M28 88V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
     node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
     node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
   );
