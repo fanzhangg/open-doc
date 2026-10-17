@@ -1,5 +1,6 @@
-// Avatars: a face drawn from the name, from one set of parts. People are
-// round and keep their face everywhere. Clippy's is fixed. The other buddies
+// Avatars: a face drawn from the name, from one set of parts, each body a
+// little uneven as if drawn by hand. People are round and keep their face
+// everywhere. Clippy's is fixed. The other buddies
 // in a doc take parts as unlike each other's as can be (setBuddies), and a
 // colour no other buddy there has (colorSlots).
 //
@@ -136,9 +137,10 @@ export function documentIcon() {
 export const agentFace = (name) => face(name, looks.get(name.toLowerCase()) ?? drawn(name));
 
 /** @param {string} name */
-export const personFace = (name) => face(name, drawn(name), CIRCLE);
+export const personFace = (name) => face(name, drawn(name), 'circle');
 
-function face(name, look, body = look.body) {
+function face(name, look, kind = look.body) {
+  const body = drawBody(kind, name);
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
   const id = `od-face-${++ids}`;
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
@@ -191,36 +193,58 @@ function spread(names) {
   return result;
 }
 
-const CIRCLE = { d: 'M2 50a48 48 0 1 0 96 0a48 48 0 1 0 -96 0Z', cy: 52 };
-
 // ---- the body ----
 
-// Four shapes far enough apart to tell at 18px: a square, a plump triangle
-// and a pentagon, all soft-cornered, and a cloud. `cy` is where the face
+// Five shapes far enough apart to tell at 18px. `FACE_Y` is where the face
 // sits: lower where the body is wide below.
 const UP = -Math.PI / 2;
-const BODIES = [
-  { d: outline(roundCorners(polygon(4, Math.PI / 4), 0.32)), cy: 52 },
-  { d: outline(puff(roundCorners(polygon(3, UP), 0.36), 0.3)), cy: 60 },
-  { d: outline(roundCorners(polygon(5, UP), 0.3)), cy: 55 },
-  { d: outline(cloud()), cy: 52 },
-];
+const BODIES = ['circle', 'square', 'triangle', 'pentagon', 'cloud'];
+const FACE_Y = { circle: 52, square: 52, triangle: 60, pentagon: 55, cloud: 52 };
 
-function polygon(sides, start) {
-  return Array.from({ length: sides }, (_, i) => {
-    const t = start + (i / sides) * Math.PI * 2;
-    return [Math.cos(t), Math.sin(t)];
+// Body `kind` as `name` draws it: corners a touch off and the outline gently
+// uneven, as if by hand, and the same every time.
+function drawBody(kind, name) {
+  const rand = random(seed(name) + 1);
+  let points;
+  if (kind === 'circle') {
+    points = ring(() => 1);
+  } else if (kind === 'cloud') {
+    const turn = rand() * Math.PI;
+    points = ring((t) => 1 + 0.085 * (2 * Math.abs(Math.cos(3 * (t + turn))) ** 0.5 - 1));
+  } else {
+    const [sides, start, round, bulge] = { square: [4, Math.PI / 4, 0.32, 0], triangle: [3, UP, 0.36, 0.3], pentagon: [5, UP, 0.3, 0] }[kind];
+    const corners = Array.from({ length: sides }, (_, i) => {
+      const t = start + (i / sides) * Math.PI * 2 + range(rand, -0.05, 0.05);
+      const r = 1 + range(rand, -0.04, 0.04);
+      return [r * Math.cos(t), r * Math.sin(t)];
+    });
+    points = puff(roundCorners(corners, corners.map(() => round + range(rand, -0.04, 0.04))), bulge);
+  }
+  // Slow waves in the outline, so no side is quite straight and no curve quite even.
+  const waves = [2, 3].map((k) => [k, range(rand, 0.006, 0.016), rand() * Math.PI * 2]);
+  points = points.map(([x, y]) => {
+    const t = Math.atan2(y, x);
+    const s = 1 + waves.reduce((sum, [k, amp, phase]) => sum + amp * Math.cos(k * t + phase), 0);
+    return [x * s, y * s];
+  });
+  return { d: outline(points), cy: FACE_Y[kind] };
+}
+
+function ring(radius) {
+  return Array.from({ length: 160 }, (_, i) => {
+    const t = (i / 160) * Math.PI * 2;
+    return [radius(t) * Math.cos(t), radius(t) * Math.sin(t)];
   });
 }
 
-// Cut each corner `frac` of the way along its edges and curve through it.
-function roundCorners(corners, frac) {
+// Cut each corner `fracs[i]` of the way along its edges and curve through it.
+function roundCorners(corners, fracs) {
   const points = [];
   corners.forEach((c, i) => {
     const prev = corners.at(i - 1);
     const next = corners[(i + 1) % corners.length];
-    const a = [c[0] + (prev[0] - c[0]) * frac, c[1] + (prev[1] - c[1]) * frac];
-    const b = [c[0] + (next[0] - c[0]) * frac, c[1] + (next[1] - c[1]) * frac];
+    const a = [c[0] + (prev[0] - c[0]) * fracs[i], c[1] + (prev[1] - c[1]) * fracs[i]];
+    const b = [c[0] + (next[0] - c[0]) * fracs[i], c[1] + (next[1] - c[1]) * fracs[i]];
     for (let j = 0; j <= 8; j++) {
       const t = j / 8;
       const w = [(1 - t) ** 2, 2 * (1 - t) * t, t * t];
@@ -236,14 +260,6 @@ function puff(points, amount) {
   return points.map(([x, y]) => {
     const s = 1 - amount + (amount * max) / Math.hypot(x, y);
     return [x * s, y * s];
-  });
-}
-
-function cloud() {
-  return Array.from({ length: 160 }, (_, i) => {
-    const t = (i / 160) * Math.PI * 2;
-    const r = 1 + 0.085 * (2 * Math.abs(Math.cos(3 * (t + 0.3))) ** 0.5 - 1);
-    return [r * Math.cos(t), r * Math.sin(t)];
   });
 }
 
@@ -267,7 +283,7 @@ const EXTRAS = [null, 'blush', 'glasses', 'bow'];
 // Blush and glasses would crowd big eyes.
 const fits = (extra, eye) => eye !== 'big' || !['blush', 'glasses'].includes(extra);
 
-const CLIPPY_LOOK = { body: BODIES[3], tilt: -3, eye: 'dot', mouth: 'smile', extra: 'blush' };
+const CLIPPY_LOOK = { body: 'cloud', tilt: -3, eye: 'dot', mouth: 'smile', extra: 'blush' };
 
 function drawFace(g, { eye, mouth, extra }, cy, hue) {
   const big = eye === 'big';
