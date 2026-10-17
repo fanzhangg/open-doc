@@ -2,8 +2,9 @@
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. A buddy shows up like any other collaborator: an avatar, its
 // replies, and typing dots while it works. A reply whose run failed, or
-// whose edit was partly dropped for the human's text, says so. Only the
-// human resolves threads; they delete their own comments and buddies'.
+// whose edit was partly dropped for the human's text, says so; one that
+// edited the doc on this machine offers Undo. Only the human resolves
+// threads; they delete their own comments and buddies'.
 
 import { icon } from './icons.js';
 import { agentFace, personFace } from './faces.js';
@@ -17,7 +18,7 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  * @param {{ onCreate: (body: string) => Promise<void>, onCancelDraft: () => void,
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
- *           onDelete: (commentId: string) => Promise<void>,
+ *           onDelete: (commentId: string) => Promise<void>, onUndo: (replyId: string) => Promise<void>,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
@@ -27,6 +28,7 @@ export function createCommentMargin(margin, handlers) {
   let threads = [];
   let agents = []; // the buddies' statuses in this doc: who works on which threads
   let me = { id: null, name: '' };
+  let edits = {}; // the buddy replies that edited the doc here: { [id]: 'edited' | 'undone' }
   let activeId = null;
   let draft = null; // { hint } while composing a comment on the selected text
   let showResolved = false;
@@ -142,6 +144,16 @@ export function createCommentMargin(margin, handlers) {
     // To retry, or to redo what was dropped, the human asks again.
     if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${comment.by.name} again to retry.`));
     if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${comment.by.name} again to redo it.`));
+    if (edits[comment.id] === 'undone') row.append(el('div', 'od-card-note od-msg-note', 'Its edit was undone.'));
+    if (edits[comment.id] === 'edited') {
+      const undo = linkButton('Undo its edit', (event) => {
+        event.stopPropagation();
+        undo.disabled = true;
+        handlers.onUndo(comment.id).catch(() => { undo.disabled = false; });
+      });
+      undo.classList.add('od-msg-undo');
+      row.append(undo);
+    }
     row.classList.toggle('od-msg-failed', Boolean(comment.failed));
     return row;
   }
@@ -381,10 +393,11 @@ export function createCommentMargin(margin, handlers) {
   narrow.addEventListener('change', layout);
 
   return {
-    /** Show `nextThreads` (from the doc host), as `nextMe` ({ id, name }) sees them. */
-    update(nextThreads, nextMe) {
+    /** Show `nextThreads` (from the doc host), as `nextMe` ({ id, name }) sees them; `nextEdits`: which replies edited the doc. */
+    update(nextThreads, nextMe, nextEdits = {}) {
       threads = nextThreads;
       me = nextMe;
+      edits = nextEdits;
       render();
     },
     /** The buddies' statuses changed: who works on which threads. */

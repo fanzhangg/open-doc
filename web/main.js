@@ -157,6 +157,7 @@ async function start() {
     onResolve: (thread) => send(api.resolve(thread)),
     onReopen: (thread) => send(api.reopen(thread)),
     onDelete: (id) => send(api.deleteComment(id)),
+    onUndo: undoReply,
     onSelect: (id) => {
       select(id);
       if (narrow.matches) revealText(id);
@@ -505,13 +506,13 @@ async function refreshThreads() {
 
 // Show the doc's comments (from state() or a comment request). Redrawing
 // every card for the same ones would stall typing.
-function applyComments({ threads, people: writers, notice }) {
-  const json = JSON.stringify({ threads, writers, notice });
+function applyComments({ threads, people: writers, edits, notice }) {
+  const json = JSON.stringify({ threads, writers, edits, notice });
   if (json === shownComments) return;
   shownComments = json;
-  comments = { threads, people: writers, notice };
+  comments = { threads, people: writers, edits, notice };
   editor.setThreads(threads);
-  margin.update(threads, { id: myId, name: me });
+  margin.update(threads, { id: myId, name: me }, edits);
   people?.render({ people: writers });
   noticeBanner.hidden = !notice;
   noticeBanner.querySelector('.od-banner-text').textContent = notice ?? '';
@@ -584,6 +585,19 @@ async function send(request) {
     setStatus(`Could not save the comment: ${error.message}`, 'error');
     throw error;
   }
+}
+
+// Undo a buddy's edit. What you typed is saved first; the doc host merges
+// the undo into it, and the page takes the result as any change on disk.
+async function undoReply(id) {
+  await flushSave();
+  try {
+    applyComments(await api.undoReply(id));
+  } catch (error) {
+    setStatus(`Could not undo: ${error.message}`, 'error');
+    throw error;
+  }
+  await syncFromDisk();
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js). The
@@ -668,7 +682,7 @@ function renameMe(next) {
   if (next === me) return;
   me = next;
   paintNameChip();
-  if (comments) margin?.update(comments.threads, { id: myId, name: me });
+  if (comments) margin?.update(comments.threads, { id: myId, name: me }, comments.edits);
   people?.renameMe();
 }
 

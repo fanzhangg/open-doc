@@ -19,12 +19,13 @@ test('versions record who changed the doc and how much', async () => {
   assert.equal(first.kind, 'opened', 'the doc as first seen');
   assert.equal(await recordVersion(doc, root, 'one\n', edit(me), t0 + 1000), null, 'no change, no version');
   await recordVersion(doc, root, 'one two\n', edit(me), t0 + 1000);
-  await recordVersion(doc, root, 'one two three\n', edit(bot, { threadIds: ['t_aaaaaa'] }), t0 + 2000);
+  await recordVersion(doc, root, 'one two three\n', edit(bot, { thread: 'c_aaaaaa', reply: 'c_bbbbbb' }), t0 + 2000);
+  await recordVersion(doc, root, 'one two three four\n', edit(bot, { thread: 'c_aaaaaa', reply: 'c_cccccc' }), t0 + 3000);
 
   const versions = await readHistory(doc, root);
-  assert.deepEqual(versions.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['edit', 'claude']]);
+  assert.deepEqual(versions.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['edit', 'claude'], ['edit', 'claude']], 'each buddy edit a version of its own');
   assert.deepEqual([versions[1].added, versions[1].removed], [4, 0]);
-  assert.deepEqual(versions[2].threadIds, ['t_aaaaaa']);
+  assert.deepEqual([versions[2].thread, versions[2].reply], ['c_aaaaaa', 'c_bbbbbb']);
 
   const shown = await readVersion(doc, root, versions[2].id);
   assert.equal(shown.markdown, 'one two three\n');
@@ -127,6 +128,7 @@ test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async 
     await until(async () => (await versions()).length === 2, 'the buddy\'s edit to be recorded');
     const [, agentVersion] = await versions();
     assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
-    assert.deepEqual(agentVersion.threadIds, [id]);
+    const thread = (await call('state')).threads.find((t) => t.id === id);
+    assert.deepEqual([agentVersion.thread, agentVersion.reply], [id, thread.comments[1].id], 'tagged with its reply');
   });
 });

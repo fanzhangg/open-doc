@@ -823,3 +823,4 @@ label.od-setting { cursor: pointer; }
 .od-settings-file { display: block; margin: 0 0 8px; overflow-wrap: anywhere; user-select: all; }
 .od-snippet { display: flex; align-items: center; gap: 8px; }
 .od-command-snippet { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 6px; background: var(--bg-soft); color: var(--text); overflow-wrap: anywhere; }
+.od-msg-undo { margin-top: 4px; padding-left: 0; font-size: 12.5px; }

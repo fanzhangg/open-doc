@@ -38,6 +38,8 @@ export const api = {
   updateBuddy: (name, patch) => call('updateBuddy', { name, patch }),
   /** Delete buddy `name`'s file: { agents }. */
   deleteBuddy: (name) => call('deleteBuddy', { name }),
+  /** Undo the edit of buddy reply `id`: { docHash, markdown, threads, … }. */
+  undoReply: (id) => call('undoReply', { id }),
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await call('history')).versions,
   /** One version: { version, markdown, before }. */

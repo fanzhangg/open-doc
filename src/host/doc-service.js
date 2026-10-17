@@ -102,12 +102,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     }
     const incoming = current.markdown.includes('\r\n') ? body.markdown.replace(/\r?\n/g, '\r\n') : body.markdown;
     const next = splice(current.markdown, incoming);
-    if (next !== current.markdown) {
-      await noteDisk(current); // whatever reached the disk since, before the human's change
-      lastWritten = hashBytes(Buffer.from(next));
-      await writeAtomic(docPath, next);
-      await noteVersion(next, { kind: 'edit', author: await me() });
-    }
+    await writeChange(current, next, { kind: 'edit', author: await me() });
     return { docHash: hashBytes(Buffer.from(next)), markdown: next };
   }
 
@@ -124,12 +119,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const found = await readVersion(docPath, settingsDir, id);
     if (!found) throw new DocError('not_found', 'no such version');
     const next = found.markdown;
-    if (next !== current.markdown) {
-      await noteDisk(current);
-      lastWritten = hashBytes(Buffer.from(next));
-      await writeAtomic(docPath, next);
-      await noteVersion(next, { kind: 'restore', author: await me(), restoredFrom: id });
-    }
+    await writeChange(current, next, { kind: 'restore', author: await me(), restoredFrom: id });
     return { docHash: hashBytes(Buffer.from(next)), markdown: next };
   }
 
@@ -182,7 +172,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (await exists(docPath + V1_SUFFIX)) notices.push(`The comments in ${basename(docPath + V1_SUFFIX)} are from an older OpenDoc and cannot be read here; the file is left as it is.`);
     if (error) notices.push(`${file} cannot be read (${error.message}); it is left as it is.`);
     if (bad.length > 0) notices.push(`${bad.length === 1 ? 'A line' : `${bad.length} lines`} of ${file} could not be read; ${bad.length === 1 ? 'it is' : 'they are'} kept as written.`);
-    return { threads, people: peopleOf(comments), notice: notices.join(' ') || null };
+    return { threads, people: peopleOf(comments), edits: await replyEdits(), notice: notices.join(' ') || null };
   }
 
   // Add or remove lines of the sidecar, written whole. Run in `serial`.
@@ -272,6 +262,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // there is dropped and the reply says `conflict`. Run in `serial`.
   async function finishRun({ threadId, name, base, edited, body, failed }) {
     let conflict = false;
+    const id = newId('c');
     if (edited !== null && edited !== base) {
       let current = null;
       try {
@@ -280,25 +271,55 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         // the doc is gone: nothing to merge into
       }
       if (current) {
-        const crlf = current.markdown.includes('\r\n');
-        const lf = (text) => text.replace(/\r\n/g, '\n');
-        const merged = merge3(lf(base), lf(current.markdown), lf(edited), { prefer: 'ours' });
+        const merged = mergeInto(current.markdown, base, edited);
         conflict = merged.dropped.length > 0;
-        const next = crlf ? merged.text.replace(/\n/g, '\r\n') : merged.text;
-        if (next !== current.markdown) {
-          await noteDisk(current);
-          lastWritten = hashBytes(Buffer.from(next));
-          await writeAtomic(docPath, next);
-          await noteVersion(next, { kind: 'edit', author: { name, kind: 'agent' }, threadIds: [threadId] });
-        }
+        await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
       }
     }
     const reply = {
-      id: newId('c'), thread: threadId, by: { id: name, name, kind: 'ai' }, at: new Date().toISOString(), body,
+      id, thread: threadId, by: { id: name, name, kind: 'ai' }, at: new Date().toISOString(), body,
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
     await changeComments((lines) => (lines.some((l) => l.comment?.id === threadId) ? [...lines, { comment: reply }] : lines))
       .catch((error) => console.error(`Could not post ${name}'s reply:`, error));
+  }
+
+  // ---- undo ----
+
+  // Undo a buddy's edit (docs/architecture-v2.md, Undo): the change from the
+  // version before its edit to the version after it, reversed and merged
+  // into the doc as it is now. Where the human changed that text since,
+  // theirs stays. Only on this machine, which has the versions.
+  async function undoReply(body) {
+    await chronicle;
+    const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
+    const found = edit && (await readVersion(docPath, settingsDir, edit.id));
+    if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
+    const current = await readDoc(docPath);
+    const next = mergeInto(current.markdown, found.markdown, found.before).text;
+    await writeChange(current, next, { kind: 'undo', author: await me(), undid: body.id });
+    return { docHash: hashBytes(Buffer.from(next)), markdown: next, ...(await commentsView(next)) };
+  }
+
+  // Which buddy replies edited the doc on this machine, and which of those
+  // were undone: { [replyId]: 'edited' | 'undone' }.
+  async function replyEdits() {
+    const edits = {};
+    for (const v of await readHistory(docPath, settingsDir)) {
+      if (v.reply) edits[v.reply] = 'edited';
+      if (v.undid) edits[v.undid] = 'undone';
+    }
+    return edits;
+  }
+
+  // Write `next` over the doc, which read `current`, as `change`: the doc
+  // as it was is in history first (an outside change included), then this.
+  async function writeChange(current, next, change) {
+    if (next === current.markdown) return;
+    await noteDisk(current);
+    lastWritten = hashBytes(Buffer.from(next));
+    await writeAtomic(docPath, next);
+    await noteVersion(next, change);
   }
 
   // ---- buddy files ----
@@ -502,6 +523,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       return found;
     },
     restoreVersion: (body) => serial(() => restoreVersion(body)),
+    undoReply: (body) => serial(() => undoReply(body)),
   };
 
   return {
@@ -561,4 +583,13 @@ function defaultName() {
   if (!name) name = userInfo().username;
   cachedName = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64) || 'me';
   return cachedName;
+}
+
+// `theirs` (a change from `base`) merged into `current`; where both changed
+// the same text, `current` stays and the change there is `dropped`. Line
+// ends follow `current`.
+function mergeInto(current, base, theirs) {
+  const lf = (text) => text.replace(/\r\n/g, '\n');
+  const merged = merge3(lf(base), lf(current), lf(theirs), { prefer: 'ours' });
+  return { ...merged, text: current.includes('\r\n') ? merged.text.replace(/\n/g, '\r\n') : merged.text };
 }

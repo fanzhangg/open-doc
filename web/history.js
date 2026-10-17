@@ -16,8 +16,8 @@ const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'shor
 const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 /**
- * `api` is web/api.js; `commentOf(threadId)` is the text of the comment an
- * agent's version answered, or null; `onRestore(id)` puts the doc back to
+ * `api` is web/api.js; `commentOf(threadId)` is the text of the comment a
+ * buddy's version answered, or null; `onRestore(id)` puts the doc back to
  * version `id` and resolves once the page shows it.
  */
 export function createHistory({ api, commentOf, onRestore, onClose }) {
@@ -232,7 +232,8 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
       const day = dayLabel(from.at);
       return `Restored ${day === dayLabel(version.at) ? '' : `${day.toLowerCase()}, `}${time.format(new Date(from.at))}`;
     }
-    const comment = version.threadIds?.map(commentOf).find(Boolean);
+    if (version.kind === 'undo') return 'Undid a buddy\'s edit';
+    const comment = version.thread && commentOf(version.thread);
     return comment ? `On “${comment.replace(/\s+/g, ' ').trim()}”` : '';
   }
 

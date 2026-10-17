@@ -1,6 +1,7 @@
 // Smoke test for the desktop app: launch it on two fixture docs, check that
 // each window's editor loads its doc, that a buddy answers an @mention in
-// each (the agent is a fake script), that the app listens on no port, that
+// each (the agent is a fake script), that Cmd+Z undoes only your typing and
+// Undo on a reply the buddy's edit, that the app listens on no port, that
 // a doc host that stops is started again, and that a setting survives a
 // relaunch.
 //
@@ -69,6 +70,10 @@ for (const [i, doc] of docs.entries()) {
   check(loaded.text.includes('Q4 Launch Plan'), `the editor loaded ${name}`);
   check(await answers(page, 'Q4 Launch Plan', `Q${i + 1} Launch Plan`, doc), `a buddy answers in ${name} and its edit lands`);
 }
+step('undo');
+const notes = await app.page('notes.md');
+check(await undoesOwnOnly(notes, docs[1]), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
+check(await undoesReply(notes, docs[1]), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
 const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { font: 'serif' }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
@@ -115,6 +120,42 @@ async function answers(page, from, title, doc) {
   return replied && readFileSync(doc, 'utf8').includes(`# ${title}`);
 }
 
+// Type at the end of the doc in `page`, have a buddy change its title, then
+// press Cmd+Z (Ctrl+Z): true when the typing is gone and the title stays.
+async function undoesOwnOnly(page, doc) {
+  await page.evaluate(`(() => {
+    const editor = document.querySelector('.ProseMirror');
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents([...editor.querySelectorAll('p')].at(-1));
+    range.collapse(false);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  })()`);
+  await page.send('Input.insertText', { text: ' Typed here.' });
+  const onDisk = (text) => readFileSync(doc, 'utf8').includes(text);
+  await waitFor(() => onDisk('Typed here.'), 15_000, 'the typing to be saved');
+  if (!(await answers(page, 'Q2 Launch Plan', 'Q7 Launch Plan', doc))) return false;
+  await waitFor(() => page.evaluate(`document.querySelector('.ProseMirror').textContent.includes('Q7 Launch Plan')`), 15_000, 'the edit to show');
+  await new Promise((done) => setTimeout(done, 2000)); // its typing-in ends
+  const modifiers = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
+  for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90 });
+  await waitFor(() => !onDisk('Typed here.'), 15_000, 'the undo to be saved').catch(() => {});
+  return !onDisk('Typed here.') && onDisk('# Q7 Launch Plan');
+}
+
+// Click Undo on the latest buddy reply in `page`: true once the title it
+// changed is back on disk.
+async function undoesReply(page, doc) {
+  const clicked = await page.evaluate(`(() => {
+    const button = [...document.querySelectorAll('.od-msg-undo')].at(-1);
+    button?.click();
+    return Boolean(button);
+  })()`);
+  if (!clicked) return false;
+  return waitFor(() => readFileSync(doc, 'utf8').includes('# Q2 Launch Plan'), 15_000, 'the undo').catch(() => false);
+}
+
 // Start the app on `paths` with the DevTools protocol on a port it picks.
 async function launch(paths) {
   const child = spawn(exe, [...appArgs, '--remote-debugging-port=0', `--user-data-dir=${join(work, 'profile')}`, ...paths], { env, stdio: ['ignore', 'ignore', 'pipe'] });
@@ -141,6 +182,7 @@ async function launch(paths) {
         .find((t) => t.type === 'page' && t.title.startsWith(name)), 30_000, `the ${name} window`);
       const cdp = await connect(target.webSocketDebuggerUrl);
       return {
+        send: (method, params) => cdp.send(method, params),
         async evaluate(expression) {
           const res = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
           if (res.result?.exceptionDetails) throw new Error(res.result.exceptionDetails.text);

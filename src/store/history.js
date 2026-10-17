@@ -1,6 +1,7 @@
 // The doc's version history: a snapshot of the doc each time it changes on
-// disk, with who changed it (the human, an agent, or a program outside
-// OpenDoc), so any earlier version can be looked at and restored.
+// disk, with who changed it (the human, a buddy, or a program outside
+// OpenDoc), so any earlier version can be looked at and restored, and a
+// buddy's edit undone.
 //
 // History is kept per doc in the user's config folder, not next to the doc,
 // so it never shows up in the doc's folder or in git:
@@ -9,9 +10,10 @@
 // `key` is derived from the doc's absolute path; renaming a doc in OpenDoc
 // moves its history along (moveHistory).
 //
-// A burst of changes by the same author (typing, one agent run) is one
-// version: a change within COALESCE_MS of the author's last one, and less
-// than MAX_SPAN_MS after their version began, replaces that version's text.
+// A burst of typing by the same person is one version: a change within
+// COALESCE_MS of their last one, and less than MAX_SPAN_MS after their
+// version began, replaces that version's text. A buddy's edit is always a
+// version of its own, after the version it was merged into.
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
@@ -35,11 +37,12 @@ export function historyDir(docPath, root) {
 
 /**
  * The versions of the doc, oldest first:
- *   { id, kind, author, startedAt, at, hash, added, removed, threadIds?, restoredFrom? }
- * `kind` is 'opened' (the doc as first seen), 'edit', 'restore' or
+ *   { id, kind, author, startedAt, at, hash, added, removed, thread?, reply?, undid?, restoredFrom? }
+ * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
  * 'external' (changed outside OpenDoc); `author` is { name, kind } or null
  * when unknown; `added` and `removed` count the characters changed since
- * the version before.
+ * the version before. A buddy's edit has the `thread` it answered and the
+ * id of its `reply`; an undo of one has the reply it `undid`.
  */
 export async function readHistory(docPath, root) {
   return (await readIndex(historyDir(docPath, root))).versions;
@@ -63,7 +66,7 @@ export async function readVersion(docPath, root, id) {
 /**
  * Note that the doc now reads `markdown`. Returns the version that holds it
  * (new or extended), or null when it is the latest version already.
- * `change` is { kind, author, threadIds?, restoredFrom? }.
+ * `change` is { kind, author, thread?, reply?, undid?, restoredFrom? }.
  */
 export async function recordVersion(docPath, root, markdown, change, now = Date.now()) {
   const dir = historyDir(docPath, root);
@@ -89,8 +92,7 @@ export async function recordVersion(docPath, root, markdown, change, now = Date.
         await saveIndex(dir, index, docPath, dropped);
         return previous;
       }
-      const threadIds = [...new Set([...(last.threadIds ?? []), ...(change.threadIds ?? [])])];
-      version = { ...last, at, hash, ...(threadIds.length > 0 ? { threadIds } : {}) };
+      version = { ...last, at, hash };
     } else {
       version = {
         id: newId('v'),
@@ -99,8 +101,7 @@ export async function recordVersion(docPath, root, markdown, change, now = Date.
         startedAt: at,
         at,
         hash,
-        ...(change.threadIds?.length ? { threadIds: [...change.threadIds] } : {}),
-        ...(change.restoredFrom ? { restoredFrom: change.restoredFrom } : {}),
+        ...Object.fromEntries(['thread', 'reply', 'undid', 'restoredFrom'].filter((k) => change[k]).map((k) => [k, change[k]])),
       };
     }
     const before = versions.length > 0 ? await readBlob(dir, versions.at(-1).hash) : null;
@@ -128,7 +129,7 @@ export async function moveHistory(fromPath, toPath, root) {
 }
 
 function continues(last, change, now) {
-  return change.kind === 'edit' && last.kind === 'edit'
+  return change.kind === 'edit' && last.kind === 'edit' && !change.reply && !last.reply
     && sameAuthor(last.author, change.author)
     && now - Date.parse(last.at) < COALESCE_MS
     && now - Date.parse(last.startedAt) < MAX_SPAN_MS;
