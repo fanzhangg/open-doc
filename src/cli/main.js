@@ -3,7 +3,8 @@
 
 import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
-import { basename, resolve as resolvePath } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve as resolvePath } from 'node:path';
 import {
   AnchorError, FormatError, MAX_HANDOFFS, OpError,
   activeWorking, applyOp, createAnchor, findQuote, findThread, inbox, newId, project, proposeChanges,
@@ -16,6 +17,9 @@ import { claudeAdapter, customAdapter } from '../server/agents/adapters.js';
 import { hooksWarning } from '../server/agents/config.js';
 import { NAME_PATTERN } from '../core/mentions.js';
 import { EDIT_MODES, EFFORTS, MAX_INSTRUCTIONS } from '../core/agents.js';
+import { ExportError, checkExportOptions, exportDoc, exportName } from '../export/index.js';
+import { printToPdf } from '../export/browser.js';
+import { readSettings } from '../store/settings.js';
 
 export const EXIT = { ok: 0, error: 1, badInput: 2, timeout: 3, conflict: 4 };
 const DEFAULT_WAIT_SECONDS = 900;
@@ -33,6 +37,7 @@ Usage:
   opendoc resolve  <doc> <thread-id> --as <name> --kind human
   opendoc reopen   <doc> <thread-id> --as <name> --kind human
   opendoc mv       <old.md> <new.md>
+  opendoc export   <doc> --to pdf|html [--out <file>] [--comments none|open|all] [--paper a4|letter] [--font sans|serif|mono]
   opendoc guard    (a Claude Code hook the server sets up for its runs; reads the hook input on stdin)
 
 serve also runs your agents invited into the doc (the Agents panel in the editor).
@@ -58,6 +63,9 @@ an @mention in an agent's reply wakes no one. After ${MAX_HANDOFFS} handoffs in 
 --to is refused until a human writes there again.
 wait blocks until a thread is waiting on <name>, marks it as being answered,
 prints it and exits 0; it exits 3 on timeout (default ${DEFAULT_WAIT_SECONDS}s, 0 = none).
+export writes a copy of the doc as saved, next to it unless --out says where (default: no
+comments, your editor font, the paper size of your region); pdf needs Chrome, Edge or
+Chromium (OPENDOC_BROWSER points at one).
 propose replies with changes instead of making them; each "before" must appear exactly
 once in the doc's markdown source. An agent's comment, reply or proposal text is at most
 280 characters. Only humans resolve and reopen threads.
@@ -90,6 +98,10 @@ const OPTIONS = {
   'max-budget-usd': { type: 'string' },
   'edit-mode': { type: 'string' },
   persona: { type: 'string' },
+  out: { type: 'string' },
+  comments: { type: 'string' },
+  paper: { type: 'string' },
+  font: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 };
 
@@ -262,6 +274,18 @@ const COMMANDS = {
     const me = identity(values, env);
     requireThreadId(threadId);
     return writeAndPrint(docPath, values, out, threadId, (s) => applyOp(s, { type: 'reopen', threadId, by: me.name, kind: me.kind }));
+  },
+
+  async export([docArg], values, { out }) {
+    const docPath = requireDoc(docArg);
+    if (!values.to) throw new UsageError('--to must be pdf or html');
+    const font = values.font ?? (await readSettings()).settings.font;
+    const options = checkExportOptions({ format: values.to, comments: values.comments, paper: values.paper, font });
+    const outPath = values.out ? resolvePath(values.out) : join(dirname(docPath), exportName(basename(docPath), options.format));
+    const result = await exportDoc(docPath, options);
+    if (options.format === 'pdf') await printToPdf(result.bytes.toString('utf8'), outPath);
+    else await writeFile(outPath, result.bytes);
+    out(values.json ? JSON.stringify({ doc: docArg, out: outPath, ...options }) : `exported ${outPath}`);
   },
 
   async mv([fromArg, toArg], values, { out }) {
@@ -483,7 +507,7 @@ function identity(values, env) {
 
 function exitCodeFor(error) {
   if (error.exitCode !== undefined) return error.exitCode;
-  if (error instanceof UsageError || error instanceof AnchorError || error instanceof OpError || error instanceof FormatError) {
+  if (error instanceof UsageError || error instanceof AnchorError || error instanceof OpError || error instanceof FormatError || error instanceof ExportError) {
     return EXIT.badInput;
   }
   if (error.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION' || error.code === 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE') return EXIT.badInput;

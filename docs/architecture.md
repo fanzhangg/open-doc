@@ -64,7 +64,8 @@ same core library, so any of them can work without the others.
 | `src/core/` | Pure library, same output in Node and the browser: rendered text (`project`), anchors, sidecar ops, inbox, mentions (in comments and in the doc text), diffs/edits/proposals, three-way merge, settings and agent profiles. |
 | `src/store/` | Disk: locked sidecar writes, file watching, user settings, version history. |
 | `src/server/` | Local HTTP server per doc: API, SSE, byte-preserving saves (`splice.js`), @mentions typed in the text (`text-asks.js`), and the agent runner (`agents/`). |
-| `src/cli/` | `opendoc` CLI: `comment`, `comments`, `inbox`, `wait`, `reply`, `propose`, `resolve`, `mv`, `serve`, `guard`. `--json` and stable exit codes. |
+| `src/export/` | Export to HTML from the doc's syntax tree, comment threads included; PDF is the HTML printed by a browser engine. |
+| `src/cli/` | `opendoc` CLI: `comment`, `comments`, `inbox`, `wait`, `reply`, `propose`, `resolve`, `mv`, `export`, `serve`, `guard`. `--json` and stable exit codes. |
 | `web/` | Editor page: Milkdown (ProseMirror) editor, comment margin, replay of agent edits, proposal previews, panels. Bundled by esbuild into `dist/web`. |
 | `desktop/` | Electron shell: windows, menus, dialogs, OS file association, start window, `opendoc` shim. |
 | `skills/opendoc/` | Skill that teaches an agent the comment loop. |
@@ -126,6 +127,17 @@ same core library, so any of them can work without the others.
   `opendoc guard` before each edit and refuses one where the human is typing.
 - An agent's program path can only be set from the desktop app (with a native
   confirmation) or `settings.json`; the page can only clear it.
+
+## Export
+
+- One-way and read-only: `src/export/` reads the doc and its sidecar (anchors
+  refreshed in memory, never written back) and renders the mdast tree.
+  Threads are located with the same anchors the editor uses and wrapped in
+  `odMark` / `odRef` nodes, which HTML turns into a highlight and a number.
+- HTML is one self-contained page: pictures from the doc's folder are inlined,
+  and a `script-src 'none'` policy keeps raw HTML in the doc from running.
+- PDF is that page printed by a browser engine: `opendoc export` runs an
+  installed Chrome or Edge headless.
 
 ## Desktop app
 
