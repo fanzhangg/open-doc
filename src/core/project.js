@@ -102,6 +102,13 @@ function collectInline(node, source, chars) {
   }
 }
 
+/** The source offset of each character of a text node's decoded value. */
+export function valueOffsets(node, source) {
+  const chars = [];
+  alignValue(node.value, node, source, chars);
+  return chars.map(([, offset]) => offset);
+}
+
 // Map each character of a node's decoded value to a source offset by walking
 // value and source together; source characters with no counterpart in the
 // value (escapes, fences, indentation) are skipped.
