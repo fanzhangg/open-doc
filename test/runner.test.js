@@ -5,91 +5,51 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { request } from 'node:http';
-import { startServer } from '../src/server/server.js';
 import { agentScript, installAgents, listAgents } from '../src/store/agents.js';
-import { SAMPLE, tempDoc } from './helpers.js';
+import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FAKE = join(ROOT, 'test', 'fixtures', 'fake-agent.js');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const CLIPPY = [{ id: 'a_clippy01', name: 'Clippy', persona: 'Helps with docs', instructions: 'Be brief.', starred: true }];
 
-async function until(check, what, timeout = 20_000) {
-  const deadline = Date.now() + timeout;
-  for (;;) {
-    const value = await check();
-    if (value) return value;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await sleep(50);
-  }
-}
-
-// The fake agent as the agent script `fake`, in a fresh config folder.
-async function fakeConfig(agents = [{ id: 'a_clippy01', name: 'Clippy', persona: 'Helps with docs', instructions: 'Be brief.', starred: true }]) {
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-runner-'));
-  await mkdir(join(settingsDir, 'agents'));
-  await writeFile(join(settingsDir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE}"\n`);
-  await chmod(join(settingsDir, 'agents', 'fake'), 0o755);
-  await writeFile(join(settingsDir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE}"\r\n`);
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', agents }));
-  return settingsDir;
-}
-
-async function withDoc(fn, { agents, folder = null, content = SAMPLE } = {}) {
+async function withDoc(fn, { agents = CLIPPY, folder = null, content = SAMPLE } = {}) {
   const docPath = await tempDoc(content);
-  const settingsDir = await fakeConfig(agents);
-  const fakeDir = await mkdtemp(join(tmpdir(), 'opendoc-fake-'));
-  process.env.FAKE_DIR = fakeDir;
-  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
-  let server = await startServer(docPath, { settingsDir, assetsDir, folder });
-  const api = (method, path, body) => call(server, method, path, body);
-  const state = async () => (await api('GET', '/api/state')).body;
-  const runs = async () => (await readFile(join(fakeDir, 'runs.log'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
-  const release = (buddy) => writeFile(join(fakeDir, `release-${buddy}`), '');
+  const settingsDir = await fakeConfig({ agents });
+  let opened = await openTestDoc(docPath, { settingsDir, folder });
+  const release = (buddy) => writeFile(join(settingsDir, `release-${buddy}`), '');
   const restart = async () => {
-    await server.close();
-    server = await startServer(docPath, { settingsDir, assetsDir, folder });
+    await opened.doc.close();
+    opened = await openTestDoc(docPath, { settingsDir, folder });
   };
   try {
-    await fn({ docPath, settingsDir, api, state, runs, release, restart, server: () => server });
-  } finally {
-    await server.close();
-  }
-}
-
-function call(server, method, path, body) {
-  return new Promise((resolve, reject) => {
-    const req = request({
-      host: '127.0.0.1', port: server.port, method, path,
-      headers: { host: `127.0.0.1:${server.port}`, 'x-opendoc-token': server.token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null }));
+    await fn({
+      docPath, settingsDir, release, restart,
+      call: (type, arg) => opened.call(type, arg),
+      state: () => opened.state(),
+      runs: () => fakeRuns(settingsDir),
     });
-    req.on('error', reject);
-    if (body !== undefined) req.write(JSON.stringify(body));
-    req.end();
-  });
+  } finally {
+    await opened.doc.close();
+  }
 }
 
 let ids = 0;
 const nextId = (prefix) => `${prefix}_test${String(++ids).padStart(4, '0')}`;
-const comment = (api, body, anchor = null) => {
+const comment = (call, body, anchor = null) => {
   const id = nextId('t');
-  return api('POST', '/api/ops', { op: { type: 'addThread', id, anchor, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } }).then(() => id);
+  return call('op', { op: { type: 'addThread', id, anchor, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } }).then(() => id);
 };
-const reply = (api, threadId, body) => api('POST', '/api/ops', { op: { type: 'addMessage', threadId, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } });
+const reply = (call, threadId, body) => call('op', { op: { type: 'addMessage', threadId, message: { id: nextId('m'), author: { name: 'fzhan', kind: 'human' }, body } } });
 const threadOf = async (state, id) => (await state()).sidecar.threads.find((t) => t.id === id);
 const repliesIn = async (state, id) => (await threadOf(state, id)).messages.filter((m) => m.author.kind === 'agent');
 
 test('a run edits its copy and prints its reply: the doc has the edit, the thread the reply; the run sees only the copy', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ docPath, api, state, runs }) => {
-    const id = await comment(api, '@Clippy replace "extra load" with "extra peak load"');
+  await withDoc(async ({ docPath, call, state, runs }) => {
+    const id = await comment(call, '@Clippy replace "extra load" with "extra peak load"');
     const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
     assert.equal(answer.author.name, 'Clippy');
     assert.equal(answer.body, 'Replaced "extra load".');
@@ -106,17 +66,17 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     assert.match(run.prompt, /Helps with docs/);
     assert.match(run.prompt, /Be brief\./);
     assert.match(run.prompt, /fzhan: @Clippy replace/);
-    assert.ok(!existsSync(run.cwd), 'the folder is gone after');
+    await until(() => !existsSync(run.cwd), 'the folder to be gone after', 5000);
   });
 });
 
 test('the human edits the same text during a run: theirs stays, the buddy\'s change there is dropped, the reply says conflict', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ docPath, api, state, runs, release }) => {
-    const id = await comment(api, '@Clippy hold replace "extra load" with "extra peak load"');
+  await withDoc(async ({ docPath, call, state, runs, release }) => {
+    const id = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     await until(async () => (await runs()).length === 1, 'the run to start');
     const now = await state();
-    const saved = await api('PUT', '/api/doc', { markdown: now.markdown.replace('extra load', 'extra traffic'), baseHash: now.docHash });
-    assert.equal(saved.status, 200);
+    const saved = await call('saveDoc', { markdown: now.markdown.replace('extra load', 'extra traffic'), baseHash: now.docHash });
+    assert.ok(!saved.conflict);
     await release('Clippy');
     const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
     assert.equal(answer.conflict, true);
@@ -131,9 +91,9 @@ test('two buddies run at once on one doc; both edits land', { timeout: 30_000 },
     { id: 'a_clippy01', name: 'Clippy', starred: true },
     { id: 'a_ada00001', name: 'Ada', starred: true },
   ];
-  await withDoc(async ({ docPath, api, state, runs, release }) => {
-    const first = await comment(api, '@Clippy hold replace "extra load" with "extra peak load"');
-    const second = await comment(api, '@Ada hold replace "week one" with "week two"');
+  await withDoc(async ({ docPath, call, state, runs, release }) => {
+    const first = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
+    const second = await comment(call, '@Ada hold replace "week one" with "week two"');
     await until(async () => (await runs()).length === 2, 'both runs to start');
     assert.deepEqual((await state()).agents.filter((a) => a.state === 'running').map((a) => a.name).sort(), ['Ada', 'Clippy']);
     await Promise.all([release('Clippy'), release('Ada')]);
@@ -146,8 +106,8 @@ test('two buddies run at once on one doc; both edits land', { timeout: 30_000 },
 });
 
 test('a script that exits 1 is answered with a reply marked failed; @mentioning the buddy again runs it again', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ settingsDir, api, state, runs }) => {
-    const id = await comment(api, '@Clippy fail');
+  await withDoc(async ({ settingsDir, call, state, runs }) => {
+    const id = await comment(call, '@Clippy fail');
     const [failed] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
     assert.equal(failed.failed, true);
     assert.match(failed.body, /some output/);
@@ -156,7 +116,7 @@ test('a script that exits 1 is answered with a reply marked failed; @mentioning 
     await sleep(500);
     assert.equal((await runs()).length, 1, 'not retried on its own');
 
-    await reply(api, id, '@Clippy replace "week one" with "week 1"');
+    await reply(call, id, '@Clippy replace "week one" with "week 1"');
     await until(async () => (await repliesIn(state, id)).length === 2, 'the second reply');
     assert.equal((await runs()).length, 2);
     assert.ok(!(await repliesIn(state, id))[1].failed);
@@ -164,9 +124,9 @@ test('a script that exits 1 is answered with a reply marked failed; @mentioning 
 });
 
 test('a comment that mentions no one asks no one; a buddy\'s reply asks no one', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ api, state, runs }) => {
-    const quiet = await comment(api, 'Clippy, is this clear?');
-    const id = await comment(api, '@Clippy say @Clippy');
+  await withDoc(async ({ call, state, runs }) => {
+    const quiet = await comment(call, 'Clippy, is this clear?');
+    const id = await comment(call, '@Clippy say @Clippy');
     await until(async () => (await repliesIn(state, id)).length, 'the reply');
     await sleep(800);
     assert.equal((await runs()).length, 1);
@@ -176,8 +136,8 @@ test('a comment that mentions no one asks no one; a buddy\'s reply asks no one',
 
 test('in project mode the run is told the project folder', { timeout: 30_000 }, async () => {
   const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
-  await withDoc(async ({ api, state, runs }) => {
-    const id = await comment(api, '@Clippy look around');
+  await withDoc(async ({ call, state, runs }) => {
+    const id = await comment(call, '@Clippy look around');
     await until(async () => (await repliesIn(state, id)).length, 'the reply');
     const [run] = await runs();
     assert.equal(run.project, folder);
@@ -186,8 +146,8 @@ test('in project mode the run is told the project folder', { timeout: 30_000 }, 
 });
 
 test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ api, state, runs, release, restart }) => {
-    const id = await comment(api, '@Clippy hold replace "extra load" with "extra peak load"');
+  await withDoc(async ({ call, state, runs, release, restart }) => {
+    const id = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     await until(async () => (await runs()).length === 1, 'the run to start');
     await restart(); // ends the run with no answer
     assert.equal((await repliesIn(state, id)).length, 0);

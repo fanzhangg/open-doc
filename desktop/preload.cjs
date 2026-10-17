@@ -45,6 +45,48 @@ function act(action, arg) {
   return ipcRenderer.invoke('opendoc:action', action, arg);
 }
 
+// window.opendocHost: a doc page's line to its doc in the doc host
+// (src/host/doc-service.js), over a message port the app hands the page
+// (windows.connectPage). `call(type, arg)` resolves to { result } or
+// { error: { message, code } }; `onEvent(fn)` hears the doc's events, and
+// those that came before it. The start window has no doc: its ask goes
+// unanswered.
+let port = null;
+let unsent = [];
+let nextCall = 0;
+const calls = new Map();
+let listener = null;
+let early = [];
+ipcRenderer.on('opendoc:port', (event) => {
+  port = event.ports[0];
+  port.onmessage = ({ data }) => {
+    if (data.event) {
+      if (listener) listener(data.event, data.data);
+      else early.push([data.event, data.data]);
+      return;
+    }
+    const resolve = calls.get(data.id);
+    calls.delete(data.id);
+    resolve?.(data.error ? { error: data.error } : { result: data.result });
+  };
+  for (const message of unsent.splice(0)) port.postMessage(message);
+});
+ipcRenderer.send('opendoc:connect');
+
+contextBridge.exposeInMainWorld('opendocHost', {
+  call: (type, arg) => new Promise((resolve) => {
+    const id = ++nextCall;
+    calls.set(id, resolve);
+    const message = { id, type: String(type), arg };
+    if (port) port.postMessage(message);
+    else unsent.push(message);
+  }),
+  onEvent: (fn) => {
+    listener = fn;
+    for (const [event, data] of early.splice(0)) fn(event, data);
+  },
+});
+
 contextBridge.exposeInMainWorld('opendocDesktop', {
   newDoc: () => act('new'),
   open: () => act('open'),

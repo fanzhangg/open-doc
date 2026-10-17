@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:">
   <title>opendoc</title>
-  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/app.css">
-  <script type="module" src="/assets/app.js"></script>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
 </head>
 <body>
   <aside class="od-files" aria-label="Docs in this folder" hidden>
@@ -118,7 +119,6 @@
         <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
       </div>
       <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
-      <ul class="od-mentions od-mentions-doc" role="listbox" aria-label="Mention" hidden></ul>
     </div>
     <div class="od-stage od-history-stage">
       <article class="od-page" aria-label="Earlier version of the document">

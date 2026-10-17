@@ -1,6 +1,6 @@
 ---
 name: verify-before-push
-description: Checks to run in the opendoc repo before committing or pushing a change, and how to ship it. Use before any commit, push, or PR here, and whenever a change touches src/server, desktop/ or web/. A push to main rebuilds the nightly installers that users download.
+description: Checks to run in the opendoc repo before committing or pushing a change, and how to ship it. Use before any commit, push, or PR here, and whenever a change touches src/host, desktop/ or web/. A push to main rebuilds the nightly installers that users download.
 ---
 
 # Verify before you push
@@ -26,16 +26,18 @@ npm run build     # bundles web/ into dist/web
 npm test          # node --test; a test or test file times out after 5 min
 ```
 
-If the change touches `src/server/`, `desktop/` or `web/`, also open a doc in
+If the change touches `src/host/`, `desktop/` or `web/`, also open a doc in
 the real app:
 
 ```bash
 npm run smoke:desktop
 ```
 
-It launches the app on a fixture doc, checks that the editor loads it, that a
-setting survives a relaunch, and that the bundled CLI runs. It uses a temp
-profile, so a running OpenDoc and your settings are not touched.
+It launches the app on two fixture docs, checks that each editor loads its
+doc and that a buddy (a fake agent script) answers in each, that the app
+opens no port and survives its doc host stopping (both on Linux), and that a
+setting survives a relaunch. It uses a temp profile, so a running OpenDoc and
+your settings are not touched.
 
 Do not commit if any of these fail. If a failure is not caused by your change,
 say so and show the output instead of working around it.

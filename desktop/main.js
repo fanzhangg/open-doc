@@ -1,8 +1,8 @@
 // The OpenDoc desktop app (Electron main process): app lifecycle, one app
 // instance for every launch, the menus, the Open / Open Folder / New Doc /
 // Rename dialogs, and the app state (recent docs and folders, last folder,
-// window bounds). Each doc window runs the same editor page and local server
-// as `opendoc serve`, the servers in a process of their own (doc-host.js);
+// window bounds). Each doc window shows the editor page (dist/web), which
+// talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
 import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
@@ -74,7 +74,7 @@ watchSettings(async () => {
 let stateWrites = Promise.resolve();
 let pendingStateWrites = 0;
 let quitting = false;
-let docHost = null; // the process the doc servers run in, from start()
+let docHost = null; // the process the open docs run in, from start()
 let docHostDown = false;
 
 // ---- opening docs ----
@@ -578,7 +578,7 @@ async function sidebarMove(win, { from, kind, to } = {}) {
   return { rel };
 }
 
-// A doc and its comments, history and own agents; an open doc's server does
+// A doc and its comments, history and own agents; an open doc does
 // all of that itself.
 async function moveDoc(fromPath, toPath) {
   const open = windows.windowOf(await realpath(fromPath));
@@ -664,7 +664,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
     const parts = [docs && count(docs, 'doc'), others && count(others, docs ? 'other file' : 'file')].filter(Boolean);
     detail = parts.length ? `Its ${parts.join(' and ')} go to the Trash.` : 'It is empty. It goes to the Trash.';
   }
-  const working = (await Promise.all(open.map((other) => other.server.running().catch(() => [])))).flat();
+  const working = (await Promise.all(open.map((other) => other.hosted.running().catch(() => [])))).flat();
   if (working.length) {
     detail += `\n\n${listNames(working)} ${working.length === 1 ? 'is' : 'are'} working on ${kind === 'doc' ? name : 'a doc in it'}; that work stops.`;
   }
@@ -754,6 +754,12 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
 
 // ---- requests from pages (preload.cjs) ----
 
+// A doc page asks for a message port to its doc (windows.connectPage).
+ipcMain.on('opendoc:connect', (event) => {
+  if (event.senderFrame !== event.sender.mainFrame) return;
+  windows.connectPage(event.sender).catch((error) => console.error(error));
+});
+
 ipcMain.handle('opendoc:action', async (event, action, arg) => {
   // A doc's page is in a view of its window; the start window's is the window's own.
   const win = windows.windowForContents(event.sender) ?? BrowserWindow.fromWebContents(event.sender);
@@ -823,7 +829,7 @@ app.on('activate', () => {
 });
 
 // Let the last state write (window bounds, recent docs) finish first, and the
-// doc servers close (they stop their agents' runs).
+// open docs close (they stop their buddies' runs).
 app.on('will-quit', (event) => {
   if (pendingStateWrites === 0 && (docHostDown || !docHost)) return;
   event.preventDefault();
@@ -838,15 +844,15 @@ app.on('will-quit', (event) => {
 app.whenReady().then(start);
 
 async function start() {
-  // First, as loading the server takes a while: the doc host, in a process of
-  // its own so that what the servers do never holds up the windows.
+  // First, as loading it takes a while: the doc host, in a process of its
+  // own so that what the docs do never holds up the windows.
   docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write');
   });
   windows.configure({
-    startDocServer: docHost.startDocServer,
+    openHostedDoc: docHost.openHostedDoc,
     lastBounds: () => state.bounds,
     onBounds: (bounds) => {
       state.bounds = bounds;

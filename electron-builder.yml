@@ -15,7 +15,6 @@ extraMetadata:
 files:
   - package.json
   - desktop/**
-  - bin/**
   - src/**
   - agents/**
   - dist/web/**
@@ -23,8 +22,7 @@ files:
   - build/icon.svg
   - build/document.ico
 
-# No asar archive: the shipped agent scripts are copied from agents/, and
-# the bundled CLI (`opendoc`) runs from these files directly.
+# No asar archive: the shipped agent scripts are copied from agents/.
 asar: false
 
 win:

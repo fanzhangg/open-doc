@@ -1,64 +1,97 @@
-// The doc host: one process, apart from the app's windows, that runs the
-// local server of every open doc (src/server/server.js), agent runs included.
+// The doc host: one process, apart from the app's windows, that holds every
+// open doc's DocService (src/host/doc-service.js), buddy runs included.
 // Electron's main process pumps the input of every window, so anything slow
-// a server does there (starting an agent's program blocks the thread for most
-// of a second on Windows) would freeze them all; here it holds up only the
-// other servers. doc-host-client.js starts it and talks to it.
+// a doc does there (starting a program blocks the thread for most of a
+// second on Windows) would freeze them all; here it holds up only the other
+// docs. doc-host-client.js starts it and talks to it.
 //
-// Requests carry an `id`, answered with `{ id, result }` or `{ id, error }`:
-//   start { docPath, folder }  → { serverId, url }
-//   close { serverId }
-//   moveTo { serverId, toPath, moved } → the doc's final path (renamed with
+// Requests from the app carry an `id`, answered with `{ id, result }` or
+// `{ id, error }`:
+//   open { docPath, folder }  → { docId }
+//   close { docId }
+//   moveTo { docId, toPath, moved } → the doc's final path (renamed with
 //     its sidecar, or, with `moved`, already there)
-//   running { serverId } → the names of the doc's agents at work
-//   setFolder { serverId, folder }
+//   running { docId } → the names of the doc's buddies at work
+//   setFolder { docId, folder }
+//   attach { docId }, with a message port: a window's page talks to the doc
+//     over it (`serve`)
 //   closeAll
 // The host says `{ type: 'ready' }` once it can take them.
 
-import { startServer } from '../src/server/server.js';
+import { openDoc } from '../src/host/doc-service.js';
 import { renameDoc } from './files.js';
 
 // An Electron utility process; plain Node's child_process.fork in the tests.
 const channel = process.parentPort
-  ? { listen: (fn) => process.parentPort.on('message', (event) => fn(event.data)), send: (message) => process.parentPort.postMessage(message) }
-  : { listen: (fn) => process.on('message', fn), send: (message) => process.send(message) };
+  ? { listen: (fn) => process.parentPort.on('message', (event) => fn(event.data, event.ports)), send: (message) => process.parentPort.postMessage(message) }
+  : { listen: (fn) => process.on('message', (message) => fn(message, [])), send: (message) => process.send(message) };
 
-const servers = new Map();
+const docs = new Map(); // docId → { service, ports: Set }
 let nextId = 0;
 
-const server = (serverId) => {
-  const found = servers.get(serverId);
+const docOf = (docId) => {
+  const found = docs.get(docId);
   if (!found) throw new Error('that doc is not open');
   return found;
 };
 
 const handlers = {
-  async start({ docPath, folder = null }) {
-    const started = await startServer(docPath, { folder });
-    const serverId = ++nextId;
-    servers.set(serverId, started);
-    return { serverId, url: started.url };
+  async open({ docPath, folder = null }) {
+    const docId = ++nextId;
+    const entry = { service: null, ports: new Set() };
+    docs.set(docId, entry);
+    try {
+      entry.service = await openDoc(docPath, { folder, emit: (event, data) => { for (const port of entry.ports) port.postMessage({ event, data }); } });
+    } catch (error) {
+      docs.delete(docId);
+      throw error;
+    }
+    return { docId };
   },
-  async close({ serverId }) {
-    const found = servers.get(serverId);
-    servers.delete(serverId);
-    await found?.close();
+  async close({ docId }) {
+    const found = docs.get(docId);
+    docs.delete(docId);
+    for (const port of found?.ports ?? []) port.close();
+    await found?.service.close();
   },
-  // `moved`: the doc is already at `toPath` (its folder moved); the server follows it.
-  moveTo: ({ serverId, toPath, moved }) => server(serverId).moveTo(toPath, moved ? async () => toPath : renameDoc),
-  running: ({ serverId }) => server(serverId).runner.statuses().map((s) => s.name),
-  setFolder: ({ serverId, folder }) => server(serverId).setFolder(folder),
+  // `moved`: the doc is already at `toPath` (its folder moved); the doc follows it.
+  moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameDoc),
+  running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
+  setFolder: ({ docId, folder }) => docOf(docId).service.setFolder(folder),
+  attach({ docId }, ports) {
+    serve(docOf(docId), ports[0]);
+  },
   async closeAll() {
-    const all = [...servers.values()];
-    servers.clear();
-    await Promise.allSettled(all.map((s) => s.close()));
+    const all = [...docs.values()];
+    docs.clear();
+    await Promise.allSettled(all.map((d) => d.service.close()));
   },
 };
 
-channel.listen(async ({ id, type, ...arg }) => {
+/**
+ * A page's requests over `port`: `{ id, type, arg }`, answered with
+ * `{ id, result }` or `{ id, error: { message, code } }`. Events go to it as
+ * `{ event, data }`, starting with `hello`.
+ */
+function serve(entry, port) {
+  entry.ports.add(port);
+  port.on('message', async ({ data: { id, type, arg } }) => {
+    try {
+      port.postMessage({ id, result: (await entry.service.call(type, arg)) ?? null });
+    } catch (error) {
+      if (!error.code) console.error(error);
+      port.postMessage({ id, error: { message: String(error?.message ?? error), code: error?.code } });
+    }
+  });
+  port.on('close', () => entry.ports.delete(port));
+  port.start();
+  port.postMessage({ event: 'hello', data: entry.service.hello() });
+}
+
+channel.listen(async ({ id, type, ...arg }, ports) => {
   try {
     if (!Object.hasOwn(handlers, type)) throw new Error(`unknown request: ${type}`);
-    channel.send({ id, result: (await handlers[type](arg)) ?? null });
+    channel.send({ id, result: (await handlers[type](arg, ports)) ?? null });
   } catch (error) {
     // The fields the app shows; `code` and `path` name a doc that already exists.
     channel.send({ id, error: { message: String(error?.message ?? error), code: error?.code, path: error?.path } });

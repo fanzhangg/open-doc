@@ -1,7 +1,7 @@
 // The opendoc page: wires the editor, the comment margin, the people (the
-// doc's agents and you) and the server together. Saves are debounced and
-// conditional on the hash they were based on. Changes made on disk (a
-// buddy's merged edit, another program) arrive as SSE events and are merged
+// doc's buddies and you) and the doc in the doc host together. Saves are
+// debounced and conditional on the hash they were based on. Changes made on
+// disk (a buddy's merged edit, another program) arrive as events and are merged
 // into the page like a collaborator's edits, a buddy's typed in by its
 // caret. Where one overlaps what the human is typing, the human's text
 // stays: no one is asked to choose.
@@ -12,7 +12,7 @@ import { avatar, createCommentMargin, namecardFor, setFaces } from './threads.js
 import { createPeople } from './agent.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
-import { createSettings, forgetLegacySettings, legacySettings } from './settings.js';
+import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
@@ -106,7 +106,6 @@ async function start() {
     save: api.saveSettings,
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
-  if (!initial.settingsSaved) adoptLegacySettings();
   me = settings.get().name ?? defaultName;
   setFaces(faceOf);
   settings.subscribe((next, prev) => {
@@ -144,11 +143,9 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
-  editor.onUi(reportCaret);
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName, onAgentResult: takeAgentResult,
     docKey: () => docKey,
-    mentionChoices: (query) => people?.mentionChoices(query, me) ?? [],
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -198,7 +195,6 @@ async function start() {
     onSidecar: applySidecar,
     onSettings: (next) => settings.receive(next),
     onError: (message) => setStatus(message, 'error'),
-    onPeople: () => editor.setMentionNames(people.mentionable()),
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
   createNameCards({
@@ -271,22 +267,21 @@ async function start() {
 
   document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
-  events.addEventListener('doc', (event) => onDocEvent(JSON.parse(event.data).docHash));
-  events.addEventListener('sidecar', () => afterTyping('sidecar', refreshThreads));
-  events.addEventListener('history', () => history.changed());
-  events.addEventListener('agents', (event) => showAgents(JSON.parse(event.data)));
-  events.addEventListener('settings', (event) => settings.receive(JSON.parse(event.data)));
-  events.addEventListener('renamed', (event) => {
-    const data = JSON.parse(event.data);
+  events.on('doc', (data) => onDocEvent(data.docHash));
+  events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
+  events.on('history', () => history.changed());
+  events.on('agents', (data) => showAgents(data));
+  events.on('settings', (data) => settings.receive(data));
+  events.on('renamed', (data) => {
     showDocName(data.doc);
     docKey = data.docKey ?? docKey; // its own agents moved with it
     people?.render({ roster: settings.get().agents });
   });
-  events.addEventListener('error', () => setStatus('Reconnecting…', 'offline'));
-  events.addEventListener('missing', (event) => setMissing(JSON.parse(event.data).missing));
-  events.addEventListener('hello', (event) => {
-    if (Boolean(JSON.parse(event.data).missing) !== missing) setMissing(!missing);
-    else if (!missing) setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
+  events.on('missing', (data) => setMissing(data.missing));
+  // First on the line: the doc may have gone missing, or runs started, since `state`.
+  events.on('hello', (data) => {
+    if (Boolean(data.missing) !== missing) setMissing(!missing);
+    showAgents(data.agents);
   });
   await files.ready;
   if (startTyping) editor.focus();
@@ -435,28 +430,6 @@ async function doSync() {
     version++;
     scheduleSave();
   }
-}
-
-// Tell the server when the caret moves to another paragraph, or out of the
-// doc, so an @mention typed in the text is sent once the human moves on from
-// it (src/server/text-asks.js).
-let caretAt; // index of the block last reported, null for none
-let blurTimer = null;
-function reportCaret() {
-  const at = editor.caretIndex();
-  if (at === caretAt) return;
-  if (at === null) {
-    // Clicking the @ menu takes the focus for a moment: wait for it to come back.
-    blurTimer ??= setTimeout(() => {
-      blurTimer = null;
-      if (editor.caretIndex() !== null || caretAt === null) return;
-      caretAt = null;
-      api.caret(null).catch(() => {});
-    }, 300);
-    return;
-  }
-  caretAt = at;
-  api.caret(editor.caretBlock()).catch(() => {});
 }
 
 // The doc's agents changed (a status, or who is here).
@@ -772,14 +745,6 @@ function select(id, { focus = true } = {}) {
 
 // ---- identity ----
 
-// Before settings had a file, this browser kept them for one port only;
-// carry them over the first time, then forget them.
-function adoptLegacySettings() {
-  const patch = legacySettings();
-  if (Object.keys(patch).length > 0) settings.set(patch);
-  forgetLegacySettings();
-}
-
 function showDocName(name) {
   document.title = `${name} — opendoc`;
   document.querySelector('.od-doc-name').textContent = name;
@@ -845,10 +810,9 @@ function renameMe(next) {
 }
 
 // Saving is automatic and local, so the header says nothing while it works;
-// it speaks up only when a save fails, the server is unreachable or a
-// conflict needs a choice.
+// it speaks up only when something fails.
 function setStatus(text, state = 'saved') {
-  const problem = state === 'error' || state === 'offline' || state === 'conflict';
+  const problem = state === 'error';
   status.hidden = !problem;
   status.dataset.state = state;
   status.querySelector('.od-status-text').textContent = problem ? text : '';

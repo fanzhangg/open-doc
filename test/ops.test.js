@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyOp, emptySidecar, newId, OpError } from '../src/core/ops.js';
 import { parseMentions } from '../src/core/mentions.js';
-import { addedMentions, carry, changedRanges, textMentions } from '../src/core/text-mentions.js';
 import { askedOf, inbox } from '../src/core/inbox.js';
 
 const human = { name: 'fzhan', kind: 'human' };
@@ -142,43 +141,6 @@ test('leave: an agent removed from the doc is no longer a participant; its messa
   assert.equal(applyOp(left, { type: 'leave', name: 'claude' }), left, 'leaving twice changes nothing');
   assert.deepEqual(parseMentions('@claude again', left.participants), [], 'no longer offered for mentions');
   assert.throws(() => applyOp(s, { type: 'leave', name: '@bad' }), (e) => e.code === 'bad_input');
-});
-
-test('textMentions: @name in the doc text, to the end of its block, outside code', () => {
-  const md = '# Plan\n\nShip in Q3. @claude add the **risks** here.\n\n`@claude` in code\n\n```\n@claude fenced\n```\n\nMail a@claude.com, ask @alex, or @Claude.\n';
-  assert.deepEqual(textMentions(md, ['claude']).map((m) => [m.name, m.quote]), [
-    ['claude', '@claude add the risks here.'],
-    ['claude', '@Claude.'],
-  ]);
-  assert.deepEqual(textMentions(md, []), []);
-  const [first] = textMentions(md, ['claude']);
-  assert.equal(first.end - first.start, first.quote.length);
-});
-
-test('addedMentions: only a mention the change typed, pasted, finished or uncovered', () => {
-  const added = (before, after) => addedMentions(before, after, ['claude', 'alex']).map((m) => m.quote);
-  const doc = 'Ship it. @claude add risks\n\nNext.\n';
-  assert.deepEqual(added('Ship it.\n', 'Ship it. @claude\n'), ['@claude'], 'typed');
-  assert.deepEqual(added('Ship it. @cla\n', 'Ship it. @claude\n'), ['@claude'], 'finished');
-  assert.deepEqual(added('Ship it. x@claude\n', 'Ship it. @claude\n'), ['@claude'], 'uncovered');
-  assert.deepEqual(added(doc, doc.replace('add risks', 'add the risks here')), [], 'writing on after an old one');
-  assert.deepEqual(added(doc, `Intro.\n\n${doc}`), [], 'text added before an old one');
-  assert.deepEqual(added(doc, doc.replace('Ship it.', 'Ship it soon.').replace('Next.', 'Next!')), [], 'one save changing places on both sides of an old one');
-  assert.deepEqual(added(doc, doc.replace('Next.', 'Next. @claude check dates')), ['@claude check dates'], 'a second one, after an old one');
-  assert.deepEqual(added(doc, doc.replace('@claude', '@alex')), ['@alex add risks'], 'renamed');
-  assert.deepEqual(added(doc, doc.replace('Ship it. @claude add risks', 'Ship it. @claude do more')), [], 'rewording an old ask is not a new one');
-  assert.deepEqual(added(doc, doc.replace('Next.', '`@claude` in code')), []);
-});
-
-test('changedRanges and carry: what a change moved, and what it touched', () => {
-  assert.deepEqual(changedRanges('abc @x def', 'abc @x de1f'), [{ a0: 9, a1: 9, b0: 9, b1: 10 }]);
-  assert.deepEqual(changedRanges('same', 'same'), []);
-  const far = changedRanges('one\ntwo @x\nthree', 'one!\ntwo @x\nthree!');
-  assert.equal(far.length, 2, 'changes far apart stay apart');
-  assert.equal(carry(far, 8, 10), 9, 'between them: moved by the first');
-  assert.equal(carry(changedRanges('ab @x', 'abZZ @x'), 3, 5), 5, 'after a change: moves with it');
-  assert.equal(carry(changedRanges('ab @x', 'ab @x!'), 3, 5), 3, 'before a change: stays');
-  assert.equal(carry(changedRanges('ab @x', 'ab @y'), 3, 5), null, 'touched');
 });
 
 test('identify: a person with an id keeps one entry when they change their name', () => {

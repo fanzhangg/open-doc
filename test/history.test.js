@@ -1,15 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { COALESCE_MS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
-import { startServer } from '../src/server/server.js';
-import { SAMPLE, tempDoc } from './helpers.js';
+import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
-const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-agent.js');
 const me = { name: 'fzhan', kind: 'human' };
 const bot = { name: 'claude', kind: 'agent' };
 const edit = (author, extra = {}) => ({ kind: 'edit', author, ...extra });
@@ -81,80 +77,38 @@ test('history follows a renamed doc', async () => {
 
 // ---- through the server ----
 
-function call(server, method, path, body) {
-  return new Promise((resolve, reject) => {
-    const req = request({
-      host: '127.0.0.1',
-      port: server.port,
-      method,
-      path,
-      headers: {
-        host: `127.0.0.1:${server.port}`,
-        'x-opendoc-token': server.token,
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null }));
-    });
-    req.on('error', reject);
-    if (body !== undefined) req.write(JSON.stringify(body));
-    req.end();
-  });
-}
-
-async function waitUntil(check, ms = 10_000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (await check()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return false;
-}
-
 // The doc's buddy, histbot, runs the fake agent script.
-async function withServer(fn) {
+async function withDoc(fn) {
   const docPath = await tempDoc(SAMPLE);
-  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
-  const settingsDir = await configRoot();
-  process.env.FAKE_DIR = settingsDir;
-  await mkdir(join(settingsDir, 'agents'));
-  await writeFile(join(settingsDir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
-  await writeFile(join(settingsDir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', agents: [{ id: 'a_histbot', name: 'histbot', starred: true }] }));
-  const server = await startServer(docPath, { assetsDir, settingsDir });
+  const settingsDir = await fakeConfig({ agents: [{ id: 'a_histbot', name: 'histbot', starred: true }] });
+  const { doc, call, state } = await openTestDoc(docPath, { settingsDir });
   try {
-    await fn({ server, docPath, versions: async () => (await call(server, 'GET', '/api/history')).body.versions });
+    await fn({ call, state, docPath, versions: async () => (await call('history')).versions });
   } finally {
-    await server.close();
+    await doc.close();
   }
 }
 
-test('the server records saves, changes on disk and restores', async () => {
-  await withServer(async ({ server, docPath, versions }) => {
+test('the doc service records saves, changes on disk and restores', async () => {
+  await withDoc(async ({ call, state, docPath, versions }) => {
     assert.deepEqual((await versions()).map((v) => v.kind), ['opened']);
-    const { body: state } = await call(server, 'GET', '/api/state');
-    const saved = await call(server, 'PUT', '/api/doc', { markdown: SAMPLE.replace('six', 'seven'), baseHash: state.docHash });
-    assert.equal(saved.status, 200);
+    const before = await state();
+    assert.ok(!(await call('saveDoc', { markdown: SAMPLE.replace('six', 'seven'), baseHash: before.docHash })).conflict);
 
     // Written by another program: noticed by the watcher.
     await writeFile(docPath, SAMPLE.replace('six', 'eight'));
-    assert.ok(await waitUntil(async () => (await versions()).length === 3), 'the outside change was recorded');
+    await until(async () => (await versions()).length === 3, 'the outside change to be recorded');
     const list = await versions();
     assert.deepEqual(list.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['external', null]]);
 
-    const shown = await call(server, 'GET', `/api/history/version?id=${list[1].id}`);
-    assert.equal(shown.body.markdown, SAMPLE.replace('six', 'seven'));
-    assert.equal(shown.body.before, SAMPLE);
+    const shown = await call('version', { id: list[1].id });
+    assert.equal(shown.markdown, SAMPLE.replace('six', 'seven'));
+    assert.equal(shown.before, SAMPLE);
 
     // Restoring needs the doc the page last saw.
-    const stale = await call(server, 'POST', '/api/history/restore', { id: list[0].id, baseHash: state.docHash });
-    assert.equal(stale.status, 409);
-    const { body: now } = await call(server, 'GET', '/api/state');
-    const restored = await call(server, 'POST', '/api/history/restore', { id: list[0].id, baseHash: now.docHash });
-    assert.equal(restored.status, 200);
-    assert.equal(restored.body.markdown, SAMPLE);
+    assert.equal((await call('restoreVersion', { id: list[0].id, baseHash: before.docHash })).conflict, true);
+    const restored = await call('restoreVersion', { id: list[0].id, baseHash: (await state()).docHash });
+    assert.equal(restored.markdown, SAMPLE);
     assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
     const last = (await versions()).at(-1);
     assert.equal(last.kind, 'restore');
@@ -162,16 +116,16 @@ test('the server records saves, changes on disk and restores', async () => {
     assert.equal(last.author.name, 'fzhan');
     assert.equal((await versions()).length, 4, 'restoring keeps every version');
 
-    assert.equal((await call(server, 'GET', '/api/history/version?id=../index')).status, 400);
-    assert.equal((await call(server, 'GET', '/api/history/version?id=v_nothere1')).status, 404);
+    await assert.rejects(call('version', { id: '../index' }), (error) => error.code === 'bad_input');
+    await assert.rejects(call('version', { id: 'v_nothere1' }), (error) => error.code === 'not_found');
   });
 });
 
 test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async () => {
-  await withServer(async ({ server, versions }) => {
+  await withDoc(async ({ call, versions }) => {
     const message = { id: 'm_hist0001', author: me, body: '@histbot replace "extra load" with "extra peak load"' };
-    await call(server, 'POST', '/api/ops', { op: { type: 'addThread', id: 't_hist0001', anchor: null, message } });
-    assert.ok(await waitUntil(async () => (await versions()).length === 2), 'the agent edit was recorded');
+    await call('op', { op: { type: 'addThread', id: 't_hist0001', anchor: null, message } });
+    await until(async () => (await versions()).length === 2, 'the buddy\'s edit to be recorded');
     const [, agentVersion] = await versions();
     assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
     assert.deepEqual(agentVersion.threadIds, ['t_hist0001']);

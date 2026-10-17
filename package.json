@@ -1,17 +1,13 @@
 {
   "name": "opendoc",
   "version": "0.1.0",
-  "description": "Co-author plain markdown with AI agents: comment threads in a sidecar file, a CLI, and a local editor.",
+  "description": "Co-author plain markdown with AI buddies: comment threads in a sidecar file and a desktop editor.",
   "author": "fanzhangg",
   "type": "module",
-  "bin": {
-    "opendoc": "./bin/opendoc.js"
-  },
   "exports": {
     ".": "./src/core/index.js"
   },
   "files": [
-    "bin/",
     "src/",
     "spec/",
     "dist/",

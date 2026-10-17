@@ -7,15 +7,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { startServer } from '../../src/server/server.js';
-import { tempDoc } from '../helpers.js';
+import { readFile } from 'node:fs/promises';
+import { fakeConfig, openTestDoc, tempDoc } from '../helpers.js';
 
-const FAKE = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'fake-agent.js');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A small seeded PRNG so a failing run can be replayed from its seed.
@@ -25,22 +19,6 @@ function rng(seed) {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 2 ** 32;
   };
-}
-
-function call(server, method, path, body) {
-  return new Promise((resolve, reject) => {
-    const req = request({
-      host: '127.0.0.1', port: server.port, method, path,
-      headers: { host: `127.0.0.1:${server.port}`, 'x-opendoc-token': server.token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null }));
-    });
-    req.on('error', reject);
-    if (body !== undefined) req.write(JSON.stringify(body));
-    req.end();
-  });
 }
 
 test('buddies x asks while the human types: one reply each, every edit lands, no human text lost', { timeout: 120_000 }, async () => {
@@ -54,27 +32,20 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
   const doc = ['# Stress', ...asks.map((a) => `Para ${a.key} old.`), ...human.map((h) => `Para ${h} old.`)].join('\n\n') + '\n';
   const docPath = await tempDoc(doc);
 
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-stress-'));
-  process.env.FAKE_DIR = settingsDir;
-  await mkdir(join(settingsDir, 'agents'));
-  await writeFile(join(settingsDir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE}"\n`, { mode: 0o755 });
-  await writeFile(join(settingsDir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE}"\r\n`);
-  await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', agents: buddies.map((name, i) => ({ id: `a_stress${i}`, name, starred: true })) }));
-  const assetsDir = await mkdtemp(join(tmpdir(), 'opendoc-assets-'));
-  const server = await startServer(docPath, { settingsDir, assetsDir });
-  const state = async () => (await call(server, 'GET', '/api/state')).body;
+  const settingsDir = await fakeConfig({ agents: buddies.map((name, i) => ({ id: `a_stress${i}`, name, starred: true })) });
+  const { doc: opened, call, state } = await openTestDoc(docPath, { settingsDir });
   try {
     // Every ask at once, in a random order, while the human edits their own paragraphs.
     const order = asks.map((a) => [random(), a]).sort((x, y) => x[0] - y[0]).map(([, a]) => a);
-    const posting = Promise.all(order.map((a, i) => call(server, 'POST', '/api/ops', { op: {
+    const posting = Promise.all(order.map((a, i) => call('op', { op: {
       type: 'addThread', id: `t_stress${String(i).padStart(3, '0')}`, anchor: null,
       message: { id: `m_stress${String(i).padStart(3, '0')}`, author: { name: 'fzhan', kind: 'human' }, body: `@${a.name} replace "Para ${a.key} old." with "Para ${a.key} new."` },
     } })));
     for (const h of human) {
       for (;;) {
         const now = await state();
-        const saved = await call(server, 'PUT', '/api/doc', { markdown: now.markdown.replace(`Para ${h} old.`, `Para ${h} typed.`), baseHash: now.docHash });
-        if (saved.status === 200) break; // 409: a buddy's merge landed first; read again
+        const saved = await call('saveDoc', { markdown: now.markdown.replace(`Para ${h} old.`, `Para ${h} typed.`), baseHash: now.docHash });
+        if (!saved.conflict) break; // a buddy's merge landed first: read again
       }
       await sleep(Math.floor(random() * 40));
     }
@@ -96,6 +67,6 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
     for (const a of asks) assert.ok(text.includes(`Para ${a.key} new.`), `seed ${seed}: ${a.key}'s edit landed`);
     for (const h of human) assert.ok(text.includes(`Para ${h} typed.`), `seed ${seed}: ${h} kept`);
   } finally {
-    await server.close();
+    await opened.close();
   }
 });

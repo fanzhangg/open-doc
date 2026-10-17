@@ -1,5 +1,5 @@
 // The user's settings file: `settings.json` in the per-user config folder,
-// shared by every doc, window and `opendoc serve` run. Writes use the same
+// shared by every doc and window. Writes use the same
 // lock and atomic rename as the sidecar, so two windows changing different
 // settings at once both keep their change.
 

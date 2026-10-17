@@ -17,8 +17,7 @@ const isMac = /Mac/.test(navigator.platform);
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /**
- * Set up the sidebar; in a browser, or a window with a single doc, it stays
- * hidden. `onCarry(carry)` hears how the last page in this window left
+ * Set up the sidebar; in a window with a single doc, it stays hidden. `onCarry(carry)` hears how the last page in this window left
  * things (`carry` from the app; `startTyping` when it made this doc), once; `onError(message)` hears what could
  * not be done. Returns `ready`, which resolves once the sidebar is drawn,
  * and `state()`, how this page leaves it.

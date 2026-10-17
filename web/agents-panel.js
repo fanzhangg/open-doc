@@ -3,7 +3,7 @@
 // persona), whether it is starred, and its instructions. What runs every
 // buddy is the agent picked in Settings.
 //
-// Changes save through the server as they are made. A new agent is a draft
+// Changes save through the doc host as they are made. A new agent is a draft
 // until Create: nothing is saved or invited before it has a name, so one
 // left half made (the panel closed, Esc, another agent picked) leaves no
 // trace.

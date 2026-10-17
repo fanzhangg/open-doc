@@ -7,7 +7,6 @@ import { hydrateIcons, icon } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { createAgentsPanel } from './agents-panel.js';
 import { api } from './api.js';
-import { fillMentionMenu } from './threads.js';
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
 const SLASH_ITEMS = [
@@ -28,10 +27,9 @@ const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 /**
  * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean,
- *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void,
- *           mentionChoices?: (query: string) => { name, kind, group, tagline? }[] }} options
+ *           onAgentResult: (result: { settings?, sidecar?, agents? }) => void }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null, mentionChoices = () => [] }) {
+export function createChrome({ editor, onComment, settings: store, getName, setName, onAgentResult, docKey = () => null }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -56,9 +54,8 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   const toolbar = document.querySelector('.od-toolbar');
   const bubble = document.querySelector('.od-bubble');
   const slash = setupSlash(editor);
-  const mention = setupMention(editor, mentionChoices);
-  // The editor's keys go to whichever menu is open.
-  editor.setKeyHandler((event) => slash.onKey(event) || mention.onKey(event));
+  // The editor's keys go to the "/" menu while it is open.
+  editor.setKeyHandler((event) => slash.onKey(event));
   const link = setupLink(editor);
   const outline = setupOutline(editor);
   const blockPicker = setupBlockPicker(editor);
@@ -99,7 +96,6 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     blockPicker.show(block);
     placeBubble();
     slash.refresh();
-    mention.refresh();
     outline.refresh();
     if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
   }
@@ -395,72 +391,6 @@ function setupSlash(editor) {
     }
     if (event.key === 'Enter' || event.key === 'Tab') {
       pick(selected);
-      return true;
-    }
-    if (event.key === 'Escape') {
-      dismissedAt = range.from;
-      close();
-      return true;
-    }
-    return false;
-  }
-
-  return { refresh, onKey };
-}
-
-// ---- @ menu: the same agents and people as in a comment box ----
-
-function setupMention(editor, mentionChoices) {
-  const menu = document.querySelector('.od-mentions-doc');
-  let range = null;
-  let choices = [];
-  let selected = 0;
-  let dismissedAt = null; // @ position the human closed with Escape
-
-  function refresh() {
-    const query = editor.mentionQuery();
-    if (!query || query.from === dismissedAt) {
-      if (!query) dismissedAt = null;
-      return close();
-    }
-    const next = mentionChoices(query.query);
-    if (next.length === 0) return close();
-    if (range?.from !== query.from || range?.query !== query.query) selected = 0;
-    range = query;
-    choices = next;
-    draw();
-    const stage = menu.offsetParent.getBoundingClientRect();
-    const at = editor.coordsAt(query.from);
-    const room = window.innerHeight - at.bottom;
-    menu.style.left = `${at.left - stage.left}px`;
-    menu.style.top = room < menu.offsetHeight + 16 ? `${at.top - stage.top - menu.offsetHeight - 6}px` : `${at.bottom - stage.top + 6}px`;
-  }
-
-  function draw() {
-    fillMentionMenu(menu, choices, selected, (choice) => pick(choice));
-  }
-
-  function pick(choice) {
-    const at = range;
-    close();
-    editor.insertMention(at, choice.name);
-  }
-
-  function close() {
-    menu.hidden = true;
-    range = null;
-    choices = [];
-  }
-
-  function onKey(event) {
-    if (menu.hidden) return false;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
-      draw();
-      return true;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      pick(choices[selected]);
       return true;
     }
     if (event.key === 'Escape') {
