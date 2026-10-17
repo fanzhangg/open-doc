@@ -204,28 +204,6 @@ async function openFolderDialog(parent) {
   await openFolder(filePaths[0], parent);
 }
 
-/**
- * The home page's Create Project: the OS save dialog names a new folder,
- * which opens as a project with an Untitled doc in it.
- */
-async function newProjectDialog(parent) {
-  const { canceled, filePath } = await dialog.showSaveDialog(...withParent(parent, {
-    title: 'Create Project',
-    buttonLabel: 'Create',
-    defaultPath: join(startFolder(parent), 'Untitled Project'),
-    properties: ['createDirectory'],
-  }));
-  if (canceled || !filePath) return;
-  try {
-    await createFolder(filePath);
-    await createUntitled(filePath);
-  } catch (error) {
-    if (error.code !== 'exists') return failed(parent, `Could not create ${basename(filePath)}.`, error);
-    if (!(await ask(parent, `${basename(filePath)} already exists.`, `Open ${filePath} as a project instead?`, 'Open'))) return;
-  }
-  await openFolder(filePath, parent);
-}
-
 // ---- creating and renaming docs ----
 
 /** File > New Doc: the OS save dialog picks the folder (or makes one) and the name. */
@@ -816,7 +794,6 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   const fromStart = windows.isStartWindow(win);
   const fromDoc = Boolean(windows.docFor(win));
   if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
-  if (action === 'newProject' && fromStart) return void (await newProjectDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
   if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
   if (action === 'folderExpand' && fromDoc) {

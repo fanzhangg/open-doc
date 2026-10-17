@@ -37,7 +37,7 @@ doc's version history.
 
 ```bash
 npm install
-npm run desktop                      # home page: Create Project, Open Project, recent projects, Settings
+npm run desktop                      # home page: Open Project, recent projects, Settings
 npm run desktop -- path/to/plan.md   # open a doc
 npm run desktop -- path/to/project   # open a folder as a project
 

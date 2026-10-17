@@ -1,6 +1,6 @@
 // A stand-in for desktop/preload.cjs so the start window opens in a plain
 // browser (scripts/start-preview.js). Sample recent projects and default
-// settings, kept in memory: Settings works; Create Project, Open Project and
+// settings, kept in memory: Settings works; Open Project and
 // the recent list only log, since there is no app to open them.
 
 (() => {
@@ -17,7 +17,6 @@
   };
 
   window.opendocDesktop = {
-    newProject: () => log('Create project'),
     openFolder: () => log('Open project…'),
     agentScripts: () => Promise.resolve({ agents: ['claude', 'codex'], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents' }),
     resetAgentScript: (name) => log(`Reset ${name}`),

@@ -88,8 +88,7 @@ contextBridge.exposeInMainWorld('opendocHost', {
 });
 
 contextBridge.exposeInMainWorld('opendocDesktop', {
-  /** The home page: a new project folder, or an existing one, picked in the OS dialog. */
-  newProject: () => act('newProject'),
+  /** The home page: a folder, picked or made in the OS dialog, opens as a project. */
   openFolder: () => act('openFolder'),
   /**
    * The folder window's sidebar: { name, docs (paths in the folder, `/`

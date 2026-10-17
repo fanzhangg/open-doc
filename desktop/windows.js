@@ -399,8 +399,8 @@ export function showStartWindow() {
     return startWindow;
   }
   startWindow = new BrowserWindow({
-    width: 560,
-    height: 700,
+    width: 440,
+    height: 420,
     resizable: false,
     maximizable: false,
     fullscreenable: false,

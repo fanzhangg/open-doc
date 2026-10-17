@@ -1,4 +1,4 @@
-// The home page: Create Project, Open Project, the recent projects, and Settings. Bundled
+// The home page: Open Project, the recent projects, and Settings. Bundled
 // into dist/web/start.js (scripts/build.js) so it shares the editor's look
 // and parts: its stylesheet and theme, tooltips and the Settings dialog.
 
@@ -13,7 +13,6 @@ const empty = document.querySelector('.od-recent-empty');
 
 hydrateIcons();
 setupTooltips();
-document.querySelector('[data-action="new-project"]').addEventListener('click', () => desktop.newProject().catch(() => {}));
 document.querySelector('[data-action="open-project"]').addEventListener('click', () => desktop.openFolder().catch(() => {}));
 
 const el = (tag, className, text) => {

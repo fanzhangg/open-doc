@@ -8,8 +8,8 @@ How a person writes with buddies in OpenDoc. For why, see the
 
 1. **Open a doc.** Any `.md` file: File > Open, a double-click in the OS,
    or a drag onto the app. Each doc gets its own window. The home page
-   creates or opens a **project**, a folder with its docs in a sidebar, and
-   lists the recent ones.
+   opens a **project** (a folder, or a new one made in the dialog) with its
+   docs in a sidebar, and lists the recent ones.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
 3. **Comment.** Select text and click the comment button at the page edge
