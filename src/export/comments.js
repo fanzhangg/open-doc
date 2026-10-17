@@ -2,7 +2,7 @@
 // where they sit in the doc's syntax tree. Each thread's text is wrapped in
 // `odMark` nodes (one per stretch of a text node it covers) and followed by
 // an `odRef` node carrying its number, so every format can mark it its own
-// way: a highlight and a superscript in HTML.
+// way: a highlight and a superscript in HTML, a Word comment in docx.
 
 import { locate } from '../core/anchor.js';
 import { project, sourceRange, valueOffsets } from '../core/project.js';

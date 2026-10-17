@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import { main } from '../src/cli/main.js';
 import { applyOp, createAnchor, emptySidecar, project, serializeSidecar } from '../src/core/index.js';
 import { parseMarkdown } from '../src/core/project.js';
@@ -39,6 +40,27 @@ async function docWithThreads(markdown, threads) {
   const docPath = await tempDoc(markdown);
   await writeFile(docPath + '.opendoc.json', serializeSidecar(sidecarFor(markdown, threads)));
   return docPath;
+}
+
+// The files in a zip (a .docx), by name.
+function unzip(buffer) {
+  const files = {};
+  let end = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = buffer.readUInt16LE(end + 10);
+  let at = buffer.readUInt32LE(end + 16);
+  for (let i = 0; i < count; i++) {
+    const method = buffer.readUInt16LE(at + 10);
+    const size = buffer.readUInt32LE(at + 20);
+    const nameLength = buffer.readUInt16LE(at + 28);
+    const extra = buffer.readUInt16LE(at + 30) + buffer.readUInt16LE(at + 32);
+    const local = buffer.readUInt32LE(at + 42);
+    const name = buffer.toString('utf8', at + 46, at + 46 + nameLength);
+    const start = local + 30 + buffer.readUInt16LE(local + 26) + buffer.readUInt16LE(local + 28);
+    const data = buffer.subarray(start, start + size);
+    files[name] = (method === 8 ? inflateRawSync(data) : data).toString('utf8');
+    at += 46 + nameLength + extra;
+  }
+  return files;
 }
 
 const count = (text, pattern) => (text.match(pattern) ?? []).length;
@@ -110,6 +132,30 @@ test('HTML export: one page with the text, marks and the picked comments', async
   assert.match(all, /Resolved/);
 });
 
+test('Word export: the doc with each thread as a Word comment', async () => {
+  const docPath = await docWithThreads(SAMPLE, [
+    { quote: 'ship all six features', reply: 'Six is a lot.' },
+    { quote: 'extra load', status: 'resolved' },
+    { quote: null },
+  ]);
+  const none = unzip((await exportDoc(docPath, { format: 'docx' })).bytes);
+  assert.match(none['word/document.xml'], /Q4 Launch Plan/);
+  assert.match(none['word/document.xml'], /w:pStyle w:val="Heading1"/);
+  assert.equal(count(none['word/comments.xml'] ?? '', /<w:comment /g), 0);
+
+  const result = await exportDoc(docPath, { format: 'docx', comments: 'all' });
+  assert.equal(result.name, 'plan.docx');
+  const files = unzip(result.bytes);
+  const doc = files['word/document.xml'];
+  assert.equal(count(files['word/comments.xml'], /<w:comment /g), 4);
+  assert.equal(count(doc, /<w:commentRangeStart /g), 4);
+  assert.equal(count(doc, /<w:commentReference /g), 4);
+  assert.match(doc, /Other comments/); // the thread on the whole doc
+  assert.match(files['word/comments.xml'], /claude \(agent\)/);
+  assert.match(files['word/commentsExtended.xml'], /w15:paraIdParent/);
+  assert.match(files['word/commentsExtended.xml'], /w15:done="1"/);
+});
+
 test('export options: formats, names and paper sizes', () => {
   assert.equal(exportName('plan.md', 'pdf'), 'plan.pdf');
   assert.equal(exportName('notes.markdown', 'html'), 'notes.html');
@@ -143,6 +189,10 @@ test('opendoc export writes the copy next to the doc', async () => {
   assert.equal(copy.code, 0, copy.stderr);
   assert.equal(JSON.parse(copy.stdout).out, elsewhere);
   assert.match(await readFile(elsewhere, 'utf8'), /Q4 Launch Plan/);
+
+  const docx = await run('export', docPath, '--to', 'docx');
+  assert.equal(docx.code, 0, docx.stderr);
+  assert.match(unzip(await readFile(join(dirname(docPath), 'plan.docx')))['word/document.xml'], /Q4 Launch Plan/);
 
   assert.equal((await run('export', docPath, '--to', 'rtf')).code, 2);
   assert.equal((await run('export', docPath)).code, 2);
