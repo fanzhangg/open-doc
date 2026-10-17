@@ -25,10 +25,11 @@ export class Runner {
    * that ended: { threadId, name, base, edited, comments, body, failed },
    * `edited` being the doc's copy at the end (null when the run failed) and
    * `comments` { before, after } the sidecar's copy at the start and end. `onChange()` runs
-   * when a run starts or ends.
+   * when a run starts or ends. `log(entry)` takes a line on each run that
+   * ended: { buddy, thread, at, ms, outcome: ok | failed | timedOut | stopped, code }.
    */
-  constructor({ asks, doc, script, folder = () => null, human = async () => null, finish, onChange = () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
-    Object.assign(this, { asks, doc, script, folder, human, finish, onChange, timeoutMs });
+  constructor({ asks, doc, script, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
+    Object.assign(this, { asks, doc, script, folder, human, finish, onChange, log, timeoutMs });
     this.runs = new Map(); // `${threadId}:${name}` (name in lower case) → { threadId, name, child, done }
     this.stopped = false;
     this.checking = null;
@@ -107,12 +108,15 @@ export class Runner {
       const script = this.script();
       const folder = this.folder();
       const prompt = buildPrompt({ buddy, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
+      const at = Date.now();
       const result = await runScript(script, { cwd: dir, prompt, timeoutMs: this.timeoutMs, env: {
         OPENDOC_DOC: copy,
         OPENDOC_COMMENTS: sidecar,
         OPENDOC_PROJECT: folder ?? '',
         OPENDOC_BUDDY: buddy.name,
       }, onChild: (child) => { run.child = child; } });
+      const outcome = this.stopped ? 'stopped' : result.timedOut ? 'timedOut' : result.code === 0 ? 'ok' : 'failed';
+      await this.log({ buddy: buddy.name, thread: run.threadId, at: new Date(at).toISOString(), ms: Date.now() - at, outcome, code: result.code });
       if (this.stopped) return; // ended by stop: no answer
       const out = { threadId: run.threadId, name: buddy.name, base };
       if (result.code === 0) {

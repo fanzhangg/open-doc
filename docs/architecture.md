@@ -72,7 +72,9 @@ user's id. Buddies run only on docs open in a window.
    the appended comments as the buddy's, and writes the reply as the
    buddy's comment. Where the human changed the same text meanwhile, the
    buddy's change is dropped and the reply is marked `conflict`.
-4. The private folder is deleted.
+4. The private folder is deleted, and the run gets a line in the config
+   folder's `logs/runs.jsonl`: doc, buddy, thread, start, duration, and
+   `ok`, `failed`, `timedOut` or `stopped` with the exit code.
 
 A buddy comments as a human does: new threads, replies in any thread. It
 cannot resolve; anything but appended comments is ignored

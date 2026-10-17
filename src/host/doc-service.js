@@ -7,9 +7,9 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { FormatError, appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
@@ -59,6 +59,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     human: async () => (await me()).name,
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
+    log: (entry) => logRun(settingsDir, { doc: docPath, ...entry }),
   });
   let currentAgent = 'claude'; // the agent script that runs every buddy (settings.agent)
   let lastDocHash = null;
@@ -593,4 +594,15 @@ function mergeInto(current, base, theirs) {
   const lf = (text) => text.replace(/\r\n/g, '\n');
   const merged = merge3(lf(base), lf(current), lf(theirs), { prefer: 'ours' });
   return { ...merged, text: current.includes('\r\n') ? merged.text.replace(/\n/g, '\r\n') : merged.text };
+}
+
+// A line per run in the config folder's logs/runs.jsonl: what a slow or
+// missing reply was. Never fails a run.
+async function logRun(dir, entry) {
+  try {
+    await mkdir(join(dir, 'logs'), { recursive: true });
+    await appendFile(join(dir, 'logs', 'runs.jsonl'), `${JSON.stringify(entry)}\n`);
+  } catch (error) {
+    console.error('Could not log a run:', error);
+  }
 }

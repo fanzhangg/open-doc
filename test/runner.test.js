@@ -35,6 +35,7 @@ async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE } =
   }
 }
 
+const runLog = async (settingsDir) => (await readFile(join(settingsDir, 'logs', 'runs.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
 const comment = (call, body, anchor = null) => call('comment', { anchor, body }).then((r) => r.id);
 const reply = (call, thread, body) => call('reply', { thread, body });
 const threadOf = async (state, id) => (await state()).threads.find((t) => t.id === id);
@@ -95,7 +96,7 @@ test('two buddies run at once on one doc; both edits land', { timeout: 30_000 },
 });
 
 test('a script that exits 1 is answered with a reply marked failed; @mentioning the buddy again runs it again', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ settingsDir, call, state, runs }) => {
+  await withDoc(async ({ docPath, settingsDir, call, state, runs }) => {
     const id = await comment(call, '@Clippy fail');
     const [failed] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
     assert.equal(failed.failed, true);
@@ -109,6 +110,9 @@ test('a script that exits 1 is answered with a reply marked failed; @mentioning 
     await until(async () => (await repliesIn(state, id)).length === 2, 'the second reply');
     assert.equal((await runs()).length, 2);
     assert.ok(!(await repliesIn(state, id))[1].failed);
+    const logged = await runLog(settingsDir);
+    assert.deepEqual(logged.map((l) => [l.doc, l.buddy, l.thread, l.outcome, l.code]), [[docPath, 'Clippy', id, 'failed', 1], [docPath, 'Clippy', id, 'ok', 0]], 'each run is logged');
+    assert.ok(logged.every((l) => Number.isInteger(l.ms) && !Number.isNaN(Date.parse(l.at))));
   });
 });
 
@@ -135,11 +139,12 @@ test('in project mode the run is told the project folder', { timeout: 30_000 }, 
 });
 
 test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ call, state, runs, release, restart }) => {
+  await withDoc(async ({ settingsDir, call, state, runs, release, restart }) => {
     const id = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     await until(async () => (await runs()).length === 1, 'the run to start');
     await restart(); // ends the run with no answer
     assert.equal((await repliesIn(state, id)).length, 0);
+    assert.equal((await runLog(settingsDir))[0].outcome, 'stopped', 'a stopped run is logged');
     await until(async () => (await runs()).length === 2, 'the run to start again');
     await release('Clippy');
     await until(async () => (await repliesIn(state, id)).length === 1, 'one reply');
