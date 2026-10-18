@@ -125,10 +125,12 @@ test('the doc service records saves, changes on disk and restores', async () => 
 test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, versions }) => {
     const { id } = await call('comment', { anchor: null, body: '@histbot replace "extra load" with "extra peak load"' });
-    await until(async () => (await versions()).length === 2, 'the buddy\'s edit to be recorded');
+    // The edit is recorded before the reply is posted: wait for both.
+    const thread = async () => (await call('state')).threads.find((t) => t.id === id);
+    await until(async () => (await versions()).length === 2 && (await thread()).comments.length === 2, 'the buddy\'s edit and reply');
     const [, agentVersion] = await versions();
     assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
-    const thread = (await call('state')).threads.find((t) => t.id === id);
-    assert.deepEqual([agentVersion.thread, agentVersion.reply], [id, thread.comments[1].id], 'tagged with its reply');
+    const { comments } = await thread();
+    assert.deepEqual([agentVersion.thread, agentVersion.reply], [id, comments[1].id], 'tagged with its reply');
   });
 });
