@@ -12,7 +12,7 @@ import { basename, dirname, extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
-import { readSidecarText } from '../src/store/files.js';
+import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
 import { moveHistory } from '../src/store/history.js';
 import {
@@ -807,6 +807,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   }
   if (action === 'folderSidebar' && fromDoc) return void windows.setSidebar(win, Boolean(arg));
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
+  if (action === 'revealSidecar' && fromDoc) return void shell.showItemInFolder(sidecarPath(windows.docFor(win).docPath));
   if (action === 'folderCreate' && fromDoc) return sidebarCreate(win, arg);
   if (action === 'folderMove' && fromDoc) return sidebarMove(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);

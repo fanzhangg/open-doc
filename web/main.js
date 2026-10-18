@@ -33,6 +33,7 @@ const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comme
 
 const status = document.querySelector('.od-status');
 const missingBanner = document.querySelector('.od-missing');
+const readOnlyBanner = document.querySelector('.od-read-only');
 const noticeBanner = document.querySelector('.od-notice');
 const resolvedToggle = document.querySelector('.od-show-resolved');
 const commentsToggle = document.querySelector('.od-tool-comment');
@@ -126,6 +127,7 @@ async function start() {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onCommentRequest: (hint) => {
+      if (comments?.readOnly) return;
       chrome?.hideBubble();
       if (narrow.matches) openSheet(true);
       else if (!commentsShown()) showComments(true);
@@ -475,11 +477,12 @@ async function refreshThreads() {
 
 // Show the doc's comments (from state() or a comment request). Redrawing
 // every card for the same ones would stall typing.
-function applyComments({ threads, people: writers, edits, notice }) {
-  const json = JSON.stringify({ threads, writers, edits, notice });
+function applyComments({ threads, people: writers, edits, notice, readOnly }) {
+  const json = JSON.stringify({ threads, writers, edits, notice, readOnly });
   if (json === shownComments) return;
   shownComments = json;
-  comments = { threads, people: writers, edits, notice };
+  comments = { threads, people: writers, edits, notice, readOnly };
+  showReadOnly(readOnly);
   editor.setThreads(threads);
   margin.update(threads, { id: myId, name: me }, edits);
   people?.render({ people: writers });
@@ -488,6 +491,30 @@ function applyComments({ threads, people: writers, edits, notice }) {
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
 }
+
+// A sidecar this app must not write (spec/SPEC.md §2): its comments show,
+// nothing adds to them, and the banner says how to fix it. Once fixed, the
+// sidecar's change event brings the comments back to normal.
+const REVEAL_LABEL = /Mac/.test(navigator.platform) ? 'Reveal in Finder' : /Win/.test(navigator.platform) ? 'Show in File Explorer' : 'Show in Folder';
+function showReadOnly(problem) {
+  document.documentElement.toggleAttribute('data-read-only', Boolean(problem));
+  readOnlyBanner.hidden = !problem;
+  if (!problem) return;
+  readOnlyBanner.querySelector('.od-banner-text').textContent = problem === 'version'
+    ? 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.'
+    : 'This doc\'s comments file does not start with {"opendoc":2}, so comments are read-only. Fix the file to add comments.';
+  readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'version';
+  const reveal = readOnlyBanner.querySelector('[data-action="reveal"]');
+  reveal.textContent = REVEAL_LABEL;
+  reveal.hidden = problem !== 'invalid' || !window.opendocDesktop;
+}
+
+readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
+  window.open('https://github.com/fanzhangg/open-doc/releases/tag/nightly');
+});
+readOnlyBanner.querySelector('[data-action="reveal"]').addEventListener('click', () => {
+  window.opendocDesktop.revealSidecar().catch(() => {});
+});
 
 // The Comments button shows or hides the margin and the highlights in the
 // text; with them hidden the page sits in the middle of the window.

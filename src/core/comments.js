@@ -11,14 +11,6 @@ export const FORMAT_VERSION = 2;
 export const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
 const AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
-export class FormatError extends Error {
-  /** @param {'version' | 'invalid'} code */
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
-}
-
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 /** Random id such as `c_k3x9q2m7pa` (prefix `c` for a comment, `u` for a person). */
@@ -34,7 +26,9 @@ export function newId(prefix) {
  * in order, each `{ text, comment }` with `comment` null for a line that is
  * not one (reported in `bad`, skipped, and kept as it is when the file is
  * written again). Of lines with the same id, the first is the comment.
- * Throws a FormatError for a file that is not version 2.
+ * `problem` is 'version' when the first line is another version and
+ * 'invalid' when it is not a header at all; the lines are still read, to
+ * show, but the file must not be written (§2).
  */
 export function parseSidecar(text) {
   const all = text.split('\n');
@@ -45,8 +39,7 @@ export function parseSidecar(text) {
   } catch {
     header = null;
   }
-  if (!isObject(header) || !Number.isInteger(header.opendoc)) throw new FormatError('invalid', 'not an opendoc sidecar: the first line is not {"opendoc":2}');
-  if (header.opendoc !== FORMAT_VERSION) throw new FormatError('version', `opendoc version ${header.opendoc}; this tool reads version ${FORMAT_VERSION}`);
+  const problem = !isObject(header) || !Number.isInteger(header.opendoc) ? 'invalid' : header.opendoc !== FORMAT_VERSION ? 'version' : null;
   const lines = [];
   const bad = [];
   const seen = new Set();
@@ -66,7 +59,7 @@ export function parseSidecar(text) {
       lines.push({ text: line, comment });
     }
   });
-  return { lines, bad };
+  return { lines, bad, problem };
 }
 
 /** A sidecar's text: the header, then `lines` (from parseSidecar, or added). */

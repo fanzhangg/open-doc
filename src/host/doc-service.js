@@ -11,14 +11,14 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { FormatError, appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
 import { revertEdits } from '../core/diff.js';
-import { StoreError, V1_SUFFIX, exists, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
+import { StoreError, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
@@ -27,7 +27,7 @@ import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } fro
 import { splice } from './splice.js';
 import { Runner } from './runner.js';
 
-/** A call refused: `code` says why ('bad_input', 'not_found', 'unreadable'). */
+/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only'). */
 export class DocError extends Error {
   constructor(code, message) {
     super(message);
@@ -145,23 +145,18 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // ---- comments (spec/SPEC.md) ----
 
   // The sidecar as it is on disk: its lines, the lines it could not read,
-  // and `error` when it is not a version 2 sidecar at all.
+  // and the `problem` that makes it read-only (parseSidecar).
   async function readComments() {
     const text = await readSidecarText(docPath);
-    if (text === null) return { lines: [], bad: [], error: null };
-    try {
-      return { ...parseSidecar(text), error: null };
-    } catch (error) {
-      if (error instanceof FormatError) return { lines: [], bad: [], error };
-      throw error;
-    }
+    return text === null ? { lines: [], bad: [], problem: null } : parseSidecar(text);
   }
 
   // The threads as a window shows them: each anchor where its text is now
   // in `markdown` (it is never rewritten in the file), or `detached`; who
-  // wrote in them; and a notice about what of the sidecar cannot be read.
+  // wrote in them; why they are read-only (`readOnly`, parseSidecar's
+  // problem); and a notice about lines of the sidecar that cannot be read.
   async function commentsView(markdown) {
-    const { lines, bad, error } = await readComments();
+    const { lines, bad, problem } = await readComments();
     const comments = lines.map((l) => l.comment).filter(Boolean);
     const text = project(markdown).text;
     const threads = threadsOf(comments, (await buddies()).map((b) => b.name)).map((thread) => {
@@ -170,17 +165,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       return { ...thread, anchor: found ? createAnchor(text, found.start, found.end) : thread.anchor, detached: !found };
     });
     const file = basename(sidecarPath(docPath));
-    const notices = [];
-    if (await exists(docPath + V1_SUFFIX)) notices.push(`The comments in ${basename(docPath + V1_SUFFIX)} are from an older OpenDoc and cannot be read here; the file is left as it is.`);
-    if (error) notices.push(`${file} cannot be read (${error.message}); it is left as it is.`);
-    if (bad.length > 0) notices.push(`${bad.length === 1 ? 'A line' : `${bad.length} lines`} of ${file} could not be read; ${bad.length === 1 ? 'it is' : 'they are'} kept as written.`);
-    return { threads, people: peopleOf(comments), edits: await replyEdits(), notice: notices.join(' ') || null };
+    const notice = bad.length > 0 && !problem ? `${bad.length === 1 ? 'A line' : `${bad.length} lines`} of ${file} could not be read; ${bad.length === 1 ? 'it is' : 'they are'} kept as written.` : null;
+    return { threads, people: peopleOf(comments), edits: await replyEdits(), readOnly: problem, notice };
   }
 
   // Add or remove lines of the sidecar, written whole. Run in `serial`.
   async function changeComments(change) {
     const current = await readComments();
-    if (current.error) throw new DocError('unreadable', `${basename(sidecarPath(docPath))} cannot be read, so it is not changed`);
+    if (current.problem) throw new DocError('read_only', `${basename(sidecarPath(docPath))} is read-only here, so it is not changed`);
     const next = change(current.lines);
     if (next !== current.lines) await writeAtomic(sidecarPath(docPath), serializeSidecar(next));
   }
@@ -215,7 +207,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (closed) return [];
     const here = await buddies();
     if (here.length === 0) return [];
-    const { lines } = await readComments();
+    const { lines, problem } = await readComments();
+    if (problem) return []; // a buddy could not post its reply
     const mine = (await me()).id;
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map((b) => b.name));
     return threads.flatMap((thread) => askedOf(thread, mine).map((name) => ({

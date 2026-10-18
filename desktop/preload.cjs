@@ -126,6 +126,8 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
     ipcRenderer.on('opendoc:folder-changed', () => callback());
   },
   rename: () => act('rename'),
+  /** Show the doc's sidecar in Finder, to fix it by hand. */
+  revealSidecar: () => act('revealSidecar'),
   /** Show the folder of the agent scripts. */
   showAgents: () => act('showAgents'),
   /** The start window's Settings > Agent: { agents, shipped, folder }, and resetting a shipped script. */

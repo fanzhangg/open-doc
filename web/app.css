@@ -302,6 +302,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 3px 5px; border-radius: 4px; bor
 .od-banner-text { flex: 1; }
 .od-banner button { border: 1px solid var(--border-strong); background: var(--bg); border-radius: 15px; padding: 3px 12px; font-weight: 500; }
 .od-banner button:hover { background: var(--bg-soft); }
+[data-read-only] :is(.od-bubble [data-action="comment"], .od-composer, .od-resolve, .od-resolved-row .od-link-button, .od-receipt-undo) { display: none !important; }
 
 /* ---- tooltips ---- */
 
