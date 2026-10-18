@@ -1,12 +1,12 @@
 // The people in the header, laid out like a shared doc's: avatars of the
-// buddies the doc reaches, a People button, then yours.
+// buddies the doc reaches, a Buddies button, then yours.
 //
 // A card is where everyone is changed: on a buddy's, a click on its name
 // edits it in place, and who it is is a field right under it; your own
 // card edits your name the same way. Faces are drawn from names.
 //
-// A buddy answers when @mentioned. The People panel lists who commented,
-// and in a project makes a new buddy.
+// A buddy answers when @mentioned. The Buddies list (the button after the
+// faces) has every buddy here; in a project it deletes one and makes one.
 //
 // The comment box asks this module what to offer after @.
 
@@ -25,7 +25,7 @@ export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting wit
 export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, project = () => false, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
-  let showing = null; // 'me' | 'people' | 'agent:<name>' | 'person:<name>' | null
+  let showing = null; // 'me' | 'buddies' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
   // name on the page, or editable, opened by a click (or a click on the card
   // itself) or by hovering a face in the header.
@@ -34,7 +34,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let anchor = null; // the name on the page the card opened next to; null: under the header
   let editing = false; // whether the shown card's name is being edited in place
 
-  invite.addEventListener('click', () => toggle('people'));
+  invite.addEventListener('click', () => toggle('buddies'));
   me.addEventListener('click', () => toggle('me'));
   root.addEventListener('click', (event) => {
     const face = event.target.closest('[data-agent]');
@@ -185,7 +185,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     panel.dataset.state = viewOnly ? 'view' : 'edit';
     panel.toggleAttribute('data-editable', editable());
     if (showing === 'me') panel.replaceChildren(...meCard());
-    else if (showing === 'people') panel.replaceChildren(...peopleCard());
+    else if (showing === 'buddies') panel.replaceChildren(...buddiesCard());
     else if (showing?.startsWith('person:')) panel.replaceChildren(...personCard(showing.slice(7)));
     else if (agentShown()) panel.replaceChildren(...agentCard(agentShown()));
     if (!panel.hidden) place();
@@ -219,20 +219,36 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return [personHead(name, 'Commented on this doc')];
   }
 
-  // Who commented, one line each, then, in a project, a line to name a new
+  // Every buddy here, one line each: a click opens its card, and a project's
+  // buddy is deleted from here. Then, in a project, a line to name a new
   // buddy: Enter makes it and opens its card.
-  function peopleCard() {
+  function buddiesCard() {
     const head = el('div', 'od-card-head');
-    head.append(el('div', 'od-card-title', 'People'));
-    const people = el('div', 'od-people-list');
-    for (const p of writers.filter((p) => !isMe(p))) people.append(personRow(p.name, 'Commenter'));
-    if (!people.childElementCount) people.append(el('div', 'od-people-empty', 'No one else has commented yet.'));
-    return project() ? [head, people, ...newBuddyRow()] : [head, people]; // buddies other than Clippy are a project's
+    head.append(el('div', 'od-card-title', 'Buddies'));
+    const list = el('div', 'od-people-list');
+    list.append(...statuses.map(buddyRow));
+    return project() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
   }
 
-  function personRow(name, role) {
+  function buddyRow(status) {
     const row = el('div', 'od-people-row');
-    row.append(avatar(name, 'human', true), el('span', 'od-people-name', name), el('span', 'od-people-role', role));
+    const open = el('button', 'od-people-open');
+    open.type = 'button';
+    open.append(avatar(status.name, 'agent', true), el('span', 'od-people-name', status.name), el('span', 'od-people-role', tagline(status) || WHERE[status.where]));
+    open.addEventListener('click', () => toggle(`agent:${status.name}`));
+    row.append(open);
+    if (status.where === 'project') {
+      const remove = el('button', 'od-icon-btn od-people-delete');
+      remove.type = 'button';
+      remove.dataset.tip = `Delete ${status.name}`;
+      remove.setAttribute('aria-label', `Delete ${status.name}`);
+      remove.append(icon('trash'));
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
+        take(await api.deleteBuddy(status.name).catch(() => ({}))); // gone already: nothing to do
+      });
+      row.append(remove);
+    }
     return row;
   }
 
@@ -276,13 +292,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const status = statusOf(name);
     const parts = [cardHead(name)];
     if (status && !viewOnly) parts.push(aboutField(status));
-    if (status && !viewOnly && status.where === 'project') {
-      parts.push(button('Delete buddy', 'od-link-button od-danger od-profile-delete', async () => {
-        if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
-        close();
-        take(await api.deleteBuddy(status.name).catch(() => ({}))); // gone already: nothing to do
-      }));
-    }
     if (!status) {
       const problem = el('div', 'od-profile-problem');
       problem.append(el('div', 'od-profile-problem-text', `None of your buddies is called ${name}, so it does not answer here.`));
@@ -420,7 +429,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (nextWriters) writers = nextWriters;
     paintFaces();
     // Not while a field on the card is being typed in.
-    if (showing && showing !== 'me' && !panel.contains(document.activeElement)) paintCard();
+    if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();
   }
 
   // ---- @names in the text ----
@@ -476,7 +485,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     },
     /** Your name changed: repaint your card if it is open. */
     renameMe() {
-      if (showing === 'me' || showing === 'people') paintCard();
+      if (showing === 'me') paintCard();
     },
   };
 }
@@ -493,13 +502,6 @@ const LABELS = { working: 'Working…', away: 'Not here' };
 export function modeOf(status) {
   if (!status) return 'away';
   return status.state === 'running' ? 'working' : 'idle';
-}
-
-function button(text, className, onClick) {
-  const node = el('button', className, text);
-  node.type = 'button';
-  node.addEventListener('click', onClick);
-  return node;
 }
 
 // A small icon-only button, labelled for screen readers and on hover.

@@ -37,11 +37,13 @@ says who it is, and the first line shows next to its name.
 - Each buddy has its own face and color, the same on every machine: Clippy
   is yellow, and up to seven project buddies get seven other colors.
 
-A card is where anyone is changed. Click a face for its card: a buddy's
-name edits in place (not Clippy's), and who it is is a field right under it,
-saved when you leave it; a project buddy's card also deletes it. Your own
-card edits your name, which can be no buddy's here. **New buddy** (People
-panel, in a project) is a name to type: Enter makes it and opens its card.
+A card is who someone is; the Buddies list is who is here. Click a face for
+its card: a buddy's name edits in place (not Clippy's), and who it is is a
+field right under it, saved when you leave it. Your own card edits your name,
+which can be no buddy's here. The **Buddies** list (the button after the
+faces) has every buddy here, each opening its card; in a project, a
+buddy's trash icon deletes it, and **New buddy** is a name to type: Enter
+makes it and opens its card.
 Editing the files by hand works too: the app picks up changes at once.
 
 What runs every buddy is the agent picked in Settings > Agent (Claude Code or
@@ -89,8 +91,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   state wherever it appears: while it works it grows and its body rolls,
   where it cannot answer it is greyed out, and when a run fails it shakes
   and flashes red once.
-- **People** button (after the avatars): you, the people who commented, and
-  the buddies here, with New buddy.
+- **Buddies** button (after the avatars): the Buddies list.
 
 ## Around the doc
 
