@@ -9,18 +9,12 @@
   <script src="../dist/web/start.js" defer></script>
 </head>
 <body class="od-home">
-  <header class="od-header">
-    <button class="od-primary od-start-open" type="button" data-action="open-project" data-tip="A folder you have, or a new one made in the dialog" data-keys="Mod+Shift+O">
-      <span data-icon="folder"></span>Open Project…
-    </button>
-    <span class="od-spacer"></span>
-    <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
-  </header>
-
   <main class="od-start">
+    <button class="od-start-open" type="button" data-action="open-project" data-tip="A folder you have, or a new one made in the dialog" data-keys="Mod+Shift+O">
+      <span data-icon="plus"></span>Open Project…
+    </button>
 
-    <section class="od-recent" aria-labelledby="recent-title">
-      <h2 id="recent-title">Recent</h2>
+    <section class="od-recent" aria-label="Recent">
       <ul></ul>
       <p class="od-recent-empty" hidden>Projects you open show up here</p>
     </section>
