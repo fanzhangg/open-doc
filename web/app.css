@@ -95,7 +95,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* ---- menu and list rows: one size everywhere ---- */
 
-:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-files-option, .od-people-row, .od-version) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-files-option, .od-people-row, .od-version, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
 /* ---- header ---- */
 
@@ -553,6 +553,25 @@ label.od-setting { cursor: pointer; }
 .od-switch:checked { background: var(--text); }
 .od-switch:checked::after { transform: translateX(14px); }
 .od-shortcuts-body { padding-top: 4px; }
+
+/* ---- home window (desktop/start.html) ---- */
+
+.od-home { user-select: none; }
+.od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 16px 16px; }
+.od-start h2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
+/* the one way in: the OS dialog opens a folder, or makes a new one */
+.od-start-open { margin-left: 4px; padding-left: 8px; }
+.od-start-open [data-icon] { display: flex; }
+.od-start-open .od-icon { width: 16px; height: 16px; }
+/* recent projects: rows like the docs sidebar's */
+.od-recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.od-recent ul { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; }
+.od-recent li button { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: none; text-align: left; }
+.od-recent li button:hover { background: var(--hover); }
+.od-recent li .od-icon { width: 16px; height: 16px; color: var(--text-faint); }
+.od-recent-name { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.od-recent-folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: right; color: var(--text-faint); font-size: 12px; }
+.od-recent-empty { margin: 0; padding: 4px 0; color: var(--text-faint); font-size: 13px; }
 
 /* ---- responsive ---- */
 
