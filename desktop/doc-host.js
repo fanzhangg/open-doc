@@ -19,7 +19,7 @@
 // The host says `{ type: 'ready' }` once it can take them.
 
 import { openDoc } from '../src/host/doc-service.js';
-import { renameDoc } from './files.js';
+import { renameFile } from './files.js';
 
 // An Electron utility process; plain Node's child_process.fork in the tests.
 const channel = process.parentPort
@@ -55,7 +55,7 @@ const handlers = {
     await found?.service.close();
   },
   // `moved`: the doc is already at `toPath` (its folder moved); the doc follows it.
-  moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameDoc),
+  moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameFile),
   running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
   setFolder: ({ docId, folder }) => docOf(docId).service.setFolder(folder),
   attach({ docId }, ports) {

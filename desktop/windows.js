@@ -3,7 +3,7 @@
 // doc-host.js, so its work never holds up the windows), plus the start
 // window shown when no doc is open. A doc's page is a file (dist/web) that
 // talks to its doc over a message port (`connectPage`). A window opened on
-// a folder lists the folder's docs in a sidebar and switches between them in
+// a folder lists the folder's files in a sidebar and switches docs in
 // place: it opens the next doc and closes the last one, and the buddies of
 // the doc left behind stop.
 //
@@ -16,7 +16,7 @@ import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listDocs, relativeDoc, watchFolder } from './folder.js';
+import { relativeDoc, watchFolder } from './folder.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGE = join(here, '..', 'dist', 'web', 'index.html');
@@ -32,12 +32,12 @@ const WINDOW_ICON = existsSync(ICON) ? { icon: ICON } : {};
 
 /**
  * `view` shows the doc's page. `folder` is the real path of the folder the
- * window was opened on (null for a single doc), `listing` its docs as last
- * listed, `expanded` the subfolders open in its sidebar, `sidebar` whether
+ * window was opened on (null for a single doc), `expanded` the subfolders
+ * open in its sidebar, `sidebar` whether
  * the sidebar shows, and `carry` how the last page left it (the sidebar's
  * scroll, hidden comments), for the next. `pending` is the next doc's page
  * while it loads during a switch.
- * @type {Map<string, { win: BrowserWindow, view: WebContentsView, hosted: import('./doc-host-client.js').HostedDoc, docPath: string, folder: string | null, listing: { docs: string[], truncated: boolean } | null, expanded: Set<string>, sidebar: boolean, carry: object | null, pending: { view: WebContentsView, docPath: string } | null, stopWatching: (() => void) | null, switching: Promise<object> | null }>}
+ * @type {Map<string, { win: BrowserWindow, view: WebContentsView, hosted: import('./doc-host-client.js').HostedDoc, docPath: string, folder: string | null, expanded: Set<string>, sidebar: boolean, carry: object | null, pending: { view: WebContentsView, docPath: string } | null, stopWatching: (() => void) | null, switching: Promise<object> | null }>}
  */
 const docs = new Map();
 const opening = new Map();
@@ -101,7 +101,7 @@ async function createDocWindow(docPath, folder) {
     webPreferences: securePreferences(),
   });
   const entry = {
-    win, view: null, hosted, docPath, folder: null, listing: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
+    win, view: null, hosted, docPath, folder: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
   };
   entry.view = createView(entry, hosted);
   win.contentView.addChildView(entry.view);
@@ -253,20 +253,16 @@ async function drawn(view) {
 }
 
 /**
- * What the sidebar of the doc page `contents` in `win` lists: the folder's
- * docs, which is open there, and how the last page left the sidebar; null
- * for a single doc.
+ * The sidebar of the doc page `contents` in `win`: the folder's name, the
+ * doc open there, and how the last page left the sidebar; null for a
+ * single doc.
  */
-export async function folderView(win, contents) {
+export function folderView(win, contents) {
   const entry = docFor(win);
   if (!entry?.folder) return null;
-  entry.listing ??= await listDocs(entry.folder);
   const docPath = entry.pending?.view.webContents === contents ? entry.pending.docPath : entry.docPath;
   return {
     name: basename(entry.folder),
-    docs: entry.listing.docs,
-    folders: entry.listing.empty,
-    truncated: entry.listing.truncated,
     current: relativeDoc(entry.folder, docPath),
     expanded: [...entry.expanded],
     sidebar: entry.sidebar,
@@ -288,25 +284,12 @@ export function setExpanded(win, rel, open) {
   else entry.expanded.delete(rel);
 }
 
-/** The folder's docs as last listed, for checking a doc the sidebar asks for. */
-export async function folderDocs(entry) {
-  entry.listing ??= await listDocs(entry.folder);
-  return entry.listing.docs;
-}
-
-/** The folder's docs and empty folders as last listed. */
-export async function folderListing(entry) {
-  entry.listing ??= await listDocs(entry.folder);
-  return entry.listing;
-}
-
 /**
- * List the folder of `entry` again now, rather than when the watch notices,
- * and tell its page: the sidebar shows a change it made at once.
+ * Tell the pages of `entry` that its folder changed now, rather than when
+ * the watch notices: the sidebar shows a change it made at once.
  */
-export async function relist(entry) {
+export function relist(entry) {
   if (!entry.folder || entry.win.isDestroyed()) return;
-  entry.listing = await listDocs(entry.folder);
   for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.send('opendoc:folder-changed');
 }
 
@@ -355,13 +338,7 @@ async function attachFolder(entry, folder) {
 function watch(entry, folder) {
   entry.folder = folder;
   expandTo(entry);
-  entry.stopWatching = watchFolder(folder, async () => {
-    if (entry.win.isDestroyed()) return;
-    const listing = await listDocs(folder);
-    if (JSON.stringify(listing) === JSON.stringify(entry.listing)) return;
-    entry.listing = listing;
-    for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.send('opendoc:folder-changed');
-  });
+  entry.stopWatching = watchFolder(folder, () => relist(entry));
 }
 
 // Open the subfolders down to the doc, so the sidebar shows it.

@@ -91,39 +91,43 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   /** The home page: a folder, picked or made in the OS dialog, opens as a project. */
   openFolder: () => act('openFolder'),
   /**
-   * The folder window's sidebar: { name, docs (paths in the folder, `/`
-   * between folders), truncated, current, expanded (open subfolders) }, or
-   * null in a window with a single doc.
+   * The folder window's sidebar: { name, current (the doc's path in the
+   * folder, `/` between folders), expanded (open subfolders), sidebar,
+   * carry }, or null in a window with a single doc.
    */
   folder: () => ipcRenderer.invoke('opendoc:action', 'folder'),
-  /** Show the folder's doc `path` (one of `folder().docs`) in this window. */
+  /** What the sidebar folder `path` ('' for the top) holds: [{ name, folder }], subfolders first. */
+  folderList: (path) => ipcRenderer.invoke('opendoc:action', 'folderList', String(path)),
+  /** The sidebar's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
+  folderRead: (path) => ipcRenderer.invoke('opendoc:action', 'folderRead', String(path)),
+  /** Show the folder's doc `path` in this window. */
   openInFolder: (path) => act('openInFolder', String(path)),
   /** Follow a link in this doc: a URL, or a path from the doc's folder. */
   openLink: (href) => act('openLink', String(href)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
   /**
-   * A new doc ('doc', which then opens here) or folder ('folder') `name` (`/`
-   * makes folders) in the sidebar folder `parent` ('' for the top). Resolves
-   * to { rel } (its path in the folder) or { error } (why the name can't be used).
+   * A new, empty file `name` (`/` makes folders) in the sidebar folder
+   * `parent` ('' for the top); a doc then opens here. Resolves to { rel }
+   * (its path in the folder) or { error } (why the name can't be used).
    */
-  folderCreate: (parent, name, kind) => act('folderCreate', { parent: String(parent), name: String(name), kind: String(kind) }),
-  /** Rename or move the sidebar's doc or folder `from` to `to`; { rel } or { error }. */
-  folderMove: (from, kind, to) => act('folderMove', { from: String(from), kind: String(kind), to: String(to) }),
-  /** Delete the sidebar's doc or folder, once the user confirms; { trashed }. */
+  folderCreate: (parent, name) => act('folderCreate', { parent: String(parent), name: String(name) }),
+  /** Rename the sidebar's file or folder `from` to `to`; { rel } or { error }. */
+  folderRename: (from, kind, to) => act('folderRename', { from: String(from), kind: String(kind), to: String(to) }),
+  /** Delete the sidebar's file or folder, once the user confirms; { trashed }. */
   folderTrash: (rel, kind) => act('folderTrash', { rel: String(rel), kind: String(kind) }),
   /**
-   * The menu of a sidebar row ('doc', 'folder') or of the blank space under
+   * The menu of a sidebar row ('file', 'folder') or of the blank space under
    * the tree ('root', rel ''), at `x`, `y` in the page, or at the pointer.
    */
   folderMenu: (rel, kind, x = null, y = null) => act('folderMenu', {
     rel: String(rel), kind: String(kind), x: x === null ? null : Number(x), y: y === null ? null : Number(y),
   }),
-  /** A command from a sidebar menu: { action: 'rename' | 'move' | 'newDoc' | 'newFolder', rel, kind }. */
+  /** A command from a sidebar menu: { action: 'rename' | 'newFile', rel, kind }. */
   onFolderCommand: (callback) => {
     ipcRenderer.on('opendoc:folder-command', (_event, { action, rel, kind }) => callback({ action: String(action), rel: String(rel), kind: String(kind) }));
   },
   showSidebar: (open) => act('folderSidebar', Boolean(open)),
-  /** The folder's docs changed, or this window started listing a folder. */
+  /** Files in the folder came or went, or this window started listing a folder. */
   onFolderChanged: (callback) => {
     ipcRenderer.on('opendoc:folder-changed', () => callback());
   },

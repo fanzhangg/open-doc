@@ -95,7 +95,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* ---- menu and list rows: one size everywhere ---- */
 
-:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-files-option, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
 /* ---- header ---- */
 
@@ -576,6 +576,13 @@ label.od-setting { cursor: pointer; }
 /* While history is open, the toolbar and the editable page give way to a
    read-only page of the selected version and the list of versions. */
 .od-history-bar, .od-history-stage { display: none; }
+/* A file other than a doc, shown read only in the doc's place. */
+.od-preview, .od-preview-name { display: none; }
+[data-preview] :is(.od-toolbar, .od-stage, .od-outline, .od-banner, .od-doc-name, .od-status, .od-count) { display: none; }
+[data-preview] .od-preview { display: block; max-width: var(--page-w); margin: 0 auto; padding: 24px var(--page-pad) 160px; }
+[data-preview] .od-preview-name { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.od-preview-text { margin: 0; font: 13px/1.6 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.od-preview-note { margin: 0; color: var(--text-soft); font-size: 14px; }
 [data-history] .od-toolbar, [data-history] .od-stage:not(.od-history-stage), [data-history] .od-outline { display: none; }
 [data-history] .od-history-bar { display: flex; align-items: center; gap: 8px; margin: 0 12px 8px; padding: 4px; min-height: 36px; background: var(--bg-soft); border-radius: 10px; flex: none; font-size: 13px; }
 [data-history] .od-history-stage { display: grid; --margin-w: 320px; --stage-gap: 24px; }
@@ -624,29 +631,18 @@ label.od-setting { cursor: pointer; }
 .od-files-row .od-icon { width: 16px; height: 16px; color: var(--text-faint); }
 .od-files-row .od-files-chevron { width: 16px; height: 16px; transition: transform 0.15s; }
 .od-files-folder[aria-expanded="false"] .od-files-chevron { transform: rotate(-90deg); }
-.od-files-doc { padding-left: 32px; }
-.od-files-doc[aria-current="page"] { background: var(--active); color: var(--text); font-weight: 500; }
-.od-files-doc[aria-current="page"] .od-icon { color: var(--text-soft); }
-.od-files-doc[aria-busy="true"] { opacity: 0.6; }
+.od-files-file { padding-left: 32px; }
+.od-files-file[aria-current="page"] { background: var(--active); color: var(--text); font-weight: 500; }
+.od-files-file[aria-current="page"] .od-icon { color: var(--text-soft); }
 .od-files-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.od-files-more, .od-files-empty { margin: 0; padding: 8px 16px; color: var(--text-faint); font-size: 12px; }
-.od-files-empty { padding: 4px 8px; }
 .od-files-row { cursor: default; user-select: none; -webkit-user-select: none; outline: none; }
 .od-files-row:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent); }
 .od-files-row > .od-files-label { flex: 1; }
-.od-files-actions { display: none; margin: -2px -4px -2px 0; padding: 2px; border-radius: 4px; color: var(--text-soft); }
-.od-files-actions .od-icon { stroke-width: 2.5; }
-.od-files-actions:hover { background: var(--hover); color: var(--text); }
-.od-files-row:hover > .od-files-actions, .od-files-row:focus-visible > .od-files-actions { display: flex; }
-.od-files-dragging .od-files-actions, .od-files-editing > .od-files-actions, .od-files-new > .od-files-actions { display: none !important; }
 .od-files-input { flex: 1; min-width: 0; height: 24px; margin: -2px 0; padding: 0 6px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: var(--text); font: inherit; font-size: 13px; outline: none; }
 .od-files-input[aria-invalid="true"] { border-color: var(--red); }
 .od-files-editing, .od-files-editing:hover { background: none; }
 .od-files-row[aria-busy="true"] { opacity: 0.6; }
 .od-files-error { margin: 2px 8px 4px 32px; color: var(--red); font-size: 12px; line-height: 1.4; }
-.od-files-empty-folder { padding: 4px 8px 4px 32px; color: var(--text-faint); font-size: 12px; }
-.od-files-link { border: 0; padding: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
-.od-files-link:hover { text-decoration: underline; }
 .od-files-dragging, .od-files-dragging * { cursor: grabbing !important; }
 .od-files-nodrop, .od-files-nodrop * { cursor: not-allowed !important; }
 .od-files-dragging .od-files-row:hover:not(.od-files-drop) { background: none; }
@@ -655,13 +651,6 @@ label.od-setting { cursor: pointer; }
 .od-files-head.od-files-drop { border-radius: 6px; }
 .od-files-ghost { position: fixed; z-index: 100; top: 0; left: 0; display: flex; align-items: center; gap: 6px; max-width: 220px; padding: 4px 8px; border-radius: 6px; background: var(--bg); box-shadow: var(--shadow-raised); color: var(--text); font-size: 13px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .od-files-ghost .od-icon { width: 15px; height: 15px; color: var(--text-faint); }
-.od-files-picker { position: absolute; z-index: 2; left: 8px; right: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 256px; padding: 6px; border-radius: 6px; background: var(--bg); box-shadow: var(--shadow-raised); }
-.od-files-picker > .od-files-input { flex: none; height: 28px; margin: 0; }
-.od-files-picker-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
-.od-files-option { display: flex; align-items: center; gap: 6px; color: var(--text-soft); cursor: default; }
-.od-files-option .od-icon { width: 15px; height: 15px; color: var(--text-faint); }
-.od-files-option:hover, .od-files-option[aria-selected="true"] { background: var(--hover); color: var(--text); }
-.od-files-option[aria-disabled="true"] { opacity: 0.45; background: none; }
 .od-header .od-files-toggle { margin-left: -6px; }
 .od-files-toggle[aria-pressed="true"] { color: var(--text); }
 

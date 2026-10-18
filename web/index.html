@@ -10,20 +10,20 @@
   <script type="module" src="app.js"></script>
 </head>
 <body>
-  <aside class="od-files" aria-label="Docs in this folder" hidden>
+  <aside class="od-files" aria-label="Files in this folder" hidden>
     <div class="od-files-head">
       <span class="od-files-icon" data-icon="folder"></span>
       <span class="od-files-name"></span>
     </div>
-    <ul class="od-files-tree" role="tree" aria-label="Docs"></ul>
-    <p class="od-files-more" hidden></p>
+    <ul class="od-files-tree" role="tree" aria-label="Files"></ul>
   </aside>
 
   <header class="od-header">
-    <button class="od-icon-btn od-files-toggle" type="button" data-icon="sidebar" data-tip="Hide docs" aria-label="Docs in this folder" aria-pressed="true" hidden></button>
+    <button class="od-icon-btn od-files-toggle" type="button" data-icon="sidebar" data-tip="Hide files" aria-label="Files in this folder" aria-pressed="true" hidden></button>
     <div class="od-title">
       <span class="od-doc-icon" data-icon="file"></span>
       <span class="od-doc-name"></span>
+      <span class="od-preview-name"></span>
       <span class="od-status" role="status" aria-live="polite" hidden>
         <span class="od-status-icon"></span><span class="od-status-text"></span>
       </span>
@@ -126,6 +126,7 @@
       </div>
       <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>
     </div>
+    <div class="od-preview" aria-label="File, read only"></div>
     <div class="od-stage od-history-stage">
       <article class="od-page" aria-label="Earlier version of the document">
         <div class="od-editor"></div>

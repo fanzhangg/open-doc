@@ -135,6 +135,7 @@ test('in project mode the run is told the project folder', { timeout: 30_000 }, 
     const [run] = await runs();
     assert.equal(run.project, folder);
     assert.ok(run.prompt.includes(folder));
+    assert.match(run.prompt, /path in a comment is relative to the project folder/);
   }, { folder });
 });
 

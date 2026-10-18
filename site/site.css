@@ -50,7 +50,7 @@ a { color: var(--accent); }
 .ds-toolbar { margin: 0; max-width: 520px; }
 .ds-files { position: static; width: 240px; padding: 8px; border: 0; border-radius: 10px; }
 .ds-files .od-files-tree { padding: 0; }
-.ds-files .od-files-doc { padding-left: 8px; }
+.ds-files .od-files-file { padding-left: 8px; }
 .ds-tip { position: static; }
 .ds-faces { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px; }
 .ds-face { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text-soft); }
