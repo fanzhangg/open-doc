@@ -3,8 +3,8 @@
 // text. A buddy shows up like any other collaborator: an avatar, its
 // replies, and its face at work while it works. A reply whose run failed, or
 // whose edit was partly dropped for the human's text, says so; one that
-// edited the doc on this machine offers Undo. Only the human resolves
-// threads; they delete their own comments and buddies'.
+// edited the doc on this machine shows its edits in the text and offers
+// Undo. Only the human resolves threads; they delete their own comments and buddies'.
 
 import { icon } from './icons.js';
 import { agentFace, buddyColor, personFace } from './faces.js';
@@ -18,7 +18,7 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  * @param {{ onCreate: (body: string) => Promise<void>, onCancelDraft: () => void,
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
- *           onUndo: (replyId: string) => Promise<void>,
+ *           onUndo: (replyId: string) => Promise<void>, onShowEdits: (replyId: string | null) => void,
  *           onSelect: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
@@ -29,6 +29,7 @@ export function createCommentMargin(margin, handlers) {
   let agents = []; // the buddies' statuses in this doc: who works on which threads
   let me = { id: null, name: '' };
   let edits = {}; // the buddy replies that edited the doc here: { [id]: 'edited' | 'undone' }
+  let shownEdits = null; // the reply whose edits the text shows
   let activeId = null;
   let draft = null; // { hint } while composing a comment on the selected text
   let showResolved = false;
@@ -151,15 +152,22 @@ export function createCommentMargin(margin, handlers) {
   }
 
   // What a run did, as the app counted it, on the machine that ran it:
-  // hovering shows its edits in the text; the icon undoes them.
-  function receipt(id, { state, by, changes, hash }) {
+  // the count shows its edits in the text, or hides them; the icon undoes them.
+  function receipt(id, { state, by, changes }) {
     const box = el('div', `od-receipt${state === 'undone' ? ' od-receipt-undone' : ''}`);
     box.style.setProperty('--buddy', buddyColor(by ?? ''));
-    const count = el('span', 'od-receipt-text', state === 'undone' ? `${changes === 1 ? 'Edit' : 'Edits'} undone` : `${changes} ${changes === 1 ? 'edit' : 'edits'}`);
-    box.append(icon('pencil'), count);
-    if (state === 'edited') {
-      box.addEventListener('mouseenter', () => handlers.onLight?.(hash));
-      box.addEventListener('mouseleave', () => handlers.onLight?.(null));
+    if (state === 'undone') box.append(icon('pencil'), el('span', '', `${changes === 1 ? 'Edit' : 'Edits'} undone`));
+    else {
+      const show = el('button', 'od-receipt-show');
+      show.type = 'button';
+      show.setAttribute('aria-pressed', String(shownEdits === id));
+      show.title = shownEdits === id ? 'Hide in the text' : 'Show in the text';
+      show.append(icon('pencil'), el('span', '', `${changes} ${changes === 1 ? 'edit' : 'edits'}`));
+      show.addEventListener('click', (event) => {
+        event.stopPropagation();
+        handlers.onShowEdits(shownEdits === id ? null : id);
+      });
+      box.append(show);
       const undo = el('button', 'od-icon-btn od-receipt-undo');
       undo.type = 'button';
       undo.title = `Undo ${changes === 1 ? 'this edit' : `these ${changes} edits`}`;
@@ -168,7 +176,6 @@ export function createCommentMargin(margin, handlers) {
       undo.addEventListener('click', (event) => {
         event.stopPropagation();
         undo.disabled = true;
-        handlers.onLight?.(null);
         handlers.onUndo(id).catch(() => { undo.disabled = false; });
       });
       box.append(undo);
@@ -400,6 +407,11 @@ export function createCommentMargin(margin, handlers) {
       threads = nextThreads;
       me = nextMe;
       edits = nextEdits;
+      render();
+    },
+    /** The reply whose edits the text shows, or null. */
+    setShownEdits(id) {
+      shownEdits = id;
       render();
     },
     /** The buddies' statuses changed: who works on which threads. */

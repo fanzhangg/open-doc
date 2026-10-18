@@ -2,9 +2,9 @@
 // a suggestion-style view of a proposal or a past edit, named
 // formatting commands for the toolbar, selection bubble and "/" menu, and
 // collaborator-style application of changes made on disk: only the blocks
-// that differ are replaced (the caret stays put). A buddy's edit is
-// underlined in its colour until the human types; any other change glows
-// with who made it.
+// that differ are replaced (the caret stays put). A buddy's run is flagged
+// with its name (its edits show as a revision, see setPreview); any other
+// change glows with who made it.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
@@ -174,7 +174,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         onDocUpdated();
         if (edited) {
           edited = false;
-          fadeEdits(); // the human is typing: a buddy's edits are theirs to read now
           onChange();
         }
       });
@@ -244,12 +243,16 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       // through, new text marked. Decorations only; the doc does not change. A
       // new `replay` number gives the marks new attributes, so ProseMirror
       // redraws them and their animation runs again.
-      const { replay } = preview;
-      const classes = (kind) => `od-mark-${kind}${replay ? ' od-replay' : ''}`;
+      // A buddy's (`by`) is in its colour, its removed text grey.
+      const { replay, by } = preview;
+      const kindClass = (kind) => (by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`);
+      const classes = (kind) => `${kindClass(kind)}${replay ? ' od-replay' : ''}`;
+      const style = by ? `--buddy: ${buddyColor(by)}` : '';
+      drawn.push(by);
       preview.items.forEach(({ anchor, mark, widget }, i) => {
         const range = find(anchor);
         if (!range) return;
-        if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), 'data-replay': String(replay) }));
+        if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), style, 'data-replay': String(replay) }));
         drawn.push(range.from, range.to, mark, replay);
         if (!widget) return;
         const before = widget.side === 'before';
@@ -512,11 +515,10 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
 
   /**
    * Show `next`, a change made by `by`: only the top-level blocks that differ
-   * are replaced. A buddy's (`buddy`) is underlined in its colour until the
-   * human types, `tag` telling its run's edits apart; any other change glows,
-   * labelled `by`.
+   * are replaced, flagged `by` for a while; anything but a buddy's run
+   * (`buddy`) also glows.
    */
-  function applyMarkdown(next, by, { buddy = false, tag = null } = {}) {
+  function applyMarkdown(next, by, { buddy = false } = {}) {
     const v = view();
     const current = v.state.doc;
     const target = parse(next);
@@ -524,53 +526,18 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     if (hunks.length === 0) return;
     v.dispatch(replaceBlocks(v.state.tr, current, target, hunks).setMeta('addToHistory', false).setMeta(FROM_DISK, true));
     const ranges = hunks.map((h) => changedRange(current, target, h)).filter(Boolean);
-    if (buddy) markEdits(ranges, by, tag);
-    else flash(ranges, by);
+    flash(ranges, by, buddy);
     paintHighlights();
   }
 
-  // A buddy's edits stay marked, in its colour, until the human types; then
-  // they fade, and hovering its reply's receipt (`lit`, its run's `tag`)
-  // shows them again. Their places follow the text as it changes.
-  let lit = null;
-  const editClass = (spec) => `od-buddy-edit${spec.faded && spec.tag !== lit ? ' od-faded' : ''}`;
-  const editDecoration = (from, to, spec) => (spec.node ? Decoration.node : Decoration.inline)(from, to, { class: editClass(spec), style: `--buddy: ${buddyColor(spec.by)}` }, spec);
-
-  function markEdits(ranges, by, tag) {
-    if (ranges.length === 0) return;
-    const flagId = Symbol('flag');
-    const decorations = ranges.map((r) => editDecoration(r.from, r.to, { buddyEdit: true, node: Boolean(r.node), by, tag, faded: false }));
-    const first = ranges[0];
-    decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddyColor(by)), { side: -1, flagId }));
-    updateFlashes((set, doc) => set.add(doc, decorations));
-    setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flagId === flagId))), FLASH_MS);
-  }
-
-  // Redraw the buddies' edit marks, `change` given each one's spec.
-  function restyleEdits(change) {
-    updateFlashes((set, doc) => {
-      const marks = set.find(undefined, undefined, (spec) => spec.buddyEdit);
-      if (marks.length === 0) return set;
-      const redrawn = marks.map((d) => editDecoration(d.from, d.to, change(d.spec)));
-      return set.remove(marks).add(doc, redrawn); // remove() empties the array it is given
-    });
-  }
-
-  function fadeEdits() {
-    if (flashKey.getState(view().state).find(undefined, undefined, (spec) => spec.buddyEdit && !spec.faded).length === 0) return;
-    restyleEdits((spec) => ({ ...spec, faded: true }));
-  }
-
-  function flash(ranges, by) {
+  function flash(ranges, by, buddy) {
     if (ranges.length === 0) return;
     const flashId = Symbol('flash');
-    const decorations = [];
-    ranges.forEach((r, i) => {
-      decorations.push(r.node
-        ? Decoration.node(r.from, r.to, { class: 'od-flash-block' }, { flashId })
-        : Decoration.inline(r.from, r.to, { class: 'od-flash' }, { flashId }));
-      if (i === 0) decorations.push(Decoration.widget(r.node ? r.from + 1 : r.from, () => flag(by), { side: -1, flashId }));
-    });
+    const decorations = buddy ? [] : ranges.map((r) => (r.node
+      ? Decoration.node(r.from, r.to, { class: 'od-flash-block' }, { flashId })
+      : Decoration.inline(r.from, r.to, { class: 'od-flash' }, { flashId })));
+    const first = ranges[0];
+    decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
     updateFlashes((set, doc) => set.add(doc, decorations));
     setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flashId === flashId))), FLASH_MS);
   }
@@ -592,12 +559,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       return normal;
     },
     applyMarkdown,
-    /** Show the edits of the run tagged `tag` again, faded or not; null hides them. */
-    lightEdits(tag) {
-      if (tag === lit) return;
-      lit = tag;
-      restyleEdits((spec) => spec);
-    },
     /** Replace the content without reporting it as a local edit. */
     setMarkdown(next) {
       editor.action(replaceAll(next, true));
@@ -613,12 +574,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     },
     /**
      * Show changes in the text (items from web/review.js); [] clears.
-     * `replay` animates them once and scrolls the first into view.
+     * `replay` animates them once, `scroll` brings the first into view; `by`
+     * shows them as that buddy's.
      */
-    setPreview(items, { replay = false } = {}) {
-      preview = { items, replay: replay ? ++replays : 0 };
+    setPreview(items, { replay = false, scroll = replay, by = null } = {}) {
+      preview = { items, replay: replay ? ++replays : 0, by };
       paintHighlights();
-      if (!replay || items.length === 0) return;
+      if (!scroll || items.length === 0) return;
       const v = view();
       const range = rangeOf(v.state.doc, items[0].anchor);
       if (!range) return;

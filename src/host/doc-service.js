@@ -295,13 +295,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
-  // { state: 'edited' | 'undone', by, changes, hash } }, `changes` how many
-  // places the run changed and `hash` the doc's right after it.
+  // { state: 'edited' | 'undone', by, changes, hash, version } }, `changes` how
+  // many places the run changed, `hash` the doc's right after it and `version`
+  // the version that holds it.
   async function replyEdits() {
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
     for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash };
+      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash, version: v.id };
       if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
     }
     return edits;
