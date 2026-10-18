@@ -91,7 +91,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-icon-btn { border: 0; background: none; width: 28px; height: 28px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-soft); flex: none; }
 .od-icon-btn:hover, .od-icon-btn[aria-expanded="true"] { background: var(--hover); color: var(--text); }
 .od-header .od-icon-btn { width: 32px; height: 32px; }
-.od-msg-head .od-icon-btn, .od-receipt .od-icon-btn { width: 24px; height: 24px; }
+.od-msg-head .od-icon-btn, .od-receipt .od-icon-btn, .od-people-row .od-icon-btn { width: 24px; height: 24px; }
 
 /* ---- menu and list rows: one size everywhere ---- */
 
@@ -171,9 +171,16 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 
 /* the People panel: who is in the doc, like a shared doc's people list */
-.od-panel[data-card="people"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.od-panel[data-card="buddies"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
 .od-people-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .od-people-row { display: flex; align-items: center; gap: 8px; margin: 0 -8px; }
+.od-people-row:not(.od-people-new):hover { background: var(--hover); }
+/* a buddy: its face, name and who it is open its card; a project's shows Delete on hover */
+.od-people-open { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; }
+.od-people-delete { opacity: 0; }
+.od-people-row:hover .od-people-delete, .od-people-delete:focus-visible { opacity: 1; }
+.od-people-delete:hover { color: var(--red); }
+@media (hover: none) { .od-people-delete { opacity: 1; } }
 .od-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .od-people-name { flex: none; max-width: 60%; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 /* the last row of the doc's agents: make a new one */
@@ -181,10 +188,9 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-people-new:hover { background: var(--hover); }
 .od-people-new-name { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 500; outline: none; }
 .od-people-new-name::placeholder { color: var(--text-soft); }
-.od-people-empty { color: var(--text-soft); font-size: 12px; }
 .od-people-new-face { width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed var(--border-strong); border-radius: 50%; }
 .od-people-new-face .od-icon { width: 13px; height: 13px; }
-.od-people-role { margin-left: auto; flex: none; color: var(--text-soft); font-size: 12px; }
+.od-people-role { flex: 1; min-width: 0; overflow: hidden; color: var(--text-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 /* the People button: a circle the size of an avatar, next to them */
 .od-invite { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px dashed var(--border-strong); border-radius: 50%; background: var(--bg); color: var(--text-soft); }
 .od-invite:hover { background: var(--hover); color: var(--text); border-style: solid; }
@@ -220,7 +226,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* who a buddy is, under its name on its card: grows with the text, up to a point */
 .od-input.od-profile-about { display: block; width: 100%; box-sizing: border-box; margin-top: 12px; min-height: 4lh; max-height: 45vh; field-sizing: content; resize: none; font: 13px/1.5 var(--ui-font); }
-.od-profile-delete { margin-top: 12px; font-size: 12px; }
 
 /* ---- toolbar ---- */
 
