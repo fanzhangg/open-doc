@@ -95,7 +95,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* ---- menu and list rows: one size everywhere ---- */
 
-:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+:where(.od-block-menu li, .site-menu a, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
 /* ---- header ---- */
 

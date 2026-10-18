@@ -4,31 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download OpenDoc</title>
-<meta name="description" content="AI buddies collaborate with you in Markdown docs. Download OpenDoc for macOS or Windows.">
+<meta name="description" content="Co-author Markdown docs with your AI buddies. Download OpenDoc for macOS or Windows.">
 <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./dist/web/app.css?v=3d70871">
-<link rel="stylesheet" href="site.css?v=3d70871">
+<link rel="stylesheet" href="./dist/web/app.css?v=a004573">
+<link rel="stylesheet" href="site.css?v=a004573">
 </head>
 <body>
 <header class="site-header">
   <a class="site-brand" href="index.html"><img src="./build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
   <nav class="site-nav" aria-label="Pages">
     <a href="index.html" aria-current="page">Download</a>
-    <a href="design.html">Design</a>
-    <a href="avatars.html">Avatars</a>
+    <div class="site-dev">
+      <button type="button" aria-expanded="false" aria-controls="site-dev-menu">Development<svg class="od-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="od-block-menu site-menu" id="site-dev-menu" hidden>
+        <a href="design.html">Design system</a>
+        <a href="avatars.html">Avatar design</a>
+        <a href="preview/">Doc mode preview</a>
+        <a href="preview/?folder">Folder mode preview</a>
+      </div>
+    </div>
   </nav>
   <span class="od-spacer"></span>
-  <a class="site-github" href="https://github.com/fanzhangg/open-doc">GitHub</a>
-  <div class="od-segmented" role="radiogroup" aria-label="Theme">
-    <button type="button" role="radio" data-theme-pick="light">Light</button>
-    <button type="button" role="radio" data-theme-pick="dark">Dark</button>
-  </div>
+  <a class="od-icon-btn" href="https://github.com/fanzhangg/open-doc" aria-label="GitHub" title="GitHub"><svg class="od-icon" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M12 2C6.48 2 2 6.58 2 12.23c0 4.52 2.87 8.35 6.84 9.7.5.1.68-.22.68-.49l-.01-1.7c-2.78.62-3.37-1.38-3.37-1.38-.46-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.86.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.36 9.36 0 0 1 12 6.98c.85 0 1.71.12 2.51.34 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.64 1.03 2.76 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9l-.01 2.81c0 .27.18.6.69.49A10.1 10.1 0 0 0 22 12.23C22 6.58 17.52 2 12 2z"/></svg></a>
+  <button class="od-icon-btn site-theme" type="button" aria-label="Switch theme" title="Switch theme"><svg class="od-icon site-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg><svg class="od-icon site-sun" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
 </header>
 <main class="dl-page">
   <section class="hero">
     <span class="od-avatar od-avatar-agent" data-presence="working" id="clippy"></span>
     <h1>OpenDoc</h1>
-    <p class="tagline">AI buddies collaborate with you in Markdown docs.</p>
+    <p class="tagline">Co-author Markdown docs with your AI buddies</p>
     <span class="version">Nightly build · early preview</span>
   </section>
 
