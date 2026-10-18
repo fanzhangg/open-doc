@@ -6,8 +6,8 @@
 <title>Download OpenDoc</title>
 <meta name="description" content="Co-author Markdown docs with your AI buddies. Download OpenDoc for macOS or Windows.">
 <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./dist/web/app.css?v=a004573">
-<link rel="stylesheet" href="site.css?v=a004573">
+<link rel="stylesheet" href="./dist/web/app.css?v=049b078">
+<link rel="stylesheet" href="site.css?v=049b078">
 </head>
 <body>
 <header class="site-header">
@@ -48,17 +48,12 @@
       Windows
     </a>
   </section>
-
-  <footer>
-    <a href="https://github.com/fanzhangg/open-doc">Source on GitHub</a> ·
-    <a href="https://github.com/fanzhangg/open-doc/releases">All releases</a>
-  </footer>
 </main>
 <script type="module">
-  import { agentFace } from './dist/web/faces.js';
+  import { agentFace } from './dist/web/faces.js?v=049b078';
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))) document.getElementById('mobile-note').style.display = 'block';
   document.getElementById('clippy').append(agentFace('Clippy'));
 </script>
-<script type="module" src="site.js"></script>
+<script type="module" src="site.js?v=049b078"></script>
 </body>
 </html>

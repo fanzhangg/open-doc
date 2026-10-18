@@ -76,5 +76,3 @@ a { color: var(--accent); }
 .dl-page .platforms svg { width: 18px; height: 18px; }
 
 .dl-page .mobile-note { display: none; margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; background: var(--bg-soft); color: var(--text-soft); text-align: center; }
-.dl-page footer { margin-top: 48px; color: var(--text-soft); font-size: 13px; text-align: center; }
-.dl-page footer a { color: inherit; }
