@@ -1,34 +1,69 @@
-// A folder of docs for the desktop app's sidebar: the docs in it, found
-// down through its subfolders, and a watch that says when that list may
-// have changed. Plain Node (no Electron), so the tests run under `node --test`.
+// A project folder for the desktop app: what one of its folders holds, for
+// the sidebar; its docs, found down through its subfolders, for the doc a
+// window opens with; and a watch that says when files may have come or gone.
+// Plain Node (no Electron), so the tests run under `node --test`.
 
 import { watch } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
+import { SIDECAR_SUFFIX } from '../src/store/files.js';
 import { isDocName } from './files.js';
 
 export const MAX_DOCS = 2000;
+export const MAX_TEXT_BYTES = 1024 * 1024;
 export const MAX_DEPTH = 12;
 export const DEBOUNCE_MS = 300;
 export const POLL_INTERVAL_MS = 3000;
 
-// Folders never searched: hidden ones (.git, .claude, …) and installed packages.
+// Never in the sidebar: git's own folder and Finder's leftovers.
+const HIDDEN = new Set(['.git', '.DS_Store']);
+export const isHiddenName = (name) => HIDDEN.has(name);
+// Folders never searched for docs: hidden ones (.git, .claude, …) and installed packages.
 const SKIPPED = new Set(['node_modules']);
 const skipped = (name) => name.startsWith('.') || SKIPPED.has(name);
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /**
+ * What the folder `dir` holds, for the sidebar: its subfolders, then its
+ * files, both by name. Left out: `.git`, `.DS_Store` and each file's
+ * sidecar (`X.opendoc.jsonl` next to `X`); a sidecar whose file is gone
+ * shows, so it can be found and fixed. An unreadable folder is empty.
+ * @returns {Promise<{ name: string, folder: boolean }[]>}
+ */
+export async function readFolder(dir) {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const names = new Set(entries.map((entry) => entry.name));
+  const shown = [];
+  for (const entry of entries) {
+    const { name } = entry;
+    if (HIDDEN.has(name) || (name.endsWith(SIDECAR_SUFFIX) && names.has(name.slice(0, -SIDECAR_SUFFIX.length)))) continue;
+    const folder = entry.isDirectory() || (entry.isSymbolicLink() && (await isFolder(join(dir, name))));
+    shown.push({ name, folder });
+  }
+  return shown.sort((a, b) => b.folder - a.folder || byName.compare(a.name, b.name));
+}
+
+/** The file `path` to show read only: { text }, or { problem } when it is 'large' or 'binary'. */
+export async function readText(path) {
+  if ((await stat(path)).size > MAX_TEXT_BYTES) return { problem: 'large' };
+  const bytes = await readFile(path);
+  return bytes.includes(0) ? { problem: 'binary' } : { text: bytes.toString('utf8') };
+}
+
+/**
  * The docs in `root` and its subfolders, as paths relative to it with `/`
  * between folders: each folder's subfolders first, then its docs, both by
- * name. Symlinked folders are not followed. At most `max` docs; `truncated`
- * says whether there were more. `empty` lists the subfolders with nothing
- * in them but hidden files, so a folder just made shows in the sidebar;
- * folders holding only other files (code, images) are in neither list.
- * @returns {Promise<{ docs: string[], empty: string[], truncated: boolean }>}
+ * name. Hidden folders, installed packages and symlinked folders are left
+ * out. At most `max` docs.
+ * @returns {Promise<string[]>}
  */
 export async function listDocs(root, { max = MAX_DOCS } = {}) {
   const docs = [];
-  const empty = [];
   let truncated = false;
   async function walk(dir, prefix, depth) {
     let entries;
@@ -36,10 +71,6 @@ export async function listDocs(root, { max = MAX_DOCS } = {}) {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
       return; // unreadable: as if empty
-    }
-    if (prefix && entries.every((entry) => entry.name.startsWith('.'))) {
-      if (empty.length < max) empty.push(prefix.slice(0, -1));
-      return;
     }
     const folders = [];
     const files = [];
@@ -65,20 +96,10 @@ export async function listDocs(root, { max = MAX_DOCS } = {}) {
     }
   }
   await walk(root, '', 0);
-  return { docs, empty, truncated };
+  return docs;
 }
 
-/** Every folder the sidebar shows for `listing`: those holding docs, and the empty ones. */
-export function listedFolders({ docs, empty }) {
-  const folders = new Set(empty);
-  for (const rel of docs) {
-    const parts = rel.split('/');
-    for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join('/'));
-  }
-  return folders;
-}
-
-/** `rel` (from listDocs) as a path under `root`. */
+/** `rel` (`/` between folders) as a path under `root`. */
 export const docInFolder = (root, rel) => join(root, ...rel.split('/'));
 
 /** `path` relative to `root` with `/` between folders, or null when it is not inside it. */
@@ -119,7 +140,7 @@ export function neighbourDoc(docs, rel, keep = () => true) {
 /**
  * Call `onChange()` (debounced) whenever a file or folder in `root` or its
  * subfolders may have been added, removed or renamed. Edits to a file's
- * contents are left out: they never change the list. Where the file system
+ * contents and anything in `.git` are left out. Where the file system
  * cannot watch a whole tree, it polls instead.
  * @returns {() => void} stop watching
  */
@@ -138,7 +159,7 @@ export function watchFolder(root, onChange) {
   try {
     watcher = watch(root, { recursive: true }, (event, name) => {
       if (event !== 'rename') return;
-      if (name && String(name).split(/[\\/]/).slice(0, -1).some(skipped)) return;
+      if (name && String(name).split(/[\\/]/).includes('.git')) return;
       fire();
     });
     watcher.on('error', startPolling);
@@ -155,6 +176,14 @@ export function watchFolder(root, onChange) {
 async function isFile(path) {
   try {
     return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function isFolder(path) {
+  try {
+    return (await stat(path)).isDirectory();
   } catch {
     return false;
   }

@@ -9,7 +9,7 @@ How a person writes with buddies in OpenDoc. For why, see the
 1. **Open a doc.** Any `.md` file: File > Open, a double-click in the OS,
    or a drag onto the app. Each doc gets its own window. The home page
    opens a **project** (a folder, or a new one made in the dialog) with its
-   docs in a sidebar, and lists the recent ones.
+   files in a sidebar, and lists the recent ones.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
 3. **Comment.** Select text and click the comment button at the page edge
@@ -112,11 +112,19 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   agent) are the same dialog in every window, the home page too, and a
   change applies at once to all of them. Buddies are not in Settings: they
   are changed on their cards.
-- **Files.** New Doc, New Doc in This Folder, and Rename (the comments move
-  too). Opening an already open doc focuses its window. If the file is moved
-  or deleted outside the app, a banner says so and saving pauses. A project's
-  sidebar also makes, renames, moves and deletes docs and folders.
+- **Files.** New Doc and Rename (the comments move too). Opening an already
+  open doc focuses its window. If the file is moved or deleted outside the
+  app, a banner says so and saving pauses.
+- **A project's sidebar** shows every file and folder as it is on disk
+  (`.git`, `.DS_Store` and comment files aside), each folder read as you open
+  it. A doc opens in the editor; any other file shows read only in its place
+  (Escape goes back). Its menu, the same for every row: New File (in a
+  folder; `/` in the name makes folders), Rename (F2), Copy Path (relative
+  to the project, as buddies read it), Reveal, and Delete (to the Trash).
+  Drag a row onto a folder to move it. A
+  file's comments go with it when it is renamed, moved or deleted here.
 - **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
-  they merge in git ([format](../spec/SPEC.md)). A sidecar from OpenDoc 1
+  they merge in git ([format](../spec/SPEC.md)). Moving a doc outside the app,
+  move this file with it. A sidecar from OpenDoc 1
   (`X.md.opendoc.json`) is not read; a banner says so and the file is left
   as it is.

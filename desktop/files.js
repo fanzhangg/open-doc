@@ -1,7 +1,8 @@
-// Creating, renaming, moving and trashing docs and folders for the desktop app. Plain Node (no Electron),
-// so the tests run under `node --test`.
+// Creating, renaming and trashing files and folders for the desktop app; a
+// file's sidecar goes with it. Plain Node (no Electron), so the tests run
+// under `node --test`.
 
-import { mkdir, readdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { SIDECAR_SUFFIX, moveDoc, sidecarPath } from '../src/store/files.js';
 
@@ -50,7 +51,7 @@ export function cleanPaths(value, max = 50) {
 export const withDocExtension = (path) => (isDocName(path) ? path : `${path}.md`);
 
 /**
- * Create an empty doc (and its folder). Never overwrites: an existing file
+ * Create an empty file (and its folder). Never overwrites: an existing file
  * throws DocFileError('exists').
  */
 export async function createDoc(path) {
@@ -85,26 +86,25 @@ export async function createUntitled(dir) {
 }
 
 /**
- * Rename (or move) a doc and its sidecar together, as `opendoc mv` does.
- * `.md` is added when the new name has no doc extension. A name that only
- * changes case works on case-insensitive disks too. Never overwrites.
- * @returns {Promise<string>} the doc's new path
+ * Rename (or move) a file and its sidecar together, as `opendoc mv` does.
+ * A name that only changes case works on case-insensitive disks too. Never
+ * overwrites.
+ * @returns {Promise<string>} the file's new path
  */
-export async function renameDoc(fromPath, toPath) {
-  const target = withDocExtension(toPath);
-  if (target === fromPath) return fromPath;
-  if (await exists(target)) {
-    if (!(await sameFile(fromPath, target))) {
-      throw new DocFileError('exists', `${basename(target)} already exists`, target);
+export async function renameFile(fromPath, toPath) {
+  if (toPath === fromPath) return fromPath;
+  if (await exists(toPath)) {
+    if (!(await sameFile(fromPath, toPath))) {
+      throw new DocFileError('exists', `${basename(toPath)} already exists`, toPath);
     }
     // Same file under another case: go through a temporary name.
-    const temp = join(dirname(target), `.${basename(target)}.${process.pid}.renaming.md`);
+    const temp = join(dirname(toPath), `.${basename(toPath)}.${process.pid}.renaming`);
     await moveDoc(fromPath, temp);
-    await moveDoc(temp, target);
-    return target;
+    await moveDoc(temp, toPath);
+    return toPath;
   }
-  await moveDoc(fromPath, target);
-  return target;
+  await moveDoc(fromPath, toPath);
+  return toPath;
 }
 
 // Characters Windows refuses in a name; elsewhere only `/` (a folder) and NUL.
@@ -112,14 +112,12 @@ const WINDOWS_RESERVED = /[<>:"|?*\\]/;
 const WINDOWS_DEVICE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 
 /**
- * Why `name` (one part of a path, as typed in the sidebar) can't be a doc or
- * folder name, or null when it can. A leading `.` is refused: hidden files
- * are not listed, so the new one would vanish from the sidebar.
+ * Why `name` (one part of a path, as typed in the sidebar) can't be a file
+ * or folder name, or null when it can.
  */
 export function nameProblem(name, platform = process.platform) {
   if (!name.trim()) return 'Enter a name.';
   if (name === '.' || name === '..') return `"${name}" can't be a name.`;
-  if (name.startsWith('.')) return 'Names starting with "." are hidden; pick another.';
   if (/[\u0000-\u001f]/.test(name)) return 'Names can\'t contain control characters.';
   if (Buffer.byteLength(name) > 255) return 'That name is too long.';
   if (platform === 'win32') {
@@ -143,13 +141,6 @@ export function nameParts(typed, platform = process.platform) {
     if (problem) return { problem };
   }
   return { parts };
-}
-
-/** Make the folder `path` (and its parents). Never reuses one that exists. */
-export async function createFolder(path) {
-  if (await exists(path)) throw new DocFileError('exists', `${basename(path)} is already here`, path);
-  await mkdir(path, { recursive: true });
-  return path;
 }
 
 /**
@@ -179,38 +170,13 @@ export function isInside(folder, path) {
 }
 
 /**
- * What a folder holds, for the delete confirm: its docs, and every other
- * file (sidecars aside), hidden ones and those in hidden folders included.
- * @returns {Promise<{ docs: number, others: number }>}
+ * Put the file `path` and its sidecar in the Trash with `trashItem`
+ * (Electron's shell.trashItem): the file first, so a failure leaves the
+ * comments with a file that is still there.
  */
-export async function countFolder(path) {
-  const count = { docs: 0, others: 0 };
-  async function walk(dir) {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) await walk(join(dir, entry.name));
-      else if (entry.name.endsWith(SIDECAR_SUFFIX) && isDocName(entry.name.slice(0, -SIDECAR_SUFFIX.length))) continue;
-      else if (isDocName(entry.name) && !entry.name.startsWith('.')) count.docs++;
-      else count.others++;
-    }
-  }
-  await walk(path);
-  return count;
-}
-
-/**
- * Put the doc `docPath` and its sidecar in the Trash with `trashItem`
- * (Electron's shell.trashItem): the doc first, so a failure leaves the
- * comments with a doc that is still there.
- */
-export async function trashDoc(docPath, trashItem) {
-  await trashItem(docPath);
-  if (await exists(sidecarPath(docPath))) await trashItem(sidecarPath(docPath));
+export async function trashFile(path, trashItem) {
+  await trashItem(path);
+  if (await exists(sidecarPath(path))) await trashItem(sidecarPath(path));
 }
 
 async function sameFile(a, b) {

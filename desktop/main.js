@@ -8,7 +8,7 @@
 import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, sep } from 'node:path';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
@@ -16,11 +16,11 @@ import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
 import { moveHistory } from '../src/store/history.js';
 import {
-  cleanPaths, countFolder, createDoc, createFolder, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
-  moveFolder, nameParts, pathsFromArgs, renameDoc, trashDoc, withDocExtension,
+  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
+  moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
-import { docInFolder, firstDoc, listDocs, listedFolders, neighbourDoc, relativeDoc } from './folder.js';
+import { docInFolder, firstDoc, isHiddenName, listDocs, neighbourDoc, readFolder, readText, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -163,7 +163,7 @@ async function openFolder(path, parent = null) {
   }
   const open = windows.folderWindow(folder);
   if (open) return show(open.docPath, parent);
-  const { docs } = await listDocs(folder);
+  const docs = await listDocs(folder);
   // A doc another window has open stays there; start with one that is free.
   const free = docs.filter((rel) => !windows.windowOf(docInFolder(folder, rel)));
   const remembered = Object.hasOwn(state.folderDocs, folder) ? state.folderDocs[folder] : null;
@@ -234,21 +234,6 @@ async function newDocDialog(parent) {
   await show(path, parent);
 }
 
-/**
- * File > New Doc in This Folder: in a folder window, a new doc named in the
- * sidebar; elsewhere `Untitled.md` (or the next free name) next to the open doc.
- */
-async function newDocHere(win) {
-  const entry = windows.docFor(win);
-  if (!entry) return newDocDialog(win);
-  if (entry.folder) return void entry.view.webContents.send('opendoc:folder-command', { action: 'newDoc', rel: '', kind: 'here' });
-  try {
-    await show(await createUntitled(dirname(entry.docPath)), win);
-  } catch (error) {
-    await failed(win, 'Could not create a doc in this folder.', error);
-  }
-}
-
 /** File > Rename: the doc and its comments move together, and the window stays open. */
 async function renameDialog(win) {
   const entry = windows.docFor(win);
@@ -263,7 +248,7 @@ async function renameDialog(win) {
   });
   if (canceled || !filePath || withDocExtension(filePath) === from) return;
   try {
-    const to = await windows.renameOpenDoc(entry, filePath);
+    const to = await windows.renameOpenDoc(entry, withDocExtension(filePath));
     state.recent = renameRecent(state.recent, from, to);
     app.addRecentDocument(to);
     state.lastFolder = dirname(to);
@@ -382,7 +367,6 @@ function buildMenu() {
       label: isMac ? 'File' : '&File',
       submenu: [
         { label: 'New Doc…', accelerator: 'CmdOrCtrl+N', click: (_item, win) => newDocDialog(win) },
-        { label: 'New Doc in This Folder', accelerator: 'CmdOrCtrl+Alt+N', enabled: Boolean(doc), click: (_item, win) => newDocHere(win) },
         { type: 'separator' },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: (_item, win) => openDialog(win) },
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: (_item, win) => openFolderDialog(win) },
@@ -516,9 +500,9 @@ async function saveStartSettings(patch) {
 
 // ---- the sidebar's file operations ----
 
-// A folder window's sidebar names docs and folders by their place in the
+// A folder window's sidebar names files and folders by their place in the
 // folder (`/` between folders, '' for the folder itself); the app checks
-// each against its own listing, or for a new name, that it stays inside.
+// that each is inside the folder, shown there, and of its kind.
 
 function sidebarOf(win) {
   const entry = windows.docFor(win);
@@ -526,68 +510,58 @@ function sidebarOf(win) {
   return entry;
 }
 
-async function checkListed(entry, rel, kind) {
-  const listing = await windows.folderListing(entry);
-  const listed = typeof rel === 'string' && (kind === 'doc' ? listing.docs.includes(rel)
-    : kind === 'folder' ? listedFolders(listing).has(rel)
-      : kind === 'root' && rel === '');
-  if (!listed) throw new Error('not allowed');
-  return rel ? docInFolder(entry.folder, rel) : entry.folder;
+// The path of `rel`: a 'file' or 'folder' of the sidebar of `entry`, or its 'root'.
+function checkInFolder(entry, rel, kind) {
+  const path = typeof rel === 'string' ? docInFolder(entry.folder, rel) : null;
+  const ok = path !== null && (kind === 'root' ? rel === ''
+    : relativeDoc(entry.folder, path) === rel && !rel.split('/').some(isHiddenName)
+      && (kind === 'file' ? isFile(path) : kind === 'folder' && isDirectory(path)));
+  if (!ok) throw new Error('not allowed');
+  return path;
 }
 
 const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
 
 /**
- * A new doc or folder named `name` (as typed; `/` makes folders) in the
- * sidebar folder `parent`. An empty doc name takes the next free Untitled.
- * A new doc opens in this window.
+ * A new, empty file named `name` (as typed; `/` makes folders) in the
+ * sidebar folder `parent`. A new doc opens in this window.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
-async function sidebarCreate(win, { parent, name, kind } = {}) {
+async function sidebarCreate(win, { parent, name } = {}) {
   const entry = sidebarOf(win);
-  if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
-  const dir = await checkListed(entry, parent, parent ? 'folder' : 'root');
-  const typed = String(name ?? '').trim();
+  const dir = checkInFolder(entry, parent, parent ? 'folder' : 'root');
+  const named = nameParts(String(name ?? ''));
+  if (named.problem) return { error: named.problem };
   let path;
   try {
-    if (kind === 'doc' && !typed) {
-      path = await createUntitled(dir);
-    } else {
-      const named = nameParts(typed);
-      if (named.problem) return { error: named.problem };
-      path = join(dir, ...named.parts);
-      if (kind === 'doc') path = await createDoc(withDocExtension(path));
-      else await createFolder(path);
-    }
+    path = await createDoc(join(dir, ...named.parts));
   } catch (error) {
     if (error.code === 'exists') return { error: `${basename(error.path)} is already here.` };
     throw error;
   }
   const rel = relativeDoc(entry.folder, path);
-  windows.expandFolder(entry, kind === 'doc' ? parentRel(rel) : rel);
-  await windows.relist(entry);
-  if (kind === 'doc') await show(path, win);
+  windows.expandFolder(entry, parentRel(rel));
+  windows.relist(entry);
+  if (isDocName(path)) await show(path, win);
   return { rel };
 }
 
 /**
- * Rename or move the sidebar's doc or folder `from` to `to` (its new place,
- * as typed; a doc keeps its extension unless `to` names one). Its comments,
- * and history go with each doc, and any window showing one
- * follows it.
+ * Rename the sidebar's file or folder `from` to `to` (its new place, as
+ * typed). A file's comments and history go with it, and any window showing
+ * it, or a doc in the folder, follows.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
-async function sidebarMove(win, { from, kind, to } = {}) {
+async function sidebarRename(win, { from, kind, to } = {}) {
   const entry = sidebarOf(win);
-  if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
-  const fromPath = await checkListed(entry, from, kind);
+  if (kind !== 'file' && kind !== 'folder') throw new Error('not allowed');
+  const fromPath = checkInFolder(entry, from, kind);
   const named = nameParts(String(to ?? ''));
   if (named.problem) return { error: named.problem };
-  let toPath = join(entry.folder, ...named.parts);
-  if (kind === 'doc' && !isDocName(toPath)) toPath += extname(fromPath);
+  const toPath = join(entry.folder, ...named.parts);
   if (toPath === fromPath) return { rel: from };
   try {
-    if (kind === 'doc') await moveDoc(fromPath, toPath);
+    if (kind === 'file') await moveFile(fromPath, toPath);
     else await moveFolderOf(fromPath, toPath);
   } catch (error) {
     if (error.code === 'exists') {
@@ -601,19 +575,19 @@ async function sidebarMove(win, { from, kind, to } = {}) {
   if (kind === 'folder') windows.moveExpanded(entry, from, rel);
   windows.expandFolder(entry, parentRel(rel));
   rememberIn(entry); // its doc may have moved
-  await windows.relist(entry);
+  windows.relist(entry);
   return { rel };
 }
 
-// A doc and its comments and history; an open doc does
+// A file and its comments and history; an open doc does
 // all of that itself.
-async function moveDoc(fromPath, toPath) {
+async function moveFile(fromPath, toPath) {
   const open = windows.windowOf(await realpath(fromPath));
   await mkdir(dirname(toPath), { recursive: true });
   if (open) {
     await windows.renameOpenDoc(open, toPath);
   } else {
-    await renameDoc(fromPath, toPath);
+    await renameFile(fromPath, toPath);
     await followDoc(fromPath, toPath);
   }
   movedInRecent(fromPath, toPath);
@@ -626,7 +600,7 @@ async function moveFolderOf(fromPath, toPath) {
   if (windows.openDocs().some((other) => other.folder && inFolder(other.folder))) {
     throw Object.assign(new Error(`${basename(fromPath)} is open in its own window`), { code: 'busy' });
   }
-  const { docs } = await listDocs(fromPath, { max: Infinity });
+  const docs = await listDocs(fromPath, { max: Infinity });
   const open = windows.openDocs().filter((other) => inFolder(other.docPath));
   const openPaths = new Set(open.map((other) => other.docPath));
   await moveFolder(fromPath, toPath);
@@ -640,8 +614,8 @@ async function moveFolderOf(fromPath, toPath) {
   movedInRecent(fromPath, toPath);
 }
 
-// What a doc that is not open leaves outside its folder, moved with it: its
-// version history.
+// What a file that is not open leaves outside its folder, moved with it: its
+// version history, if it is a doc.
 async function followDoc(fromPath, toPath) {
   try {
     await moveHistory(fromPath, toPath, configDir());
@@ -670,35 +644,33 @@ async function countComments(path) {
 }
 
 /**
- * Put the sidebar's doc (with its comments) or folder (with everything in
+ * Put the sidebar's file (with its comments) or folder (with everything in
  * it) in the Trash, after the user confirms. This window shows another doc
  * first if it showed one of them; other windows showing one close.
  * @returns {Promise<{ trashed: boolean }>}
  */
 async function sidebarTrash(win, { rel, kind } = {}) {
   const entry = sidebarOf(win);
-  if (kind !== 'doc' && kind !== 'folder') throw new Error('not allowed');
-  const path = await checkListed(entry, rel, kind);
+  if (kind !== 'file' && kind !== 'folder') throw new Error('not allowed');
+  const path = checkInFolder(entry, rel, kind);
   const name = basename(path);
   const real = await realpath(path);
-  const gone = (docPath) => (kind === 'doc' ? docPath === real : isInside(real, docPath));
+  const gone = (docPath) => (kind === 'file' ? docPath === real : isInside(real, docPath));
   if (kind === 'folder' && windows.openDocs().some((other) => other.folder && isInside(real, other.folder))) {
     await warn(win, `Could not delete ${name}.`, `${name} is open in its own window. Close that window first.`);
     return { trashed: false };
   }
   const open = windows.openDocs().filter((other) => gone(other.docPath));
   let detail;
-  if (kind === 'doc') {
+  if (kind === 'file') {
     const comments = await countComments(path);
     detail = comments ? `It and its ${count(comments, 'comment')} go to the Trash.` : 'It goes to the Trash.';
   } else {
-    const { docs, others } = await countFolder(path);
-    const parts = [docs && count(docs, 'doc'), others && count(others, docs ? 'other file' : 'file')].filter(Boolean);
-    detail = parts.length ? `Its ${parts.join(' and ')} go to the Trash.` : 'It is empty. It goes to the Trash.';
+    detail = 'It and everything in it go to the Trash.';
   }
   const working = (await Promise.all(open.map((other) => other.hosted.running().catch(() => [])))).flat();
   if (working.length) {
-    detail += `\n\n${listNames(working)} ${working.length === 1 ? 'is' : 'are'} working on ${kind === 'doc' ? name : 'a doc in it'}; that work stops.`;
+    detail += `\n\n${listNames(working)} ${working.length === 1 ? 'is' : 'are'} working on ${kind === 'file' ? name : 'a doc in it'}; that work stops.`;
   }
   const { response } = await dialog.showMessageBox(win, {
     type: 'warning', message: `Delete "${name}"?`, detail, buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1,
@@ -710,7 +682,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
         await windows.closeDocWindow(other);
         continue;
       }
-      const { docs } = await windows.folderListing(entry);
+      const docs = await listDocs(entry.folder);
       const free = (doc) => {
         const docPath = docInFolder(entry.folder, doc);
         return !gone(docPath) && (!windows.windowOf(docPath) || windows.windowOf(docPath) === entry);
@@ -728,7 +700,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
     return { trashed: false };
   }
   try {
-    if (kind === 'doc') await trashDoc(path, (item) => shell.trashItem(item));
+    if (kind === 'file') await trashFile(path, (item) => shell.trashItem(item));
     else await shell.trashItem(path);
   } catch (error) {
     await failed(win.isDestroyed() ? null : win, `Could not move ${name} to the Trash.`, error);
@@ -740,7 +712,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
     saveState();
     recentChanged();
   }
-  if (!win.isDestroyed()) await windows.relist(entry);
+  if (!win.isDestroyed()) windows.relist(entry);
   return { trashed: true };
 }
 
@@ -748,26 +720,21 @@ const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /**
- * The menu of a sidebar row (`kind` 'doc' or 'folder') or of the blank space
+ * The menu of a sidebar row (`kind` 'file' or 'folder') or of the blank space
  * below the tree ('root'), at `x`, `y` in the window, or at the pointer.
- * Rename, Move To, New Doc and New Folder happen in the page, which hears
- * them as folder commands.
+ * Rename and New File happen in the page, which hears them as folder commands.
  */
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
   const entry = sidebarOf(win);
-  const path = await checkListed(entry, rel, kind);
+  const path = checkInFolder(entry, rel, kind);
   const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
-  const create = [
-    { label: 'New Doc', click: command('newDoc') },
-    { label: 'New Folder', click: command('newFolder') },
-  ];
-  const place = [
+  const newFile = { label: 'New File', click: command('newFile') };
+  const template = kind === 'root' ? [newFile] : [
+    ...(kind === 'folder' ? [newFile, { type: 'separator' }] : []),
     { label: 'Rename…', accelerator: 'F2', registerAccelerator: false, click: command('rename') },
-    { label: 'Move To…', click: command('move') },
-    { type: 'separator' },
+    { label: 'Copy Path', click: () => clipboard.writeText(rel) },
     { label: REVEAL_LABEL, click: () => shell.showItemInFolder(path) },
-    { label: 'Copy Path', click: () => clipboard.writeText(path) },
     { type: 'separator' },
     {
       label: 'Delete…',
@@ -776,10 +743,6 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
       click: () => report(sidebarTrash(win, { rel, kind })),
     },
   ];
-  const shown = path === entry.docPath || (await realpath(path).catch(() => path)) === entry.docPath;
-  const template = kind === 'doc'
-    ? [{ label: 'Open in New Window', enabled: !shown, click: () => report(windows.openDoc(path)) }, { type: 'separator' }, ...place]
-    : kind === 'folder' ? [...create, { type: 'separator' }, ...place] : create;
   const at = Number.isFinite(x) && Number.isFinite(y) ? { x: Math.round(x), y: Math.round(y) } : {};
   Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }
@@ -809,8 +772,10 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderSidebar' && fromDoc) return void windows.setSidebar(win, Boolean(arg));
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'revealSidecar' && fromDoc) return void shell.showItemInFolder(sidecarPath(windows.docFor(win).docPath));
+  if (action === 'folderList' && fromDoc) return readFolder(checkInFolder(sidebarOf(win), arg, arg ? 'folder' : 'root'));
+  if (action === 'folderRead' && fromDoc) return readText(checkInFolder(sidebarOf(win), arg, 'file'));
   if (action === 'folderCreate' && fromDoc) return sidebarCreate(win, arg);
-  if (action === 'folderMove' && fromDoc) return sidebarMove(win, arg);
+  if (action === 'folderRename' && fromDoc) return sidebarRename(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);
   if (action === 'folderMenu' && fromDoc) return void (await sidebarMenu(win, event.sender, arg));
   if (action === 'showAgents' && (fromStart || fromDoc)) return void showAgents();
@@ -836,12 +801,12 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   throw new Error(`not allowed: ${action}`);
 });
 
-// The sidebar of a folder window names a doc of its own list (`/` between
+// The sidebar of a folder window names one of its docs (`/` between
 // folders); anything else is refused.
 async function openInFolder(win, rel) {
-  const entry = windows.docFor(win);
-  if (!entry?.folder || typeof rel !== 'string' || !(await windows.folderDocs(entry)).includes(rel)) throw new Error('not allowed');
-  await openPath(docInFolder(entry.folder, rel), { parent: win });
+  const path = checkInFolder(sidebarOf(win), rel, 'file');
+  if (!isDocName(path)) throw new Error('not allowed');
+  await openPath(path, { parent: win });
 }
 
 // A link followed in a doc: the web goes to the browser; a path, from the

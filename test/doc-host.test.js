@@ -53,7 +53,7 @@ test('the doc host opens a doc, renames it with its sidecar, and closes it', asy
     const doc = await host.openHostedDoc(docPath);
     assert.ok(await serves(doc));
 
-    const moved = await doc.moveTo(join(dirname(docPath), 'renamed'));
+    const moved = await doc.moveTo(join(dirname(docPath), 'renamed.md'));
     assert.equal(moved, join(dirname(docPath), 'renamed.md'));
     assert.ok(await exists(moved));
     assert.ok(await exists(sidecarPath(moved)));

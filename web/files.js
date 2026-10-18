@@ -1,11 +1,12 @@
-// The sidebar of a desktop folder window: the folder's docs as a tree, the
-// open one marked, and light file management (from its menus): new
-// doc and new folder, rename, move (drag, or Move To…) and delete. The app
-// does each on disk and checks it; the page only names docs and folders by
-// their place in the folder. Clicking a doc asks the app to show it in this
-// window (the page is replaced by that doc's); the app keeps which subfolders
-// are open, whether the sidebar shows and how far it was scrolled, so the
-// next page draws it just as this one left it.
+// The sidebar of a desktop folder window: the folder's files as a tree, read
+// a folder at a time as it opens, the open one marked, and light file
+// management: new file, rename and delete (from its menu), and move (drag). The app does each
+// on disk and checks it; the page only names files and folders by their
+// place in the folder. Clicking a doc asks the app to show it in this window
+// (the page is replaced by that doc's); any other file shows here, read only,
+// in place of the doc. The app keeps which subfolders are open, whether the
+// sidebar shows and how far it was scrolled, so the next page draws it just
+// as this one left it.
 
 import { icon } from './icons.js';
 
@@ -14,7 +15,10 @@ const DRAG_SLOP_PX = 4;
 const OPEN_ON_HOVER_MS = 700;
 const SCROLL_EDGE_PX = 28; // a drag this close to the tree's top or bottom scrolls it
 const isMac = /Mac/.test(navigator.platform);
-const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const NOT_SHOWN = {
+  large: 'This file is too large to show here.',
+  binary: 'This file is not text, so it can’t be shown here.',
+};
 
 /**
  * Set up the sidebar; in a window with a single doc, it stays hidden. `onCarry(carry)` hears how the last page in this window left
@@ -28,9 +32,11 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   const head = aside.querySelector('.od-files-head');
   const tree = aside.querySelector('.od-files-tree');
   const toggle = document.querySelector('.od-files-toggle');
+  const preview = document.querySelector('.od-preview');
+  const previewName = document.querySelector('.od-preview-name');
   if (!desktop?.folder) return { ready: Promise.resolve(), state: () => ({}) };
   let view = null;
-  let folders = new Set(); // every folder the tree shows
+  let lists = new Map(); // what the top folder ('') and each open subfolder hold: [{ name, folder }]
   let first = true;
   // In a narrow window the sidebar floats over the page instead of beside
   // it: closed until the toggle opens it, closed again by the toggle, Escape
@@ -42,10 +48,10 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   let field = null; // the name being typed, if any: a redraw waits for it
   let stale = false; // the folder changed while a name was being typed
   let focusNext = null; // the row to focus once the tree is drawn again
-  let picker = null; // the open Move To… list, if any
+  let created = null; // the doc just made here, which the next page opens ready to type in
+  let previewing = null; // the file shown read only, if any
   let drag = null;
   let justDragged = false;
-  let created = null; // the doc just made here, which the next page opens ready to type in
 
   async function refresh() {
     if (field) {
@@ -54,6 +60,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     }
     try {
       view = await desktop.folder();
+      if (view) lists = await load(new Set(view.expanded));
     } catch {
       view = null;
     }
@@ -65,18 +72,13 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     }
     aside.querySelector('.od-files-name').textContent = view.name;
     aside.querySelector('.od-files-name').title = view.name;
-    const more = aside.querySelector('.od-files-more');
-    more.hidden = !view.truncated;
-    more.textContent = view.truncated ? `Showing the first ${view.docs.length} docs.` : '';
+    if (previewing && lists.get(parentOf(previewing))?.some(({ name }) => name === nameOf(previewing)) === false) closePreview();
     const focused = tree.contains(document.activeElement) ? document.activeElement.closest('[role="treeitem"]')?.dataset.path : null;
-    const root = nest(view.docs, view.folders ?? []);
-    folders = allFolders(root);
-    tree.replaceChildren(...items(root, '', new Set(view.expanded), 1));
-    if (view.docs.length === 0 && folders.size === 0) tree.append(el('li', 'od-files-empty', 'No docs in this folder'));
+    tree.replaceChildren(...items('', 1));
     const wanted = focusNext ?? focused;
     focusNext = null;
     const target = (wanted !== null && wanted !== undefined && visibleRow(wanted)) || null;
-    rove(target ?? visibleRow(view.current ?? '') ?? rows()[0] ?? null);
+    rove(target ?? visibleRow(shown() ?? '') ?? rows()[0] ?? null);
     if (target) {
       target.focus({ preventScroll: true });
       target.scrollIntoView({ block: 'nearest' });
@@ -91,6 +93,19 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     first = false;
   }
 
+  // What the top folder and each open subfolder in it hold.
+  async function load(expanded) {
+    const loaded = new Map();
+    async function read(path) {
+      const entries = await desktop.folderList(path).catch(() => []);
+      loaded.set(path, entries);
+      await Promise.all(entries.filter(({ name, folder }) => folder && expanded.has(join(path, name)))
+        .map(({ name }) => read(join(path, name))));
+    }
+    await read('');
+    return loaded;
+  }
+
   function show(open) {
     docked = open;
     draw();
@@ -101,7 +116,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     aside.hidden = !open;
     document.documentElement.toggleAttribute('data-files', docked && !narrow.matches);
     toggle.setAttribute('aria-pressed', String(open));
-    toggle.dataset.tip = open ? 'Hide docs' : 'Show docs';
+    toggle.dataset.tip = open ? 'Hide files' : 'Show files';
     window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
   }
 
@@ -119,7 +134,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
 
   // ---- drawing ----
 
-  // A row: a doc or a folder, named by `path`, its place in the folder.
+  // A row: a file or a folder, named by `path`, its place in the folder.
   function row(kind, path, label, level) {
     const node = el('div', `od-files-row od-files-${kind}`);
     node.setAttribute('role', 'treeitem');
@@ -128,56 +143,32 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     node.title = path;
     node.dataset.path = path;
     node.dataset.kind = kind;
-    const actions = el('span', 'od-files-actions');
-    actions.setAttribute('aria-hidden', 'true'); // Shift+F10 opens the same menu
-    actions.dataset.tip = 'More';
-    actions.append(icon('more'));
     if (kind === 'folder') node.append(icon('chevron', 'od-icon od-files-chevron'));
-    node.append(icon(kind === 'folder' ? 'folder' : 'file'), el('span', 'od-files-label', label), actions);
+    node.append(icon(kind), el('span', 'od-files-label', label));
     return node;
   }
 
-  // A subfolder's row and, below it, what is in it.
-  function folderItem(name, node, path, expanded, level) {
-    const item = el('li');
-    item.setAttribute('role', 'none');
-    const open = expanded.has(path);
-    const heading = row('folder', path, name, level);
-    heading.setAttribute('aria-expanded', String(open));
-    const children = el('ul');
-    children.setAttribute('role', 'group');
-    const inside = items(node, `${path}/`, expanded, level + 1);
-    if (inside.length) {
-      children.append(...inside);
-    } else {
-      const empty = el('li', 'od-files-empty-folder');
-      empty.setAttribute('role', 'none');
-      const start = el('button', 'od-files-link', 'New doc');
-      start.type = 'button';
-      start.tabIndex = -1;
-      start.addEventListener('click', () => startCreate(path, 'doc'));
-      empty.append(el('span', null, 'No docs yet · '), start);
-      children.append(empty);
-    }
-    children.hidden = !open;
-    item.append(heading, children);
-    return item;
-  }
-
-  function docItem(name, path, level) {
-    const item = el('li');
-    item.setAttribute('role', 'none');
-    const node = row('doc', path, name.replace(DOC_EXTENSION, ''), level);
-    if (path === view.current) node.setAttribute('aria-current', 'page');
-    item.append(node);
-    return item;
-  }
-
-  function items(node, prefix, expanded, level) {
-    return [
-      ...[...node.folders].map(([name, child]) => folderItem(name, child, prefix + name, expanded, level)),
-      ...node.docs.map((name) => docItem(name, prefix + name, level)),
-    ];
+  // What the folder `path` holds, as rows: a subfolder with what is in it, when open.
+  function items(path, level) {
+    return (lists.get(path) ?? []).map(({ name, folder }) => {
+      const at = join(path, name);
+      const item = el('li');
+      item.setAttribute('role', 'none');
+      const node = row(folder ? 'folder' : 'file', at, name, level);
+      item.append(node);
+      if (folder) {
+        const open = lists.has(at);
+        node.setAttribute('aria-expanded', String(open));
+        const children = el('ul');
+        children.setAttribute('role', 'group');
+        if (open) children.append(...items(at, level + 1));
+        children.hidden = !open;
+        item.append(children);
+      } else if (at === shown()) {
+        node.setAttribute('aria-current', 'page');
+      }
+      return item;
+    });
   }
 
   // ---- rows, focus and opening ----
@@ -185,7 +176,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   const rows = () => [...tree.querySelectorAll('.od-files-row[data-path]')].filter((node) => !node.closest('[hidden]'));
   const rowFor = (path) => tree.querySelector(`.od-files-row[data-path="${CSS.escape(path)}"]`);
   const visibleRow = (path) => rows().find((node) => node.dataset.path === path) ?? null;
-  const labelOf = (node) => node.querySelector('.od-files-label').textContent;
+  const shown = () => previewing ?? view?.current;
 
   // One row takes Tab; the arrows move between the others.
   function rove(node) {
@@ -200,32 +191,66 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     node.scrollIntoView({ block: 'nearest' });
   }
 
-  function setOpen(node, open) {
+  // Open or close a folder; one not read since it was last open is read first.
+  async function setOpen(node, open) {
+    const { path } = node.dataset;
     if (node.getAttribute('aria-expanded') === String(open)) return;
+    desktop.folderExpand(path, open).catch(() => {});
+    if (open && !lists.has(path)) {
+      lists.set(path, await desktop.folderList(path).catch(() => []));
+      node.nextElementSibling.replaceChildren(...items(path, Number(node.getAttribute('aria-level')) + 1));
+    }
     node.setAttribute('aria-expanded', String(open));
     node.nextElementSibling.hidden = !open;
-    desktop.folderExpand(node.dataset.path, open).catch(() => {});
+  }
+
+  function markShown() {
+    for (const node of tree.querySelectorAll('.od-files-file')) {
+      if (node.dataset.path === shown()) node.setAttribute('aria-current', 'page');
+      else node.removeAttribute('aria-current');
+    }
   }
 
   function openDoc(node) {
     const path = node.dataset.path;
-    if (path === view.current) return;
+    if (path === view.current) return void closePreview();
     node.setAttribute('aria-busy', 'true');
     // The page saves any edit still on its way before it is replaced.
-    desktop.openInFolder(path).catch((error) => onError(`Could not open ${labelOf(node)}: ${reason(error)}`))
+    desktop.openInFolder(path).catch((error) => onError(`Could not open ${nameOf(path)}: ${reason(error)}`))
       .finally(() => node.removeAttribute('aria-busy'));
   }
 
-  function activate(node) {
-    if (node.dataset.kind === 'folder') setOpen(node, node.getAttribute('aria-expanded') !== 'true');
-    else openDoc(node);
+  // Show the file `path` read only, in place of the doc.
+  async function showFile(path) {
+    previewing = path;
+    markShown();
+    const result = await desktop.folderRead(path).catch((error) => ({ error: reason(error) }));
+    if (previewing !== path) return;
+    if (result.error) {
+      closePreview();
+      onError(`Could not open ${nameOf(path)}: ${result.error}`);
+      return;
+    }
+    previewName.textContent = nameOf(path);
+    preview.replaceChildren(result.problem ? el('p', 'od-preview-note', NOT_SHOWN[result.problem]) : el('pre', 'od-preview-text', result.text));
+    document.documentElement.setAttribute('data-preview', '');
+    preview.scrollIntoView({ block: 'start' });
+    if (floating) closeFloating();
   }
 
-  // The folder a new doc goes in: the focused folder, the focused doc's, or the open doc's.
-  function hereFolder() {
-    const focused = tree.contains(document.activeElement) ? document.activeElement.closest('[role="treeitem"]') : null;
-    if (focused?.dataset.kind === 'folder') return focused.dataset.path;
-    return parentOf(focused?.dataset.path ?? view?.current ?? '');
+  function closePreview() {
+    if (!previewing) return;
+    previewing = null;
+    document.documentElement.removeAttribute('data-preview');
+    preview.replaceChildren();
+    markShown();
+  }
+
+  function activate(node) {
+    const { kind, path } = node.dataset;
+    if (kind === 'folder') setOpen(node, node.getAttribute('aria-expanded') !== 'true');
+    else if (DOC_EXTENSION.test(path)) openDoc(node);
+    else showFile(path);
   }
 
   function menu(node, at = null) {
@@ -244,36 +269,37 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     const next = [...after.slice(at + 1), ...after.slice(0, at).reverse()]
       .find((other) => other.dataset.path !== path && !other.dataset.path.startsWith(`${path}/`));
     focusNext = next?.dataset.path ?? null;
+    if (previewing === path || previewing?.startsWith(`${path}/`)) closePreview();
     refresh();
   }
 
-  // ---- naming: new docs and folders, and renames ----
-
-  // The names already in folder `parent` (lowercase), but `except`.
-  function taken(parent, except = null) {
-    const names = new Set();
-    for (const path of [...view.docs, ...folders]) {
-      if (parentOf(path) === parent && path !== except) names.add(path.split('/').at(-1).toLowerCase());
-    }
-    return names;
+  // Rename or move `path` to `to`; what is shown read only follows it.
+  async function move(path, kind, to) {
+    const result = await desktop.folderRename(path, kind, to);
+    if (result?.rel && (previewing === path || previewing?.startsWith(`${path}/`))) previewing = result.rel + previewing.slice(path.length);
+    return result;
   }
 
-  // Why `typed` can't name a `kind` here, as far as the page can tell (the
-  // app checks again, and for the characters an OS refuses).
-  function problem(typed, kind, names, extension) {
+  // ---- naming: new files and renames ----
+
+  // Why `typed` (a path in folder `base`) can't name a file other than
+  // `except`, as far as the page can tell (the app checks again, and for the
+  // characters an OS refuses).
+  function problem(typed, base, except = null) {
     const parts = typed.split('/').map((part) => part.trim());
     if (parts.some((part) => !part)) return 'Enter a name.';
-    if (parts.some((part) => part.startsWith('.'))) return 'Names starting with "." are hidden; pick another.';
-    if (parts.length > 1) return null;
-    const name = kind === 'doc' && !DOC_EXTENSION.test(parts[0]) ? parts[0] + extension : parts[0];
-    return names.has(name.toLowerCase()) ? `${name} is already here.` : null;
+    const path = join(base, parts.join('/'));
+    const there = (lists.get(parentOf(path)) ?? []).some(({ name }) => join(parentOf(path), name) !== except
+      && name.toLowerCase() === nameOf(path).toLowerCase());
+    return there ? `${nameOf(path)} is already there.` : null;
   }
 
   /**
-   * Turn `node`'s label into a name field. `commit(typed)` resolves to
-   * { rel } or { error }; `cancel()` runs when the field closes without one.
+   * Turn `node`'s label into a name field, with `selection` ([start, end])
+   * selected. `commit(typed)` resolves to { rel } or { error }; `cancel()`
+   * runs when the field closes without one, as it does empty.
    */
-  function nameField(node, { value, placeholder, label, check, commit, cancel = () => {}, emptyCancels }) {
+  function nameField(node, { value, selection = [0, value.length], placeholder, label, check, commit, cancel = () => {} }) {
     const name = node.querySelector('.od-files-label');
     const input = el('input', 'od-files-input');
     Object.assign(input, { type: 'text', value, placeholder, spellcheck: false, autocomplete: 'off' });
@@ -312,8 +338,8 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     async function submit(fromEnter) {
       if (busy) return;
       const typed = input.value.trim();
-      if (!typed && emptyCancels(fromEnter)) return void drop();
-      const local = typed ? check(typed) : null;
+      if (!typed) return void drop();
+      const local = check(typed);
       if (local) {
         if (fromEnter) return void say(local);
         return void drop();
@@ -360,162 +386,54 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     input.addEventListener('pointerdown', (event) => event.stopPropagation());
     input.addEventListener('click', (event) => event.stopPropagation());
     input.focus();
-    input.select();
+    input.setSelectionRange(...selection);
   }
 
   function startRename(node) {
     if (field) return;
-    closePicker();
     const { kind, path } = node.dataset;
-    const name = path.split('/').at(-1);
-    const extension = kind === 'doc' ? (name.match(DOC_EXTENSION)?.[0] ?? '') : '';
-    const stem = extension ? name.slice(0, -extension.length) : name;
+    const name = nameOf(path);
     const parent = parentOf(path);
-    const names = taken(parent, path);
+    const dot = kind === 'file' ? name.lastIndexOf('.') : -1;
     focusRow(node);
     nameField(node, {
-      value: stem,
-      placeholder: stem,
+      value: name,
+      selection: [0, dot > 0 ? dot : name.length], // the name, not its extension
+      placeholder: name,
       label: `Rename ${name}`,
-      check: (typed) => problem(typed, kind, names, extension),
-      emptyCancels: () => true,
-      commit: async (typed) => (typed === stem ? { rel: path } : desktop.folderMove(path, kind, join(parent, typed))),
+      check: (typed) => problem(typed, parent, path),
+      commit: async (typed) => (typed === name ? { rel: path } : move(path, kind, join(parent, typed))),
     });
   }
 
-  function startCreate(parent, kind) {
+  async function startCreate(parent) {
     if (field || !view) return;
-    closePicker();
     reveal();
     const holder = parent ? rowFor(parent) : null;
     if (parent && !holder) return;
-    if (holder) setOpen(holder, true);
+    if (holder) await setOpen(holder, true);
     const group = holder ? holder.nextElementSibling : tree;
-    group.querySelector(':scope > .od-files-empty-folder, :scope > .od-files-empty')?.setAttribute('hidden', '');
     const item = el('li');
     item.setAttribute('role', 'none');
     const level = parent ? parent.split('/').length + 1 : 1;
-    const node = row(kind, '', '', level);
+    const node = row('file', '', '', level);
     delete node.dataset.path;
     node.classList.add('od-files-new');
     item.append(node);
-    // A new folder goes first; a new doc first among the docs, under the folders.
-    const before = kind === 'folder' ? group.firstElementChild
-      : [...group.children].find((child) => child.querySelector(':scope > .od-files-doc'));
-    group.insertBefore(item, before ?? null);
-    const names = taken(parent);
+    // First among the files, under the folders.
+    group.insertBefore(item, [...group.children].find((child) => child.querySelector(':scope > .od-files-file')) ?? null);
     nameField(node, {
       value: '',
-      placeholder: kind === 'doc' ? 'Untitled' : 'New folder',
-      label: kind === 'doc' ? 'New doc name' : 'New folder name',
-      check: (typed) => problem(typed, kind, names, '.md'),
-      // Enter on an empty doc name takes the next free Untitled; leaving it empty cancels.
-      emptyCancels: (fromEnter) => kind !== 'doc' || !fromEnter,
+      placeholder: 'Name',
+      label: 'New file name',
+      check: (typed) => problem(typed, parent),
       commit: (typed) => {
-        created = kind === 'doc';
-        return desktop.folderCreate(parent, typed, kind).finally(() => { created = null; });
+        created = DOC_EXTENSION.test(typed);
+        return desktop.folderCreate(parent, typed).finally(() => { created = null; });
       },
-      cancel: () => {
-        item.remove();
-        group.querySelector(':scope > [hidden].od-files-empty-folder, :scope > [hidden].od-files-empty')?.removeAttribute('hidden');
-      },
+      cancel: () => item.remove(),
     });
     item.scrollIntoView({ block: 'nearest' });
-  }
-
-  // ---- Move To… ----
-
-  function openPicker(node) {
-    closePicker();
-    if (field) return;
-    const { kind, path } = node.dataset;
-    const name = path.split('/').at(-1);
-    const from = parentOf(path);
-    const inside = (folder) => kind === 'folder' && (folder === path || folder.startsWith(`${path}/`));
-    const choices = ['', ...[...folders].sort(byName.compare)].filter((folder) => !inside(folder));
-    const box = el('div', 'od-files-picker');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', `Move ${name} to`);
-    const input = el('input', 'od-files-input');
-    Object.assign(input, { type: 'text', placeholder: 'Find a folder', spellcheck: false, autocomplete: 'off' });
-    input.setAttribute('aria-label', `Move ${name} to`);
-    const list = el('ul', 'od-files-picker-list');
-    list.setAttribute('role', 'listbox');
-    list.id = 'od-files-picker-list';
-    input.setAttribute('aria-controls', list.id);
-    box.append(input, list);
-    let shown = [];
-    let active = 0;
-
-    const render = () => {
-      const filter = input.value.trim().toLowerCase();
-      shown = choices.filter((folder) => (folder || view.name).toLowerCase().includes(filter));
-      active = Math.min(active, Math.max(shown.length - 1, 0));
-      if (shown[active] === from) active = shown.findIndex((folder) => folder !== from);
-      list.replaceChildren(...shown.map((folder, index) => {
-        const option = el('li', 'od-files-option');
-        option.setAttribute('role', 'option');
-        option.id = `od-files-option-${index}`;
-        option.setAttribute('aria-selected', String(index === active));
-        if (folder === from) {
-          option.setAttribute('aria-disabled', 'true');
-          option.title = `${name} is already here`;
-        }
-        option.append(icon('folder'), el('span', 'od-files-label', folder || view.name));
-        option.addEventListener('pointerdown', (event) => event.preventDefault()); // keep the field focused
-        option.addEventListener('click', () => pick(folder));
-        return option;
-      }));
-      if (shown.length === 0) list.append(el('li', 'od-files-empty', 'No folder matches'));
-      input.setAttribute('aria-activedescendant', shown.length ? `od-files-option-${active}` : '');
-      list.children[active]?.scrollIntoView({ block: 'nearest' });
-    };
-    const step = (by) => {
-      if (shown.length === 0) return;
-      let next = active;
-      do next = (next + by + shown.length) % shown.length;
-      while (shown[next] === from && next !== active);
-      active = next;
-      render();
-    };
-    async function pick(folder) {
-      if (folder === undefined || folder === from) return;
-      closePicker();
-      const result = await desktop.folderMove(path, kind, join(folder, name)).catch((error) => ({ error: reason(error) }));
-      if (result?.error) {
-        onError(result.error);
-        focusRow(visibleRow(path));
-        return;
-      }
-      focusNext = result.rel;
-      refresh();
-    }
-    input.addEventListener('input', () => {
-      active = 0;
-      render();
-    });
-    input.addEventListener('keydown', (event) => {
-      event.stopPropagation();
-      if (event.key === 'ArrowDown') step(1);
-      else if (event.key === 'ArrowUp') step(-1);
-      else if (event.key === 'Enter' && !event.isComposing) pick(shown[active]);
-      else if (event.key === 'Escape') {
-        closePicker();
-        focusRow(visibleRow(path));
-      } else return;
-      event.preventDefault();
-    });
-    const top = node.getBoundingClientRect().bottom - aside.getBoundingClientRect().top + 4;
-    box.style.top = `${Math.min(top, aside.clientHeight - 260)}px`;
-    aside.append(box);
-    picker = { box, node };
-    render();
-    input.focus();
-  }
-
-  function closePicker() {
-    picker?.box.remove();
-    picker = null;
   }
 
   // ---- dragging to move ----
@@ -523,7 +441,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   // The folder a drop at `x`, `y` goes to ('' for the top), or null for none.
   function dropTarget(x, y) {
     const under = document.elementFromPoint(x, y);
-    if (!under || !aside.contains(under) || under.closest('.od-files-picker')) return null;
+    if (!under || !aside.contains(under)) return null;
     const node = under.closest('.od-files-row[data-path]');
     if (node) return node.dataset.kind === 'folder' ? node.dataset.path : parentOf(node.dataset.path);
     return under.closest('.od-files-tree, .od-files-head') ? '' : null;
@@ -531,9 +449,8 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
 
   function startDrag() {
     drag.started = true;
-    closePicker();
     const ghost = el('div', 'od-files-ghost');
-    ghost.append(icon(drag.kind === 'folder' ? 'folder' : 'file'), el('span', null, labelOf(drag.node)));
+    ghost.append(icon(drag.kind), el('span', null, nameOf(drag.path)));
     document.body.append(ghost);
     drag.ghost = ghost;
     drag.node.classList.add('od-files-dragged');
@@ -584,8 +501,8 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     justDragged = true;
     setTimeout(() => { justDragged = false; }, 0);
     if (!drop || done.target === null) return;
-    const name = done.path.split('/').at(-1);
-    desktop.folderMove(done.path, done.kind, join(done.target, name))
+    const name = nameOf(done.path);
+    move(done.path, done.kind, join(done.target, name))
       .then((result) => {
         if (result?.error) return onError(result.error);
         focusNext = result.rel;
@@ -597,7 +514,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   tree.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || field) return;
     const node = event.target.closest('.od-files-row[data-path]');
-    if (!node || event.target.closest('.od-files-actions')) return;
+    if (!node) return;
     drag = { node, path: node.dataset.path, kind: node.dataset.kind, x: event.clientX, y: event.clientY, pointerId: event.pointerId, started: false, target: null };
   });
   document.addEventListener('pointermove', (event) => {
@@ -622,15 +539,10 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     const node = event.target.closest('.od-files-row[data-path]');
     if (!node) return;
     rove(node);
-    if (event.target.closest('.od-files-actions')) {
-      const box = event.target.closest('.od-files-actions').getBoundingClientRect();
-      menu(node, { x: box.left, y: box.bottom + 4 });
-      return;
-    }
     activate(node);
   });
   aside.addEventListener('contextmenu', (event) => {
-    if (field || event.target.closest('.od-files-picker, input')) return;
+    if (field || event.target.closest('input')) return;
     const node = event.target.closest('.od-files-row[data-path]');
     if (!node && !event.target.closest('.od-files-tree')) return;
     event.preventDefault();
@@ -669,12 +581,10 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     if (node) rove(node);
   });
 
-  desktop.onFolderCommand(({ action, rel, kind }) => {
+  desktop.onFolderCommand(({ action, rel }) => {
     const node = rel ? rowFor(rel) : null;
     if (action === 'rename' && node) startRename(node);
-    else if (action === 'move' && node) openPicker(node);
-    else if (action === 'newDoc') startCreate(kind === 'here' ? hereFolder() : rel, 'doc');
-    else if (action === 'newFolder') startCreate(rel, 'folder');
+    else if (action === 'newFile') startCreate(rel);
   });
 
   // ---- showing and hiding ----
@@ -700,56 +610,22 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     if (event.key !== 'Escape' || event.defaultPrevented) return;
     if (drag?.started) {
       endDrag(false);
-      return;
+    } else if (floating) {
+      closeFloating();
+      toggle.focus();
+    } else {
+      closePreview();
     }
-    if (!floating) return;
-    closeFloating();
-    toggle.focus();
   });
   document.addEventListener('pointerdown', (event) => {
-    if (picker && !picker.box.contains(event.target)) closePicker();
     if (floating && !aside.contains(event.target) && !toggle.contains(event.target)) closeFloating();
   });
   desktop.onFolderChanged(refresh);
   return { ready: refresh(), state: () => ({ sidebarScroll: tree.scrollTop, startTyping: Boolean(created) }) };
 }
 
-// The docs and empty folders (paths with `/` between folders, the docs in
-// the folder's order) as a tree: { folders: Map<name, node>, docs: [name] },
-// each folder's subfolders by name.
-function nest(paths, empty = []) {
-  const root = { folders: new Map(), docs: [] };
-  const folderAt = (parts) => {
-    let node = root;
-    for (const part of parts) {
-      if (!node.folders.has(part)) node.folders.set(part, { folders: new Map(), docs: [] });
-      node = node.folders.get(part);
-    }
-    return node;
-  };
-  for (const path of paths) {
-    const parts = path.split('/');
-    folderAt(parts.slice(0, -1)).docs.push(parts.at(-1));
-  }
-  for (const path of empty) folderAt(path.split('/'));
-  sortFolders(root);
-  return root;
-}
-
-function sortFolders(node) {
-  node.folders = new Map([...node.folders].sort(([a], [b]) => byName.compare(a, b)));
-  for (const child of node.folders.values()) sortFolders(child);
-}
-
-function allFolders(node, prefix = '', into = new Set()) {
-  for (const [name, child] of node.folders) {
-    into.add(prefix + name);
-    allFolders(child, `${prefix + name}/`, into);
-  }
-  return into;
-}
-
 const parentOf = (path) => path.split('/').slice(0, -1).join('/');
+const nameOf = (path) => path.split('/').at(-1);
 const join = (folder, name) => (folder ? `${folder}/${name}` : name);
 
 // An error from the app, without Electron's "Error invoking remote method" wrapping.
