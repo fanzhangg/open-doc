@@ -1,9 +1,21 @@
-# 规则
+# OpenDoc
 
-- 先和我讨论、确认任务的需求和设计，再开始实现。
-- 架构和实现保持极简：只为本质复杂度写代码；不加用不到的抽象、配置、依赖和防御性代码；能复用就不新建，能删就不加。
-- 把大任务拆成可以验收边界清晰的小目标再实现。
-- commit、PR 和文档保持极简：只写核心观点和本质复杂度，不讨论偶然复杂度；git/GitHub 上的交互（commit、PR、issue、评论）用英文。
-- 优先用中文回答我的问题；回复简洁，只讲要点。
-- session 结束前，把没解决完的问题和打算以后做的事直接在 GitHub 提 issue 记录（每件事一个，只写是什么、为什么）；先查重，已有就在原 issue 下补充。
-- 改 UI 前先读设计系统 `site/design.html` 和 `site/avatars.html`（线上 https://fanzhangg.github.io/open-doc/design.html），严格按它的规则改；系统本身要变时，先改它和 `web/app.css` 的 tokens，再改界面。
+A markdown editor where people and AI buddies co-author docs.
+Product: docs/product-vision.md, docs/user-experience.md. Design: docs/architecture.md.
+Comment format: spec/SPEC.md. Commands: README.md "Development".
+Before any commit, push or PR: the verify-before-push skill.
+
+## Working rules
+
+- Agree on requirements and design with the person you work with before implementing.
+- Keep the architecture and code minimal: code only for essential complexity; no unused abstractions, config, dependencies or defensive code; reuse before adding, delete before adding.
+- Split big tasks into small goals with clear acceptance boundaries.
+- Commits, PRs and docs: core points and essential complexity only, not accidental complexity.
+- UI: read the design system `site/design.html` and `site/avatars.html` first (live at https://fanzhangg.github.io/open-doc/design.html) and follow it strictly; if the system itself changes, change it and the tokens in `web/app.css` before the UI.
+
+## Issues and PRs
+
+- Labels: `ready` (agreed, anyone may take it), `needs-decision` (waiting on a person), `human-proposed` / `ai-proposed` (who raised it).
+- Before starting an issue, assign it to yourself (an agent assigns the person it works for); if someone else has it, ask first.
+- A PR that finishes an issue says `Closes #n` in its body.
+- Agents may file issues, but only after the person they work for approves each one. Before a session ends, propose issues for the open problems and follow-ups: one per item, what and why only, labeled `ai-proposed`; check for duplicates first and add to an existing issue instead.
