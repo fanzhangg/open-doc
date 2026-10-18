@@ -91,6 +91,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     }
     blockPicker.show(block);
     placeBubble();
+    link.refresh(pointerDown);
     slash.refresh();
     outline.refresh();
     if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
@@ -117,7 +118,10 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   document.addEventListener('mouseup', () => {
     if (!pointerDown) return;
     pointerDown = false;
-    requestAnimationFrame(placeBubble);
+    requestAnimationFrame(() => {
+      placeBubble();
+      link.refresh(false);
+    });
   });
 
   function placeBubble() {
@@ -174,19 +178,65 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   };
 }
 
-// ---- link popover: the URL for the selection or the link at the caret ----
+// ---- links: a card for the link at the caret, and the popover that edits one ----
 
-// Enter applies, an empty URL removes the link, Escape or clicking away
-// cancels. It sits under the text it links, or under the button that opened
-// it when that text is out of view.
+// The card shows where the link at the caret goes, under it: click to open,
+// or edit or remove it. Mod+click on a link opens it too. The popover edits
+// the URL for the selection or the link at the caret: Enter applies, an
+// empty URL removes the link, Escape or clicking away cancels. It sits under
+// the text it links, or under the button that opened it when that text is
+// out of view.
 function setupLink(editor) {
+  const card = document.querySelector('.od-link-card');
+  const go = card.querySelector('.od-link-go');
   const popover = document.querySelector('.od-link');
   const input = popover.querySelector('.od-link-input');
   const unlink = popover.querySelector('[data-action="unlink"]');
   const canvas = document.querySelector('.od-canvas');
   let button = null; // the toolbar or bubble button it opened from
+  let shown = null; // the link the card is for: { href, rect }
+
+  // `#heading` scrolls this doc; anything else is the app's to open.
+  function follow(href) {
+    if (href.startsWith('#')) editor.scrollToAnchor(href.slice(1));
+    else if (window.opendocDesktop) window.opendocDesktop.openLink(href).catch(() => {});
+    else window.open(href, '_blank', 'noopener');
+  }
+
+  function showCard(link) {
+    shown = link;
+    card.hidden = !link;
+    if (!link) return;
+    const { href } = link;
+    const doc = !/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith('#');
+    go.querySelector('.od-link-go-icon').replaceChildren(icon(doc ? 'file' : 'link'));
+    go.querySelector('.od-link-go-text').textContent = doc
+      ? decoded(href.split(/[?#]/)[0].split('/').at(-1)).replace(/\.(md|markdown)$/i, '') || href
+      : href.replace(/^(https?:|mailto:)(\/\/)?(www\.)?/i, '');
+    go.dataset.tip = href;
+    placeAt(card, link.rect);
+  }
+
+  card.addEventListener('mousedown', (event) => event.preventDefault()); // the caret stays in the link
+  card.addEventListener('click', (event) => {
+    const action = event.target.closest('button')?.dataset.action;
+    if (!shown || !action) return;
+    if (action === 'open') follow(shown.href);
+    else if (action === 'edit') open(null);
+    else if (action === 'unlink') {
+      editor.beginLink();
+      editor.endLink('');
+    }
+  });
+  document.addEventListener('click', (event) => {
+    const a = event.target.closest?.('.od-editor a[href]');
+    if (!a || !(mac ? event.metaKey : event.ctrlKey)) return;
+    event.preventDefault();
+    follow(a.getAttribute('href'));
+  });
 
   function open(from) {
+    showCard(null);
     button = from ?? null;
     const href = editor.beginLink();
     input.value = href ?? '';
@@ -209,14 +259,18 @@ function setupLink(editor) {
     const rect = editor.linkRect();
     const view = canvas.getBoundingClientRect();
     const visible = rect && rect.bottom > view.top && rect.top < view.bottom;
-    const shown = button?.isConnected && button.getClientRects().length > 0;
-    const anchor = visible || !shown ? rect : button.getBoundingClientRect();
+    const onScreen = button?.isConnected && button.getClientRects().length > 0;
+    const anchor = visible || !onScreen ? rect : button.getBoundingClientRect();
     if (!anchor) return;
-    const { offsetWidth: width, offsetHeight: height } = popover;
-    const left = visible ? rect.left - 10 : (anchor.left + anchor.right) / 2 - width / 2;
+    placeAt(popover, anchor, visible ? rect.left - 10 : (anchor.left + anchor.right) / 2 - popover.offsetWidth / 2);
+  }
+
+  // Under `anchor`, or over it when there is no room below.
+  function placeAt(box, anchor, left = anchor.left - 10) {
+    const { offsetWidth: width, offsetHeight: height } = box;
     const below = anchor.bottom + 8 + height < window.innerHeight - 8;
-    popover.style.left = `${Math.min(Math.max(left, 8), window.innerWidth - width - 8)}px`;
-    popover.style.top = `${below ? anchor.bottom + 8 : anchor.top - height - 8}px`;
+    box.style.left = `${Math.min(Math.max(left, 8), window.innerWidth - width - 8)}px`;
+    box.style.top = `${below ? anchor.bottom + 8 : anchor.top - height - 8}px`;
   }
 
   popover.addEventListener('keydown', (event) => {
@@ -247,14 +301,18 @@ function setupLink(editor) {
     if (popover.hidden || popover.contains(event.target) || event.target.closest?.('[data-command="link"]')) return;
     close(null);
   }, true);
-  canvas.addEventListener('scroll', () => {
+  const replace = () => {
     if (!popover.hidden) place();
-  }, { passive: true });
-  window.addEventListener('resize', () => {
-    if (!popover.hidden) place();
-  });
+    if (shown) showCard(editor.caretLink());
+  };
+  canvas.addEventListener('scroll', replace, { passive: true });
+  window.addEventListener('resize', replace);
 
   return {
+    /** Show the card for the link at the caret, if any; none while the pointer is still down. */
+    refresh(pointerDown) {
+      if (popover.hidden) showCard(pointerDown ? null : editor.caretLink());
+    },
     /** Open for the selection (`from`: the button that asked), or cancel when open. */
     toggle(from) {
       if (popover.hidden) open(from);
@@ -443,6 +501,14 @@ function setupOutline(editor) {
 }
 
 // ---- tooltips: label plus shortcut, after a short hover ----
+
+function decoded(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
 
 function plural(n, word) {
   return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;

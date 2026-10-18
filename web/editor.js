@@ -334,7 +334,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   function formatState() {
     const { state } = view();
     const active = new Set();
-    for (const [name, mark] of [['bold', 'strong'], ['italic', 'emphasis'], ['strike', 'strike_through'], ['code', 'inlineCode'], ['link', 'link']]) {
+    for (const [name, mark] of [['bold', 'strong'], ['italic', 'emphasis'], ['strike', 'strike_through'], ['code', 'inlineCode']]) {
       if (markActive(state, mark)) active.add(name);
     }
     const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
@@ -392,10 +392,16 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   function linkRect() {
     const v = view();
     const range = linkKey.getState(v.state);
-    if (!range) return null;
-    const start = v.coordsAtPos(range.from);
-    const end = v.coordsAtPos(range.to);
-    return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right) };
+    return range ? rangeRect(v, range.from, range.to) : null;
+  }
+
+  /** The link at the caret while the editor has focus and nothing is selected: { href, rect }, or null. */
+  function caretLink() {
+    const v = view();
+    const { state } = v;
+    if (!v.hasFocus() || !state.selection.empty) return null;
+    const run = linkAround(state.doc, state.selection.from, state.schema.marks.link, 'both');
+    return run ? { href: run.mark.attrs.href, rect: rangeRect(v, run.from, run.to) } : null;
   }
 
   // ---- "/" menu: the query typed after a slash at the caret ----
@@ -427,6 +433,14 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       if (node.type.name === 'heading' && node.textContent.trim()) result.push({ level: node.attrs.level, text: node.textContent, pos });
     });
     return result;
+  }
+
+  /** Scroll to the heading a `#fragment` link names, as GitHub names it; false when there is none. */
+  function scrollToAnchor(fragment) {
+    const slug = (text) => text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+    const heading = headings().find((h) => slug(h.text) === decodeURIComponent(fragment).toLowerCase());
+    if (heading) scrollToHeading(heading.pos);
+    return Boolean(heading);
   }
 
   function scrollToHeading(pos) {
@@ -608,11 +622,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     runSlash,
     headings,
     scrollToHeading,
+    scrollToAnchor,
     counts,
     selectionRect,
     beginLink,
     endLink,
     linkRect,
+    caretLink,
     coordsAt: (pos) => view().coordsAtPos(pos),
     /** Called after every editor update: typing, selection, focus. */
     onUi(listener) {
@@ -677,6 +693,12 @@ function linkTarget(state) {
     });
   }
   return { from: Math.min(from, head?.from ?? from), to: Math.max(to, tail?.to ?? to), href: mark?.attrs.href ?? null };
+}
+
+function rangeRect(view, from, to) {
+  const start = view.coordsAtPos(from);
+  const end = view.coordsAtPos(to);
+  return { top: Math.min(start.top, end.top), bottom: Math.max(start.bottom, end.bottom), left: Math.min(start.left, end.left), right: Math.max(start.right, end.right) };
 }
 
 // The run of text carrying one link that touches `pos` on `side`

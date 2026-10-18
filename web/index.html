@@ -14,10 +14,6 @@
     <div class="od-files-head">
       <span class="od-files-icon" data-icon="folder"></span>
       <span class="od-files-name"></span>
-      <span class="od-files-tools">
-        <button class="od-icon-btn" type="button" data-action="new-doc" data-icon="filePlus" data-tip="New doc" aria-label="New doc"></button>
-        <button class="od-icon-btn" type="button" data-action="new-folder" data-icon="folderPlus" data-tip="New folder" aria-label="New folder"></button>
-      </span>
     </div>
     <ul class="od-files-tree" role="tree" aria-label="Docs"></ul>
     <p class="od-files-more" hidden></p>
@@ -139,6 +135,12 @@
       </aside>
     </div>
   </main>
+
+  <div class="od-link-card" role="toolbar" aria-label="Link" hidden>
+    <button type="button" class="od-link-go" data-action="open" data-tip="Open" data-keys="Mod+Click"><span class="od-link-go-icon"></span><span class="od-link-go-text"></span></button>
+    <button type="button" class="od-icon-btn" data-action="edit" data-icon="pencil" data-tip="Edit link" data-keys="Mod+K" aria-label="Edit link"></button>
+    <button type="button" class="od-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link"></button>
+  </div>
 
   <div class="od-link" role="dialog" aria-label="Link" hidden>
     <span class="od-link-icon" data-icon="link"></span>

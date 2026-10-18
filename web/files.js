@@ -1,5 +1,5 @@
 // The sidebar of a desktop folder window: the folder's docs as a tree, the
-// open one marked, and light file management: new
+// open one marked, and light file management (from its menus): new
 // doc and new folder, rename, move (drag, or Move To…) and delete. The app
 // does each on disk and checks it; the page only names docs and folders by
 // their place in the folder. Clicking a doc asks the app to show it in this
@@ -676,8 +676,6 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     else if (action === 'newDoc') startCreate(kind === 'here' ? hereFolder() : rel, 'doc');
     else if (action === 'newFolder') startCreate(rel, 'folder');
   });
-  head.querySelector('[data-action="new-doc"]').addEventListener('click', () => startCreate(parentOf(view?.current ?? ''), 'doc'));
-  head.querySelector('[data-action="new-folder"]').addEventListener('click', () => startCreate(parentOf(view?.current ?? ''), 'folder'));
 
   // ---- showing and hiding ----
 

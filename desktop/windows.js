@@ -505,7 +505,7 @@ function samePage(url, page) {
   }
 }
 
-function openExternal(url) {
+export function openExternal(url) {
   try {
     if (EXTERNAL.has(new URL(url).protocol)) shell.openExternal(url);
   } catch {

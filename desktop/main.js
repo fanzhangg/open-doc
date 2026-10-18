@@ -9,7 +9,7 @@ import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, sess
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText, sidecarPath } from '../src/store/files.js';
@@ -801,6 +801,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
   if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
+  if (action === 'openLink' && fromDoc) return void (await openLink(win, arg));
   if (action === 'folderExpand' && fromDoc) {
     if (typeof arg?.path === 'string') windows.setExpanded(win, arg.path, Boolean(arg.open));
     return undefined;
@@ -841,6 +842,14 @@ async function openInFolder(win, rel) {
   const entry = windows.docFor(win);
   if (!entry?.folder || typeof rel !== 'string' || !(await windows.folderDocs(entry)).includes(rel)) throw new Error('not allowed');
   await openPath(docInFolder(entry.folder, rel), { parent: win });
+}
+
+// A link followed in a doc: the web goes to the browser; a path, from the
+// doc's own place, opens as a doc or folder dropped on the app would.
+async function openLink(win, href) {
+  const url = new URL(String(href), pathToFileURL(windows.docFor(win).docPath));
+  if (url.protocol === 'file:') await openPath(fileURLToPath(url), { parent: win });
+  else windows.openExternal(url.href);
 }
 
 // ---- lifecycle ----
