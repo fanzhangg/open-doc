@@ -88,10 +88,10 @@
   fill('spread', BUDDIES.map((name) => labelled(avatar(name, { size: 56 }), name)));
   fill('clippy', [labelled(avatar('Clippy', { size: 56 }), 'Face'), labelled(icon(appIcon(), 64), 'App icon'), labelled(icon(documentIcon(), 64), 'Document')]);
   fill('people', ['Fan', 'Noor', 'Alice', 'Bob', 'Carol'].map((name) => labelled(avatar(name, { person: true, size: 44 }), name)));
-  fill('sizes', [[44, 'Card'], [30, 'Header'], [22, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
+  fill('sizes', [[44, 'Card'], [32, 'Header'], [24, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
     .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
   fill('states', [['idle', 'Answers when asked'], ['autocomment', 'Comments on its own'], ['working', 'Working'], ['queued', 'Queued'], ['offline', 'Offline']]
-    .map(([presence, label]) => labelled(avatar('Ada', { size: 30, presence: presence === 'queued' ? null : presence }), label)));
+    .map(([presence, label]) => labelled(avatar('Ada', { size: 32, presence: presence === 'queued' ? null : presence }), label)));
   // Queued is shown on the card it waits on, not in the header.
   const queued = document.querySelectorAll('[data-faces="states"] .ds-face')[3];
   queued.dataset.state = 'queued';
