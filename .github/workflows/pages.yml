@@ -1,6 +1,8 @@
 # The site (gh-pages) is site/ on main: the download page and the design
 # system, rendered with the app's own stylesheet and faces. Its pages point
 # at ../dist/web/ and ../build/ in the repo; here those live next to them.
+# preview/ is the app's pages in a plain browser, for trying the UX
+# (scripts/preview.js); nothing links to it.
 # When any of it changes on main, publish it. Run it by hand to catch up.
 
 name: Pages
@@ -8,7 +10,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: [site/**, build/icon.svg, build/icon.png, web/app.css, web/faces.js, src/core/buddies.js]
+    paths: [site/**, build/icon.svg, build/icon.png, web/**, src/core/**, desktop/start.*, desktop/*-preview-stub.js, scripts/build.js, scripts/preview.js]
   workflow_dispatch:
 
 permissions:
@@ -28,9 +30,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Build the stylesheet, faces and fonts
+      - name: Build the stylesheet, faces, fonts and preview
         working-directory: main
-        run: npm ci && npm run build
+        run: npm ci && npm run build && node scripts/preview.js
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - name: Copy, and push if anything changed
@@ -43,6 +45,7 @@ jobs:
           cp ../main/build/icon.svg ../main/build/icon.png build/
           cp ../main/dist/web/app.css ../main/dist/web/faces.js dist/web/
           cp ../main/dist/web/fonts/* dist/web/fonts/
+          rm -rf preview && cp -R ../main/dist/preview preview
           git add -A
           git diff --cached --quiet && exit 0
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Site from main @ ${GITHUB_SHA::7}"
