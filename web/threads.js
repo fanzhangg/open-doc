@@ -19,7 +19,7 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  *           onReply: (threadId: string, body: string) => Promise<void>,
  *           onResolve: (threadId: string) => Promise<void>, onReopen: (threadId: string) => Promise<void>,
  *           onUndo: (replyId: string) => Promise<void>, onShowEdits: (replyId: string | null) => void,
- *           onSelect: (threadId: string | null) => void,
+ *           onSelect: (threadId: string | null) => void, onHover: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
  *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
  *           mentionable?: () => { name: string, kind: string }[] }} handlers
@@ -400,6 +400,10 @@ export function createCommentMargin(margin, handlers) {
 
   window.addEventListener('resize', layout);
   narrow.addEventListener('change', layout);
+
+  // The card under the pointer lights up its text. Delegated, as cards are redrawn.
+  margin.addEventListener('mouseover', (event) => handlers.onHover(event.target.closest('.od-card')?.dataset.thread ?? null));
+  margin.addEventListener('mouseleave', () => handlers.onHover(null));
 
   return {
     /** Show `nextThreads` (from the doc host), as `nextMe` ({ id, name }) sees them; `nextEdits`: which replies edited the doc. */
