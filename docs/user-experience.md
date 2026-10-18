@@ -65,7 +65,7 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 
 - A buddy edits a copy of the doc; when it is done, its changes are merged
   into the doc as it is then, at once, underlined in its color until you
-  next type.
+  next type or another run's edits land.
 - A buddy comments as you do: on any passage, or in any thread. It cannot
   resolve. Its comments ask no one.
 - Under its reply the app shows how many places the run edited; hovering
