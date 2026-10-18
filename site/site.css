@@ -59,35 +59,15 @@ a { color: var(--accent); }
 
 .dl-page { max-width: 880px; margin: 0 auto; padding: 56px 16px 48px; font-size: 14px; line-height: 1.6; }
 .dl-page .hero { text-align: center; margin-bottom: 48px; }
-.dl-page .hero img { width: 96px; height: 96px; }
+.dl-page .hero .od-avatar { --size: 96px; }
+#clippy .od-face-body { animation-duration: 8s; }
 .dl-page h1 { margin: 16px 0 8px; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
 .dl-page .tagline { margin: 0 auto; max-width: 520px; color: var(--text-soft); font-size: 16px; }
 .dl-page .version { display: inline-block; margin-top: 16px; padding: 2px 8px; border-radius: 999px; background: var(--hover); color: var(--text-soft); font-size: 12px; }
 
-.dl-page .platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.dl-page .card { display: flex; flex-direction: column; padding: 24px; border-radius: 14px; background: var(--bg); box-shadow: var(--shadow); }
-.dl-page .card.suggested { box-shadow: 0 0 0 2px var(--text); }
-.dl-page .card-head { display: flex; align-items: center; gap: 12px; }
-.dl-page .card-head svg { width: 24px; height: 24px; flex: none; }
-.dl-page h2 { margin: 0; font-size: 20px; font-weight: 600; }
-.dl-page .badge { display: none; margin-left: auto; padding: 2px 8px; border-radius: 999px; background: var(--active); color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; }
-.dl-page .card.suggested .badge { display: inline-block; }
-.dl-page .req { margin: 6px 0 24px; color: var(--text-soft); }
-.dl-page .download { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 6px; background: var(--text); color: var(--on-text); font-weight: 500; text-decoration: none; }
-.dl-page .download:hover { background: color-mix(in srgb, var(--text) 86%, var(--canvas)); }
-.dl-page .download svg { width: 18px; height: 18px; }
-.dl-page .file { margin: 8px 0 0; color: var(--text-soft); font-size: 12px; text-align: center; word-break: break-all; }
-
-.dl-page h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); }
-.dl-page ol { margin: 0; padding-left: 24px; }
-.dl-page li { margin: 4px 0; }
-.dl-page li::marker { color: var(--text-soft); }
-.dl-page b { font-weight: 600; }
-.dl-page code { padding: 2px 4px; border-radius: 4px; background: var(--bg-soft); font: 12px var(--mono); }
-.dl-page pre { margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; background: var(--bg-soft); overflow-x: auto; }
-.dl-page pre code { padding: 0; background: none; }
-.dl-page .note, .dl-page details { margin: 12px 0 0; color: var(--text-soft); font-size: 13px; }
-.dl-page summary { cursor: pointer; }
+.dl-page .platforms { display: flex; justify-content: center; gap: 12px; }
+.dl-page .platforms a { gap: 8px; height: 40px; padding: 0 16px; font-size: 14px; text-decoration: none; }
+.dl-page .platforms svg { width: 18px; height: 18px; }
 
 .dl-page .mobile-note { display: none; margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; background: var(--bg-soft); color: var(--text-soft); text-align: center; }
 .dl-page footer { margin-top: 48px; color: var(--text-soft); font-size: 13px; text-align: center; }
