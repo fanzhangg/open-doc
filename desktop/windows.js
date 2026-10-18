@@ -11,7 +11,7 @@
 // so a switch draws the next doc out of sight, under the one shown, and
 // swaps it in only once it is drawn: the window never shows a blank page.
 
-import { BrowserWindow, MessageChannelMain, WebContentsView, dialog, screen, shell } from 'electron';
+import { BrowserWindow, Menu, MessageChannelMain, WebContentsView, dialog, screen, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -139,6 +139,7 @@ function createView(entry, hosted) {
   const view = new WebContentsView({ webPreferences: securePreferences() });
   view.setBackgroundColor(hooks.background());
   restrictNavigation(view.webContents, PAGE);
+  editMenu(view.webContents);
   hostedDocs.set(view.webContents, hosted);
   hosted.onRestart = () => {
     if (!view.webContents.isDestroyed()) view.webContents.reload();
@@ -476,6 +477,22 @@ function restrictNavigation(contents, page) {
   contents.setWindowOpenHandler(({ url }) => {
     openExternal(url);
     return { action: 'deny' };
+  });
+}
+
+// Electron shows no context menu of its own. Right-clicking text offers the
+// spell checker's corrections for a misspelled word, and cut, copy and paste.
+function editMenu(contents) {
+  contents.on('context-menu', (_event, { misspelledWord, dictionarySuggestions, isEditable, selectionText, editFlags }) => {
+    const items = [];
+    if (misspelledWord) {
+      for (const word of dictionarySuggestions) items.push({ label: word, click: () => contents.replaceMisspelling(word) });
+      if (!dictionarySuggestions.length) items.push({ label: 'No Guesses Found', enabled: false });
+      items.push({ label: 'Learn Spelling', click: () => contents.session.addWordToSpellCheckerDictionary(misspelledWord) }, { type: 'separator' });
+    }
+    if (isEditable) items.push({ role: 'cut', enabled: editFlags.canCut }, { role: 'copy', enabled: editFlags.canCopy }, { role: 'paste', enabled: editFlags.canPaste });
+    else if (selectionText) items.push({ role: 'copy' });
+    if (items.length) Menu.buildFromTemplate(items).popup();
   });
 }
 
