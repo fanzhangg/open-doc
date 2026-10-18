@@ -114,14 +114,14 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 
 - Channels: **nightly** (every main), **beta** and **stable** (tags). A
   release is drafted by CI and published by a person.
-- Installers: macOS dmg (ad-hoc signed), Windows NSIS, Linux AppImage.
+- Installers: macOS dmg (signed and notarized), Windows NSIS, Linux AppImage.
 - The app follows semver. The format's major changes only with the spec,
   its fixtures and a note on what happens to old files.
 
 ## Stretch goals
 
-- **Signing**: a macOS Developer ID and notarization, then installing on a
-  clean VM and running the main flow before each release.
+- **Clean install**: installing the signed app on a clean VM and running the
+  main flow before each release.
 - **Real agents**: run the shipped Claude Code and Codex scripts for real,
   to catch a program changing its flags. First by hand before a release on
   the maintainer's own subscription; later a weekly CI run with a

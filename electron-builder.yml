@@ -42,8 +42,9 @@ mac:
   category: public.app-category.productivity
   # A full tile, not a bare mark: macOS 26 puts a bare mark on a grey plate.
   icon: build/icon.icns
-  # Ad-hoc signature until there is a Developer ID. Without one the bundle's
-  # signature is broken, and a downloaded copy shows as "damaged".
+  # Ad-hoc signature for local and pull request builds; CI signs and notarizes
+  # main with the Developer ID (.github/workflows/desktop.yml). Without any
+  # signature the bundle's signature is broken and shows as "damaged".
   identity: "-"
   hardenedRuntime: false
   fileAssociations: &markdown
