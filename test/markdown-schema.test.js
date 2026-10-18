@@ -13,3 +13,8 @@ test('editor: an image without a title survives parse and serialize', async () =
     assert.equal(serialize(doc), markdown);
   }
 });
+
+test('editor: text typed right after a link is not part of it', async () => {
+  const parse = await editorParser();
+  assert.equal(parse('[a](x)\n').type.schema.marks.link.spec.inclusive, false);
+});

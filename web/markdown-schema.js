@@ -3,7 +3,7 @@
 // list, so the tests check the document the page really builds.
 
 import { $remark } from '@milkdown/kit/utils';
-import { commonmark, imageSchema } from '@milkdown/kit/preset/commonmark';
+import { commonmark, imageSchema, linkSchema } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
 
@@ -27,6 +27,9 @@ const image = imageSchema.extendSchema((schema) => (ctx) => {
   };
 });
 
-const swapped = new Map([[imageSchema.ctx, image.ctx], [imageSchema.node, image.node]]);
+// Text typed right after a link is not part of it.
+const link = linkSchema.extendSchema((schema) => (ctx) => ({ ...schema(ctx), inclusive: false }));
+
+const swapped = new Map([[imageSchema.ctx, image.ctx], [imageSchema.node, image.node], [linkSchema.ctx, link.ctx], [linkSchema.mark, link.mark]]);
 
 export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly].flat();
