@@ -1,5 +1,5 @@
 // A stand-in for the doc host (src/host/doc-service.js) so the doc window
-// opens in a plain browser (scripts/preview.js): one sample doc and
+// opens in a plain browser (preview/build.js): one sample doc and
 // its comments, kept in memory, read with the same src/core as the app.
 // Buddies don't run: one asked answers with a set reply after a moment.
 // No history, no undo; a reload starts over.
