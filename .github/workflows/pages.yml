@@ -1,20 +1,21 @@
-# The site (gh-pages): the download page shows the app icon, and /design/ is
-# the design system, rendered with the app's own stylesheet. When either
-# changes on main, copy it there. Run it by hand to catch up.
+# The site (gh-pages) is site/ on main: the download page and the design
+# system, rendered with the app's own stylesheet and faces. Its pages point
+# at ../dist/web/ and ../build/ in the repo; here those live next to them.
+# When any of it changes on main, publish it. Run it by hand to catch up.
 
 name: Pages
 
 on:
   push:
     branches: [main]
-    paths: [build/icon.svg, build/icon.png, docs/design.html, web/app.css, web/faces.js, src/core/buddies.js]
+    paths: [site/**, build/icon.svg, build/icon.png, web/app.css, web/faces.js, src/core/buddies.js]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  copy:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Build the stylesheet and fonts
+      - name: Build the stylesheet, faces and fonts
         working-directory: main
         run: npm ci && npm run build
         env:
@@ -35,13 +36,11 @@ jobs:
       - name: Copy, and push if anything changed
         working-directory: pages
         run: |
-          cp ../main/build/icon.svg icon.svg
-          cp ../main/build/icon.png icon.png
-          cp ../main/build/icon.png favicon.png
-          mkdir -p design dist/web/fonts
-          cp ../main/docs/design.html design/index.html
-          cp ../main/dist/web/app.css dist/web/app.css
-          cp ../main/dist/web/faces.js dist/web/faces.js
+          cp ../main/site/* .
+          sed -i 's#\.\./dist/web/#dist/web/#g; s#\.\./build/#build/#g' *.html
+          mkdir -p build dist/web/fonts
+          cp ../main/build/icon.svg ../main/build/icon.png build/
+          cp ../main/dist/web/app.css ../main/dist/web/faces.js dist/web/
           cp ../main/dist/web/fonts/* dist/web/fonts/
           git add -A
           git diff --cached --quiet && exit 0

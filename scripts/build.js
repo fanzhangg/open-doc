@@ -33,7 +33,7 @@ await build({
   legalComments: 'linked',
   logLevel: 'info',
 });
-// The faces on their own, for the design page (docs/design.html).
+// The faces on their own, for the design page (site/avatars.html).
 await build({
   entryPoints: [join(root, 'web', 'faces.js')],
   outfile: join(out, 'faces.js'),

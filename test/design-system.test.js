@@ -1,4 +1,4 @@
-// The app's styles keep to the design system (docs/design.html): colours
+// The app's styles keep to the design system (site/design.html): colours
 // only as tokens, and sizes, radii and weights only from its scales.
 
 import { test } from 'node:test';
@@ -12,6 +12,8 @@ const WEIGHTS = ['400', '500', '600'];
 const sheets = {
   'web/app.css': readFileSync(new URL('../web/app.css', import.meta.url), 'utf8'),
   'desktop/start.html': readFileSync(new URL('../desktop/start.html', import.meta.url), 'utf8').match(/<style>([\s\S]*?)<\/style>/)[1],
+  'site/site.css': readFileSync(new URL('../site/site.css', import.meta.url), 'utf8'),
+  'site/index.html': readFileSync(new URL('../site/index.html', import.meta.url), 'utf8').match(/<style>([\s\S]*?)<\/style>/)[1],
 };
 
 // Every declaration outside the token blocks (`:root…{}` with no descendant)

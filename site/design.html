@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,48 +7,27 @@
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
   <link rel="stylesheet" href="../dist/web/app.css">
-  <style>
-    .ds { flex: 1; overflow-y: auto; }
-    .ds-page { max-width: 880px; margin: 0 auto; padding: 48px 24px 120px; }
-    .ds-top { display: flex; align-items: center; gap: 12px; }
-    .ds h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
-    .ds h2 { margin: 56px 0 6px; font-size: 16px; font-weight: 600; }
-    .ds h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); }
-    .ds p, .ds li { color: var(--text-soft); line-height: 1.6; }
-    .ds p { margin: 0 0 12px; max-width: 640px; }
-    .ds ol, .ds ul { margin: 0 0 12px; padding-left: 20px; max-width: 680px; }
-    .ds li { margin: 4px 0; }
-    .ds strong { color: var(--text); font-weight: 600; }
-    .ds code { font: 12px var(--mono); padding: 1px 4px; border-radius: 4px; background: var(--bg-soft); color: var(--text); }
-    .ds-lead { font-size: 16px; }
-    .ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-    .ds-swatch { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
-    .ds-swatch i { height: 48px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); }
-    .ds-swatch span { color: var(--text-soft); }
-    .ds-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 8px 0; }
-    .ds-box { padding: 20px; border-radius: 10px; background: var(--canvas); box-shadow: var(--shadow); }
-    .ds-scale { display: flex; flex-direction: column; gap: 10px; }
-    .ds-scale div { display: flex; align-items: baseline; gap: 16px; }
-    .ds-scale span:first-child { width: 72px; flex: none; color: var(--text-faint); font-size: 12px; }
-    .ds-radius i { width: 56px; height: 56px; background: var(--bg-soft); box-shadow: inset 0 0 0 1px var(--border-strong); }
-    .ds-prose { font-family: var(--doc-font); font-size: var(--doc-size); line-height: var(--doc-leading); }
-    .ds-card { position: static; max-width: 340px; cursor: default; }
-    .ds-faces { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 20px; }
-    .ds-face { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text-soft); }
-  </style>
+  <link rel="stylesheet" href="site.css">
+  <link rel="icon" href="../build/icon.svg" type="image/svg+xml">
 </head>
 <body>
-<main class="ds">
-<div class="ds-page">
-
-  <div class="ds-top">
-    <h1>Paper and ink</h1>
-    <span class="od-spacer"></span>
-    <div class="od-segmented" role="radiogroup" aria-label="Theme">
-      <button type="button" role="radio" data-theme-pick="light" aria-checked="true">Light</button>
-      <button type="button" role="radio" data-theme-pick="dark" aria-checked="false">Dark</button>
-    </div>
+<header class="site-header">
+  <a class="site-brand" href="index.html"><img src="../build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
+  <nav class="site-nav" aria-label="Pages">
+    <a href="index.html">Download</a>
+    <a href="design.html" aria-current="page">Design</a>
+    <a href="avatars.html">Avatars</a>
+  </nav>
+  <span class="od-spacer"></span>
+  <a class="site-github" href="https://github.com/fanzhangg/open-doc">GitHub</a>
+  <div class="od-segmented" role="radiogroup" aria-label="Theme">
+    <button type="button" role="radio" data-theme-pick="light">Light</button>
+    <button type="button" role="radio" data-theme-pick="dark">Dark</button>
   </div>
+</header>
+<main class="ds-page">
+
+  <h1>Paper and ink</h1>
   <p class="ds-lead">OpenDoc's design system. The page is quiet so the writing and the buddies stand out: a warm grey ramp, one ink, and colour only where it means something.</p>
   <p>This page is rendered with the app's own <code>web/app.css</code>. Change the system there and here together.</p>
 
@@ -87,7 +66,7 @@
     <div class="ds-swatch"><i style="background: var(--green)"></i><b>--green</b><span>Insertions, online</span></div>
   </div>
   <h3>Buddies</h3>
-  <p>Each buddy has its own colour, the one in its face (see <a href="#avatars">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag, typing dots and the card it is working on.</p>
+  <p>Each buddy has its own colour, the one in its face (see <a href="avatars.html">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag, typing dots and the card it is working on.</p>
 
   <h2>Type</h2>
   <p>Inter for the UI. The doc's own font (sans, serif or mono) and its sizes in <code>em</code> are the writer's, not the UI's.</p>
@@ -113,31 +92,6 @@
     <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow)"></i><b>--shadow</b><span>Resting cards</span></div>
     <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow-raised)"></i><b>--shadow-raised</b><span>Anything floating</span></div>
   </div>
-
-  <h2 id="avatars">Avatars</h2>
-  <p>Everyone has a face, drawn from their name by <code>web/faces.js</code>, so it is the same on every machine and nobody picks or uploads one. The faces below are drawn by that code.</p>
-
-  <h3>Buddies: a body, a face and a colour</h3>
-  <p>A buddy is one of five <strong>bodies</strong> (circle, square, triangle, pentagon, cloud) with a <strong>face</strong>: eyes (dot, big, happy, sleepy, squint), a mouth (smile, grin, o, flat, cat) and maybe one extra (blush, glasses, bow). Its <strong>colour</strong> is one of eight OKLCH hues, evenly spaced, with Clippy's sunflower first. Outlines are a little uneven and tilted, as if drawn by hand, and the same every time.</p>
-  <p>In a doc, buddies take parts and colours as unlike each other's as possible: the first five never share a body, eyes or a mouth, and eight never share a colour. These are eight buddies in one doc:</p>
-  <div class="ds-box ds-faces" data-faces="spread"></div>
-
-  <h3>Clippy</h3>
-  <p>Clippy's face is fixed: a sunflower cloud with dot eyes, a smile and blush. It is also the app's mark, on its icon and its documents.</p>
-  <div class="ds-box ds-faces" data-faces="clippy"></div>
-
-  <h3>People</h3>
-  <p>People are always round. Their face and colour come from their name, the same way as a buddy's.</p>
-  <div class="ds-box ds-faces" data-faces="people"></div>
-
-  <h3>Sizes</h3>
-  <p>Set by <code>--size</code> on <code>.od-avatar</code>. Features are drawn to read at 18px; a new eye, mouth or extra must too.</p>
-  <div class="ds-box ds-faces" data-faces="sizes"></div>
-
-  <h3>States</h3>
-  <p>A buddy shows what it is doing with its face, not with a badge: working, its body rolls and its face bobs; queued, it breathes; offline or starting, it greys out. A green dot means it comments on its own.</p>
-  <div class="ds-box ds-faces" data-faces="states"></div>
-  <p>Faces have their own palette and gradient in <code>faces.js</code>, the one place outside the tokens with colour literals. Ink for features is <code>#1f1d24</code>.</p>
 
   <h2>Components</h2>
   <h3>Buttons</h3>
@@ -194,58 +148,7 @@
     <kbd>⌘K</kbd>
   </div>
 
-</div>
 </main>
-<script type="module">
-  import { agentFace, appIcon, documentIcon, personFace, setBuddies } from '../dist/web/faces.js';
-
-  const BUDDIES = ['Clippy', 'Ada', 'Rex', 'Juno', 'Milo', 'Vera', 'Otto', 'Pip'];
-  setBuddies(BUDDIES);
-  const avatar = (name, { person = false, size = 44, presence = null } = {}) => {
-    const node = document.createElement('span');
-    node.className = `od-avatar${person ? '' : ' od-avatar-agent'}`;
-    node.style.setProperty('--size', `${size}px`);
-    node.append(person ? personFace(name) : agentFace(name));
-    if (!presence) return node;
-    const wrap = document.createElement('span');
-    wrap.className = 'od-agent-face';
-    wrap.dataset.presence = presence;
-    const dot = document.createElement('span');
-    dot.className = 'od-presence-dot';
-    wrap.append(node, dot);
-    return wrap;
-  };
-  const labelled = (node, label) => {
-    const item = document.createElement('div');
-    item.className = 'ds-face';
-    item.append(node, label);
-    return item;
-  };
-  const icon = (svg, size) => {
-    svg.setAttribute('width', size);
-    svg.setAttribute('height', size);
-    return svg;
-  };
-  const fill = (key, items) => document.querySelector(`[data-faces="${key}"]`).append(...items);
-
-  fill('spread', BUDDIES.map((name) => labelled(avatar(name, { size: 56 }), name)));
-  fill('clippy', [labelled(avatar('Clippy', { size: 56 }), 'Face'), labelled(icon(appIcon(), 64), 'App icon'), labelled(icon(documentIcon(), 64), 'Document')]);
-  fill('people', ['Fan', 'Noor', 'Alice', 'Bob', 'Carol'].map((name) => labelled(avatar(name, { person: true, size: 44 }), name)));
-  fill('sizes', [[44, 'Card'], [30, 'Header'], [22, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
-    .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
-  fill('states', [['idle', 'Answers when asked'], ['autocomment', 'Comments on its own'], ['working', 'Working'], ['queued', 'Queued'], ['offline', 'Offline']]
-    .map(([presence, label]) => labelled(avatar('Ada', { size: 30, presence: presence === 'queued' ? null : presence }), label)));
-  // Queued is shown on the card it waits on, not in the header.
-  const queued = document.querySelectorAll('[data-faces="states"] .ds-face')[3];
-  queued.dataset.state = 'queued';
-</script>
-<script>
-  for (const button of document.querySelectorAll('[data-theme-pick]')) {
-    button.addEventListener('click', () => {
-      document.documentElement.dataset.theme = button.dataset.themePick;
-      for (const b of document.querySelectorAll('[data-theme-pick]')) b.setAttribute('aria-checked', String(b === button));
-    });
-  }
-</script>
+<script type="module" src="site.js"></script>
 </body>
 </html>
