@@ -117,7 +117,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-people { display: flex; align-items: center; gap: 8px; }
 .od-me, .od-agent-face { border: 0; background: none; padding: 0; border-radius: 50%; display: flex; }
 .od-me:hover .od-avatar { box-shadow: 0 0 0 3px var(--hover); }
-.od-agent-face:hover .od-face-body { filter: brightness(1.06); }
 
 .od-avatar { --size: 32px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s, transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
 .od-avatar-small { --size: 24px; }
@@ -131,10 +130,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* A buddy has three states, the same on every face of it: ready (as drawn),
    working (it grows, its body rolls and its face bobs) and away (greyed). A
-   failed run is a moment: the face shakes and flashes red, once. */
-[data-presence="working"] .od-avatar-agent, .od-typing .od-avatar-agent { transform: scale(1.12); }
-[data-presence="working"] .od-face-body, .od-typing .od-face-body { animation: od-spin 2.4s linear infinite; }
-[data-presence="working"] .od-face-look, .od-typing .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
+   failed run is a moment: the face shakes and flashes red, once. A face you
+   point at grows too, and on its card it moves as if at work, to greet you. */
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-avatar-agent, .od-avatar-agent:hover { transform: scale(1.12); }
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-body { animation: od-spin 2.4s linear infinite; }
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
 [data-presence="away"] .od-avatar-agent { filter: grayscale(1); opacity: 0.45; }
 .od-avatar-agent.od-failed { animation: od-shake 0.45s ease-in-out; }
 .od-failed .od-face-body { animation: od-red 1s; }

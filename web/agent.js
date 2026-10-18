@@ -149,25 +149,31 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // When each buddy's last run failed, so its face plays that out even if the
   // header is redrawn meanwhile (its status changes as the run ends).
   const failedAt = new Map();
+  let painted = '';
 
+  // Redrawn only when a face would change, so one being pointed at keeps
+  // growing and one at work keeps moving through the doc's other updates.
   function paintFaces() {
     const names = agentsHere();
-    root.replaceChildren(...names.map((name) => {
-      const status = statusOf(name);
-      const mode = modeOf(status);
-      const wrap = el('span', 'od-agent');
-      wrap.dataset.presence = mode;
-      wrap.dataset.state = status?.state ?? 'away';
-      const face = el('button', 'od-agent-face');
-      face.type = 'button';
-      face.dataset.agent = name;
-      face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
-      face.append(avatar(name, 'agent'));
-      if (failedAt.get(name.toLowerCase()) > Date.now() - FAILED_MS) face.firstChild.classList.add('od-failed');
-      namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
-      wrap.append(face);
-      return wrap;
-    }));
+    const flinching = (name) => failedAt.get(name.toLowerCase()) > Date.now() - FAILED_MS;
+    const faces = names.map((name) => ({ name, mode: modeOf(statusOf(name)), failed: flinching(name) }));
+    const key = JSON.stringify(faces);
+    if (key !== painted) {
+      painted = key;
+      root.replaceChildren(...faces.map(({ name, mode, failed }) => {
+        const wrap = el('span', 'od-agent');
+        wrap.dataset.presence = mode;
+        const face = el('button', 'od-agent-face');
+        face.type = 'button';
+        face.dataset.agent = name;
+        face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
+        face.append(avatar(name, 'agent'));
+        if (failed) face.firstChild.classList.add('od-failed');
+        namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
+        wrap.append(face);
+        return wrap;
+      }));
+    }
     // A renamed agent's card stays open while the doc catches up with the new name.
     if (agentShown() && !names.some((n) => same(n, agentShown())) && !editing) close();
   }
