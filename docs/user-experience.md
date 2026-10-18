@@ -85,8 +85,10 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 ## Seeing buddies work
 
 - **Presence.** People's avatars are circles; each buddy's is a soft blob
-  with a face. They sit side by side in the header. While a buddy works its
-  body rolls under its face and the thread shows it working.
+  with a face. They sit side by side in the header. A buddy's face shows its
+  state wherever it appears: while it works it grows and its body rolls,
+  where it cannot answer it is greyed out, and when a run fails it shakes
+  and flashes red once.
 - **People** button (after the avatars): you, the people who commented, and
   the buddies here, with New buddy.
 

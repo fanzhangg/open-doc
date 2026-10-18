@@ -1,7 +1,7 @@
 // The comment margin, Google Docs style: one card per thread beside the text it
 // is about, stacked so they never overlap, with the active card aligned to its
 // text. A buddy shows up like any other collaborator: an avatar, its
-// replies, and typing dots while it works. A reply whose run failed, or
+// replies, and its face at work while it works. A reply whose run failed, or
 // whose edit was partly dropped for the human's text, says so; one that
 // edited the doc on this machine offers Undo. Only the human resolves
 // threads; they delete their own comments and buddies'.
@@ -108,12 +108,10 @@ export function createCommentMargin(margin, handlers) {
       card.append(commentRow(comment, i === 0 && !thread.resolved ? resolveButton(thread) : null));
     });
 
-    // Typing dots for each agent working on it; several can at once.
+    // Each buddy working on it, its face at work; several can at once.
     for (const name of working) {
       const row = el('div', 'od-typing');
-      row.title = `${name} is working on it`;
-      row.style.setProperty('--buddy', buddyColor(name));
-      row.append(avatar(name, 'agent', true), dots());
+      row.append(avatar(name, 'agent', true), el('span', '', `${name} is working…`));
       card.append(row);
     }
     if (thread.resolved) {
@@ -531,12 +529,6 @@ export function avatar(name, kind, small = false) {
   // buddies a circle, square, triangle, pentagon or cloud, all drawn by hand.
   node.append(agent ? agentFace(name) : personFace(name));
   node.title = name;
-  return node;
-}
-
-function dots() {
-  const node = el('span', 'od-dots');
-  node.append(el('i'), el('i'), el('i'));
   return node;
 }
 

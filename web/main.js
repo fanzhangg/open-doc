@@ -477,10 +477,15 @@ async function refreshThreads() {
 
 // Show the doc's comments (from state() or a comment request). Redrawing
 // every card for the same ones would stall typing.
+let failedShown = null; // ids of the failed replies on screen; null until the first update
 function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   const json = JSON.stringify({ threads, writers, edits, notice, readOnly });
   if (json === shownComments) return;
   shownComments = json;
+  // A failed run's reply that is new since the last update: its buddy flinches.
+  const failed = threads.flatMap((t) => t.comments).filter((c) => c.failed);
+  if (failedShown) for (const c of failed.filter((c) => !failedShown.has(c.id))) people?.failed(c.by.name);
+  failedShown = new Set(failed.map((c) => c.id));
   comments = { threads, people: writers, edits, notice, readOnly };
   showReadOnly(readOnly);
   editor.setThreads(threads);

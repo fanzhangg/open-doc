@@ -146,6 +146,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // ---- the avatars in the header ----
 
+  // When each buddy's last run failed, so its face plays that out even if the
+  // header is redrawn meanwhile (its status changes as the run ends).
+  const failedAt = new Map();
+
   function paintFaces() {
     const names = agentsHere();
     root.replaceChildren(...names.map((name) => {
@@ -159,6 +163,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       face.dataset.agent = name;
       face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
       face.append(avatar(name, 'agent'));
+      if (failedAt.get(name.toLowerCase()) > Date.now() - FAILED_MS) face.firstChild.classList.add('od-failed');
       namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
       wrap.append(face);
       return wrap;
@@ -458,12 +463,19 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     pin,
     /** An agent whose run is in progress, if any. */
     running: () => statuses.find((s) => s.state === 'running') ?? null,
+    /** `name`'s run failed: its face shakes and flashes red, once. */
+    failed(name) {
+      failedAt.set(name.toLowerCase(), Date.now());
+      paintFaces();
+    },
     /** Your name changed: repaint your card if it is open. */
     renameMe() {
       if (showing === 'me' || showing === 'people') paintCard();
     },
   };
 }
+
+const FAILED_MS = 1000; // how long a failed run's moment plays (app.css: .od-failed)
 
 // Where a buddy stands in this doc, on its card under its name.
 const STANDING = { working: 'Working…', away: 'Not running here' };
