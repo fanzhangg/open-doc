@@ -48,7 +48,14 @@
   <div class="ds-box ds-faces" data-faces="sizes"></div>
 
   <h2>States</h2>
-  <p>A buddy shows what it is doing with its face, not with a badge: working, its body rolls and its face bobs; queued, it breathes; offline or starting, it greys out. A green dot means it comments on its own.</p>
+  <p>A buddy shows what it is doing with its face, never with a badge or a dot, and the same on every face of it: in the header, on its card and on the thread it works on. It has three states and one moment:</p>
+  <ul>
+    <li><strong>Ready</strong>: as drawn, still. It answers when you @mention it.</li>
+    <li><strong>Working</strong>: it grows a little, its body rolls and its face bobs, until the run ends and it settles back.</li>
+    <li><strong>Away</strong>: greyed out. It does not answer in this doc.</li>
+    <li><strong>Failed</strong>, a moment: when a run fails, its face shakes and flashes red, once. The thread says what happened.</li>
+  </ul>
+  <p>A finished run has no moment of its own: its edits light up in the text, in its colour. A face you point at grows the same way, and on its card a buddy moves as if at work, to greet you. With reduced motion, faces keep their size and nothing moves.</p>
   <div class="ds-box ds-faces" data-faces="states"></div>
   <p>Faces have their own palette and gradient in <code>faces.js</code>, the one place outside the tokens with colour literals. Ink for features is <code>#1f1d24</code>.</p>
 
@@ -67,9 +74,7 @@
     const wrap = document.createElement('span');
     wrap.className = 'od-agent-face';
     wrap.dataset.presence = presence;
-    const dot = document.createElement('span');
-    dot.className = 'od-presence-dot';
-    wrap.append(node, dot);
+    wrap.append(node);
     return wrap;
   };
   const labelled = (node, label) => {
@@ -90,11 +95,13 @@
   fill('people', ['Fan', 'Noor', 'Alice', 'Bob', 'Carol'].map((name) => labelled(avatar(name, { person: true, size: 44 }), name)));
   fill('sizes', [[44, 'Card'], [32, 'Header'], [24, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
     .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
-  fill('states', [['idle', 'Answers when asked'], ['autocomment', 'Comments on its own'], ['working', 'Working'], ['queued', 'Queued'], ['offline', 'Offline']]
-    .map(([presence, label]) => labelled(avatar('Ada', { size: 32, presence: presence === 'queued' ? null : presence }), label)));
-  // Queued is shown on the card it waits on, not in the header.
-  const queued = document.querySelectorAll('[data-faces="states"] .ds-face')[3];
-  queued.dataset.state = 'queued';
+  fill('states', [['idle', 'Ready'], ['working', 'Working'], ['away', 'Away'], ['idle', 'Failed']]
+    .map(([presence, label]) => labelled(avatar('Clippy', { size: 44, presence }), label)));
+  // The failed moment plays once in the app; here, every few seconds.
+  const failed = document.querySelectorAll('[data-faces="states"] .od-avatar')[3];
+  const flinch = () => { failed.classList.remove('od-failed'); void failed.offsetWidth; failed.classList.add('od-failed'); };
+  flinch();
+  setInterval(flinch, 3000);
 </script>
 <script type="module" src="site.js"></script>
 </body>

@@ -117,9 +117,8 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-people { display: flex; align-items: center; gap: 8px; }
 .od-me, .od-agent-face { border: 0; background: none; padding: 0; border-radius: 50%; display: flex; }
 .od-me:hover .od-avatar { box-shadow: 0 0 0 3px var(--hover); }
-.od-agent-face:hover .od-face-body { filter: brightness(1.06); }
 
-.od-avatar { --size: 32px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s; }
+.od-avatar { --size: 32px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s, transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
 .od-avatar-small { --size: 24px; }
 .od-avatar-agent { border-radius: 0; background: none; }
 /* People are circles; agents are faces (faces.js): a circle, square, triangle, pentagon or cloud. */
@@ -129,25 +128,20 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-agent { display: flex; align-items: center; gap: 8px; }
 .od-agent-face, .od-profile-face { position: relative; display: flex; }
 
-/* presence: with Auto Commenter (green), answers when @mentioned (no dot), offline (grey ring, greyed avatar), connecting (grey) */
-.od-presence-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-faint); }
-.od-agent-face .od-presence-dot, .od-profile-face .od-presence-dot { position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border: 2px solid var(--canvas); }
-.od-profile-face .od-presence-dot { border-color: var(--bg); width: 14px; height: 14px; }
-[data-presence="autocomment"] .od-presence-dot { background: var(--green); }
-[data-presence="idle"] .od-presence-dot { display: none; }
-[data-presence="offline"] .od-presence-dot { background: var(--canvas); box-shadow: inset 0 0 0 2px var(--text-soft); }
-.od-profile[data-presence="offline"] .od-presence-dot { background: var(--bg); }
-[data-presence="offline"] .od-agent-face .od-avatar, .od-profile[data-presence="offline"] .od-avatar { filter: grayscale(1); opacity: 0.55; }
-/* inactive, failing or still starting: greyed out */
-[data-presence="offline"] .od-avatar-agent, [data-presence="away"] .od-avatar-agent, [data-presence="connecting"] .od-avatar-agent { filter: grayscale(1); opacity: 0.5; }
-[data-presence="connecting"] .od-avatar-agent { animation: od-fade-pulse 1.2s ease-in-out infinite; }
-@keyframes od-fade-pulse { 50% { opacity: 0.35; } }
-/* working (in the header, and on the card it is working on): the body rolls under the face, which bobs along; waiting for its turn: it breathes */
-[data-presence="working"] .od-face-body, .od-typing .od-face-body { animation: od-spin 2.4s linear infinite; }
-[data-presence="working"] .od-face-look, .od-typing .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
-@keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
-[data-state="queued"] .od-face-body { animation: od-fade-pulse 1.6s ease-in-out infinite; }
+/* A buddy has three states, the same on every face of it: ready (as drawn),
+   working (it grows, its body rolls and its face bobs) and away (greyed). A
+   failed run is a moment: the face shakes and flashes red, once. A face you
+   point at grows too, and on its card it moves as if at work, to greet you. */
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-avatar-agent, .od-avatar-agent:hover { transform: scale(1.12); }
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-body { animation: od-spin 2.4s linear infinite; }
+:is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
+[data-presence="away"] .od-avatar-agent { filter: grayscale(1); opacity: 0.45; }
+.od-avatar-agent.od-failed { animation: od-shake 0.45s ease-in-out; }
+.od-failed .od-face-body { animation: od-red 1s; }
 @keyframes od-spin { to { transform: rotate(360deg); } }
+@keyframes od-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
+@keyframes od-shake { 20%, 60% { transform: translateX(-3px) rotate(-5deg); } 40%, 80% { transform: translateX(3px) rotate(5deg); } }
+@keyframes od-red { 0%, 70% { fill: var(--red); } }
 
 /* profile cards under the header avatars */
 .od-panel { position: fixed; top: 50px; right: 12px; z-index: 30; width: 320px; padding: 16px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; font-size: 13px; }
@@ -165,8 +159,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-agents { display: flex; align-items: center; gap: 6px; }
 .od-agents:empty { display: none; }
 .od-invite .od-icon { width: 18px; height: 18px; }
-[data-presence="away"] .od-presence-dot { display: none; }
-[data-presence="away"] .od-agent-face .od-avatar, .od-profile[data-presence="away"] .od-avatar { filter: grayscale(1); opacity: 0.45; }
 
 
 /* name cards */
@@ -193,7 +185,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-people-new-face { width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed var(--border-strong); border-radius: 50%; }
 .od-people-new-face .od-icon { width: 13px; height: 13px; }
 .od-people-role { margin-left: auto; flex: none; color: var(--text-soft); font-size: 12px; }
-.od-people-row .od-profile-face .od-presence-dot { width: 9px; height: 9px; border-width: 2px; border-color: var(--bg); }
 /* the People button: a circle the size of an avatar, next to them */
 .od-invite { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px dashed var(--border-strong); border-radius: 50%; background: var(--bg); color: var(--text-soft); }
 .od-invite:hover { background: var(--hover); color: var(--text); border-style: solid; }
@@ -208,7 +199,6 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-inline-input[aria-invalid="true"] { outline-color: var(--red); }
 .od-profile-who { flex: 1; }
 .od-profile + .od-input-error { margin-top: 6px; }
-[data-presence="working"] .od-presence-dot, [data-presence="queued"] .od-presence-dot { background: var(--green); }
 
 /* the @ menu and who-will-reply line under a comment box */
 .od-mentions { position: absolute; left: 0; right: 0; top: 100%; z-index: 6; max-height: 320px; overflow-y: auto; list-style: none; margin: 4px 0 0; padding: 4px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); }
@@ -477,11 +467,6 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-check { width: 18px; height: 18px; fill: currentColor; flex: none; }
 
 .od-typing { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-soft); }
-.od-dots { display: inline-flex; gap: 4px; }
-.od-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--buddy, var(--text-soft)); animation: od-bounce 1.2s infinite; }
-.od-dots i:nth-child(2) { animation-delay: 0.15s; }
-.od-dots i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes od-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-3px); opacity: 1; } }
 
 .od-resolved-row { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-soft); }
 .od-resolved-row span { flex: 1; }
