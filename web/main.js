@@ -132,6 +132,7 @@ async function start() {
       if (narrow.matches) openSheet(true);
       else if (!commentsShown()) showComments(true);
       pendingSelection = hint;
+      paintEmpty();
       editor.setDraft(hint);
       margin.startDraft(hint);
     },
@@ -153,6 +154,7 @@ async function start() {
     onCreate: createThread,
     onCancelDraft: () => {
       pendingSelection = null;
+      paintEmpty();
       editor.setDraft(null);
     },
     onReply: (thread, body) => send(api.reply(thread, body)),
@@ -214,6 +216,7 @@ async function start() {
     if (on && narrow.matches) openSheet(true);
     else if (on && !commentsShown()) showComments(true);
     margin.setShowResolved(on);
+    paintEmpty();
   });
   narrow.addEventListener('change', () => {
     openSheet(false);
@@ -495,6 +498,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   noticeBanner.querySelector('.od-banner-text').textContent = notice ?? '';
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
+  paintEmpty();
 }
 
 // A sidecar this app must not write (spec/SPEC.md §2): its comments show,
@@ -551,10 +555,24 @@ function openSheet(on) {
   if (on) margin.rerender();
 }
 
+// With no open comment, no draft and no resolved list, the margin folds away
+// and the Comments button rests; the next comment brings them back.
+function noComments() {
+  return document.documentElement.hasAttribute('data-no-comments');
+}
+
+function paintEmpty() {
+  const empty = !comments?.threads.some((t) => !t.resolved) && !pendingSelection && resolvedToggle.getAttribute('aria-pressed') !== 'true';
+  document.documentElement.toggleAttribute('data-no-comments', empty);
+  if (empty) openSheet(false);
+  paintCommentsToggle();
+}
+
 function paintCommentsToggle() {
-  const on = narrow.matches ? sheetOpen() : commentsShown();
+  const on = !noComments() && (narrow.matches ? sheetOpen() : commentsShown());
+  commentsToggle.disabled = noComments();
   commentsToggle.setAttribute('aria-pressed', String(on));
-  commentsToggle.dataset.tip = on ? 'Hide comments' : 'Show comments';
+  commentsToggle.dataset.tip = noComments() ? 'No comments' : on ? 'Hide comments' : 'Show comments';
 }
 
 // Bring a thread's text into view above the sheet.
@@ -572,6 +590,7 @@ async function createThread(body) {
   const anchor = found ? createAnchor(text, found.start, found.end) : hint;
   const { id } = await send(api.comment(anchor, body));
   pendingSelection = null;
+  paintEmpty();
   editor.setDraft(null);
   select(id);
 }

@@ -276,13 +276,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-stage { position: relative; display: grid; grid-template-columns: minmax(0, var(--page-w)) var(--margin-w); gap: var(--stage-gap); justify-content: center; padding: 16px 16px 160px clamp(16px, 100% - var(--page-w) - var(--stage-gap) - var(--margin-w) - 16px, var(--stage-gap) + var(--margin-w) + 16px); }
 .od-page { position: relative; min-height: calc(100vh - 160px); padding: 40px var(--page-pad) 120px; }
 .od-margin { position: relative; transition: opacity 0.2s; }
-/* comments hidden (the toolbar's Comments button): no margin, no highlights;
-   a narrow window keeps its highlights, which open the comment sheet */
+/* comments hidden (the toolbar's Comments button) or none to show: no margin;
+   hidden also drops the highlights, except in a narrow window, where they open the sheet */
 @media (min-width: 901px) {
-  [data-hide-comments] .od-stage { --margin-w: 0px; --stage-gap: 0px; }
-  [data-hide-comments] .od-margin { display: none; }
+  :is([data-hide-comments], [data-no-comments]) .od-stage { --margin-w: 0px; --stage-gap: 0px; }
+  :is([data-hide-comments], [data-no-comments]) .od-margin { display: none; }
   [data-hide-comments] .od-hl { background: none; animation: none; transition: none; }
-  .od-empty-open { display: none; }
 }
 
 /* ---- document typography ---- */
