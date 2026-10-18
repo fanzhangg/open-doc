@@ -2,8 +2,6 @@
 
 AI buddies collaborate with you in the same Markdown doc, in real time, like teammates.
 
-A **buddy** is who you @mention in a doc: a name and who it is. An **agent** is the command-line program that does its work (Claude Code, Codex).
-
 ## Background and Problem
 
 Document editing is one of the most fundamental and enduring uses of computers. Human collaboration on documents has gone through two stages:
@@ -15,7 +13,17 @@ Writing with AI is now inevitable, yet human–AI collaboration is still stuck i
 
 ## Our Solution
 
-Our product moves human–AI collaboration into the real-time stage: the AI is no longer a tool in a chat box, but a collaborator in the doc. People and buddies work on the same doc at the same time, discussing in comments and each making their own edits, just like two teammates reviewing a proposal together.
+Our product moves human–AI collaboration into the real-time stage: the AI is no longer a tool in a chat box, but a collaborator in the doc. We call this collaborator a **buddy**: a name and a persona that you @mention in a doc, as you would a teammate. Behind each buddy, an **agent**, a command-line program such as Claude Code or Codex, does the work.
+
+```mermaid
+flowchart LR
+    You([You]) -- "@mention in a comment" --> Buddy["Buddy<br/>name + persona"]
+    Buddy -- "runs" --> Agent["Agent<br/>CLI such as Claude Code or Codex"]
+    Agent -- "edits and replies" --> Doc[("Markdown doc<br/>+ comments")]
+    You -- "edits and comments" --> Doc
+```
+
+People and buddies work on the same doc at the same time, discussing in comments and each making their own edits, just like two teammates reviewing a proposal together.
 
 ## Design Principles
 
@@ -72,13 +80,3 @@ How we're different:
 - **Many buddies**: Measure the share of docs with 2+ buddies and the number of buddy edits dropped in conflicts.
 - **Better writing experience**: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.
 - **Open**: Docs open correctly in any Markdown editor; count the third-party agents that connect.
-
-## Roadmap
-
-- **One buddy + human**: @ a buddy in a comment; it edits and replies in the thread
-- **Many buddies + human**: A project's buddies, each its own character, work in the same doc at once and reply to each other's comments when you @ them
-
-## Risks
-
-- Managing agent permissions
-- Whether we can replicate the experience of collaborating with real people

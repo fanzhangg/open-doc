@@ -1,14 +1,20 @@
 # Architecture
 
-How OpenDoc is built, and why. No backward compatibility with OpenDoc 1: a
-version 1 sidecar is ignored. A sidecar this version must not write (another
-version, or no header) shows its comments read-only, with a way to fix it.
+## Overview
 
-Two words: a **buddy** is who you @mention in a doc (a name and who it
-is); an **agent** is the CLI that does its work (Claude Code,
-Codex). A buddy runs on an agent.
+How OpenDoc is built, in two parts. [The app](#the-app): the doc host, a
+background process that does every file write and runs the buddies, and
+the windows you edit in. [A buddy's turn](#a-buddys-turn): buddies are AI
+agents that answer comments, and a turn is one buddy answering one
+comment: the app starts an agent program on a copy of the doc, then merges
+what it changed back in. (The code calls a turn a run: `Runner`,
+`runs.jsonl`.)
 
-## Principles
+No backward compatibility with OpenDoc 1: a version 1 sidecar is ignored.
+A sidecar this version must not write (another version, or no header)
+shows its comments read-only, with a way to fix it.
+
+### Principles
 
 1. **Files are the truth.** Docs, sidecars and buddy files are plain files.
    Everything else is a cache, rebuilt from them, or only costs undo if
@@ -21,16 +27,23 @@ Codex). A buddy runs on an agent.
 4. **No one resolves a conflict by hand.** The person typing always wins.
    What loses is redone (ask the buddy again) or restored (history).
 5. **Buddies always edit, and every edit can be undone.** See
-   [Undo](#undo).
-6. **Only my own comments start runs.** Nothing in a shared file makes a
+   [Undoing changes](#undoing-changes).
+6. **Only my own comments start turns.** Nothing in a shared file makes a
    buddy run, or chooses what program runs, on this machine.
 
-## Buddies and folders
+## The app
 
-A window has a doc and, in project mode, a folder. Its buddies are Clippy,
-as the user's `buddies/Clippy.md` says, and the folder's
-(`.opendoc/buddies/`), each a `<Name>.md` file
-([PROJECT](../spec/PROJECT.md)).
+### Doc mode and project mode
+
+The app has two modes:
+
+- **Doc mode:** a `.md` file opened on its own (from Finder, say). One
+  doc, one buddy: Clippy. That holds even if the file sits in a project
+  folder.
+- **Project mode:** a folder opened from the home page. A file tree and
+  its docs, Clippy, and the project's own buddies. They live in
+  `.opendoc/buddies/` at the folder's root and travel with it
+  ([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
 | --- | --- | --- |
@@ -38,22 +51,73 @@ as the user's `buddies/Clippy.md` says, and the folder's
 | Window | One doc | File tree and docs |
 | Folder | none | the opened folder |
 
-That is the only difference: doc mode is project mode with no folder.
+The asymmetry is intentional: doc mode is a light editor with one
+buddy; project mode is the full multi-doc, multi-buddy experience.
 
-## Components
+Clippy is the same in both modes: who it is lives in the user's config
+folder, not in any project. That is what sets it apart from every other
+buddy ([PROJECT §2](../spec/PROJECT.md)):
+
+| | Clippy | Project buddies |
+| --- | --- | --- |
+| Reached from | every doc, in either mode | docs in their project only |
+| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.opendoc/buddies/<Name>.md` in the project |
+| Travels with | the user | the project folder |
+| Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from it |
+| Color | yellow, its own | one of the other seven, picked by name |
+
+### Components
 
 | Component | Owns |
 | --- | --- |
 | Format | `X.md` + `X.md.opendoc.jsonl` ([SPEC](../spec/SPEC.md)) |
 | Model (`src/core`) | rendered text, anchors, diff and three-way merge, reading the sidecar, the inbox. No I/O. |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
-| Runner | which runs should start (the inbox), runs them, their status in memory |
+| Runner | which turns should start (the inbox), runs them, their status in memory |
 | Windows | editing and commenting, through DocService |
 
 DocService and Runner run in the doc host, the app's utility process.
 Windows reach it over Electron message ports.
 
-## Who answers
+### How files are read and written
+
+- DocService reads the doc and its sidecar when the doc opens, keeping a
+  hash of each. Windows never read the files; they ask DocService.
+- It watches both files, through a folder watch and a poll every 500 ms
+  for file systems where watches miss changes. When a hash changes, it tells
+  every window; a doc change it did not write is saved to history first.
+- Before writing, DocService checks the file is still what it last read;
+  if not, it merges the outside change first. Where it overlaps what is
+  being typed, the typing wins and the outside version is saved to history.
+- Every file is written whole: a temporary file in the same folder,
+  renamed over it.
+
+### Undoing changes
+
+1. **Your own edits:** Cmd+Z, which undoes only yours, as in shared docs.
+2. **A buddy's turn:** Undo on its reply. The diff between the versions
+   saved before and after the turn is its changes. Each change whose new
+   text is still in the doc, found the way an anchor is, is put back; the
+   rest are skipped: text belongs to whoever changed it last. All at once,
+   never one change; its comments stay.
+3. **Anything else:** restore a version from history.
+
+Each of them saves a version first. Undo on a reply works only on the
+machine that ran it, where its versions are.
+
+### The config folder
+
+In the config folder (`~/Library/Application Support/OpenDoc/` on macOS),
+written only by the app.
+
+| File | Holds |
+| --- | --- |
+| `settings.json` | the user's id and name; editor preferences; which agent runs buddies |
+| `agents/` | agent scripts; Claude Code and Codex ship as two |
+| `state.json` | recent docs and folders, window bounds |
+| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
+
+## A buddy's turn
 
 A thread waits on buddy X when a comment by this machine's user, newer than
 X's last comment there, asks X. A comment asks whom it @mentions; one that
@@ -61,7 +125,7 @@ mentions no one asks the thread's buddies: the one that opened it, and each
 the user @mentioned there before. That is computed from the sidecar and the
 user's id. Buddies run only on docs open in a window.
 
-## A run
+### How a turn works
 
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
@@ -74,58 +138,30 @@ user's id. Buddies run only on docs open in a window.
    the appended comments as the buddy's, and writes the reply as the
    buddy's comment. Where the human changed the same text meanwhile, the
    buddy's change is dropped and the reply is marked `conflict`.
-4. The private folder is deleted, and the run gets a line in the config
+4. The private folder is deleted, and the turn gets a line in the config
    folder's `logs/runs.jsonl`: doc, buddy, thread, start, duration, and
    `ok`, `failed`, `timedOut` or `stopped` with the exit code.
 
 A buddy comments as a human does: new threads, replies in any thread. It
 cannot resolve; anything but appended comments is ignored
-([agent config](agent-config.md#comments)). Its comments start no runs
+([agent config](agent-config.md#comments)). Its comments start no turns
 (principle 6).
 
+### What the user sees after a turn
+
 What the app knows, the app shows, not the buddy's reply: under the reply,
-how many places the run edited, with Undo; a dropped change marks the reply
+how many places the turn edited, with Undo; a dropped change marks the reply
 `conflict`; its comments are in the margin. The reply says only what the
-app cannot (why, what to decide), and may be empty. The run's edits land at
-once, underlined in the buddy's color until the user next types; hovering
-the count shows them again. The count, the underlines and Undo are on the
-machine that ran it only, read from the version saved after the run.
+app cannot (why, what to decide), and may be empty. The turn's edits land at
+once, underlined in the buddy's color until the user next types or another
+turn's edits land; hovering the count shows them again. The count, the
+underlines and Undo are on the machine that ran it only, read from the
+version saved after the turn.
 
-A run that fails is answered too: the buddy's comment is marked `failed`,
+### Failures, retries and restarts
+
+A turn that fails is answered too: the buddy's comment is marked `failed`,
 with the end of the program's output. One ask, one reply; to retry, or to
-redo a `conflict`, @mention the buddy again. Which runs are working lives
-only in memory: after a restart, unanswered asks run again. Runs go on at
+redo a `conflict`, @mention the buddy again. Which turns are working lives
+only in memory: after a restart, unanswered asks run again. Turns go on at
 the same time; their merges are applied one at a time.
-
-## Undo
-
-1. **Your own edits:** Cmd+Z, which undoes only yours, as in shared docs.
-2. **A buddy's run:** Undo on its reply. The diff between the versions
-   saved before and after the run is its changes. Each change whose new
-   text is still in the doc, found the way an anchor is, is put back; the
-   rest are skipped: text belongs to whoever changed it last. All at once,
-   never one change; its comments stay.
-3. **Anything else:** restore a version from history.
-
-Each of them saves a version first. Undo on a reply works only on the
-machine that ran it, where its versions are.
-
-## Writes
-
-- Before writing, DocService checks the file is still what it last read;
-  if not, it merges the outside change first. Where it overlaps what is
-  being typed, the typing wins and the outside version is saved to history.
-- Every file is written whole: a temporary file in the same folder,
-  renamed over it.
-
-## Local state
-
-In the config folder (`~/Library/Application Support/OpenDoc/` on macOS),
-written only by the app.
-
-| File | Holds |
-| --- | --- |
-| `settings.json` | the user's id and name; editor preferences; which agent runs buddies |
-| `agents/` | agent scripts; Claude Code and Codex ship as two |
-| `state.json` | recent docs and folders, window bounds |
-| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
