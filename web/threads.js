@@ -53,7 +53,6 @@ export function createCommentMargin(margin, handlers) {
     const shown = visibleThreads();
     for (const thread of shown) cards.push(threadCard(thread));
     if (showResolved && shown.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
-    else if (!draft && shown.length === 0) cards.push(el('p', 'od-empty od-empty-open', 'No comments yet.')); // shown only in the narrow window's sheet
 
     // Live updates arrive while the human types: keep the card they are typing
     // in attached, updated around its text box, so text, caret and IME input survive.
