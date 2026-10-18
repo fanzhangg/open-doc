@@ -1,7 +1,8 @@
 # Architecture
 
 How OpenDoc is built, and why. No backward compatibility with OpenDoc 1: a
-version 1 sidecar is reported as unreadable.
+version 1 sidecar is ignored. A sidecar this version must not write (another
+version, or no header) shows its comments read-only, with a way to fix it.
 
 Two words: a **buddy** is who you @mention in a doc (a name and who it
 is); an **agent** is the CLI that does its work (Claude Code,

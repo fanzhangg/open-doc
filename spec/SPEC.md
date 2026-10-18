@@ -19,8 +19,9 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 ## 2. Comments
 
 UTF-8 text, one JSON object per line, `\n` after each. The first line is
-`{"opendoc":2}`; a tool MUST refuse a major version it does not know. Every
-other line is a comment. A tool MUST keep fields it does not understand.
+`{"opendoc":2}`; a tool MUST NOT write a sidecar whose first line is not,
+and MAY show its comments read-only. Every other line is a comment. A tool
+MUST keep fields it does not understand.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

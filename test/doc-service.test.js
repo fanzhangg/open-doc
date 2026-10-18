@@ -115,7 +115,7 @@ test('a comment by another user that @mentions a buddy runs nothing; one by you 
   }, { sidecar: `{"opendoc":2}\n${line(theirs)}\n` });
 });
 
-test('a v1 sidecar opens with a notice, and its bytes are unchanged', async () => {
+test('a v1 sidecar is not read, and its bytes are unchanged', async () => {
   const v1 = '{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": [],\n  "participants": []\n}\n';
   const docPath = await tempDoc();
   await writeFile(`${docPath}.opendoc.json`, v1);
@@ -124,7 +124,7 @@ test('a v1 sidecar opens with a notice, and its bytes are unchanged', async () =
   try {
     const now = await state();
     assert.deepEqual(now.threads, []);
-    assert.match(now.notice, /plan\.md\.opendoc\.json are from an older OpenDoc/);
+    assert.equal(now.notice, null);
     await call('comment', { anchor: null, body: 'New comments go to the new file' });
     await doc.moveTo(join(dirname(docPath), 'renamed.md'));
     assert.equal(await readFile(`${docPath}.opendoc.json`, 'utf8'), v1, 'byte for byte, where it was');
@@ -133,14 +133,21 @@ test('a v1 sidecar opens with a notice, and its bytes are unchanged', async () =
   }
 });
 
-test('a sidecar of an unknown version is not read or written; a bad line is reported and kept', async () => {
-  await withDoc(async ({ call, state, docPath }) => {
-    assert.match((await state()).notice, /cannot be read/);
-    await assert.rejects(call('comment', { anchor: null, body: 'x' }), refused('unreadable'));
-    assert.equal(await readFile(sidecarPath(docPath), 'utf8'), '{"opendoc":3}\n');
-  }, { sidecar: '{"opendoc":3}\n' });
+test('a sidecar of another version, or without a header, is shown read-only; a bad line is reported and kept', async () => {
+  const theirs = { id: 'c_theirs1', anchor: null, by: { id: 'u_sam', name: 'Sam', kind: 'human' }, at: '2026-01-01T00:00:00Z', body: 'Hi' };
+  for (const [header, readOnly] of [['{"opendoc":3}', 'version'], ['<<<<<<< HEAD', 'invalid']]) {
+    const sidecar = `${header}\n${JSON.stringify(theirs)}\n`;
+    await withDoc(async ({ call, state, docPath }) => {
+      const now = await state();
+      assert.equal(now.readOnly, readOnly);
+      assert.deepEqual(now.threads.map((t) => t.id), ['c_theirs1']);
+      await assert.rejects(call('comment', { anchor: null, body: 'x' }), refused('read_only'));
+      assert.equal(await readFile(sidecarPath(docPath), 'utf8'), sidecar);
+    }, { sidecar });
+  }
   await withDoc(async ({ call, state, docPath }) => {
     assert.match((await state()).notice, /A line of plan\.md\.opendoc\.jsonl could not be read/);
+    assert.equal((await state()).readOnly, null);
     await call('comment', { anchor: null, body: 'x' });
     assert.equal((await readFile(sidecarPath(docPath), 'utf8')).split('\n')[1], 'not json', 'kept as it is');
   }, { sidecar: '{"opendoc":2}\nnot json\n' });

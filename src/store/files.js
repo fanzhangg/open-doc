@@ -6,8 +6,6 @@ import { createHash } from 'node:crypto';
 import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 
 export const SIDECAR_SUFFIX = '.opendoc.jsonl';
-/** A version 1 sidecar: not read, and left as it is. */
-export const V1_SUFFIX = '.opendoc.json';
 const LOCK_STALE_MS = 2000;
 const LOCK_TIMEOUT_MS = 5000;
 

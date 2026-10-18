@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { FormatError, askedOf, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
+import { askedOf, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
 import { parseMentions } from '../src/core/mentions.js';
 
 const { reading, mentions } = JSON.parse(readFileSync(new URL('../spec/conformance/sidecar.json', import.meta.url), 'utf8'));
@@ -53,10 +53,11 @@ test('any order or duplication of lines reads to the same threads (what makes me
   }
 });
 
-test('a version this tool does not know is refused; so is a v1 sidecar', () => {
-  assert.throws(() => parseSidecar('{"opendoc":3}\n'), (e) => e instanceof FormatError && e.code === 'version');
-  assert.throws(() => parseSidecar('{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": []\n}\n'), FormatError);
-  assert.throws(() => parseSidecar(''), FormatError);
+test('a version this tool does not know, or no header, is a problem; the lines are still read', () => {
+  assert.equal(parseSidecar('{"opendoc":2}\n').problem, null);
+  assert.equal(parseSidecar('{"opendoc":3}\n').problem, 'version');
+  assert.equal(parseSidecar('{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": []\n}\n').problem, 'invalid');
+  assert.equal(parseSidecar('').problem, 'invalid');
 });
 
 test('writing: the whole file, bad lines kept as they are, unknown fields kept, a duplicate written once', () => {
