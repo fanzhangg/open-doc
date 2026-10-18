@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenDoc Design System</title>
+  <!-- A live specimen: the app's own stylesheet and classes, so this page is
+       always what the app looks like. Run `npm run build` to view it locally. -->
+  <link rel="stylesheet" href="../dist/web/app.css">
+  <style>
+    .ds { flex: 1; overflow-y: auto; }
+    .ds-page { max-width: 880px; margin: 0 auto; padding: 48px 24px 120px; }
+    .ds-top { display: flex; align-items: center; gap: 12px; }
+    .ds h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+    .ds h2 { margin: 56px 0 6px; font-size: 16px; font-weight: 600; }
+    .ds h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); }
+    .ds p, .ds li { color: var(--text-soft); line-height: 1.6; }
+    .ds p { margin: 0 0 12px; max-width: 640px; }
+    .ds ol, .ds ul { margin: 0 0 12px; padding-left: 20px; max-width: 680px; }
+    .ds li { margin: 4px 0; }
+    .ds strong { color: var(--text); font-weight: 600; }
+    .ds code { font: 12px var(--mono); padding: 1px 4px; border-radius: 4px; background: var(--bg-soft); color: var(--text); }
+    .ds-lead { font-size: 16px; }
+    .ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .ds-swatch { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .ds-swatch i { height: 48px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); }
+    .ds-swatch span { color: var(--text-soft); }
+    .ds-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 8px 0; }
+    .ds-box { padding: 20px; border-radius: 10px; background: var(--canvas); box-shadow: var(--shadow); }
+    .ds-scale { display: flex; flex-direction: column; gap: 10px; }
+    .ds-scale div { display: flex; align-items: baseline; gap: 16px; }
+    .ds-scale span:first-child { width: 72px; flex: none; color: var(--text-faint); font-size: 12px; }
+    .ds-radius i { width: 56px; height: 56px; background: var(--bg-soft); box-shadow: inset 0 0 0 1px var(--border-strong); }
+    .ds-prose { font-family: var(--doc-font); font-size: var(--doc-size); line-height: var(--doc-leading); }
+    .ds-card { position: static; max-width: 340px; cursor: default; }
+  </style>
+</head>
+<body>
+<main class="ds">
+<div class="ds-page">
+
+  <div class="ds-top">
+    <h1>Paper and ink</h1>
+    <span class="od-spacer"></span>
+    <div class="od-segmented" role="radiogroup" aria-label="Theme">
+      <button type="button" role="radio" data-theme-pick="light" aria-checked="true">Light</button>
+      <button type="button" role="radio" data-theme-pick="dark" aria-checked="false">Dark</button>
+    </div>
+  </div>
+  <p class="ds-lead">OpenDoc's design system. The page is quiet so the writing and the buddies stand out: a warm grey ramp, one ink, and colour only where it means something.</p>
+  <p>This page is rendered with the app's own <code>web/app.css</code>. Change the system there and here together.</p>
+
+  <h2>Rules for changing the UI</h2>
+  <p>For anyone, person or agent, who changes how the app looks.</p>
+  <ol>
+    <li><strong>Reuse before adding.</strong> Use an existing class (<code>.od-primary</code>, <code>.od-secondary</code>, <code>.od-icon-btn</code>, <code>.od-input</code>, <code>.od-segmented</code>, <code>.od-switch</code>, <code>.od-panel</code>…) before writing a new rule.</li>
+    <li><strong>Colours are tokens.</strong> No hex, <code>rgb()</code>, <code>oklch()</code>, <code>black</code> or <code>white</code> outside the token blocks at the top of <code>app.css</code>. A colour with a new meaning gets a token there, and a line on this page, first.</li>
+    <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions; green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
+    <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full. Spacing is on a 4px grid.</li>
+    <li><strong>One primary button per view.</strong> Everything else is secondary, ghost or a link button.</li>
+    <li><strong>Sentence case.</strong> Labels and headings are never all caps.</li>
+    <li><strong>Both themes.</strong> Check light and dark; tokens flip on their own, so a change that needs a dark-only override is usually using the wrong token.</li>
+  </ol>
+  <p><code>test/design-system.test.js</code> fails on colour literals and off-scale sizes, radii and weights in <code>web/app.css</code> and <code>desktop/start.html</code>.</p>
+
+  <h2>Colour</h2>
+  <h3>Surfaces and ink</h3>
+  <div class="ds-grid">
+    <div class="ds-swatch"><i style="background: var(--canvas)"></i><b>--canvas</b><span>Window, page</span></div>
+    <div class="ds-swatch"><i style="background: var(--bg)"></i><b>--bg</b><span>Popovers, dialogs, active card</span></div>
+    <div class="ds-swatch"><i style="background: var(--bg-soft)"></i><b>--bg-soft</b><span>Toolbar, sidebar, cards, code</span></div>
+    <div class="ds-swatch"><i style="background: var(--hover)"></i><b>--hover</b><span>Hover wash</span></div>
+    <div class="ds-swatch"><i style="background: var(--active)"></i><b>--active</b><span>Selected, pressed, current</span></div>
+    <div class="ds-swatch"><i style="background: var(--border-strong)"></i><b>--border / -strong</b><span>Hairlines, outlines</span></div>
+    <div class="ds-swatch"><i style="background: var(--text-faint)"></i><b>--text-faint</b><span>Placeholders, meta</span></div>
+    <div class="ds-swatch"><i style="background: var(--text-soft)"></i><b>--text-soft</b><span>Secondary text, icons</span></div>
+    <div class="ds-swatch"><i style="background: var(--text)"></i><b>--text</b><span>Ink: text, primary fill</span></div>
+  </div>
+  <h3>Colours that mean something</h3>
+  <div class="ds-grid">
+    <div class="ds-swatch"><i style="background: var(--highlight)"></i><b>--highlight</b><span>Commented text</span></div>
+    <div class="ds-swatch"><i style="background: var(--highlight-active)"></i><b>--highlight-active</b><span>The open comment's text</span></div>
+    <div class="ds-swatch"><i style="background: var(--accent)"></i><b>--accent</b><span>Focus, selection, links only</span></div>
+    <div class="ds-swatch"><i style="background: var(--red)"></i><b>--red</b><span>Danger, errors, deletions</span></div>
+    <div class="ds-swatch"><i style="background: var(--green)"></i><b>--green</b><span>Insertions, online</span></div>
+  </div>
+  <h3>Buddies</h3>
+  <p>Each buddy has its own colour (<code>web/faces.js</code>): Clippy's sunflower, then seven hues evenly apart. It is set as <code>--buddy</code> on whatever belongs to that buddy: its face, @chip, edits, flag, typing dots and the card it is working on.</p>
+  <div class="ds-grid">
+    <div class="ds-swatch"><i style="background: oklch(0.84 0.17 85)"></i><b>Clippy</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 135)"></i><b>135</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 180)"></i><b>180</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 225)"></i><b>225</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 270)"></i><b>270</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 315)"></i><b>315</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 0)"></i><b>0</b></div>
+    <div class="ds-swatch"><i style="background: oklch(0.78 0.14 45)"></i><b>45</b></div>
+  </div>
+
+  <h2>Type</h2>
+  <p>Inter for the UI. The doc's own font (sans, serif or mono) and its sizes in <code>em</code> are the writer's, not the UI's.</p>
+  <div class="ds-box ds-scale">
+    <div><span>24 / 600</span><span style="font-size: 24px; font-weight: 600">Display</span></div>
+    <div><span>20 / 600</span><span style="font-size: 20px; font-weight: 600">Large heading</span></div>
+    <div><span>16 / 600</span><span style="font-size: 16px; font-weight: 600">Section heading</span></div>
+    <div><span>14 / 400</span><span style="font-size: 14px">Comment text, menus, the base size</span></div>
+    <div><span>13 / 500</span><span style="font-size: 13px; font-weight: 500">Buttons, controls, settings</span></div>
+    <div><span>12 / 400</span><span style="font-size: 12px; color: var(--text-soft)">Names, times, hints, small headings</span></div>
+    <div><span>11 / 500</span><span style="font-size: 11px; font-weight: 500; color: var(--text-soft)">Badges, keys, flags</span></div>
+  </div>
+
+  <h2>Shape and depth</h2>
+  <div class="ds-row ds-radius">
+    <div class="ds-swatch"><i style="border-radius: 4px"></i>4 chips, keys</div>
+    <div class="ds-swatch"><i style="border-radius: 6px"></i>6 controls, rows</div>
+    <div class="ds-swatch"><i style="border-radius: 10px"></i>10 cards, menus</div>
+    <div class="ds-swatch"><i style="border-radius: 14px"></i>14 dialogs</div>
+    <div class="ds-swatch"><i style="border-radius: 50%"></i>full faces</div>
+  </div>
+  <div class="ds-row" style="gap: 24px; margin-top: 20px">
+    <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow)"></i><b>--shadow</b><span>Resting cards</span></div>
+    <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow-raised)"></i><b>--shadow-raised</b><span>Anything floating</span></div>
+  </div>
+
+  <h2>Components</h2>
+  <h3>Buttons</h3>
+  <div class="ds-row">
+    <button class="od-primary" type="button">Reply</button>
+    <button class="od-secondary" type="button">Cancel</button>
+    <button class="od-secondary od-danger" type="button">Delete</button>
+    <button class="od-link-button" type="button">Reopen</button>
+    <button class="od-icon-btn" type="button" aria-label="Settings"><svg class="od-icon" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
+  </div>
+  <h3>Toolbar: pressed is ink on grey</h3>
+  <div class="od-toolbar" style="margin: 0; max-width: 520px">
+    <div class="od-tool-group">
+      <button type="button" aria-pressed="true" aria-label="Bold"><svg class="od-icon" viewBox="0 0 24 24"><path d="M6 12h8a4 4 0 0 1 0 8H6V4h7a4 4 0 0 1 0 8"/></svg></button>
+      <button type="button" aria-label="Italic"><svg class="od-icon" viewBox="0 0 24 24"><path d="M19 4h-9M14 20H5M15 4 9 20"/></svg></button>
+      <button type="button" aria-label="Link"><svg class="od-icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+    </div>
+    <span class="od-spacer"></span>
+    <button class="od-pill od-tool-comment" type="button" aria-pressed="false"><svg class="od-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Comments<span class="od-comment-count">3</span></button>
+  </div>
+  <h3>Fields and choices</h3>
+  <div class="ds-row">
+    <input class="od-input" placeholder="Your name">
+    <div class="od-segmented" role="radiogroup"><button type="button" role="radio" aria-checked="true">Normal</button><button type="button" role="radio" aria-checked="false">Wide</button></div>
+    <input class="od-switch" type="checkbox" checked aria-label="On">
+    <input class="od-switch" type="checkbox" aria-label="Off">
+  </div>
+  <h3>Lists: current is ink on grey</h3>
+  <div class="od-files" style="position: static; width: 240px; border-radius: 10px; border: 0; padding: 8px">
+    <ul class="od-files-tree" style="padding: 0">
+      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px">Launch plan</button></li>
+      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px" aria-current="page">Roadmap</button></li>
+      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px">Notes</button></li>
+    </ul>
+  </div>
+  <h3>Text: comments, buddy edits, links</h3>
+  <div class="ds-box ds-prose od-editor">
+    We ship the beta to <span class="od-hl">fifty design partners</span> in March, then
+    <span class="od-hl od-hl-active">open the waitlist</span> once
+    <span class="od-buddy-edit" style="--buddy: oklch(0.84 0.17 85)">onboarding is stable</span>.
+    See <a href="#">the checklist</a>.
+  </div>
+  <h3>A thread</h3>
+  <div class="od-card ds-card" style="--buddy: oklch(0.84 0.17 85)">
+    <div class="od-msg">
+      <div class="od-msg-head"><span class="od-who"><span class="od-name">Fan</span><span class="od-time">2m</span></span></div>
+      <div class="od-body">Too vague. <span class="od-at od-at-agent">@Clippy</span> can you make it concrete? cc <span class="od-at od-at-person">@Sam</span></div>
+    </div>
+    <div class="od-typing"><span class="od-dots"><i></i><i></i><i></i></span>Clippy is working on it</div>
+  </div>
+  <h3>Tooltip and keys</h3>
+  <div class="ds-row">
+    <span class="od-tip" style="position: static">Bold <kbd>⌘B</kbd></span>
+    <kbd>⌘K</kbd>
+  </div>
+
+</div>
+</main>
+<script>
+  for (const button of document.querySelectorAll('[data-theme-pick]')) {
+    button.addEventListener('click', () => {
+      document.documentElement.dataset.theme = button.dataset.themePick;
+      for (const b of document.querySelectorAll('[data-theme-pick]')) b.setAttribute('aria-checked', String(b === button));
+    });
+  }
+</script>
+</body>
+</html>

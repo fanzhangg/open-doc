@@ -84,6 +84,7 @@ export function createCommentMargin(margin, handlers) {
     const working = thread.resolved ? [] : agents.filter((a) => a.threadIds.includes(thread.id)).map((a) => a.name);
     card.classList.toggle('od-card-active', active);
     card.classList.toggle('od-card-working', working.length > 0);
+    if (working.length > 0) card.style.setProperty('--buddy', buddyColor(working[0]));
     card.classList.toggle('od-card-resolved', thread.resolved);
     // A click that ends selecting the card's text leaves the selection, to copy.
     card.addEventListener('click', (event) => {
@@ -111,6 +112,7 @@ export function createCommentMargin(margin, handlers) {
     for (const name of working) {
       const row = el('div', 'od-typing');
       row.title = `${name} is working on it`;
+      row.style.setProperty('--buddy', buddyColor(name));
       row.append(avatar(name, 'agent', true), dots());
       card.append(row);
     }
@@ -501,6 +503,7 @@ export function withMentions(text, people) {
     const chip = el('span', `od-at od-at-${who.kind}`, text.slice(start, end));
     chip.dataset.mention = who.name;
     chip.dataset.mentionKind = who.kind;
+    if (who.kind === 'agent') chip.style.setProperty('--buddy', buddyColor(who.name));
     nodes.push(chip);
     at = end;
   }

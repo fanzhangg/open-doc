@@ -904,7 +904,7 @@ async function start() {
     },
     onClosed: buildMenu,
     // A new page's background until it draws: the editor's canvas in the user's theme.
-    background: () => ((settings.theme === 'dark' || (settings.theme !== 'light' && nativeTheme.shouldUseDarkColors)) ? '#191919' : '#ffffff'),
+    background: () => ((settings.theme === 'dark' || (settings.theme !== 'light' && nativeTheme.shouldUseDarkColors)) ? '#1c1b19' : '#ffffff'),
   });
   buildMenu();
   app.on('browser-window-focus', buildMenu);

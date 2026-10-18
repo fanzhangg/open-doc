@@ -6,3 +6,4 @@
 - commit、PR 和文档保持极简：只写核心观点和本质复杂度，不讨论偶然复杂度；git/GitHub 上的交互（commit、PR、issue、评论）用英文。
 - 优先用中文回答我的问题；回复简洁，只讲要点。
 - session 结束前，把没解决完的问题和打算以后做的事直接在 GitHub 提 issue 记录（每件事一个，只写是什么、为什么）；先查重，已有就在原 issue 下补充。
+- 改 UI 前先读设计系统 `docs/design.html`（线上 https://fanzhangg.github.io/open-doc/design/），严格按它的规则改；系统本身要变时，先改它和 `web/app.css` 的 tokens，再改界面。
