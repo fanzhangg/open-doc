@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   folder: () => ipcRenderer.invoke('opendoc:action', 'folder'),
   /** Show the folder's doc `path` (one of `folder().docs`) in this window. */
   openInFolder: (path) => act('openInFolder', String(path)),
+  /** Follow a link in this doc: a URL, or a path from the doc's folder. */
+  openLink: (href) => act('openLink', String(href)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
   /**
    * A new doc ('doc', which then opens here) or folder ('folder') `name` (`/`
