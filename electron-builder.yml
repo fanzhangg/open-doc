@@ -47,6 +47,8 @@ mac:
   # signature the bundle's signature is broken and shows as "damaged".
   identity: "-"
   hardenedRuntime: false
+  # Chromium's own UI strings; the other locales add about 48 MB.
+  electronLanguages: [en, zh_CN]
   fileAssociations: &markdown
     - ext: [md, markdown]
       name: Markdown Document
