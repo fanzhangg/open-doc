@@ -37,7 +37,8 @@ jobs:
         working-directory: pages
         run: |
           cp ../main/site/* .
-          sed -i 's#\.\./dist/web/#./dist/web/#g; s#\.\./build/#./build/#g' *.html
+          # ?v= makes browsers fetch each deploy's CSS instead of a cached one.
+          sed -i "s#\.\./dist/web/#./dist/web/#g; s#\.\./build/#./build/#g; s#\.css\"#.css?v=${GITHUB_SHA::7}\"#g" *.html
           mkdir -p build dist/web/fonts
           cp ../main/build/icon.svg ../main/build/icon.png build/
           cp ../main/dist/web/app.css ../main/dist/web/faces.js dist/web/
