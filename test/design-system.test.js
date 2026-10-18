@@ -12,12 +12,14 @@ const WEIGHTS = ['400', '500', '600'];
 const SPACING = [0, 2, 4, 6, 8, 12, 16, 24, 32, 48]; // larger values are layout
 const HEIGHTS = [24, 28, 32, 36, 40]; // controls; smaller ones are icons and lines
 
-const sheets = {
-  'web/app.css': readFileSync(new URL('../web/app.css', import.meta.url), 'utf8'),
-  'desktop/start.html': readFileSync(new URL('../desktop/start.html', import.meta.url), 'utf8').match(/<style>([\s\S]*?)<\/style>/)[1],
-  'site/site.css': readFileSync(new URL('../site/site.css', import.meta.url), 'utf8'),
-  'site/index.html': readFileSync(new URL('../site/index.html', import.meta.url), 'utf8').match(/<style>([\s\S]*?)<\/style>/)[1],
-};
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const sheets = Object.fromEntries(['web/app.css', 'site/site.css'].map((path) => [path, read(path)]));
+
+// Styles live in those two files, so they are all checked here.
+test('pages have no <style> blocks', () => {
+  const pages = ['web/index.html', 'desktop/start.html', 'site/index.html', 'site/design.html', 'site/avatars.html'];
+  assert.deepEqual(pages.filter((path) => /<style[\s>]/.test(read(path))), []);
+});
 
 // Every declaration outside the token blocks (`:root…{}` with no descendant)
 // and the font faces.
