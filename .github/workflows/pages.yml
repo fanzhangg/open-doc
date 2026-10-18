@@ -7,7 +7,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: [build/icon.svg, build/icon.png, docs/design.html, web/app.css]
+    paths: [build/icon.svg, build/icon.png, docs/design.html, web/app.css, web/faces.js, src/core/buddies.js]
   workflow_dispatch:
 
 permissions:
@@ -41,6 +41,7 @@ jobs:
           mkdir -p design dist/web/fonts
           cp ../main/docs/design.html design/index.html
           cp ../main/dist/web/app.css dist/web/app.css
+          cp ../main/dist/web/faces.js dist/web/faces.js
           cp ../main/dist/web/fonts/* dist/web/fonts/
           git add -A
           git diff --cached --quiet && exit 0
