@@ -8,11 +8,11 @@
   <link rel="stylesheet" href="../dist/web/app.css">
   <style>
     body { user-select: none; }
-    .od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 20px 16px; }
+    .od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 16px 16px; }
     .od-start h2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
 
     /* the one way in: the OS dialog opens a folder, or makes a new one */
-    .od-start-open { display: flex; align-items: center; gap: 6px; height: 28px; margin-left: 4px; padding: 0 12px 0 10px; border: 0; border-radius: 6px; background: var(--text); color: var(--on-text); font-size: 13px; font-weight: 500; }
+    .od-start-open { display: flex; align-items: center; gap: 6px; height: 28px; margin-left: 4px; padding: 0 12px 0 8px; border: 0; border-radius: 6px; background: var(--text); color: var(--on-text); font-size: 13px; font-weight: 500; }
     .od-start-open:hover { background: color-mix(in srgb, var(--text) 86%, var(--canvas)); }
     .od-start-open [data-icon] { display: flex; }
     .od-start-open .od-icon { width: 16px; height: 16px; }
@@ -20,7 +20,7 @@
     /* recent projects: rows like the docs sidebar's */
     .od-recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     .od-recent ul { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; }
-    .od-recent li button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 13px; }
+    .od-recent li button { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 13px; }
     .od-recent li button:hover { background: var(--hover); }
     .od-recent li .od-icon { width: 16px; height: 16px; color: var(--text-faint); }
     .od-recent-name { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }

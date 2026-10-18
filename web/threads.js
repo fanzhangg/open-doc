@@ -163,7 +163,7 @@ export function createCommentMargin(margin, handlers) {
     if (state === 'edited') {
       box.addEventListener('mouseenter', () => handlers.onLight?.(hash));
       box.addEventListener('mouseleave', () => handlers.onLight?.(null));
-      const undo = el('button', 'od-icon-button od-receipt-undo');
+      const undo = el('button', 'od-icon-btn od-receipt-undo');
       undo.type = 'button';
       undo.title = `Undo ${changes === 1 ? 'this edit' : `these ${changes} edits`}`;
       undo.setAttribute('aria-label', undo.title);
@@ -218,7 +218,7 @@ export function createCommentMargin(margin, handlers) {
   }
 
   function resolveButton(thread) {
-    const button = el('button', 'od-icon-button od-resolve');
+    const button = el('button', 'od-icon-btn od-resolve');
     button.type = 'button';
     button.title = 'Mark as resolved and hide';
     button.setAttribute('aria-label', 'Resolve');

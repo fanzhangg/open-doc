@@ -37,12 +37,13 @@
     <li><strong>Reuse before adding.</strong> Use an existing class (<code>.od-primary</code>, <code>.od-secondary</code>, <code>.od-icon-btn</code>, <code>.od-input</code>, <code>.od-segmented</code>, <code>.od-switch</code>, <code>.od-panel</code>…) before writing a new rule.</li>
     <li><strong>Colours are tokens.</strong> No hex, <code>rgb()</code>, <code>oklch()</code>, <code>black</code> or <code>white</code> outside the token blocks at the top of <code>app.css</code>. A colour with a new meaning gets a token there, and a line on this page, first.</li>
     <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions; green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
-    <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full. Spacing is on a 4px grid.</li>
+    <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full; spacing 2, 4, 6, 8, 12, 16, 24, 32, 48px; control heights 24, 28, 32px (36 and 40 for bars and big buttons).</li>
+    <li><strong>One of each control.</strong> Icon buttons are <code>.od-icon-btn</code>: 28px, 32 in the header, 24 inside a row. Menu and list rows share one size, set once in <code>app.css</code>: 28px tall, 8px side padding, radius 6, 13px; grey on hover, <code>--active</code> when selected or current.</li>
     <li><strong>One primary button per view.</strong> Everything else is secondary, ghost or a link button.</li>
     <li><strong>Sentence case.</strong> Labels and headings are never all caps.</li>
     <li><strong>Both themes.</strong> Check light and dark; tokens flip on their own, so a change that needs a dark-only override is usually using the wrong token.</li>
   </ol>
-  <p><code>test/design-system.test.js</code> fails on colour literals and off-scale sizes, radii and weights in <code>web/app.css</code> and <code>desktop/start.html</code>.</p>
+  <p><code>test/design-system.test.js</code> fails on colour literals, all-caps text, and off-scale sizes, weights, radii, spacing and control heights in <code>web/app.css</code>, <code>desktop/start.html</code> and the site's own styles.</p>
 
   <h2>Colour</h2>
   <h3>Surfaces and ink</h3>

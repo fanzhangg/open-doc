@@ -1,5 +1,6 @@
 // The app's styles keep to the design system (site/design.html): colours
-// only as tokens, and sizes, radii and weights only from its scales.
+// only as tokens; sizes, radii, weights, spacing and control heights only
+// from its scales; and no all-caps text.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,6 +9,8 @@ import { readFileSync } from 'node:fs';
 const FONT_SIZES = ['11px', '12px', '13px', '14px', '16px', '20px', '24px'];
 const RADII = ['0', '4px', '6px', '10px', '14px', '50%', '999px'];
 const WEIGHTS = ['400', '500', '600'];
+const SPACING = [0, 2, 4, 6, 8, 12, 16, 24, 32, 48]; // larger values are layout
+const HEIGHTS = [24, 28, 32, 36, 40]; // controls; smaller ones are icons and lines
 
 const sheets = {
   'web/app.css': readFileSync(new URL('../web/app.css', import.meta.url), 'utf8'),
@@ -51,5 +54,19 @@ for (const [file, css] of Object.entries(sheets)) {
     const bad = decls.filter(({ prop, value }) => prop.startsWith('border') && prop.endsWith('radius')
       && value.split(/\s+/).some((v) => !RADII.includes(v) && v !== 'inherit'));
     assert.deepEqual(bad, []);
+  });
+
+  test(`${file}: spacing and control heights are on the scale`, () => {
+    const px = (value) => (/calc|var\(/.test(value) ? [] : [...value.matchAll(/-?([\d.]+)px/g)].map(([, n]) => Number(n)));
+    const bad = decls.filter(({ prop, value }) => {
+      if (/^(padding|margin|gap|row-gap|column-gap)(-|$)/.test(prop)) return px(value).some((n) => n <= 48 && !SPACING.includes(n));
+      if (prop === 'height' || prop === 'min-height') return px(value).some((n) => n > 20 && n <= 40 && !HEIGHTS.includes(n));
+      return false;
+    });
+    assert.deepEqual(bad, []);
+  });
+
+  test(`${file}: no all-caps text`, () => {
+    assert.deepEqual(decls.filter(({ prop, value }) => prop === 'text-transform' && value !== 'none'), []);
   });
 }
