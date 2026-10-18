@@ -56,8 +56,8 @@ gh pr merge --auto --squash
 ```
 
 `--auto` merges the PR on its own once the required checks, `package (windows)`
-and `package (macos)` (lint, installers, smoke test), pass. Merging rebuilds the
-nightly from main. The `test` job does not block the merge, so look at it
+and `package (macos)` (lint, installers, smoke test), pass and one person other
+than the author approves it. Merging rebuilds the nightly from main. The `test` job does not block the merge, so look at it
 before you walk away: if your change broke a unit test, fix it in the same PR
 (`gh pr merge --disable-auto` first if it needs more than a quick push).
 
