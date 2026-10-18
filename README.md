@@ -45,6 +45,7 @@ npm run dist:desktop          # installer in release/
 
 - [Product vision](docs/product-vision.md)
 - [Architecture](docs/architecture.md)
+- [Design system](https://fanzhangg.github.io/open-doc/design.html): how the app looks, and the rules for changing it
 - [Comment format spec](spec/SPEC.md): the open sidecar format, so other tools can read and write OpenDoc comments
 
 ## Contributing

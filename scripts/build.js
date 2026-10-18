@@ -33,6 +33,16 @@ await build({
   legalComments: 'linked',
   logLevel: 'info',
 });
+// The faces on their own, for the design page (site/avatars.html).
+await build({
+  entryPoints: [join(root, 'web', 'faces.js')],
+  outfile: join(out, 'faces.js'),
+  bundle: true,
+  format: 'esm',
+  target: 'es2022',
+  minify: true,
+  logLevel: 'info',
+});
 await copyFile(join(root, 'web', 'index.html'), join(out, 'index.html'));
 await copyFile(join(root, 'web', 'app.css'), join(out, 'app.css'));
 await copyFile(join(root, 'build', 'icon.svg'), join(out, 'icon.svg'));
