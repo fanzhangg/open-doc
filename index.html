@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download OpenDoc</title>
-<meta name="description" content="Co-author plain markdown with AI agents. Download OpenDoc for macOS or Windows.">
-<link rel="icon" href="build/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="dist/web/app.css">
+<meta name="description" content="AI buddies collaborate with you in the same Markdown doc, in real time, like teammates. Download OpenDoc for macOS or Windows.">
+<link rel="icon" href="./build/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./dist/web/app.css">
 <link rel="stylesheet" href="site.css">
 <style>
   main { max-width: 880px; margin: 0 auto; padding: 56px 16px 48px; font-size: 14px; line-height: 1.6; }
@@ -48,7 +48,7 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-brand" href="index.html"><img src="build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
+  <a class="site-brand" href="index.html"><img src="./build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
   <nav class="site-nav" aria-label="Pages">
     <a href="index.html" aria-current="page">Download</a>
     <a href="design.html">Design</a>
@@ -63,9 +63,9 @@
 </header>
 <main>
   <section class="hero">
-    <img src="build/icon.svg" alt="" width="96" height="96">
+    <img src="./build/icon.svg" alt="" width="96" height="96">
     <h1>OpenDoc</h1>
-    <p class="tagline">Co-author plain markdown with AI agents. Comments, suggestions and an agent that answers in the thread, right next to your doc.</p>
+    <p class="tagline">AI buddies collaborate with you in the same Markdown doc, in real time, like teammates.</p>
     <span class="version">Nightly build · early preview</span>
   </section>
 
@@ -88,15 +88,8 @@
       <h3>Install</h3>
       <ol>
         <li>Open the downloaded file and drag <b>OpenDoc</b> into <b>Applications</b>.</li>
-        <li>Open OpenDoc. macOS says it can't verify the app — click <b>Done</b>.</li>
-        <li>Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b> next to OpenDoc, then confirm.</li>
+        <li>Open OpenDoc from <b>Applications</b>. The first time, macOS asks if you're sure — click <b>Open</b>.</li>
       </ol>
-      <p class="note">You only need to do this once. The warning appears because this preview isn't notarized by Apple yet.</p>
-      <details>
-        <summary>No “Open Anyway” button?</summary>
-        <p>Open Terminal and run:</p>
-        <pre><code>xattr -dr com.apple.quarantine /Applications/OpenDoc.app</code></pre>
-      </details>
       <details>
         <summary>Not sure which Mac you have?</summary>
         <p>Apple menu → <b>About This Mac</b>. If it says <b>Chip: Apple M…</b>, this download works. Intel Macs aren't supported yet.</p>
