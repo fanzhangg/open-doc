@@ -95,7 +95,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* ---- menu and list rows: one size everywhere ---- */
 
-:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-files-option, .od-people-row, .od-version, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+:where(.od-block-menu li, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-files-option, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
 /* ---- header ---- */
 
@@ -547,12 +547,12 @@ label.od-setting { cursor: pointer; }
 /* ---- home window (desktop/start.html) ---- */
 
 .od-home { user-select: none; }
-.od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 16px 16px; }
-.od-start h2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
-/* the one way in: the OS dialog opens a folder, or makes a new one */
-.od-start-open { margin-left: 4px; padding-left: 8px; }
-.od-start-open [data-icon] { display: flex; }
-.od-start-open .od-icon { width: 16px; height: 16px; }
+.od-start { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px; }
+/* the one way in, a row like the agent list's New buddy: the OS dialog opens a folder, or makes a new one */
+.od-start-open { display: flex; align-items: center; gap: 8px; margin: 0 -8px 8px; border: 0; background: none; color: var(--text-soft); font-weight: 500; text-align: left; }
+.od-start-open:hover { background: var(--hover); color: var(--text); }
+.od-start-open [data-icon] { width: 16px; height: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed var(--border-strong); border-radius: 4px; }
+.od-start-open .od-icon { width: 11px; height: 11px; }
 /* recent projects: rows like the docs sidebar's */
 .od-recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .od-recent ul { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; }

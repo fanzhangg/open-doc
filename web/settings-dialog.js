@@ -245,7 +245,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     next.focus();
   });
 
-  document.querySelector('.od-settings-toggle').addEventListener('click', () => open('general'));
+  document.querySelector('.od-settings-toggle')?.addEventListener('click', () => open('general'));
 
   /** Open on `section`, or close when it is already showing that section. */
   function toggle(section) {

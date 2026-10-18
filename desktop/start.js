@@ -1,4 +1,4 @@
-// The home page: Open Project, the recent projects, and Settings. Bundled
+// The home page: Open Project, the recent projects, and Settings (from the menu). Bundled
 // into dist/web/start.js (scripts/build.js) so it shares the editor's look
 // and parts: its stylesheet and theme, tooltips and the Settings dialog.
 
