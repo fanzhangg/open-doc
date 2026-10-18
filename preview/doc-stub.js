@@ -1,0 +1,333 @@
+// A stand-in for the doc host (src/host/doc-service.js) so the doc window
+// opens in a plain browser (preview/build.js): a sample doc, or with
+// `?folder` a sample project and the app's side of its sidebar
+// (window.opendocDesktop), read with the same src/core as the app. Kept in
+// sessionStorage, so switching docs (`?folder&doc=<path>`, a new page as
+// in the app) and reloading keep it; a new tab starts over.
+// Buddies don't run: one asked answers with a set reply after a moment.
+// No history, no undo, no menus.
+
+import { createAnchor, findQuote, locate } from '../src/core/anchor.js';
+import { askedOf, newId, peopleOf, threadsOf } from '../src/core/comments.js';
+import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
+import { sameName } from '../src/core/mentions.js';
+import { project } from '../src/core/project.js';
+import { DEFAULT_SETTINGS, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
+
+const params = new URLSearchParams(location.search);
+const inFolder = params.has('folder');
+const KEY = `opendoc.preview.${inFolder ? 'folder' : 'doc'}`;
+
+const WELCOME = `# Welcome to OpenDoc
+
+This is a preview of the editor in a browser. Edit anything: changes stay in this tab.
+
+## Comments
+
+Select some text and press the comment button to start a thread. Mention @Clippy to ask it; here it answers with a set reply, since buddies only run in the desktop app.
+
+## What is not here
+
+Opening files and folders, version history and undoing a buddy's edit need the desktop app.
+`;
+
+const PROJECT = {
+  'README.md': `# Sample Project
+
+A folder opened as a project: its files in the sidebar, and its own buddies, Editor and Researcher, next to Clippy.
+
+Open a doc from the sidebar, rename one (F2), delete one (Delete) or drag it into another folder. New files come from the right-click menu, which is the desktop app's own, so not here.
+`,
+  'notes/plan.md': `# Plan
+
+1. Draft the launch post.
+2. Check the numbers in the budget.
+3. Share the draft for comments.
+`,
+  'notes/meeting.md': `# Meeting notes
+
+We agreed to ship the preview first and ask for feedback before the next step.
+`,
+  'drafts/launch-post.md': `# Introducing OpenDoc
+
+Write plain Markdown with people and AI buddies, in comments next to the text.
+`,
+  'data/budget.csv': 'item,cost\ndesign,1200\nhosting,40\n',
+};
+
+// The sample threads: a comment by you on `quote`, and a buddy's answer.
+const THREADS = inFolder
+  ? [
+    { doc: 'README.md', quote: 'its own buddies', ask: '@Editor is this clear enough?', by: 'Editor', answer: 'Yes. Maybe say what a buddy is in one line.' },
+    { doc: 'notes/plan.md', quote: 'Check the numbers', ask: '@Researcher which numbers?', by: 'Researcher', answer: 'The hosting cost in data/budget.csv looks low.' },
+  ]
+  : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: CLIPPY.name, answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
+
+const ai = (name) => ({ id: name, name, kind: 'ai' });
+const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+function seed() {
+  const settings = { ...DEFAULT_SETTINGS, id: 'u_preview', name: 'you' };
+  const me = { id: settings.id, name: settings.name, kind: 'human' };
+  const files = inFolder ? { ...PROJECT } : { 'Welcome.md': WELCOME };
+  const comments = {};
+  for (const t of THREADS) {
+    const text = project(files[t.doc]).text;
+    const found = findQuote(text, t.quote);
+    const id = newId('c');
+    (comments[t.doc] ??= []).push(
+      { id, anchor: createAnchor(text, found.start, found.end), by: me, at: ago(30), body: t.ask },
+      { id: newId('c'), thread: id, by: ai(t.by), at: ago(29), body: t.answer },
+    );
+  }
+  return {
+    settings, files, comments, clippy: null,
+    buddies: inFolder ? [{ name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
+    expanded: ['notes'], sidebar: true, carry: null,
+  };
+}
+
+let s;
+try {
+  s = JSON.parse(sessionStorage.getItem(KEY)) ?? seed();
+} catch {
+  s = seed();
+}
+function save() {
+  try {
+    sessionStorage.setItem(KEY, JSON.stringify(s));
+  } catch {
+    // no storage: kept until the page goes
+  }
+}
+save();
+
+const DOC = /\.(md|markdown)$/i;
+const docs = () => Object.keys(s.files).filter((path) => DOC.test(path)).sort();
+let current = s.files[params.get('doc')] !== undefined && DOC.test(params.get('doc')) ? params.get('doc') : docs()[0];
+const name = (path) => path.split('/').pop();
+const me = () => ({ id: s.settings.id, name: s.settings.name, kind: 'human' });
+const comments = () => (s.comments[current] ??= []);
+const buddies = () => buddiesHere(s.buddies, s.clippy ? [{ name: CLIPPY.name, about: s.clippy }] : []);
+
+// FNV-1a, standing in for the file's sha256: only equality matters here.
+function hash(text) {
+  let h = 0x811c9dc5;
+  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return (h >>> 0).toString(16);
+}
+
+const running = new Map(); // buddy name → thread ids
+const agents = () => buddies().map((b) => ({ ...b, state: running.has(b.name) ? 'running' : 'ready', threadIds: running.get(b.name) ?? [] }));
+
+function view() {
+  const text = project(s.files[current]).text;
+  const threads = threadsOf(comments(), buddies().map((b) => b.name)).map((thread) => {
+    if (!thread.anchor) return { ...thread, detached: false };
+    const found = locate(text, thread.anchor);
+    return { ...thread, anchor: found ? createAnchor(text, found.start, found.end) : thread.anchor, detached: !found };
+  });
+  return { threads, people: peopleOf(comments()), edits: {}, readOnly: null, notice: null };
+}
+
+let listener = null;
+const emit = (event, data) => listener?.(event, data);
+
+// The buddies this user's comments ask, as the runner would start them.
+function answer() {
+  for (const thread of threadsOf(comments(), buddies().map((b) => b.name))) {
+    for (const asked of askedOf(thread, s.settings.id)) {
+      if (running.get(asked)?.includes(thread.id)) continue;
+      running.set(asked, [...(running.get(asked) ?? []), thread.id]);
+      emit('agents', agents());
+      setTimeout(() => {
+        const left = running.get(asked).filter((id) => id !== thread.id);
+        if (left.length) running.set(asked, left);
+        else running.delete(asked);
+        if (!threadsOf(comments()).find((t) => t.id === thread.id)?.resolved) {
+          comments().push({ id: newId('c'), thread: thread.id, by: ai(asked), at: new Date().toISOString(), body: 'This is a preview, so I can\'t read or edit the doc here. In the desktop app I would answer you now.' });
+          save();
+          emit('sidecar', {});
+        }
+        emit('agents', agents());
+      }, 1500);
+    }
+  }
+}
+
+function add(comment) {
+  comments().push({ id: newId('c'), by: me(), at: new Date().toISOString(), ...comment });
+  save();
+  setTimeout(answer);
+  return { ...view(), id: comments().at(-1).id };
+}
+
+const refuse = (message) => {
+  throw Object.assign(new Error(message), { code: 'bad_input' });
+};
+
+function checkBuddy(fields) {
+  checkBuddyPatch(fields);
+  if (fields.name !== undefined && [CLIPPY.name, s.settings.name].some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
+}
+
+function changedBuddies() {
+  save();
+  emit('agents', agents());
+  return { agents: agents() };
+}
+
+const calls = {
+  state: () => ({ doc: name(current), markdown: s.files[current], docHash: hash(s.files[current]), ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
+  saveDoc({ markdown, baseHash }) {
+    const now = s.files[current];
+    if (baseHash !== hash(now)) return { conflict: true, markdown: now, docHash: hash(now) };
+    s.files[current] = markdown;
+    save();
+    return { docHash: hash(markdown), markdown };
+  },
+  comment: ({ anchor, body }) => add({ anchor, body }),
+  reply: ({ thread, body }) => add({ thread, body }),
+  resolve: ({ thread }) => add({ thread, body: '', resolved: true }),
+  reopen: ({ thread }) => add({ thread, body: '' }),
+  saveSettings(patch) {
+    checkSettingsPatch(patch);
+    s.settings = mergeSettings(s.settings, patch);
+    save();
+    emit('settings', s.settings);
+    return { settings: s.settings };
+  },
+  scripts: () => ({ agents: ['claude', 'codex'], shipped: ['claude', 'codex'], folder: '(the desktop app\'s config folder)' }),
+  resetScript: () => ({ agents: ['claude', 'codex'] }),
+  createBuddy({ buddy }) {
+    if (!inFolder) refuse('buddies other than Clippy belong to a project');
+    const fields = { about: '', ...buddy };
+    checkBuddy(fields);
+    if (!fields.name) refuse('a buddy needs a name');
+    if (buddies().some((b) => sameName(b.name, fields.name))) refuse(`the name ${fields.name} is taken`);
+    s.buddies.push(fields);
+    return changedBuddies();
+  },
+  updateBuddy({ name: was, patch = {} }) {
+    const found = buddies().find((b) => sameName(b.name, was)) ?? refuse('no such buddy');
+    if (found.where === 'app' && patch.name !== undefined) refuse(`${found.name} keeps its name`);
+    checkBuddy(patch);
+    if (found.where === 'app') s.clippy = patch.about ?? s.clippy;
+    else s.buddies = s.buddies.map((b) => (sameName(b.name, was) ? { ...b, ...patch } : b));
+    return changedBuddies();
+  },
+  deleteBuddy({ name: gone }) {
+    if (sameName(gone, CLIPPY.name)) refuse(`${CLIPPY.name} cannot be deleted`);
+    s.buddies = s.buddies.filter((b) => !sameName(b.name, gone));
+    return changedBuddies();
+  },
+  history: () => ({ versions: [] }),
+  version: () => refuse('no history in the preview'),
+  restoreVersion: () => refuse('no history in the preview'),
+  undoReply: () => refuse('no undo in the preview'),
+};
+
+window.opendocHost = {
+  async call(type, arg) {
+    try {
+      return { result: structuredClone(await calls[type](arg ?? {})) };
+    } catch (error) {
+      return { error: { message: error.message, code: error.code ?? 'bad_input' } };
+    }
+  },
+  onEvent(fn) {
+    listener = fn;
+    fn('hello', { missing: false, agents: agents() });
+  },
+};
+
+// ---- the folder (desktop/main.js's side of the sidebar) ----
+
+if (inFolder) {
+  const inside = (path, base) => !base || path === base || path.startsWith(`${base}/`);
+  const parents = (path) => path.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
+  const exists = (path) => s.files[path] !== undefined || Object.keys(s.files).some((file) => parents(file).includes(path));
+  let onChanged = () => {};
+  s.expanded = [...new Set([...s.expanded, ...parents(current)])]; // the open doc shows in the tree
+  save();
+
+  // Show doc `path` here: as in the app, a new page, told how this one left things.
+  async function open(path) {
+    s.carry = await window.opendocLeave();
+    save();
+    location.search = `?folder&doc=${encodeURIComponent(path)}`;
+  }
+
+  function changed() {
+    save();
+    onChanged();
+  }
+
+  window.opendocDesktop = {
+    folder() {
+      const carry = s.carry;
+      s.carry = null;
+      save();
+      return Promise.resolve({ name: 'Sample Project', current, expanded: s.expanded, sidebar: s.sidebar, carry });
+    },
+    folderList(path) {
+      const names = new Map();
+      for (const file of Object.keys(s.files).filter((f) => inside(f, path) && f !== path)) {
+        const [first, ...rest] = (path ? file.slice(path.length + 1) : file).split('/');
+        names.set(first, rest.length > 0 || names.get(first) === true);
+      }
+      return Promise.resolve([...names].map(([n, folder]) => ({ name: n, folder }))
+        .sort((a, b) => (b.folder - a.folder) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+    },
+    folderRead: (path) => Promise.resolve({ text: s.files[path] ?? '' }),
+    openInFolder: (path) => open(path),
+    folderRename(from, kind, to) {
+      if (exists(to)) return Promise.resolve({ error: `${name(to)} is already here.` });
+      const moved = (path) => to + path.slice(from.length);
+      for (const map of [s.files, s.comments]) {
+        for (const path of Object.keys(map).filter((p) => (kind === 'folder' ? inside(p, from) : p === from))) {
+          map[moved(path)] = map[path];
+          delete map[path];
+        }
+      }
+      s.expanded = s.expanded.map((path) => (inside(path, from) ? moved(path) : path));
+      if (kind === 'folder' ? inside(current, from) : current === from) {
+        current = moved(current);
+        history.replaceState(null, '', `?folder&doc=${encodeURIComponent(current)}`);
+        emit('renamed', { doc: name(current) });
+      }
+      changed();
+      return Promise.resolve({ rel: to });
+    },
+    async folderTrash(rel, kind) {
+      if (!window.confirm(`Delete ${name(rel)}?`)) return { trashed: false };
+      for (const map of [s.files, s.comments]) {
+        for (const path of Object.keys(map).filter((p) => (kind === 'folder' ? inside(p, rel) : p === rel))) delete map[path];
+      }
+      changed();
+      if (s.files[current] === undefined && docs().length > 0) await open(docs()[0]);
+      return { trashed: true };
+    },
+    folderExpand(path, isOpen) {
+      s.expanded = isOpen ? [...new Set([...s.expanded, path])] : s.expanded.filter((p) => p !== path);
+      save();
+      return Promise.resolve();
+    },
+    showSidebar(isOpen) {
+      s.sidebar = isOpen;
+      save();
+      return Promise.resolve();
+    },
+    onFolderChanged: (fn) => {
+      onChanged = fn;
+    },
+    // The app's menus (new file among them) and dialogs: none in a browser.
+    folderMenu: () => Promise.resolve(),
+    onFolderCommand: () => {},
+    onCommand: () => {},
+    openLink: () => Promise.resolve(),
+    rename: () => Promise.resolve(),
+    revealSidecar: () => Promise.resolve(),
+    showAgents: () => Promise.resolve(),
+  };
+}

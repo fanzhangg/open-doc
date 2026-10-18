@@ -2,7 +2,7 @@
 # system, rendered with the app's own stylesheet and faces. Its pages point
 # at ../dist/web/ and ../build/ in the repo; here those live next to them.
 # preview/ is the app's pages in a plain browser, for trying the UX
-# (scripts/preview.js); nothing links to it.
+# (preview/build.js); nothing links to it.
 # When any of it changes on main, publish it. Run it by hand to catch up.
 
 name: Pages
@@ -10,7 +10,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: [site/**, build/icon.svg, build/icon.png, web/**, src/core/**, desktop/start.*, desktop/*-preview-stub.js, scripts/build.js, scripts/preview.js]
+    paths: [site/**, build/icon.svg, build/icon.png, web/**, src/core/**, desktop/start.*, preview/**, scripts/build.js]
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
           node-version: 22
       - name: Build the stylesheet, faces, fonts and preview
         working-directory: main
-        run: npm ci && npm run build && node scripts/preview.js
+        run: npm ci && npm run build && node preview/build.js
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - name: Copy, and push if anything changed
