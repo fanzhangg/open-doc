@@ -1,4 +1,4 @@
-// The Settings dialog (General, Appearance, Editor, Shortcuts), tooltips that
+// The Settings dialog (Appearance, Editor, Shortcuts, Agent), tooltips that
 // show shortcuts, and how shortcuts are written: shared by the editor
 // (web/ui.js) and the desktop start window (desktop/start.js), so both look
 // and behave the same. Settings are saved for every doc and window (see
@@ -20,7 +20,6 @@ const DIALOG = `
 <dialog class="od-settings" aria-label="Settings">
   <nav class="od-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
     <div class="od-settings-title">Settings</div>
-    <button type="button" role="tab" data-section="general" data-icon="user">General</button>
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
@@ -29,20 +28,7 @@ const DIALOG = `
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
 
-    <section class="od-settings-section" role="tabpanel" data-section="general">
-      <h2>General</h2>
-      <div class="od-setting">
-        <div class="od-setting-text">
-          <label for="od-name-input">Your name</label>
-        </div>
-        <div class="od-setting-control">
-          <input id="od-name-input" class="od-input" type="text" autocomplete="off" spellcheck="false" maxlength="64">
-          <div class="od-input-error" role="alert" hidden>Use letters, digits, . _ or -</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="od-settings-section" role="tabpanel" data-section="appearance" hidden>
+    <section class="od-settings-section" role="tabpanel" data-section="appearance">
       <h2>Appearance</h2>
       <div class="od-setting">
         <div class="od-setting-text">
@@ -134,17 +120,15 @@ export function keyLabel(keys) {
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
  * one page shows. `scripts` ({ list() → { agents, shipped, folder }, reset(name),
  * showFolder? }) backs Agent, which picks the agent script.
- * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, scripts: object }} options
+ * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>,
+ *           onApply?: (settings: object) => void, scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, scripts }) {
+export function setupSettings({ store, onApply = () => {}, scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   hydrateIcons(dialog);
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
-  const nameInput = dialog.querySelector('#od-name-input');
-  const nameError = dialog.querySelector('.od-input-error');
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
   dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
@@ -187,7 +171,6 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     mark('[data-theme-choice]', 'themeChoice', settings.theme);
     mark('[data-width]', 'width', settings.width);
     for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
-    if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
   }
   store.subscribe(apply);
@@ -199,24 +182,11 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     if (section === 'agent') paintScripts();
   }
 
-  function open(section = 'general') {
-    nameInput.value = getName();
-    nameError.hidden = true;
+  function open(section = 'appearance') {
     show(section);
     if (!dialog.open) dialog.showModal();
-    if (section === 'general') nameInput.focus();
-    else tabs.find((tab) => tab.dataset.section === section).focus();
+    tabs.find((tab) => tab.dataset.section === section).focus();
   }
-
-  // The name takes effect as soon as it is valid; an invalid one is pointed out and not kept.
-  nameInput.addEventListener('input', () => {
-    const next = nameInput.value.trim();
-    nameError.hidden = next === '' || setName(next);
-  });
-  nameInput.addEventListener('blur', () => {
-    nameInput.value = getName();
-    nameError.hidden = true;
-  });
 
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) return dialog.close(); // backdrop
@@ -245,7 +215,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     next.focus();
   });
 
-  document.querySelector('.od-settings-toggle').addEventListener('click', () => open('general'));
+  document.querySelector('.od-settings-toggle').addEventListener('click', () => open());
 
   /** Open on `section`, or close when it is already showing that section. */
   function toggle(section) {
@@ -258,7 +228,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     const mod = mac ? event.metaKey : event.ctrlKey;
     if (mod && !event.altKey && (event.key === '/' || event.key === ',')) {
       event.preventDefault();
-      toggle(event.key === '/' ? 'shortcuts' : 'general');
+      toggle(event.key === '/' ? 'shortcuts' : 'appearance');
     }
   });
 

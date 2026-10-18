@@ -5,7 +5,6 @@
 import { hydrateIcons, icon } from '../web/icons.js';
 import { createSettings } from '../web/settings.js';
 import { setupSettings, setupTooltips } from '../web/settings-dialog.js';
-import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const desktop = window.opendocDesktop;
 const list = document.querySelector('.od-recent ul');
@@ -30,16 +29,10 @@ desktop.settings().then((initial) => {
   store = createSettings(initial, { save: (patch) => desktop.saveSettings(patch), onError: () => {} });
   settings = setupSettings({
     store,
-    getName: () => store.get().name ?? '',
-    setName(next) {
-      if (!NAME_PATTERN.test(next)) return false;
-      if (next !== store.get().name) store.set({ name: next });
-      return true;
-    },
     scripts: { list: desktop.agentScripts, reset: desktop.resetAgentScript, showFolder: desktop.showAgents },
   });
 });
-desktop.onCommand((name) => settings?.toggle(name === 'shortcuts' ? 'shortcuts' : 'general'));
+desktop.onCommand((name) => settings?.toggle(name === 'shortcuts' ? 'shortcuts' : 'appearance'));
 // Changed in another window, or in settings.json: the look follows.
 desktop.onSettingsChanged(() => desktop.settings().then((next) => store?.receive(next), () => {}));
 

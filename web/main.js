@@ -104,7 +104,7 @@ async function start() {
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
   me = settings.get().name ?? defaultName;
-  settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
+  settings.subscribe((next) => renameMe(next.name ?? defaultName));
   showDocName(initial.doc);
   offerRename();
   paintNameChip();
@@ -137,9 +137,7 @@ async function start() {
     },
   });
   synced = editor.getMarkdown();
-  chrome = createChrome({
-    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName,
-  });
+  chrome = createChrome({ editor, onComment: () => editor.requestComment(), settings });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
     onError: (message) => setStatus(message, 'error'),

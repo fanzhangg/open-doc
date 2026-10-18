@@ -24,10 +24,9 @@ const SLASH_ITEMS = [
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
- * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
- *           getName: () => string, setName: (name: string) => boolean }} options
+ * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings> }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName }) {
+export function createChrome({ editor, onComment, settings: store }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -35,8 +34,6 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
 
   const settings = setupSettings({
     store,
-    getName,
-    setName,
     onApply(next) {
       count.hidden = !next.wordCount;
       window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
@@ -172,7 +169,7 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       if (name === 'undo' || name === 'redo') {
         if (document.activeElement?.closest('.ProseMirror')) editor.run(name);
         else document.execCommand(name);
-      } else if (name === 'settings') settings.toggle('general');
+      } else if (name === 'settings') settings.toggle('appearance');
       else if (name === 'shortcuts') settings.toggle('shortcuts');
     },
   };
