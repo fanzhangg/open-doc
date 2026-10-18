@@ -1,5 +1,5 @@
 // A stand-in for desktop/preload.cjs so the start window opens in a plain
-// browser (scripts/preview.js). Sample recent projects and default
+// browser (preview/build.js). Sample recent projects and default
 // settings, kept in memory: Settings works; Open Project and
 // the recent list only log, since there is no app to open them.
 
