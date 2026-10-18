@@ -362,12 +362,19 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--buddy, var(--text)); animation: od-fade 6s ease-out forwards; }
 @keyframes od-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
-/* a buddy's edit: underlined in its colour until you type, then faded; its receipt lights it again */
-.od-buddy-edit { background: color-mix(in oklch, var(--buddy) 16%, transparent); box-shadow: inset 0 -2px 0 var(--buddy); border-radius: 0; transition: background 0.4s, box-shadow 0.4s; }
-.od-buddy-edit.od-faded { background: transparent; box-shadow: none; }
+/* a buddy's run as a revision: new text in its colour, removed text grey and struck through */
+.od-buddy-edit { background: color-mix(in oklch, var(--buddy) 16%, transparent); box-shadow: inset 0 -2px 0 var(--buddy); border-radius: 0; }
+.od-buddy-del { color: var(--text-faint); text-decoration: line-through; }
+del.od-buddy-del { margin-right: 0.15em; }
+.od-buddy-del.od-replay { animation: od-replay-del 0.6s ease-out both; }
+.od-buddy-edit.od-replay { animation: od-replay-buddy 0.7s ease-out 0.55s both; }
+@keyframes od-replay-buddy { from { opacity: 0; background: color-mix(in oklch, var(--buddy) 40%, transparent); } }
 .od-receipt { display: flex; align-items: center; gap: 6px; margin-top: 8px; min-height: 28px; padding: 0 2px 0 8px; border: 1px solid color-mix(in oklch, var(--buddy) 45%, transparent); border-radius: 6px; background: color-mix(in oklch, var(--buddy) 8%, transparent); color: var(--text-soft); font-size: 12px; font-variant-numeric: tabular-nums; }
-.od-receipt > .od-icon { width: 14px; height: 14px; flex: none; color: var(--buddy); }
-.od-receipt-text { flex: 1; min-width: 0; }
+.od-receipt > .od-icon, .od-receipt-show > .od-icon { width: 14px; height: 14px; flex: none; color: var(--buddy); }
+/* the count shows the run's edits in the text, pressed while they are shown */
+.od-receipt-show { display: flex; flex: 1; min-width: 0; align-self: stretch; align-items: center; gap: 6px; border: 0; padding: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.od-receipt:has(.od-receipt-show:hover) { background: color-mix(in oklch, var(--buddy) 14%, transparent); }
+.od-receipt:has(.od-receipt-show[aria-pressed="true"]) { border-color: var(--buddy); background: color-mix(in oklch, var(--buddy) 20%, transparent); color: var(--text); }
 .od-receipt-undone { border-color: var(--border); background: none; }
 .od-receipt-undone > .od-icon { color: var(--text-faint); }
 

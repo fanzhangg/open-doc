@@ -6,8 +6,8 @@
   <title>OpenDoc Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=66833ac">
-  <link rel="stylesheet" href="site.css?v=66833ac">
+  <link rel="stylesheet" href="./dist/web/app.css?v=2336d60">
+  <link rel="stylesheet" href="site.css?v=2336d60">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -36,7 +36,7 @@
   <ol>
     <li><strong>Reuse before adding.</strong> Use an existing class (<code>.od-primary</code>, <code>.od-secondary</code>, <code>.od-icon-btn</code>, <code>.od-input</code>, <code>.od-segmented</code>, <code>.od-switch</code>, <code>.od-panel</code>…) before writing a new rule.</li>
     <li><strong>Colours are tokens.</strong> No hex, <code>rgb()</code>, <code>oklch()</code>, <code>black</code> or <code>white</code> outside the token blocks at the top of <code>app.css</code>. A colour with a new meaning gets a token there, and a line on this page, first.</li>
-    <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions; green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
+    <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions (a buddy's deletions are grey); green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
     <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full; spacing 2, 4, 6, 8, 12, 16, 24, 32, 48px; control heights 24, 28, 32px (36 and 40 for bars and big buttons).</li>
     <li><strong>One of each control.</strong> Icon buttons are <code>.od-icon-btn</code>: 28px, 32 in the header, 24 inside a row. Menu and list rows share one size, set once in <code>app.css</code>: 28px tall, 8px side padding, radius 6, 13px; grey on hover, <code>--active</code> when selected or current.</li>
     <li><strong>One primary button per view.</strong> Everything else is secondary, ghost or a link button.</li>
@@ -67,7 +67,7 @@
     <div class="ds-swatch"><i style="background: var(--green)"></i><b>--green</b><span>Insertions, online</span></div>
   </div>
   <h3>Buddies</h3>
-  <p>Each buddy has its own colour, the one in its face (see <a href="avatars.html">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag and the card it is working on.</p>
+  <p>Each buddy has its own colour, the one in its face (see <a href="avatars.html">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag and the card it is working on. A run's edits show in the text as a revision: new text in its colour, removed text grey and struck through where it was.</p>
 
   <h2>Type</h2>
   <p>Inter for the UI. The doc's own font (sans, serif or mono) and its sizes in <code>em</code> are the writer's, not the UI's.</p>
@@ -132,7 +132,7 @@
   <div class="ds-box ds-prose od-editor">
     We ship the beta to <span class="od-hl">fifty design partners</span> in March, then
     <span class="od-hl od-hl-active">open the waitlist</span> once
-    <span class="od-buddy-edit" style="--buddy: oklch(0.84 0.17 85)">onboarding is stable</span>.
+    <del class="od-buddy-del">the beta is solid</del><span class="od-buddy-edit" style="--buddy: oklch(0.84 0.17 85)">onboarding is stable</span>.
     See <a href="#">the checklist</a>.
   </div>
   <h3>A thread</h3>
