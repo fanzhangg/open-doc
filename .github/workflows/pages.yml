@@ -37,7 +37,7 @@ jobs:
         working-directory: pages
         run: |
           cp ../main/site/* .
-          sed -i 's#\.\./dist/web/#dist/web/#g; s#\.\./build/#build/#g' *.html
+          sed -i 's#\.\./dist/web/#./dist/web/#g; s#\.\./build/#./build/#g' *.html
           mkdir -p build dist/web/fonts
           cp ../main/build/icon.svg ../main/build/icon.png build/
           cp ../main/dist/web/app.css ../main/dist/web/faces.js dist/web/
