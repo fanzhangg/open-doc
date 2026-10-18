@@ -122,8 +122,9 @@ written only by the app.
 A thread waits on buddy X when a comment by this machine's user, newer than
 X's last comment there, asks X. A comment asks whom it @mentions; one that
 mentions no one asks the thread's buddies: the one that opened it, and each
-the user @mentioned there before. That is computed from the sidecar and the
-user's id. Buddies run only on docs open in a window.
+the user @mentioned there before. An empty one (resolving, reopening) asks
+no one. That is computed from the sidecar and the user's id. Buddies run
+only on docs open in a window.
 
 ### How a turn works
 
@@ -137,13 +138,18 @@ user's id. Buddies run only on docs open in a window.
    copy's diff into the doc, three-way from the copy as it started, adds
    the appended comments as the buddy's, and writes the reply as the
    buddy's comment. Where the human changed the same text meanwhile, the
-   buddy's change is dropped and the reply is marked `conflict`.
+   buddy's change is dropped and the reply is marked `conflict`. The reply
+   and comments are dated just after the last comment the turn was given,
+   so a comment the user wrote meanwhile still waits on X.
 4. The private folder is deleted, and the turn gets a line in the config
    folder's `logs/runs.jsonl`: doc, buddy, thread, start, duration, and
    `ok`, `failed`, `timedOut` or `stopped` with the exit code.
 
+Resolving a thread ends its turns at once, with no answer; a turn that
+ended but is not merged yet is dropped. Deleting a buddy ends its turns too.
+
 A buddy comments as a human does: new threads, replies in any thread. It
-cannot resolve; anything but appended comments is ignored
+cannot resolve or reopen; anything but appended comments is ignored
 ([agent config](agent-config.md#comments)). Its comments start no turns
 (principle 6).
 

@@ -29,8 +29,8 @@ MUST keep fields it does not understand.
 | `thread` | string, optional | The first comment of the thread this one replies in. Absent on a first comment. |
 | `anchor` | object or null, optional | First comments only: the text it is about (§3). Absent or `null` for a comment on the whole doc. |
 | `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. A human's `id` is random and stays when the name changes; a buddy's `id` is its name. |
-| `at` | string | When it was written, RFC 3339 UTC. |
-| `body` | string | Plain text; may be empty when `resolved` is set, or on a buddy's reply. |
+| `at` | string | When it was written, RFC 3339 UTC. A buddy's reply and comments: just after the latest comment of the thread it answered, as its run saw it. |
+| `body` | string | Plain text; may be empty on a reply (a human's resolves or reopens), or when `resolved` is set. |
 | `resolved` | `true`, optional | Humans only: resolves the thread. |
 | `conflict` | `true`, optional | Buddies only: part of its edit was dropped because a human changed the same text meanwhile. |
 | `failed` | `true`, optional | Buddies only: its run failed; `body` is the end of the program's output. |
@@ -131,7 +131,8 @@ score = 50 * quoteSim
 2. A thread is its first comment and the comments whose `thread` is its id,
    ordered by `at`, then `id`. A reply whose first comment is missing is
    hidden.
-3. A thread is resolved when its latest comment has `resolved`.
+3. A thread is resolved when its latest human comment has `resolved`:
+   only people resolve and reopen.
 4. A human is shown by the name in their latest comment.
 5. A line that is not valid JSON or not a valid comment is reported, skipped
    and kept as it is.

@@ -22,7 +22,8 @@ export class Runner {
    * comments }, `comments` the sidecar's text or null.
    * `script()` is the path of the agent script, `folder()` the project
    * folder or null, `human()` the user's name. `finish(result)` takes a run
-   * that ended: { threadId, name, base, edited, comments, body, failed },
+   * that ended: { threadId, name, base, seen, edited, comments, body, failed },
+   * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
    * `comments` { before, after } the sidecar's copy at the start and end. `onChange()` runs
    * when a run starts or ends. `log(entry)` takes a line on each run that
@@ -69,6 +70,15 @@ export class Runner {
     return this.checking;
   }
 
+  /** End the runs `which({ threadId, name })` picks, without an answer. */
+  cancel(which) {
+    for (const run of this.runs.values()) {
+      if (!which(run)) continue;
+      run.cancelled = true;
+      killTree(run.child);
+    }
+  }
+
   /** End every run without an answer (an unanswered ask runs again next time) and start no more. */
   async stop() {
     this.stopped = true;
@@ -84,7 +94,7 @@ export class Runner {
   }
 
   #start(key, { threadId, thread, buddy }) {
-    const run = { threadId, name: buddy.name, child: null, done: null };
+    const run = { threadId, name: buddy.name, child: null, done: null, cancelled: false };
     this.runs.set(key, run);
     run.done = this.#run(run, thread, buddy)
       .catch((error) => console.error(`Run of ${buddy.name} failed to finish:`, error))
@@ -114,11 +124,15 @@ export class Runner {
         OPENDOC_COMMENTS: sidecar,
         OPENDOC_PROJECT: folder ?? '',
         OPENDOC_BUDDY: buddy.name,
-      }, onChild: (child) => { run.child = child; } });
-      const outcome = this.stopped ? 'stopped' : result.timedOut ? 'timedOut' : result.code === 0 ? 'ok' : 'failed';
+      }, onChild: (child) => {
+        run.child = child;
+        if (run.cancelled) killTree(child);
+      } });
+      const stopped = this.stopped || run.cancelled;
+      const outcome = stopped ? 'stopped' : result.timedOut ? 'timedOut' : result.code === 0 ? 'ok' : 'failed';
       await this.log({ buddy: buddy.name, thread: run.threadId, at: new Date(at).toISOString(), ms: Date.now() - at, outcome, code: result.code });
-      if (this.stopped) return; // ended by stop: no answer
-      const out = { threadId: run.threadId, name: buddy.name, base };
+      if (stopped) return; // ended by stop or cancel: no answer
+      const out = { threadId: run.threadId, name: buddy.name, base, seen: thread.comments.at(-1).at };
       if (result.code === 0) {
         const edited = await readFile(copy, 'utf8').catch(() => base);
         const after = await readFile(sidecar, 'utf8').catch(() => before);
