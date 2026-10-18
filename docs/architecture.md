@@ -153,10 +153,11 @@ What the app knows, the app shows, not the buddy's reply: under the reply,
 how many places the turn edited, with Undo; a dropped change marks the reply
 `conflict`; its comments are in the margin. The reply says only what the
 app cannot (why, what to decide), and may be empty. The turn's edits land at
-once, underlined in the buddy's color until the user next types or another
-turn's edits land; hovering the count shows them again. The count, the
-underlines and Undo are on the machine that ran it only, read from the
-version saved after the turn.
+once, shown as a revision (new text in the buddy's color, removed text
+struck through) until the user next types or another turn's edits land;
+clicking the count shows them again. The count, the revision and Undo are on
+the machine that ran it only, read from the version saved after the turn and
+the one before it.
 
 ### Failures, retries and restarts
 

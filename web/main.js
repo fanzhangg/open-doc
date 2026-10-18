@@ -18,6 +18,8 @@ import { icon } from './icons.js';
 import { merge3 } from '../src/core/merge.js';
 import { project } from '../src/core/project.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
+import { diffEdits } from '../src/core/diff.js';
+import { editItems } from './review.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
@@ -113,6 +115,7 @@ async function start() {
     stage: document.querySelector('.od-stage'),
     markdown: initial.markdown,
     onChange: () => {
+      hideRun();
       dirty = true;
       version++;
       setStatus('Saving…', 'saving');
@@ -161,7 +164,7 @@ async function start() {
     onResolve: (thread) => send(api.resolve(thread)),
     onReopen: (thread) => send(api.reopen(thread)),
     onUndo: undoReply,
-    onLight: (hash) => editor.lightEdits(hash),
+    onShowEdits: (id) => (id ? showRun(id) : hideRun()),
     onSelect: (id) => {
       select(id);
       if (narrow.matches) revealText(id);
@@ -227,6 +230,9 @@ async function start() {
     if (event.key !== 'Escape' || event.defaultPrevented || !sheetOpen()) return;
     openSheet(false);
     commentsToggle.focus();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hideRun(); // even when the editor took it
   });
   document.addEventListener('pointerdown', (event) => {
     if (!sheetOpen() || event.target.closest('.od-margin, .od-tool-comment, .od-show-resolved, [data-thread], .od-bubble')) return;
@@ -379,16 +385,17 @@ async function doSync() {
   const fresh = await api.state();
   if (fresh.docHash === baseHash) return;
   // A buddy's run wrote this doc when its version is the doc on disk.
-  const run = Object.values(fresh.edits ?? {}).find((e) => e.hash === fresh.docHash && e.state === 'edited');
+  const [reply, run] = Object.entries(fresh.edits ?? {}).find(([, e]) => e.hash === fresh.docHash && e.state === 'edited') ?? [];
   const theirs = editor.normalize(fresh.markdown);
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
   const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
-  // A buddy's changes are marked in its colour; anything else glows.
-  editor.applyMarkdown(merged.text, run?.by ?? ON_DISK, { buddy: Boolean(run), tag: run?.hash });
+  // A buddy's changes show as its revision; anything else glows.
+  editor.applyMarkdown(merged.text, run?.by ?? ON_DISK, { buddy: Boolean(run) });
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
+  if (run) showRun(reply, { scroll: false });
   if (merged.text === theirs) {
     dirty = false;
     setStatus('Saved');
@@ -610,6 +617,7 @@ async function send(request) {
 // Undo a buddy's edit. What you typed is saved first; the doc host merges
 // the undo into it, and the page takes the result as any change on disk.
 async function undoReply(id) {
+  if (shownRun === id) hideRun();
   await flushSave();
   try {
     applyComments(await api.undoReply(id));
@@ -618,6 +626,31 @@ async function undoReply(id) {
     throw error;
   }
   await syncFromDisk();
+}
+
+// ---- a buddy's run as a revision in the text ----
+
+// The edits of the run that wrote reply `id`, marked in the text until the
+// human types, presses Escape or toggles them off on the reply; `scroll`
+// brings the first into view. An edit changed since is left out.
+let shownRun = null;
+async function showRun(id, { scroll = true } = {}) {
+  const run = comments?.edits?.[id];
+  if (run?.state !== 'edited') return;
+  shownRun = id;
+  margin.setShownEdits(id);
+  const found = await api.version(run.version).catch(() => null);
+  if (shownRun !== id) return;
+  if (!found?.before) return hideRun();
+  const edits = diffEdits(editor.normalize(found.before), editor.normalize(found.markdown)).map((change) => change.edit);
+  editor.setPreview(editItems(editor.getMarkdown(), edits), { replay: true, scroll, by: run.by });
+}
+
+function hideRun() {
+  if (shownRun === null) return;
+  shownRun = null;
+  margin.setShownEdits(null);
+  editor.setPreview([]);
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js). The

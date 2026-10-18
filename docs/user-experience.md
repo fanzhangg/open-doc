@@ -66,13 +66,15 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 ## Buddies always edit, and every edit can be undone
 
 - A buddy edits a copy of the doc; when it is done, its changes are merged
-  into the doc as it is then, at once, underlined in its color until you
-  next type or another run's edits land.
+  into the doc as it is then, at once, and shown as a revision: new text in
+  its color, removed text grey and struck through where it was, until you
+  type, press Escape or another run's edits land.
 - A buddy comments as you do: on any passage, or in any thread. It cannot
   resolve. Its comments ask no one.
-- Under its reply the app shows how many places the run edited; hovering
-  it shows them again. The reply only says why, or what you need to
-  decide, and may be empty.
+- Under its reply the app shows how many places the run edited; clicking
+  it shows them in the text again (and scrolls to them), clicking again
+  hides them. Edits changed since are left out. The reply only says why,
+  or what you need to decide, and may be empty.
 - **Your text wins.** Where you changed the same text while it worked, yours
   stays, its change there is dropped, and its reply says so. @mention it
   again to redo it.
