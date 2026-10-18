@@ -25,6 +25,7 @@ import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { markdownPlugins } from './markdown-schema.js';
+import { diagrams } from './diagrams.js';
 import { diffBlocks } from './blocks.js';
 import { buddyColor } from './faces.js';
 
@@ -116,7 +117,8 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *           onChange: () => void, onSelectThread: (id: string) => void,
  *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
  */
-// `editable: false` makes a read-only view, such as an earlier version of the doc.
+// `editable: false` makes a read-only view, such as an earlier version of the doc;
+// it shows diagrams as their source, so the changes in them can be seen.
 export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
   // The doc as last loaded or applied; an update back to it is an echo, not a
   // local edit. Compared as a doc: serializing the whole doc on every change
@@ -148,7 +150,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
         }
       });
     })
-    .use(markdownPlugins).use(history).use(clipboard).use(listener)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .create();
 
@@ -191,9 +193,9 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const comment = (from, to, id) => {
       const thread = open.get(id);
       if (!thread && id !== 'draft') return;
-      let classes = 'od-hl';
-      if (id === 'draft' || id === activeId) classes += ' od-hl-active';
-      decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id }));
+      const active = id === 'draft' || id === activeId;
+      const classes = active ? 'od-hl od-hl-active' : 'od-hl';
+      decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id, active }));
       drawn.push(from, to, id, classes);
     };
     {
