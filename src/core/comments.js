@@ -78,7 +78,7 @@ function invalid(c) {
   if (c.anchor !== undefined && c.anchor !== null && !validAnchor(c.anchor)) return 'bad anchor';
   if (!isObject(c.by) || typeof c.by.id !== 'string' || !c.by.id || !NAME_PATTERN.test(c.by.name ?? '') || !['human', 'ai'].includes(c.by.kind)) return 'bad by';
   if (typeof c.at !== 'string' || !AT.test(c.at)) return 'bad at';
-  if (typeof c.body !== 'string' || (c.body.trim() === '' && c.resolved !== true && !(c.by.kind === 'ai' && c.thread))) return 'bad body';
+  if (typeof c.body !== 'string' || (c.body.trim() === '' && c.resolved !== true && !c.thread)) return 'bad body';
   for (const key of ['resolved', 'conflict', 'failed']) if (c[key] !== undefined && c[key] !== true) return `bad ${key}`;
   return null;
 }
@@ -142,7 +142,8 @@ const byTime = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 
 /**
  * The threads in `comments` (§4): each `{ id, anchor, resolved, comments }`,
  * its first comment then its replies, ordered by `at`, then `id`; threads in
- * the order of their first comments. A reply whose first comment is missing
+ * the order of their first comments. Only people resolve and reopen: a
+ * thread is resolved when its latest human comment says so. A reply whose first comment is missing
  * is left out. `mentionable` names who an @name can mean (§6); each comment
  * gets `mentions`, the names it mentions, as spelled there.
  */
@@ -151,7 +152,8 @@ export function threadsOf(comments, mentionable = []) {
   return firsts.map((first) => {
     const all = [first, ...comments.filter((c) => c.thread === first.id).sort(byTime)]
       .map((c) => ({ ...c, mentions: parseMentions(c.body, mentionable) }));
-    return { id: first.id, anchor: first.anchor ?? null, resolved: all.at(-1).resolved === true, comments: all };
+    const human = all.findLast((c) => c.by.kind === 'human');
+    return { id: first.id, anchor: first.anchor ?? null, resolved: human?.resolved === true, comments: all };
   });
 }
 
@@ -159,7 +161,7 @@ export function threadsOf(comments, mentionable = []) {
  * The buddies the open `thread` (from threadsOf) waits on: each X that a
  * comment by user `me` (an id) asks, newer than X's last comment there. A
  * comment asks whom it @mentions; one that mentions no one asks the
- * thread's buddies: the one that opened it and each that `me` @mentioned
+ * thread's buddies, unless it is empty (it resolved or reopened the thread): the one that opened it and each that `me` @mentioned
  * there before (docs/architecture.md, Who answers).
  */
 export function askedOf(thread, me) {
@@ -168,7 +170,7 @@ export function askedOf(thread, me) {
   const theirs = thread.comments[0].by.kind === 'ai' ? [thread.comments[0].by.id] : [];
   const asked = [];
   thread.comments.forEach((c, i) => {
-    if (c.by.kind !== 'human' || c.by.id !== me) return;
+    if (c.by.kind !== 'human' || c.by.id !== me || c.body.trim() === '') return;
     for (const name of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && sameName(r.by.id, name));
       if (!answered) add(asked, name);

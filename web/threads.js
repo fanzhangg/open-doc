@@ -4,7 +4,7 @@
 // replies, and its face at work while it works. A reply whose run failed, or
 // whose edit was partly dropped for the human's text, says so; one that
 // edited the doc on this machine shows its edits in the text and offers
-// Undo. Only the human resolves threads; they delete their own comments and buddies'.
+// Undo. Only people resolve and reopen threads.
 
 import { icon } from './icons.js';
 import { agentFace, buddyColor, personFace } from './faces.js';
@@ -115,7 +115,7 @@ export function createCommentMargin(margin, handlers) {
       card.append(row);
     }
     if (thread.resolved) {
-      const by = thread.comments.at(-1).by;
+      const by = thread.comments.findLast((c) => c.resolved).by;
       const row = el('div', 'od-resolved-row');
       row.append(checkIcon(), el('span', '', `Resolved by ${by.id === me.id ? 'you' : by.name}`));
       row.append(linkButton('Reopen', () => handlers.onReopen(thread.id)));
@@ -145,7 +145,7 @@ export function createCommentMargin(margin, handlers) {
     else row.append(head);
     // To retry, or to redo what was dropped, the human asks again.
     if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${comment.by.name} again to retry.`));
-    if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so part of the edit was dropped. @mention ${comment.by.name} again to redo it.`));
+    if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${comment.by.name} again to redo it.`));
     if (edits[comment.id]) row.append(receipt(comment.id, edits[comment.id]));
     row.classList.toggle('od-msg-failed', Boolean(comment.failed));
     return row;

@@ -100,7 +100,48 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
     assert.equal((await call('reply', { thread: id, body: 'Not yet' })).threads[0].resolved, false);
     await call('resolve', { thread: id });
     assert.equal((await call('reopen', { thread: id })).threads[0].resolved, false);
-    assert.equal((await threadOf(state, id)).comments.length, 5);
+    assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['Fix this', '', 'Not yet', '', ''], 'reopening is an empty reply');
+  });
+});
+
+test('a comment written while a buddy works asks it again once it replies', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+    await call('reply', { thread: id, body: '@Pilot say again' });
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await until(async () => (await threadOf(state, id)).comments.at(-1).body === 'again', 'the second reply');
+    assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['@Pilot hold', 'Nothing to change.', '@Pilot say again', 'again']);
+  });
+});
+
+test('resolving stops the thread\'s buddy, with nothing it did landing; reopening asks no one', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
+    await until(async () => (await state()).agents.some((a) => a.state === 'running'), 'the run');
+    await call('resolve', { thread: id });
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(500);
+    assert.equal((await threadOf(state, id)).resolved, true);
+    assert.equal((await threadOf(state, id)).comments.length, 2);
+    assert.match((await state()).markdown, /extra load/);
+    await call('reopen', { thread: id });
+    await pause(1000);
+    assert.equal((await fakeRuns(settingsDir)).length, 1);
+    assert.equal((await threadOf(state, id)).resolved, false);
+  });
+});
+
+test('deleting a buddy stops its runs', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+    await call('deleteBuddy', { name: 'Pilot' });
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(1000);
+    assert.equal((await threadOf(state, id)).comments.length, 1);
+    assert.match((await state()).markdown, /extra load/);
   });
 });
 

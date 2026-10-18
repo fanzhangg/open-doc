@@ -376,13 +376,14 @@ function afterTyping(key, fn) {
   entry.timer = setTimeout(() => afterTyping(key, fn), Math.min(pause, left));
 }
 
+// `by` flags a change no buddy's run made: ON_DISK, or what the human did.
 let syncing = null;
-function syncFromDisk() {
-  syncing ??= doSync().finally(() => { syncing = null; });
+function syncFromDisk(by = ON_DISK) {
+  syncing ??= doSync(by).finally(() => { syncing = null; });
   return syncing;
 }
 
-async function doSync() {
+async function doSync(by) {
   const fresh = await api.state();
   if (fresh.docHash === baseHash) return;
   // A buddy's run wrote this doc when its version is the doc on disk.
@@ -392,7 +393,7 @@ async function doSync() {
   // Where the change overlaps what the human typed since, the human's stays.
   const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
   // A buddy's changes show as its revision; anything else glows.
-  editor.applyMarkdown(merged.text, run?.by ?? ON_DISK, { buddy: Boolean(run) });
+  editor.applyMarkdown(merged.text, run?.by ?? by, { buddy: Boolean(run) });
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -626,7 +627,7 @@ async function undoReply(id) {
     setStatus(`Could not undo: ${error.message}`, 'error');
     throw error;
   }
-  await syncFromDisk();
+  await syncFromDisk('Undo');
 }
 
 // ---- a buddy's run as a revision in the text ----

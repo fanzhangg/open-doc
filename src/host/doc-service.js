@@ -178,13 +178,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // A comment by this user: a first comment (`anchor` on the doc's rendered
-  // text, or null for the whole doc), or a reply in `thread`.
-  async function comment({ thread, anchor = null, body, resolved = false } = {}) {
-    if (typeof body !== 'string' || (body.trim() === '' && !resolved)) throw new DocError('bad_input', 'a comment needs text');
+  // text, or null for the whole doc), or a reply in `thread`. Resolving and
+  // reopening are empty replies, which ask no one.
+  async function comment({ thread, anchor = null, body, resolved = false, reopen = false } = {}) {
+    if (typeof body !== 'string' || (body.trim() === '' && !resolved && !reopen)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
     const added = {
       id: newId('c'), ...(thread !== undefined ? { thread } : {}), ...(thread === undefined ? { anchor } : {}),
-      by: await me(), at: new Date().toISOString(), body: resolved ? '' : body, ...(resolved ? { resolved: true } : {}),
+      by: await me(), at: new Date().toISOString(), body: resolved || reopen ? '' : body, ...(resolved ? { resolved: true } : {}),
     };
     await serial(() => changeComments((lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
@@ -242,8 +243,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // A run ended (runner.js): merge what it changed in its copy into the doc,
   // three-way from the copy as it started, then post its reply. Where the
   // human changed the same text meanwhile, theirs stays, the buddy's change
-  // there is dropped and the reply says `conflict`. Run in `serial`.
-  async function finishRun({ threadId, name, base, edited, comments, body, failed }) {
+  // there is dropped and the reply says `conflict`. A run whose thread was
+  // resolved meanwhile is dropped whole. Its reply and comments come just
+  // after the last comment it saw, so one written while it worked still
+  // asks. Run in `serial`.
+  async function finishRun({ threadId, name, base, seen, edited, comments, body, failed }) {
+    const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
+    if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
     let conflict = false;
     const id = newId('c');
     if (edited !== null && edited !== base) {
@@ -260,9 +266,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       }
     }
     const by = { id: name, name, kind: 'ai' };
-    const now = Date.now();
+    const at = Date.parse(seen) + 1;
     const reply = {
-      id, thread: threadId, by, at: new Date(now + 1).toISOString(), body, // after its comments, so it ends its thread
+      id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
     // Its comments are on the doc as it is now, its edit merged in.
@@ -270,7 +276,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     await changeComments((lines) => {
       if (!lines.some((l) => l.comment?.id === threadId)) return lines;
       const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
-      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(now).toISOString(), threads }) : [];
+      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(at).toISOString(), threads }) : [];
       return [...lines, ...added.map((comment) => ({ comment })), { comment: reply }];
     }).catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
@@ -378,6 +384,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   async function deleteBuddy({ name } = {}) {
     const found = await buddyNamed(name);
     if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be deleted`);
+    runner.cancel((run) => sameName(run.name, found.name));
     return changeBuddies(() => removeBuddy(projectDir(), found.name));
   }
 
@@ -493,8 +500,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     saveDoc: (body) => serial(() => saveDoc(body ?? {})),
     comment: (body) => comment({ anchor: body?.anchor ?? null, body: body?.body }),
     reply: (body) => comment({ thread: body?.thread, body: body?.body }),
-    resolve: (body) => comment({ thread: body?.thread, body: '', resolved: true }),
-    reopen: (body) => comment({ thread: body?.thread, body: 'Reopened.' }),
+    // Resolving a thread stops the runs on it, with no answer.
+    async resolve(body) {
+      const result = await comment({ thread: body?.thread, body: '', resolved: true });
+      runner.cancel((run) => run.threadId === body.thread);
+      return result;
+    },
+    reopen: (body) => comment({ thread: body?.thread, body: '', reopen: true }),
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
       // Your name is no buddy's here, as no buddy's is yours.
