@@ -1,6 +1,6 @@
 // Bundle the browser editor into dist/web (run at publish time, not install).
 import { build } from 'esbuild';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,9 +8,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist', 'web');
 await mkdir(out, { recursive: true });
 
+// Split, so mermaid loads only with a doc's first diagram (web/diagrams.js).
+await rm(join(out, 'chunks'), { recursive: true, force: true });
 await build({
-  entryPoints: [join(root, 'web', 'main.js')],
-  outfile: join(out, 'app.js'),
+  entryPoints: { app: join(root, 'web', 'main.js') },
+  outdir: out,
+  splitting: true,
+  chunkNames: 'chunks/[name]-[hash]',
   bundle: true,
   format: 'esm',
   target: 'es2022',
