@@ -1,7 +1,7 @@
 // Which top-level blocks differ between two docs, so a change from disk
 // replaces only those (web/editor.js) and the caret stays put.
 
-import { Mark } from '@milkdown/kit/prose/model';
+import { Fragment, Mark } from '@milkdown/kit/prose/model';
 
 /**
  * Runs of children that differ between two nodes, aligned by a longest
@@ -9,6 +9,44 @@ import { Mark } from '@milkdown/kit/prose/model';
  */
 export function diffBlocks(a, b) {
   return diffSeq(a.childCount, b.childCount, (x, y) => sameBlock(a.child(x), b.child(y)));
+}
+
+/**
+ * Turn doc `a` into doc `b` in `tr` (a transaction on `a`), replacing the runs
+ * of blocks in `hunks` (from diffBlocks). A block replaced by one of the same
+ * type keeps what did not change, so a caret in it stays where it was.
+ */
+export function replaceBlocks(tr, a, b, hunks) {
+  for (const h of [...hunks].reverse()) {
+    const from = childPos(a, h.a0);
+    if (h.a1 - h.a0 === 1 && h.b1 - h.b0 === 1 && a.child(h.a0).type === b.child(h.b0).type) {
+      const old = a.child(h.a0);
+      const next = b.child(h.b0);
+      if (!sameAttrs(old, next)) tr.setNodeMarkup(from, null, next.attrs);
+      const start = old.content.findDiffStart(next.content);
+      if (start === null) continue;
+      let { a: endA, b: endB } = old.content.findDiffEnd(next.content);
+      // Repeated text can make the common end overlap the common start.
+      const overlap = start - Math.min(endA, endB);
+      if (overlap > 0) {
+        endA += overlap;
+        endB += overlap;
+      }
+      tr.replace(from + 1 + start, from + 1 + endA, next.slice(start, endB));
+    } else {
+      const nodes = [];
+      for (let k = h.b0; k < h.b1; k++) nodes.push(b.child(k));
+      tr.replaceWith(from, childPos(a, h.a1), Fragment.from(nodes));
+    }
+  }
+  return tr;
+}
+
+/** Document position where top-level child `index` of `doc` starts. */
+export function childPos(doc, index) {
+  let pos = 0;
+  for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize;
+  return pos;
 }
 
 // Runs where two sequences of length n and m differ, given equality by index.

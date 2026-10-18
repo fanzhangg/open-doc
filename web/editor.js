@@ -11,28 +11,32 @@ import {
   toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
   wrapInBulletListCommand, wrapInOrderedListCommand, turnIntoTextCommand,
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
+  headingKeymap, listItemKeymap,
 } from '@milkdown/kit/preset/commonmark';
 import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
+import { cursor } from '@milkdown/kit/plugin/cursor';
+import { trailing } from '@milkdown/kit/plugin/trailing';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, callCommand, replaceAll } from '@milkdown/kit/utils';
+import { $prose, $shortcut, callCommand, replaceAll } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
-import { Fragment } from '@milkdown/kit/prose/model';
+import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { markdownPlugins } from './markdown-schema.js';
 import { diagrams } from './diagrams.js';
-import { diffBlocks } from './blocks.js';
+import { childPos, diffBlocks, replaceBlocks } from './blocks.js';
 import { buddyColor } from './faces.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
 const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
+const FROM_DISK = 'opendoc-from-disk'; // meta of a change applied from disk, not typed
 
 // A ProseMirror doc never changes, so its projection and where each anchor is
 // in it are worked out once per doc, however often the highlights, the
@@ -93,6 +97,23 @@ const linkPlugin = $prose(() => new Plugin({
   },
 }));
 
+// Tab in a table's last cell adds a row. Milkdown's Tab (priority 100) only
+// moves to the next cell, and the key then left the table and broke it.
+const tableTab = $shortcut(() => ({
+  Tab: {
+    key: 'Tab',
+    priority: 90,
+    onRun: () => (state, dispatch, view) => {
+      if (!isInTable(state)) return false;
+      if (dispatch) {
+        addRowAfter(state, dispatch);
+        goToNextCell(1)(view.state, dispatch);
+      }
+      return true;
+    },
+  },
+}));
+
 // Reports every view update and lets the page take keys first (for the "/"
 // menu), and marks the top-level block holding the caret (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
@@ -120,10 +141,11 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
 export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
-  // The doc as last loaded or applied; an update back to it is an echo, not a
-  // local edit. Compared as a doc: serializing the whole doc on every change
-  // costs a long doc tens of milliseconds each time.
-  let baselineDoc = null;
+  // The human changed the doc since `updated` last fired: any change not
+  // applied from disk, even one that brings back the text as it was saved.
+  // What plugins append (the empty line kept after a last table or code
+  // block, which saves as nothing) follows from another change.
+  let edited = false;
   let onDocUpdated = () => {};
   const uiListeners = new Set();
   let keyHandler = () => false;
@@ -137,21 +159,34 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       ctx.set(rootCtx, host);
       ctx.set(defaultValueCtx, markdown);
       if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
+      // Milkdown edits headings as if they were source: Backspace or Delete at
+      // the start of one takes off a `#` (h3, h2, h1, text). Here Backspace
+      // joins the line above and Delete deletes, as in any text; Delete at the
+      // start of a list item deletes forward too.
+      ctx.update(headingKeymap.key, (keys) => ({ ...keys, DowngradeHeading: { shortcuts: [] } }));
+      ctx.update(listItemKeymap.key, (keys) => ({ ...keys, LiftFirstListItem: { shortcuts: 'Backspace' } }));
       // Match common markdown style so edited blocks change as little as possible.
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options, bullet: '-', emphasis: '*', strong: '*', rule: '-', fences: true, listItemIndent: 'one',
       }));
       // `updated` is debounced (200 ms) and fires only when the doc changed.
-      ctx.get(listenerCtx).updated((_ctx, doc) => {
+      ctx.get(listenerCtx).updated(() => {
         onDocUpdated();
-        if (!doc.eq(baselineDoc)) {
+        if (edited) {
+          edited = false;
           fadeEdits(); // the human is typing: a buddy's edits are theirs to read now
           onChange();
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
+    .use($prose(() => new Plugin({
+      appendTransaction(trs) {
+        if (trs.some((tr) => tr.docChanged && !tr.getMeta(FROM_DISK) && !tr.getMeta('appendedTransaction'))) edited = true;
+        return null;
+      },
+    })))
     .create();
 
   const view = () => editor.ctx.get(editorViewCtx);
@@ -173,7 +208,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     return md;
   };
   const currentMarkdown = () => serialize(view().state.doc);
-  baselineDoc = view().state.doc;
   let threads = [];
   let activeId = null;
   let preview = { items: [], replay: 0 }; // see web/review.js; replay > 0 animates it once
@@ -487,19 +521,8 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const current = v.state.doc;
     const target = parse(next);
     const hunks = diffBlocks(current, target);
-    if (hunks.length === 0) {
-      baselineDoc = v.state.doc;
-      return;
-    }
-    const tr = v.state.tr;
-    for (const h of [...hunks].reverse()) {
-      const nodes = [];
-      for (let k = h.b0; k < h.b1; k++) nodes.push(target.child(k));
-      tr.replaceWith(childPos(current, h.a0), childPos(current, h.a1), Fragment.from(nodes));
-    }
-    tr.setMeta('addToHistory', false);
-    v.dispatch(tr);
-    baselineDoc = v.state.doc;
+    if (hunks.length === 0) return;
+    v.dispatch(replaceBlocks(v.state.tr, current, target, hunks).setMeta('addToHistory', false).setMeta(FROM_DISK, true));
     const ranges = hunks.map((h) => changedRange(current, target, h)).filter(Boolean);
     if (buddy) markEdits(ranges, by, tag);
     else flash(ranges, by);
@@ -578,7 +601,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     /** Replace the content without reporting it as a local edit. */
     setMarkdown(next) {
       editor.action(replaceAll(next, true));
-      baselineDoc = view().state.doc;
       paintHighlights();
     },
     setThreads(next) {
@@ -749,13 +771,6 @@ function flag(name, color = null) {
   label.textContent = name;
   wrap.append(label);
   return wrap;
-}
-
-// Document position where top-level child `index` starts.
-function childPos(doc, index) {
-  let pos = 0;
-  for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize;
-  return pos;
 }
 
 // The part of the new doc a hunk introduced: the changed characters when one
