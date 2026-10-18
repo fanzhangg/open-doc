@@ -14,6 +14,9 @@ const DOC_EXTENSION = /\.(md|markdown)$/i;
 const DRAG_SLOP_PX = 4;
 const OPEN_ON_HOVER_MS = 700;
 const SCROLL_EDGE_PX = 28; // a drag this close to the tree's top or bottom scrolls it
+const WIDTH_KEY = 'opendoc.filesWidth'; // the sidebar width the human dragged to, in px
+const MIN_WIDTH_PX = 180;
+const MAX_WIDTH_PX = 480;
 const isMac = /Mac/.test(navigator.platform);
 const NOT_SHOWN = {
   large: 'This file is too large to show here.',
@@ -620,6 +623,51 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   document.addEventListener('pointerdown', (event) => {
     if (floating && !aside.contains(event.target) && !toggle.contains(event.target)) closeFloating();
   });
+  // ---- width ----
+
+  // Drag the sidebar's edge to resize it; double-click it for the default
+  // width back. Every window shares the width last dragged to.
+  const handle = aside.querySelector('.od-files-resize');
+  const setWidth = (px) => {
+    if (px) document.documentElement.style.setProperty('--files-w', `${px}px`);
+    else document.documentElement.style.removeProperty('--files-w');
+    window.dispatchEvent(new Event('resize')); // the comment margin re-lays out
+  };
+  try {
+    setWidth(Number(localStorage.getItem(WIDTH_KEY)) || 0);
+  } catch {
+    // no storage: the default width
+  }
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    document.documentElement.classList.add('od-files-resizing');
+    let width = 0;
+    const move = (e) => {
+      width = Math.round(Math.min(MAX_WIDTH_PX, Math.max(MIN_WIDTH_PX, e.clientX)));
+      setWidth(width);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('lostpointercapture', () => {
+      handle.removeEventListener('pointermove', move);
+      document.documentElement.classList.remove('od-files-resizing');
+      try {
+        if (width) localStorage.setItem(WIDTH_KEY, String(width));
+      } catch {
+        // no storage: the width lasts for this page
+      }
+    }, { once: true });
+  });
+  handle.addEventListener('dblclick', () => {
+    setWidth(0);
+    try {
+      localStorage.removeItem(WIDTH_KEY);
+    } catch {
+      // no storage: nothing kept
+    }
+  });
+
   desktop.onFolderChanged(refresh);
   return { ready: refresh(), state: () => ({ sidebarScroll: tree.scrollTop, startTyping: Boolean(created) }) };
 }

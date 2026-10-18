@@ -651,6 +651,10 @@ label.od-setting { cursor: pointer; }
 .od-files-head.od-files-drop { border-radius: 6px; }
 .od-files-ghost { position: fixed; z-index: 100; top: 0; left: 0; display: flex; align-items: center; gap: 6px; max-width: 220px; padding: 4px 8px; border-radius: 6px; background: var(--bg); box-shadow: var(--shadow-raised); color: var(--text); font-size: 13px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .od-files-ghost .od-icon { width: 15px; height: 15px; color: var(--text-faint); }
+.od-files-resize { position: absolute; z-index: 1; top: 0; bottom: 0; right: -4px; width: 8px; cursor: col-resize; }
+.od-files-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; transition: background 0.15s; }
+.od-files-resize:hover::after, .od-files-resizing .od-files-resize::after { background: var(--text-faint); transition-delay: 0.1s; }
+.od-files-resizing, .od-files-resizing * { cursor: col-resize !important; user-select: none !important; }
 .od-header .od-files-toggle { margin-left: -6px; }
 .od-files-toggle[aria-pressed="true"] { color: var(--text); }
 
@@ -663,6 +667,7 @@ label.od-setting { cursor: pointer; }
 @media (max-width: 900px) {
   :root { --page-pad: 20px; }
   /* the sidebar floats over the page, under the toggle that opens it */
+  .od-files-resize { display: none; }
   .od-files { top: 50px; bottom: 12px; left: 8px; z-index: 25; width: min(var(--files-w), calc(100vw - 16px)); border: 0; border-radius: 10px; background: var(--bg); box-shadow: var(--shadow-raised); animation: od-pop 0.14s ease-out; }
   .od-stage { grid-template-columns: minmax(0, 1fr); padding: 0 0 80px; }
   .od-page { padding-top: 24px; padding-bottom: 48px; min-height: 0; }
