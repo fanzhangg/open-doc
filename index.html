@@ -8,43 +8,6 @@
 <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./dist/web/app.css">
 <link rel="stylesheet" href="site.css">
-<style>
-  main { max-width: 880px; margin: 0 auto; padding: 56px 16px 48px; font-size: 14px; line-height: 1.6; }
-  .hero { text-align: center; margin-bottom: 48px; }
-  .hero img { width: 96px; height: 96px; }
-  h1 { margin: 16px 0 8px; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
-  .tagline { margin: 0 auto; max-width: 520px; color: var(--text-soft); font-size: 16px; }
-  .version { display: inline-block; margin-top: 16px; padding: 2px 8px; border-radius: 999px; background: var(--hover); color: var(--text-soft); font-size: 12px; }
-
-  .platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-  .card { display: flex; flex-direction: column; padding: 24px; border-radius: 14px; background: var(--bg); box-shadow: var(--shadow); }
-  .card.suggested { box-shadow: 0 0 0 2px var(--text); }
-  .card-head { display: flex; align-items: center; gap: 12px; }
-  .card-head svg { width: 24px; height: 24px; flex: none; }
-  h2 { margin: 0; font-size: 20px; font-weight: 600; }
-  .badge { display: none; margin-left: auto; padding: 2px 8px; border-radius: 999px; background: var(--active); color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; }
-  .card.suggested .badge { display: inline-block; }
-  .req { margin: 6px 0 24px; color: var(--text-soft); }
-  .download { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 6px; background: var(--text); color: var(--on-text); font-weight: 500; text-decoration: none; }
-  .download:hover { background: color-mix(in srgb, var(--text) 86%, var(--canvas)); }
-  .download svg { width: 18px; height: 18px; }
-  .file { margin: 8px 0 0; color: var(--text-soft); font-size: 12px; text-align: center; word-break: break-all; }
-
-  h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); }
-  ol { margin: 0; padding-left: 24px; }
-  li { margin: 4px 0; }
-  li::marker { color: var(--text-soft); }
-  b { font-weight: 600; }
-  code { padding: 2px 4px; border-radius: 4px; background: var(--bg-soft); font: 12px var(--mono); }
-  pre { margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; background: var(--bg-soft); overflow-x: auto; }
-  pre code { padding: 0; background: none; }
-  .note, details { margin: 12px 0 0; color: var(--text-soft); font-size: 13px; }
-  summary { cursor: pointer; }
-
-  .mobile-note { display: none; margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; background: var(--bg-soft); color: var(--text-soft); text-align: center; }
-  footer { margin-top: 48px; color: var(--text-soft); font-size: 13px; text-align: center; }
-  footer a { color: inherit; }
-</style>
 </head>
 <body>
 <header class="site-header">
@@ -61,7 +24,7 @@
     <button type="button" role="radio" data-theme-pick="dark">Dark</button>
   </div>
 </header>
-<main>
+<main class="dl-page">
   <section class="hero">
     <img src="./build/icon.svg" alt="" width="96" height="96">
     <h1>OpenDoc</h1>

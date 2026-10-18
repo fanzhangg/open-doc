@@ -43,7 +43,7 @@
     <li><strong>Sentence case.</strong> Labels and headings are never all caps.</li>
     <li><strong>Both themes.</strong> Check light and dark; tokens flip on their own, so a change that needs a dark-only override is usually using the wrong token.</li>
   </ol>
-  <p><code>test/design-system.test.js</code> fails on colour literals, all-caps text, and off-scale sizes, weights, radii, spacing and control heights in <code>web/app.css</code>, <code>desktop/start.html</code> and the site's own styles.</p>
+  <p><code>test/design-system.test.js</code> fails on colour literals, all-caps text, and off-scale sizes, weights, radii, spacing and control heights in <code>web/app.css</code> and <code>site/site.css</code>, the only places styles live: no page has a <code>&lt;style&gt;</code> block.</p>
 
   <h2>Colour</h2>
   <h3>Surfaces and ink</h3>
@@ -89,9 +89,9 @@
     <div class="ds-swatch"><i style="border-radius: 14px"></i>14 dialogs</div>
     <div class="ds-swatch"><i style="border-radius: 50%"></i>full faces</div>
   </div>
-  <div class="ds-row" style="gap: 24px; margin-top: 20px">
-    <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow)"></i><b>--shadow</b><span>Resting cards</span></div>
-    <div class="ds-swatch"><i style="width: 120px; background: var(--bg); box-shadow: var(--shadow-raised)"></i><b>--shadow-raised</b><span>Anything floating</span></div>
+  <div class="ds-row ds-shadows">
+    <div class="ds-swatch"><i style="box-shadow: var(--shadow)"></i><b>--shadow</b><span>Resting cards</span></div>
+    <div class="ds-swatch"><i style="box-shadow: var(--shadow-raised)"></i><b>--shadow-raised</b><span>Anything floating</span></div>
   </div>
 
   <h2>Components</h2>
@@ -104,7 +104,7 @@
     <button class="od-icon-btn" type="button" aria-label="Settings"><svg class="od-icon" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
   </div>
   <h3>Toolbar: pressed is ink on grey</h3>
-  <div class="od-toolbar" style="margin: 0; max-width: 520px">
+  <div class="od-toolbar ds-toolbar">
     <div class="od-tool-group">
       <button type="button" aria-pressed="true" aria-label="Bold"><svg class="od-icon" viewBox="0 0 24 24"><path d="M6 12h8a4 4 0 0 1 0 8H6V4h7a4 4 0 0 1 0 8"/></svg></button>
       <button type="button" aria-label="Italic"><svg class="od-icon" viewBox="0 0 24 24"><path d="M19 4h-9M14 20H5M15 4 9 20"/></svg></button>
@@ -121,11 +121,11 @@
     <input class="od-switch" type="checkbox" aria-label="Off">
   </div>
   <h3>Lists: current is ink on grey</h3>
-  <div class="od-files" style="position: static; width: 240px; border-radius: 10px; border: 0; padding: 8px">
-    <ul class="od-files-tree" style="padding: 0">
-      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px">Launch plan</button></li>
-      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px" aria-current="page">Roadmap</button></li>
-      <li><button class="od-files-row od-files-doc" type="button" style="padding-left: 8px">Notes</button></li>
+  <div class="od-files ds-files">
+    <ul class="od-files-tree">
+      <li><button class="od-files-row od-files-doc" type="button">Launch plan</button></li>
+      <li><button class="od-files-row od-files-doc" type="button" aria-current="page">Roadmap</button></li>
+      <li><button class="od-files-row od-files-doc" type="button">Notes</button></li>
     </ul>
   </div>
   <h3>Text: comments, buddy edits, links</h3>
@@ -145,7 +145,7 @@
   </div>
   <h3>Tooltip and keys</h3>
   <div class="ds-row">
-    <span class="od-tip" style="position: static">Bold <kbd>⌘B</kbd></span>
+    <span class="od-tip ds-tip">Bold <kbd>⌘B</kbd></span>
     <kbd>⌘K</kbd>
   </div>
 
