@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'">
+  <title>OpenDoc</title>
+  <!-- The app's look, this window's own rules included (the home window section). -->
+  <link rel="stylesheet" href="app.css">
+  <script src="start-stub.js"></script>
+  <script src="start.js" defer></script>
+</head>
+<body class="od-home">
+  <main class="od-start">
+    <button class="od-start-open" type="button" data-action="open-project" data-tip="A folder you have, or a new one made in the dialog" data-keys="Mod+Shift+O">
+      <span data-icon="plus"></span>Open Project…
+    </button>
+
+    <section class="od-recent" aria-label="Recent">
+      <ul></ul>
+      <p class="od-recent-empty" hidden>Projects you open show up here</p>
+    </section>
+  </main>
+
+  <div class="od-tip" role="tooltip" hidden></div>
+</body>
+</html>
