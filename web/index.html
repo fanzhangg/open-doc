@@ -143,43 +143,5 @@
 
   <div class="od-tip" role="tooltip" hidden></div>
 
-  <dialog class="od-agents-dialog" aria-label="Buddies">
-    <aside class="od-agents-side">
-      <div class="od-agents-side-head">
-        <span class="od-agents-title">Buddies</span>
-        <button type="button" class="od-icon-btn" data-action="new-agent" data-icon="plus" data-tip="New buddy" aria-label="New buddy"></button>
-      </div>
-      <div class="od-agents-list" role="listbox" aria-label="Your buddies"></div>
-    </aside>
-
-    <div class="od-agents-main">
-      <button type="button" class="od-icon-btn od-agents-close" data-icon="close" data-action="close" aria-label="Close buddies"></button>
-
-      <form class="od-agent-editor" autocomplete="off" hidden>
-        <header class="od-agent-head">
-          <span class="od-agent-head-avatar"></span>
-          <div class="od-agent-head-fields">
-            <input class="od-agent-name" type="text" data-agent="name" spellcheck="false" maxlength="64" aria-label="Name" placeholder="Name, as you @mention it">
-            <div class="od-input-error" role="alert" hidden></div>
-          </div>
-        </header>
-        <p class="od-agent-where"></p>
-
-        <section class="od-agent-block">
-          <h3><label for="od-agent-about">Who it is</label></h3>
-          <p class="od-agent-block-hint">Its prompt: who it is, what to do, what to leave alone, how to reply. The first line shows next to its name.</p>
-          <textarea id="od-agent-about" class="od-input od-input-full od-about" data-agent="about" rows="9" placeholder="A copy editor.&#10;&#10;Fix spelling and grammar only. Leave style and structure alone. Reply with a short list of what you fixed."></textarea>
-        </section>
-
-        <footer class="od-agent-foot">
-          <button type="button" class="od-link-button od-danger" data-action="delete-agent">Delete buddy</button>
-          <span class="od-agent-draft-actions">
-            <button type="button" class="od-secondary" data-action="discard-draft">Cancel</button>
-            <button type="button" class="od-primary" data-action="create-agent" disabled>Create</button>
-          </span>
-        </footer>
-      </form>
-    </div>
-  </dialog>
 </body>
 </html>

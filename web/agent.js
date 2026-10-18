@@ -1,14 +1,12 @@
 // The people in the header, laid out like a shared doc's: avatars of the
 // buddies the doc reaches, a People button, then yours.
 //
-// Buddies are light: on a buddy's card, a click on its name edits it in
-// place; the Buddies panel holds who it is. New buddy opens a draft there.
-// Faces are drawn from names.
+// A card is where everyone is changed: on a buddy's, a click on its name
+// edits it in place, and who it is is a field right under it; your own
+// card edits your name the same way. Faces are drawn from names.
 //
-// A buddy answers when @mentioned. The People panel lists who commented
-// and the buddies here. Clicking an avatar opens that buddy's card: its
-// name, editable right there, and the first line of who it is. Your own card works
-// the same way: a click on your name edits it in place.
+// A buddy answers when @mentioned. The People panel lists who commented,
+// and in a project makes a new buddy.
 //
 // The comment box asks this module what to offer after @.
 
@@ -22,10 +20,9 @@ export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting wit
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, openSettings: (section: string, name?: string) => void,
- *           newAgent: () => void, project?: () => boolean }} options
+ *           setName: (name: string) => boolean, project?: () => boolean, onResult: (result: { agents? }) => void }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, openSettings, newAgent, project = () => false }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, project = () => false, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
   let showing = null; // 'me' | 'people' | 'agent:<name>' | 'person:<name>' | null
@@ -49,8 +46,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       viewOnly = false;
       return paintCard();
     }
-    const row = event.target.closest('[data-open-agent]');
-    if (row && !event.target.closest('button')) toggle(`agent:${row.dataset.openAgent}`);
   });
   document.addEventListener('mousedown', (event) => {
     if (showing && ![panel, root, me, invite].some((n) => n.contains(event.target))) close();
@@ -205,12 +200,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     pic.append(avatar(getName(), 'human'));
     const who = el('div', 'od-profile-who');
     who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
-    const tools = el('div', 'od-profile-tools');
-    tools.append(iconButton('settings', 'More settings', () => {
-      close();
-      openSettings('general');
-    }));
-    head.append(pic, who, tools);
+    head.append(pic, who);
     return [head];
   }
 
@@ -218,34 +208,15 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return [personHead(name, 'Commented on this doc')];
   }
 
-  // Like a shared doc's people list, one line each: you and the people who
-  // commented, the agents here, then the agents you can bring in. What an
-  // agent may do is on its card, a click away.
+  // Who commented, one line each, then, in a project, a line to name a new
+  // buddy: Enter makes it and opens its card.
   function peopleCard() {
     const head = el('div', 'od-card-head');
-    head.append(el('div', 'od-card-title', 'People'), button('Manage buddies', 'od-link-button', () => {
-      close();
-      openSettings('agents');
-    }));
+    head.append(el('div', 'od-card-title', 'People'));
     const people = el('div', 'od-people-list');
-    people.append(personRow(getName(), 'You'));
     for (const p of writers.filter((p) => !isMe(p))) people.append(personRow(p.name, 'Commenter'));
-
-    // The buddies here, then a row to make a new one.
-    const inDoc = el('div', 'od-people-list');
-    for (const name of agentsHere()) inDoc.append(agentRow(name));
-    const create = el('button', 'od-people-row od-people-new');
-    create.type = 'button';
-    const plus = el('span', 'od-people-new-face');
-    plus.append(icon('plus'));
-    create.append(plus, el('span', 'od-people-name', 'New buddy'));
-    create.addEventListener('click', () => {
-      close();
-      newAgent();
-    });
-    if (project()) inDoc.append(create); // buddies other than Clippy are a project's
-
-    return [head, people, el('div', 'od-card-subtitle', 'Buddies in this doc'), inDoc];
+    if (!people.childElementCount) people.append(el('div', 'od-people-empty', 'No one else has commented yet.'));
+    return project() ? [head, people, ...newBuddyRow()] : [head, people]; // buddies other than Clippy are a project's
   }
 
   function personRow(name, role) {
@@ -254,25 +225,54 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return row;
   }
 
-  // A buddy on one line: avatar, name, who it is. The row opens its card.
-  function agentRow(name) {
-    const row = el('div', 'od-people-row od-people-agent');
-    row.dataset.openAgent = name;
-    const face = el('span', 'od-profile-face');
-    face.dataset.presence = modeOf(statusOf(name));
-    face.append(avatar(name, 'agent', true));
-    const who = el('span', 'od-people-who');
-    who.append(el('span', 'od-people-name', name));
-    if (introOf(name)) who.append(el('span', 'od-people-sub', introOf(name)));
-    row.append(face, who);
-    return row;
+  function newBuddyRow() {
+    const row = el('label', 'od-people-row od-people-new');
+    const plus = el('span', 'od-people-new-face');
+    plus.append(icon('plus'));
+    const field = el('input', 'od-people-new-name');
+    field.type = 'text';
+    field.placeholder = 'New buddy';
+    field.maxLength = 64;
+    field.spellcheck = false;
+    field.setAttribute('aria-label', "New buddy's name");
+    const error = el('div', 'od-input-error');
+    error.hidden = true;
+    const failed = (message) => {
+      error.textContent = message;
+      error.hidden = false;
+      field.setAttribute('aria-invalid', 'true');
+    };
+    field.addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const name = field.value.trim();
+      if (!NAME_PATTERN.test(name)) return failed(NAME_RULE);
+      try {
+        take(await api.createBuddy({ name }));
+        toggle(`agent:${name}`);
+        panel.querySelector('.od-profile-about')?.focus();
+      } catch (failure) {
+        failed(failure.message);
+      }
+    });
+    row.append(plus, field);
+    return [row, error];
   }
 
   // A buddy's card: who it is. A name in the doc that is no buddy here says
   // it does not answer here.
   function agentCard(name) {
+    const status = statusOf(name);
     const parts = [cardHead(name)];
-    if (!statusOf(name)) {
+    if (status && !viewOnly) parts.push(aboutField(status));
+    if (status && !viewOnly && status.where === 'project') {
+      parts.push(button('Delete buddy', 'od-link-button od-danger od-profile-delete', async () => {
+        if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
+        close();
+        take(await api.deleteBuddy(status.name).catch(() => ({}))); // gone already: nothing to do
+      }));
+    }
+    if (!status) {
       const problem = el('div', 'od-profile-problem');
       problem.append(el('div', 'od-profile-problem-text', `None of your buddies is called ${name}, so it does not answer here.`));
       parts.push(problem);
@@ -290,15 +290,29 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const who = el('div', 'od-profile-who');
     // Click the name to edit it right there.
     who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'od-profile-name', name));
-    if (introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
+    if (viewOnly && introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
     who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
-    if (status && !viewOnly) {
-      const tools = el('div', 'od-profile-tools');
-      tools.append(iconButton('settings', 'Edit who it is', () => editProfile(status.name)));
-      head.append(tools);
-    }
     return head;
+  }
+
+  // Who `agent` is, all of it, to change right there: saved when the field
+  // is left. Clippy's, cleared, is Clippy as it ships.
+  function aboutField(agent) {
+    const field = el('textarea', 'od-input od-profile-about');
+    field.value = agent.about;
+    field.placeholder = 'Who it is, what to do, what to leave alone, how to reply. The first line shows next to its name.';
+    field.spellcheck = true;
+    field.setAttribute('aria-label', `Who ${agent.name} is`);
+    field.addEventListener('change', async () => {
+      try {
+        take(await api.updateBuddy(agent.name, { about: field.value }));
+      } catch (failure) {
+        field.setAttribute('aria-invalid', 'true');
+        field.title = failure.message;
+      }
+    });
+    return field;
   }
 
   // `agent`'s name as text that turns into a field when clicked. Enter or
@@ -361,7 +375,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   }
 
   function commitMyName(field, value) {
-    if (value !== getName() && !NAME_PATTERN.test(value)) return fail(field, NAME_RULE);
+    if (value === getName()) return settle();
+    if (!NAME_PATTERN.test(value)) return fail(field, NAME_RULE);
+    if (agentsHere().some((n) => same(n, value))) return fail(field, `${value} is a buddy here`);
     settle();
     setName(value);
   }
@@ -385,14 +401,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     again.focus();
   }
 
-  function take(result) {
-    if (result.agents) render({ agents: result.agents });
-  }
-
-  function editProfile(name) {
-    close();
-    openSettings('agents', name);
-  }
+  const take = (result) => onResult(result);
 
   /** Any of: `agents` (the buddies here, with their statuses), `people` (who commented). */
   function render({ agents, people: nextWriters }) {
@@ -400,7 +409,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (nextWriters) writers = nextWriters;
     paintFaces();
     // Not while a field on the card is being typed in.
-    if (showing && showing !== 'me' && !(editing && panel.contains(document.activeElement))) paintCard();
+    if (showing && showing !== 'me' && !panel.contains(document.activeElement)) paintCard();
   }
 
   // ---- @names in the text ----
@@ -447,7 +456,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     peek,
     unpeek,
     pin,
-    statuses: () => statuses,
     /** An agent whose run is in progress, if any. */
     running: () => statuses.find((s) => s.state === 'running') ?? null,
     /** Your name changed: repaint your card if it is open. */
@@ -477,14 +485,6 @@ function button(text, className, onClick) {
 }
 
 // A small icon-only button, labelled for screen readers and on hover.
-function iconButton(name, label, onClick) {
-  const node = button('', 'od-icon-button', onClick);
-  node.append(icon(name));
-  node.title = label;
-  node.setAttribute('aria-label', label);
-  return node;
-}
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
