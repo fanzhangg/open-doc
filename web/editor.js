@@ -209,6 +209,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   const currentMarkdown = () => serialize(view().state.doc);
   let threads = [];
   let activeId = null;
+  let hoverId = null; // the thread whose card is under the pointer
   let preview = { items: [], replay: 0 }; // see web/review.js; replay > 0 animates it once
   let replays = 0;
   let draft = null; // anchor-like hint of the selection being commented on
@@ -226,7 +227,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const comment = (from, to, id) => {
       const thread = open.get(id);
       if (!thread && id !== 'draft') return;
-      const active = id === 'draft' || id === activeId;
+      const active = id === 'draft' || id === activeId || id === hoverId;
       const classes = active ? 'od-hl od-hl-active' : 'od-hl';
       decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id, active }));
       drawn.push(from, to, id, classes);
@@ -570,6 +571,11 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     },
     setActive(id) {
       activeId = id;
+      paintHighlights();
+    },
+    setHover(id) {
+      if (id === hoverId) return;
+      hoverId = id;
       paintHighlights();
     },
     /**

@@ -169,6 +169,7 @@ async function start() {
       select(id);
       if (narrow.matches) revealText(id);
     },
+    onHover: (id) => editor.setHover(id),
     anchorTops: (items) => editor.anchorTops(items),
     mentionChoices: (query) => people?.mentionChoices(query) ?? [],
     mentionable: () => people?.mentionable() ?? [],
