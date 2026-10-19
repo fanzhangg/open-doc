@@ -10,6 +10,7 @@ import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
 import { history, historyKeymap, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands';
 import { diffEdits } from '../../src/core/diff.js';
 import { buddyColor } from '../faces.js';
+import { hydrateIcons } from '../icons.js';
 
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
@@ -56,14 +57,16 @@ const keys = [
 
 /**
  * The same options and interface as the Markdown view (createMarkdownView in
- * markdown.js); it has no tools, so `toolbar` and `onComment` are not used.
+ * markdown.js). It has no tools, so `toolbar` is not used; given
+ * `onComment`, a bubble over a selection offers Comment.
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
- *           onMarkClick?: (id: string) => void, onLayout?: () => void }} options
+ *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {} }) {
+export async function createPlainView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   let changeTimer = 0;
+  let bubble = null;
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
@@ -78,10 +81,13 @@ export async function createPlainView({ stage, text, editable = true, onChange =
           }
           // Lines measured as they scroll into view move what is below them.
           if ((update.heightChanged || update.geometryChanged) && !update.docChanged) onLayout();
+          if (update.selectionSet || update.focusChanged || update.geometryChanged) bubble?.place();
         }),
       ],
     }),
   });
+
+  if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
 
   // The doc's text, read out once per version of it.
   let textOf = { doc: view.state.doc, text };
@@ -148,7 +154,71 @@ export async function createPlainView({ stage, text, editable = true, onChange =
     destroy() {
       clearTimeout(changeTimer);
       host.removeEventListener('click', clickMark);
+      bubble?.destroy();
       view.destroy();
+    },
+  };
+}
+
+// A Comment button over the selection while the editor has focus, as in the
+// Markdown view's bubble; hidden while the pointer is still selecting.
+function createBubble(view, { stage, host, onComment }) {
+  const template = document.createElement('template');
+  template.innerHTML = `<div class="od-bubble" role="toolbar" aria-label="Selection" hidden>
+    <button type="button" class="od-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
+  </div>`;
+  hydrateIcons(template.content);
+  const bubble = template.content.firstElementChild;
+  stage.append(bubble);
+  const canvas = stage.parentElement; // scrolls the page
+  const page = host.closest('.od-page');
+  const done = new AbortController();
+  const { signal } = done;
+  let pointerDown = false;
+
+  function place() {
+    const { from, to, empty } = view.state.selection.main;
+    const start = !pointerDown && !empty && view.hasFocus && view.coordsAtPos(from, 1);
+    const end = start && view.coordsAtPos(to, -1);
+    if (!end) {
+      bubble.hidden = true;
+      return;
+    }
+    bubble.hidden = false;
+    const stageRect = stage.getBoundingClientRect();
+    const pageRect = page.getBoundingClientRect();
+    const { offsetWidth: width, offsetHeight: height } = bubble;
+    const top = Math.min(start.top, end.top);
+    const center = (Math.min(start.left, end.left) + Math.max(start.right, end.right)) / 2;
+    const left = Math.min(Math.max(center - width / 2, pageRect.left + 8), pageRect.right - width - 8);
+    const above = top - height - 10 > canvas.getBoundingClientRect().top;
+    bubble.style.left = `${left - stageRect.left}px`;
+    bubble.style.top = `${(above ? top - height - 10 : Math.max(start.bottom, end.bottom) + 10) - stageRect.top}px`;
+    bubble.dataset.side = above ? 'above' : 'below';
+  }
+
+  // The button comments without taking the editor's selection.
+  bubble.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+    if (event.target.closest('button')) onComment();
+  }, { signal });
+  document.addEventListener('mousedown', (event) => {
+    if (host.contains(event.target)) pointerDown = true;
+  }, { signal });
+  document.addEventListener('mouseup', () => {
+    if (!pointerDown) return;
+    pointerDown = false;
+    place();
+  }, { signal });
+  canvas.addEventListener('scroll', () => {
+    if (!bubble.hidden) place();
+  }, { passive: true, signal });
+
+  return {
+    place,
+    destroy() {
+      done.abort();
+      bubble.remove();
     },
   };
 }

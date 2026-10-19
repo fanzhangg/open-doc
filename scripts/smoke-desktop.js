@@ -87,6 +87,7 @@ const lines = await plain.evaluate(`(async () => {
 })()`);
 check(lines === CODE, 'the plain view shows app.js as it is');
 check(await commentShows(plain, CODE, 'greet'), 'a comment on its text is drawn over that text');
+check(await bubbleComments(plain, 'world'), 'selecting text shows Comment, which opens a draft on it');
 check(await answers(plain, 'Hello', 'Howdy', code), 'a buddy answers in app.js and its edit lands');
 const revision = await waitFor(() => plain.evaluate(`document.querySelector('.od-stage .od-buddy-edit')?.textContent`), 15_000, 'the revision').catch(() => null);
 check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
@@ -147,6 +148,32 @@ async function commentShows(page, text, quote) {
   const id = await page.evaluate(`window.opendocHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
   return waitFor(() => page.evaluate(`document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
     .catch(() => false);
+}
+
+// Select `quote` in the doc in `page` and click the bubble's Comment: true
+// once the draft card shows, then the draft is cancelled.
+async function bubbleComments(page, quote) {
+  await page.send('Emulation.setFocusEmulationEnabled', { enabled: true }); // the window may be behind another
+  const shown = await page.evaluate(`(async () => {
+    const editor = document.querySelector('.od-stage [contenteditable="true"]');
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !node.data.includes('${quote}')) node = walker.nextNode();
+    editor.focus();
+    const range = document.createRange();
+    range.setStart(node, node.data.indexOf('${quote}'));
+    range.setEnd(node, node.data.indexOf('${quote}') + ${quote.length});
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    await new Promise((r) => setTimeout(r, 200));
+    const button = document.querySelector('.od-stage .od-bubble:not([hidden]) [data-action="comment"]');
+    button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    return Boolean(button);
+  })()`);
+  const draft = shown && (await waitFor(() => page.evaluate(`Boolean(document.querySelector('.od-card[data-thread="draft"]'))`), 5_000, 'the draft').catch(() => false));
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  return draft;
 }
 
 // Type at the end of the doc in `page`, have a buddy change `from` to `to`,
