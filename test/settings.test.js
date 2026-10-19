@@ -4,8 +4,9 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, resolveSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, pluginSettings, resolveSettings } from '../src/core/settings.js';
 import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
+import { markdown } from '../web/plugins/markdown/index.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -19,11 +20,11 @@ test('configDir follows each OS convention and the override', () => {
 });
 
 test('patches are checked key by key', () => {
-  assert.doesNotThrow(() => checkSettingsPatch({ font: 'serif', focus: true, name: 'fzhan' }));
+  assert.doesNotThrow(() => checkSettingsPatch({ font: 'serif', wordCount: true, name: 'fzhan' }));
   assert.doesNotThrow(() => checkSettingsPatch({ name: null }));
   assert.throws(() => checkSettingsPatch({ font: 'comic' }), SettingsError);
   assert.throws(() => checkSettingsPatch({ colour: 'red' }), /unknown setting/);
-  assert.throws(() => checkSettingsPatch({ outline: 'yes' }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ wordCount: 'yes' }), SettingsError);
   assert.throws(() => checkSettingsPatch({ name: 'two words' }), SettingsError);
   assert.throws(() => checkSettingsPatch([]), SettingsError);
 });
@@ -58,11 +59,11 @@ test('a bad patch writes nothing', async () => {
 test('keys from a newer version are kept on write', async () => {
   const dir = await tempDir();
   await writeFile(settingsPath(dir), JSON.stringify({ version: 3, font: 'mono', agent: { enabled: true } }));
-  await updateSettings({ focus: true }, dir);
+  await updateSettings({ wordCount: true }, dir);
   const raw = JSON.parse(await readFile(settingsPath(dir), 'utf8'));
   assert.deepEqual(raw.agent, { enabled: true });
   assert.equal(raw.font, 'mono');
-  assert.equal(raw.focus, true);
+  assert.equal(raw.wordCount, true);
 });
 
 test('a corrupt file is set aside and defaults are used', async () => {
@@ -75,22 +76,21 @@ test('a corrupt file is set aside and defaults are used', async () => {
   assert.equal((await readSettings(dir)).settings.font, 'serif');
 });
 
-test('concurrent writers of different settings both keep their change', async () => {
+test('concurrent writers of different plugin switches all keep their change', async () => {
   const dir = await tempDir();
   const script = join(dir, 'writer.mjs');
   const store = new URL('../src/store/settings.js', import.meta.url).href;
   await writeFile(script, `import { updateSettings } from ${JSON.stringify(store)};
 const [key, value] = process.argv.slice(2);
-for (let i = 0; i < 20; i++) await updateSettings({ [key]: i % 2 === 0 ? value === 'true' : value !== 'true' }, process.env.DIR);
-await updateSettings({ [key]: value === 'true' }, process.env.DIR);`);
+const set = (on) => updateSettings({ plugins: { markdown: { [key]: on } } }, process.env.DIR);
+for (let i = 0; i < 20; i++) await set(i % 2 === 0 ? value === 'true' : value !== 'true');
+await set(value === 'true');`);
   const run = (key, value) => new Promise((resolve, reject) => {
     fork(script, [key, value], { env: { ...process.env, DIR: dir } }).on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`exit ${code}`))));
   });
-  await Promise.all([run('focus', 'true'), run('wordCount', 'true'), run('outline', 'false')]);
+  await Promise.all([run('focus', 'true'), run('enabled', 'false'), run('outline', 'false')]);
   const { settings } = await readSettings(dir);
-  assert.equal(settings.focus, true);
-  assert.equal(settings.wordCount, true);
-  assert.equal(settings.outline, false);
+  assert.deepEqual(settings.plugins.markdown, { focus: true, enabled: false, outline: false });
 });
 
 test('watchSettings sees the file appear and change', async () => {
@@ -115,4 +115,40 @@ test('agent: which agent script runs every buddy, Claude Code unless changed', (
   assert.equal(resolveSettings({ agent: 'my-bot' }).agent, 'my-bot');
   assert.equal(resolveSettings({ agent: 'a/b' }).agent, 'claude');
   assert.throws(() => checkSettingsPatch({ claudeBin: '/opt/claude' }), /unknown setting: claudeBin/);
+});
+
+test('plugins: defaults come from the declaration; the old top-level outline and focus are gone', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.plugins, {});
+  assert.deepEqual(pluginSettings(resolveSettings(null), markdown), { enabled: true, outline: true, focus: false });
+  assert.deepEqual(resolveSettings({ outline: false, focus: true }), DEFAULT_SETTINGS);
+  assert.throws(() => checkSettingsPatch({ focus: true }), /unknown setting: focus/);
+});
+
+test('plugins: a switch changed is saved alone and survives a fresh read', async () => {
+  const dir = await tempDir();
+  await updateSettings({ plugins: { markdown: { enabled: false } } }, dir);
+  await updateSettings({ plugins: { markdown: { focus: true } } }, dir);
+  const { settings } = await readSettings(dir);
+  assert.deepEqual(settings.plugins, { markdown: { enabled: false, focus: true } });
+  assert.deepEqual(pluginSettings(settings, markdown), { enabled: false, outline: true, focus: true });
+});
+
+test('plugins: only booleans by plugin id; a bad switch falls back alone', () => {
+  assert.doesNotThrow(() => checkSettingsPatch({ plugins: { markdown: { outline: false }, csv: {} } }));
+  for (const plugins of [[], null, { markdown: true }, { markdown: { focus: 'yes' } }, { markdown: [] }]) {
+    assert.throws(() => checkSettingsPatch({ plugins }), SettingsError, JSON.stringify(plugins));
+  }
+  assert.deepEqual(resolveSettings({ plugins: 'on' }).plugins, {});
+  const resolved = resolveSettings({ plugins: { markdown: { enabled: 'no', outline: false }, broken: 3 } });
+  assert.deepEqual(resolved.plugins, { markdown: { outline: false } });
+  assert.deepEqual(pluginSettings(resolved, markdown), { enabled: true, outline: false, focus: false });
+});
+
+test('plugins: ids this version does not know are kept', async () => {
+  const dir = await tempDir();
+  await writeFile(settingsPath(dir), JSON.stringify({ version: 2, plugins: { csv: { enabled: false, header: true } } }));
+  assert.deepEqual((await readSettings(dir)).settings.plugins, { csv: { enabled: false, header: true } });
+  await updateSettings({ plugins: { markdown: { outline: false } } }, dir);
+  const raw = JSON.parse(await readFile(settingsPath(dir), 'utf8'));
+  assert.deepEqual(raw.plugins, { csv: { enabled: false, header: true }, markdown: { outline: false } });
 });

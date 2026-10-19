@@ -2,7 +2,7 @@
 // made on demand in a stage like the doc window's, and DOM helpers that work
 // for any view that edits through contenteditable.
 
-import { createMarkdownView } from '../../web/views/markdown.js';
+import { createMarkdownView } from '../../web/plugins/markdown/view.js';
 import { createPlainView } from '../../web/views/plain.js';
 
 const VIEWS = { markdown: createMarkdownView, plain: createPlainView };

@@ -1,19 +1,18 @@
-// The page's chrome around the doc's view: the word count, the focus mode
-// shortcut and the desktop app's menu commands. The view brings its own
-// tools (web/views/markdown.js). Tooltips and the Settings dialog are in
-// settings-dialog.js, shared with the desktop start window.
+// The page's chrome around the doc's view: the word count and the desktop
+// app's menu commands. A plugin's view brings its own tools and shortcuts
+// (web/plugins/). Tooltips and the Settings dialog are in settings-dialog.js,
+// shared with the desktop start window.
 
 import { hydrateIcons } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { api } from './api.js';
-
-const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+import { PLUGINS } from './plugins/index.js';
 
 /**
- * @param {{ view: object, settings: ReturnType<typeof import('./settings.js').createSettings>,
+ * @param {{ getView: () => object, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean }} options
  */
-export function createChrome({ view, settings: store, getName, setName }) {
+export function createChrome({ getView, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
@@ -22,6 +21,7 @@ export function createChrome({ view, settings: store, getName, setName }) {
 
   const settings = setupSettings({
     store,
+    plugins: PLUGINS,
     getName,
     setName,
     onApply(next) {
@@ -53,22 +53,13 @@ export function createChrome({ view, settings: store, getName, setName }) {
   function refreshCount() {
     countTimer = 0;
     countedAt = performance.now();
+    const view = getView();
     const text = view.getText();
     const selection = view.selection();
     const selected = selection ? words(text.slice(selection.from, selection.to)) : 0;
     count.textContent = selected ? `${selected.toLocaleString()} of ${plural(words(text), 'word')}` : plural(words(text), 'word');
   }
   document.addEventListener('selectionchange', recount);
-
-  // ---- global shortcuts ----
-
-  document.addEventListener('keydown', (event) => {
-    const mod = mac ? event.metaKey : event.ctrlKey;
-    if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
-      event.preventDefault();
-      settings.set({ focus: !settings.get().focus });
-    }
-  });
 
   refreshCount();
   return {
@@ -78,7 +69,7 @@ export function createChrome({ view, settings: store, getName, setName }) {
     command(name) {
       // Undo in the doc is the view's own history (your edits only); in a field, the field's.
       if (name === 'undo' || name === 'redo') {
-        if (page.contains(document.activeElement)) view[name]();
+        if (page.contains(document.activeElement)) getView()[name]();
         else document.execCommand(name);
       } else if (name === 'settings') settings.toggle('general');
       else if (name === 'shortcuts') settings.toggle('shortcuts');

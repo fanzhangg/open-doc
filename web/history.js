@@ -15,12 +15,12 @@ const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'shor
 const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 /**
- * `api` is web/api.js; `createView` makes the doc's default view (from
- * web/views/index.js); `commentOf(threadId)` is the text of the comment a
- * buddy's version answered, or null; `onRestore(id)` puts the doc back to
+ * `api` is web/api.js; `chooseView()` is the view the doc opens in (viewFor
+ * in web/plugins/index.js); `commentOf(threadId)` is the text of the comment
+ * a buddy's version answered, or null; `onRestore(id)` puts the doc back to
  * version `id` and resolves once the page shows it.
  */
-export function createHistory({ api, createView, commentOf, onRestore, onClose }) {
+export function createHistory({ api, chooseView, commentOf, onRestore, onClose }) {
   const root = document.documentElement;
   const stage = document.querySelector('.od-history-stage');
   const list = stage.querySelector('.od-history-list');
@@ -30,7 +30,8 @@ export function createHistory({ api, createView, commentOf, onRestore, onClose }
   const changesToggle = bar.querySelector('.od-history-changes input');
   const toggleButton = document.querySelector('.od-tool-history');
 
-  let view = null; // the read-only view, made the first time history opens
+  let view = null; // the read-only view, made when history first opens
+  let viewId; // the plugin `view` is of (null: the plain view)
   let versions = [];
   let selected = null;
   let shown = null; // { version, text, before } of the selected version
@@ -45,7 +46,7 @@ export function createHistory({ api, createView, commentOf, onRestore, onClose }
     if (isOpen()) return;
     root.setAttribute('data-history', '');
     toggleButton.setAttribute('aria-pressed', 'true');
-    view ??= await createView({ stage, text: '', editable: false });
+    await makeView();
     await refresh();
     await select(latest()?.id ?? null);
     list.focus({ preventScroll: true });
@@ -56,6 +57,25 @@ export function createHistory({ api, createView, commentOf, onRestore, onClose }
     root.removeAttribute('data-history');
     toggleButton.setAttribute('aria-pressed', 'false');
     onClose?.();
+  }
+
+  // The view, made again when the doc opens in another one (a plugin was
+  // switched); one at a time.
+  let making = Promise.resolve();
+  function makeView() {
+    making = making.catch(() => {}).then(remakeView);
+    return making;
+  }
+
+  async function remakeView() {
+    const chosen = chooseView();
+    if (view && chosen.id === viewId) return;
+    const old = view;
+    view = await chosen.createView({ stage, text: '', editable: false, settings: chosen.settings });
+    viewId = chosen.id;
+    await old?.destroy();
+    view.applyText(shown?.text ?? ''); // the version picked by now
+    showChanges();
   }
 
   async function refresh() {
@@ -237,7 +257,12 @@ export function createHistory({ api, createView, commentOf, onRestore, onClose }
     return comment ? `On “${comment.replace(/\s+/g, ' ').trim()}”` : '';
   }
 
-  return { open, close, changed, isOpen, toggle: () => (isOpen() ? close() : open()) };
+  return {
+    open, close, changed, isOpen,
+    toggle: () => (isOpen() ? close() : open()),
+    /** The doc may open in another view now. */
+    viewChanged: () => (isOpen() ? makeView() : undefined),
+  };
 }
 
 function timeRange(version) {

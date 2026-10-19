@@ -1,7 +1,7 @@
 // The Markdown view: a Milkdown (ProseMirror) WYSIWYG editor that draws the
 // page's marks (comments, a draft, a revision), with its own chrome (a
 // toolbar, selection bubble, link popover, "/" menu and outline, see
-// markdown-chrome.js), and collaborator-style application of changes made
+// chrome.js), and collaborator-style application of changes made
 // on disk: only the blocks that differ are replaced (the caret stays put).
 // A buddy's change is flagged with its name; any other change glows with
 // who made it.
@@ -32,16 +32,16 @@ import { lift } from '@milkdown/kit/prose/commands';
 import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
-import { createAnchor, locate } from '../../src/core/anchor.js';
-import { project, renderedRange, sourceRange } from '../../src/formats/markdown/project.js';
-import { splice } from '../../src/formats/markdown/splice.js';
-import { docRange, projectDoc, selectionSpan, textRange } from '../pm-text.js';
-import { editItems } from '../review.js';
-import { markdownPlugins } from '../markdown-schema.js';
-import { diagrams } from '../diagrams.js';
-import { childPos, diffBlocks, replaceBlocks } from '../blocks.js';
-import { buddyColor } from '../faces.js';
-import { createChrome } from './markdown-chrome.js';
+import { createAnchor, locate } from '../../../src/core/anchor.js';
+import { project, renderedRange, sourceRange } from '../../../src/formats/markdown/project.js';
+import { splice } from '../../../src/formats/markdown/splice.js';
+import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
+import { editItems } from '../../review.js';
+import { markdownPlugins } from '../../markdown-schema.js';
+import { diagrams } from '../../diagrams.js';
+import { childPos, diffBlocks, replaceBlocks } from '../../blocks.js';
+import { buddyColor } from '../../faces.js';
+import { createChrome } from './chrome.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
@@ -139,13 +139,19 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
- *           toolbar?: HTMLElement, onComment?: () => void }} options
+ *           toolbar?: HTMLElement, onComment?: () => void,
+ *           settings?: { outline: boolean, focus: boolean }, saveSettings?: (patch: object) => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
 // Given a `toolbar`, the view puts its tools there and the rest of its chrome
-// around `stage`; its bubble's Comment button calls `onComment`.
-export async function createMarkdownView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {} }) {
+// around `stage`; its bubble's Comment button calls `onComment`. The chrome
+// follows the plugin's `settings` (web/plugins/markdown/index.js) and changes
+// them through `saveSettings` (the focus mode shortcut).
+export async function createMarkdownView({
+  stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
+  settings = null, saveSettings = () => {},
+}) {
   // The human changed the doc since `updated` last fired: any change not
   // applied from disk, even one that brings back the text as it was saved.
   // What plugins append (the empty line kept after a last table or code
@@ -549,7 +555,7 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
       run, formatState, slashQuery, runSlash, headings, scrollToHeading, scrollToAnchor,
       selectionRect, beginLink, endLink, linkRect, caretLink,
       coordsAt: (pos) => view().coordsAtPos(pos),
-    }, { toolbar, stage, host, onComment });
+    }, { toolbar, stage, host, onComment, settings, saveSettings });
   }
 
   return {
@@ -603,6 +609,11 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
       host.removeEventListener('click', clickMark);
       return editor.destroy();
     },
+
+    // ---- as a plugin's view ----
+
+    /** The plugin's settings changed. */
+    applySettings: (next) => chrome?.applySettings(next),
   };
 }
 

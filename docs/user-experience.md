@@ -13,7 +13,8 @@ How a person writes with buddies in OpenDoc. For why, see the
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
    Any other text file (code, config, notes) opens as plain text, and
-   comments and buddies work the same there.
+   comments and buddies work the same there. The WYSIWYG editor is a
+   plugin (see Plugins below): switched off, Markdown opens as plain text too.
 3. **Comment.** Select text and click the comment button at the page edge
    (Ctrl+Alt+M). The comment sits in the margin beside its text and follows
    it as the text changes.
@@ -110,10 +111,17 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 - **Changes from outside** (a `git pull`, another editor) show up live and
   merge with your typing. Where they overlap what you are typing, your typing
   stays and their version is in history.
-- **Settings** (name, theme, font, width, outline, word count, focus mode,
-  agent) are the same dialog in every window, the home page too, and a
-  change applies at once to all of them. Buddies are not in Settings: they
-  are changed on their cards.
+- **Settings** (name, theme, font, width, word count, plugins, agent) are
+  the same dialog in every window, the home page too (it has no Plugins:
+  those come with a doc's editor), and a change applies at once to all of
+  them. Buddies are not in Settings: they are changed on their cards.
+- **Plugins.** Every text file opens in the plain editor unless a plugin
+  gives its format a WYSIWYG one. Markdown's is the one built in, on by
+  default: its toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are
+  part of it. Settings > Plugins shows each plugin with what it does, a
+  switch, and its own settings (Outline, Focus mode) while it is on.
+  Switching it applies at once to every open doc: a Markdown doc turns to
+  plain text and back, comments still in the margin, and nothing is written.
 - **Files.** New Doc and Rename (the comments move too). Opening an already
   open doc focuses its window. If the file is moved or deleted outside the
   app, a banner says so and saving pauses.

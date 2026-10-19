@@ -11,7 +11,9 @@ export const SETTINGS_VERSION = 2;
  * (`u_…`, made once by the doc host; null until then). `name: null` means
  * "not chosen yet": the doc host suggests one. `agent` names the agent
  * script that runs every buddy (src/store/agents.js). Buddies are files
- * (src/store/buddies.js), never settings.
+ * (src/store/buddies.js), never settings. `plugins` holds each plugin's
+ * switches by its id (`{ markdown: { enabled: false } }`); a switch not
+ * there takes the default the plugin declares (pluginSettings).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
@@ -19,9 +21,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system',
   font: 'sans',
   width: 'normal',
-  outline: true,
   wordCount: false,
-  focus: false,
+  plugins: Object.freeze({}),
   agent: 'claude',
 });
 
@@ -36,9 +37,8 @@ const RULES = {
   theme: oneOf('system', 'light', 'dark'),
   font: oneOf('sans', 'serif', 'mono'),
   width: oneOf('normal', 'wide'),
-  outline: boolean,
   wordCount: boolean,
-  focus: boolean,
+  plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(boolean)),
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
 
@@ -59,9 +59,14 @@ export function checkSettingsPatch(patch) {
   return patch;
 }
 
-/** `stored` with `patch` applied: top-level keys replace. */
+/** `stored` with `patch` applied: top-level keys replace, but a plugin's switches merge into its others. */
 export function mergeSettings(stored, patch) {
-  return { ...stored, ...patch };
+  const next = { ...stored, ...patch };
+  if (patch.plugins) {
+    next.plugins = { ...objectOr(stored.plugins) };
+    for (const [id, switches] of Object.entries(patch.plugins)) next.plugins[id] = { ...objectOr(next.plugins[id]), ...switches };
+  }
+  return next;
 }
 
 /**
@@ -75,8 +80,20 @@ export function resolveSettings(stored) {
   for (const key of Object.keys(RULES)) {
     if (Object.hasOwn(stored, key) && RULES[key](stored[key])) out[key] = stored[key];
   }
+  // A plugin's bad switch falls back alone; plugins this version does not know are kept.
+  if (isObject(stored.plugins)) {
+    out.plugins = Object.fromEntries(Object.entries(stored.plugins).filter(([, one]) => isObject(one))
+      .map(([id, one]) => [id, Object.fromEntries(Object.entries(one).filter(([, value]) => boolean(value)))]));
+  }
   return out;
 }
+
+/** The settings of `plugin` (a declaration, web/plugins/): on unless switched off, its own defaults for the rest. */
+export function pluginSettings(settings, plugin) {
+  return { enabled: true, ...plugin.settings, ...settings.plugins[plugin.id] };
+}
+
+const objectOr = (value) => (isObject(value) ? value : {});
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);

@@ -57,7 +57,7 @@ const keys = [
 
 /**
  * The same options and interface as the Markdown view (createMarkdownView in
- * markdown.js). It has no tools, so `toolbar` is not used; given
+ * web/plugins/markdown/view.js). It has no tools, so `toolbar` is not used; given
  * `onComment`, a bubble over a selection offers Comment.
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
@@ -129,7 +129,7 @@ export async function createPlainView({ stage, text, editable = true, onChange =
   }
 
   return {
-    // ---- the view interface (see markdown.js) ----
+    // ---- the view interface (see web/plugins/markdown/view.js) ----
 
     getText: currentText,
     applyText,
