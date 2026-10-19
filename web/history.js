@@ -5,7 +5,7 @@
 // restored, which adds a new version, so a restore can be undone the same way.
 
 import { diffEdits } from '../src/core/diff.js';
-import { createMarkdownView } from './editor.js';
+import { createMarkdownView } from './views/markdown.js';
 import { revisionMarks } from './marks.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';

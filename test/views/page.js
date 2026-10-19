@@ -2,7 +2,7 @@
 // made on demand in a stage like the doc window's, and DOM helpers that work
 // for any view that edits through contenteditable.
 
-import { createMarkdownView } from '../../web/editor.js';
+import { createMarkdownView } from '../../web/views/markdown.js';
 
 const VIEWS = { markdown: createMarkdownView };
 const stage = document.querySelector('.od-stage');

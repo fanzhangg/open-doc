@@ -1,4 +1,4 @@
-// The view contract (web/editor.js): what every view of a doc must do,
+// The view contract (web/views/markdown.js): what every view of a doc must do,
 // checked on each view in Electron, driven over the DevTools protocol.
 
 import { after, before, test } from 'node:test';

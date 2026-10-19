@@ -1,6 +1,6 @@
 // Rendered text: what a reader of a markdown doc sees, with its syntax
 // removed, plus a map from each character back to the source. The WYSIWYG
-// editor reaches its document through it (web/editor.js builds the same text
+// editor reaches its document through it (web/views/markdown.js builds the same text
 // from its own document), and the merge check compares it (./index.js).
 //
 // Built from the CommonMark + GFM tree, with emphasis read the CJK-friendly

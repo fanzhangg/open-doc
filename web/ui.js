@@ -1,37 +1,24 @@
-// The chrome around the editor: the toolbar (reflecting the formatting at the
-// caret), a formatting bubble over selections, the link popover, the "/" block
-// menu, a floating outline and the word count. Tooltips and the Settings
-// dialog are in settings-dialog.js, shared with the desktop start window.
+// The page's chrome around the doc's view: the word count, the focus mode
+// shortcut and the desktop app's menu commands. The view brings its own
+// tools (web/views/markdown.js). Tooltips and the Settings dialog are in
+// settings-dialog.js, shared with the desktop start window.
 
-import { hydrateIcons, icon } from './icons.js';
+import { hydrateIcons } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { api } from './api.js';
-
-const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
-const SLASH_ITEMS = [
-  { command: 'paragraph', icon: 'text', label: 'Text', words: 'text paragraph normal p' },
-  { command: 'h1', icon: 'heading', label: 'Heading 1', words: 'heading h1 title' },
-  { command: 'h2', icon: 'heading', label: 'Heading 2', words: 'heading h2 subtitle' },
-  { command: 'h3', icon: 'heading', label: 'Heading 3', words: 'heading h3' },
-  { command: 'bullets', icon: 'bullets', label: 'Bulleted list', words: 'bullet list ul unordered' },
-  { command: 'numbers', icon: 'numbers', label: 'Numbered list', words: 'numbered list ol ordered' },
-  { command: 'quote', icon: 'quote', label: 'Quote', words: 'quote blockquote' },
-  { command: 'codeBlock', icon: 'codeBlock', label: 'Code block', words: 'code block fence pre' },
-  { command: 'table', icon: 'table', label: 'Table', words: 'table grid' },
-  { command: 'divider', icon: 'divider', label: 'Divider', words: 'divider hr rule line separator' },
-];
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
- * @param {{ editor: object, onComment: () => void, settings: ReturnType<typeof import('./settings.js').createSettings>,
+ * @param {{ view: object, settings: ReturnType<typeof import('./settings.js').createSettings>,
  *           getName: () => string, setName: (name: string) => boolean }} options
  */
-export function createChrome({ editor, onComment, settings: store, getName, setName }) {
+export function createChrome({ view, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
   const count = document.querySelector('.od-count');
+  const page = document.querySelector('.od-page');
 
   const settings = setupSettings({
     store,
@@ -47,106 +34,31 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
       showFolder: window.opendocDesktop && (() => window.opendocDesktop.showAgents()),
     },
   });
-  const toolbar = document.querySelector('.od-toolbar');
-  const bubble = document.querySelector('.od-bubble');
-  const slash = setupSlash(editor);
-  // The editor's keys go to the "/" menu while it is open.
-  editor.setKeyHandler((event) => slash.onKey(event));
-  const link = setupLink(editor);
-  const outline = setupOutline(editor);
-  const blockPicker = setupBlockPicker(editor);
 
-  // Toolbar and bubble buttons act on the editor without taking its selection.
-  for (const bar of [toolbar, bubble]) {
-    bar.addEventListener('mousedown', (event) => {
-      const target = event.target.closest('button');
-      if (!target || target.closest('.od-block-picker')) return;
-      event.preventDefault();
-      if (target.dataset.action === 'comment') onComment();
-      else if (target.dataset.command === 'link') link.toggle(target);
-      else if (target.dataset.command) editor.run(target.dataset.command);
-    });
-  }
-
-  // ---- reflect the editor's state ----
-
-  let frame = 0;
-  editor.onUi(() => {
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      refresh();
-    });
+  // Toolbar buttons act without taking the doc's selection.
+  document.querySelector('.od-toolbar').addEventListener('mousedown', (event) => {
+    if (event.target.closest('button')) event.preventDefault();
   });
 
-  function refresh() {
-    const { active, block, canUndo, canRedo } = editor.formatState();
-    for (const button of document.querySelectorAll('.od-toolbar [data-command], .od-bubble [data-command]')) {
-      const { command } = button.dataset;
-      if (command === 'undo' || command === 'redo') {
-        button.disabled = !(command === 'undo' ? canUndo : canRedo);
-        continue;
-      }
-      button.setAttribute('aria-pressed', String(active.has(button.dataset.command)));
-    }
-    blockPicker.show(block);
-    placeBubble();
-    link.refresh(pointerDown);
-    slash.refresh();
-    outline.refresh();
-    if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
-  }
+  // ---- word count ----
 
   // Counting words reads the whole doc, so it runs a few times a second at
   // most, not on every keystroke or every frame of an agent's replay.
   const COUNT_MS = 300;
   let countTimer = 0;
   let countedAt = -Infinity;
+  function recount() {
+    if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
+  }
   function refreshCount() {
     countTimer = 0;
     countedAt = performance.now();
-    const { words, selected } = editor.counts();
-    count.textContent = selected ? `${selected.toLocaleString()} of ${plural(words, 'word')}` : plural(words, 'word');
+    const text = view.getText();
+    const selection = view.selection();
+    const selected = selection ? words(text.slice(selection.from, selection.to)) : 0;
+    count.textContent = selected ? `${selected.toLocaleString()} of ${plural(words(text), 'word')}` : plural(words(text), 'word');
   }
-
-  // ---- selection bubble ----
-
-  let pointerDown = false;
-  document.addEventListener('mousedown', (event) => {
-    if (event.target.closest('.od-editor') && !event.target.closest('.od-history-stage')) pointerDown = true;
-  });
-  document.addEventListener('mouseup', () => {
-    if (!pointerDown) return;
-    pointerDown = false;
-    requestAnimationFrame(() => {
-      placeBubble();
-      link.refresh(false);
-    });
-  });
-
-  function placeBubble() {
-    const rect = !pointerDown && editor.selectionRect();
-    if (!rect) {
-      bubble.hidden = true;
-      return;
-    }
-    bubble.querySelector('[data-action="comment"]').hidden = !rect.commentable;
-    bubble.hidden = false;
-    const stage = bubble.offsetParent.getBoundingClientRect();
-    const page = document.querySelector('.od-page').getBoundingClientRect();
-    const canvasTop = document.querySelector('.od-canvas').getBoundingClientRect().top;
-    const { offsetWidth: width, offsetHeight: height } = bubble;
-    const center = (rect.left + rect.right) / 2;
-    const left = Math.min(Math.max(center - width / 2, page.left + 8), page.right - width - 8);
-    const above = rect.top - height - 10 > canvasTop;
-    const top = above ? rect.top - height - 10 : rect.bottom + 10;
-    bubble.style.left = `${left - stage.left}px`;
-    bubble.style.top = `${top - stage.top}px`;
-    bubble.dataset.side = above ? 'above' : 'below';
-  }
-  document.querySelector('.od-canvas').addEventListener('scroll', () => {
-    if (!bubble.hidden) placeBubble();
-  }, { passive: true });
+  document.addEventListener('selectionchange', recount);
 
   // ---- global shortcuts ----
 
@@ -155,22 +67,18 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
     if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault();
       settings.set({ focus: !settings.get().focus });
-    } else if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k' && event.target.closest?.('.od-editor')) {
-      event.preventDefault();
-      link.toggle();
     }
   });
 
-  refresh();
+  refreshCount();
   return {
-    hideBubble() {
-      bubble.hidden = true;
-    },
+    /** The doc's text changed: count its words again. */
+    recount,
     /** A command from the desktop app's menu: 'settings', 'shortcuts', 'undo' or 'redo'. */
     command(name) {
-      // Undo in the doc is the editor's own history (your edits only); in a field, the field's.
+      // Undo in the doc is the view's own history (your edits only); in a field, the field's.
       if (name === 'undo' || name === 'redo') {
-        if (document.activeElement?.closest('.ProseMirror')) editor.run(name);
+        if (page.contains(document.activeElement)) view[name]();
         else document.execCommand(name);
       } else if (name === 'settings') settings.toggle('general');
       else if (name === 'shortcuts') settings.toggle('shortcuts');
@@ -178,336 +86,8 @@ export function createChrome({ editor, onComment, settings: store, getName, setN
   };
 }
 
-// ---- links: a card for the link at the caret, and the popover that edits one ----
-
-// The card shows where the link at the caret goes, under it: click to open,
-// or edit or remove it. Mod+click on a link opens it too. The popover edits
-// the URL for the selection or the link at the caret: Enter applies, an
-// empty URL removes the link, Escape or clicking away cancels. It sits under
-// the text it links, or under the button that opened it when that text is
-// out of view.
-function setupLink(editor) {
-  const card = document.querySelector('.od-link-card');
-  const go = card.querySelector('.od-link-go');
-  const popover = document.querySelector('.od-link');
-  const input = popover.querySelector('.od-link-input');
-  const unlink = popover.querySelector('[data-action="unlink"]');
-  const canvas = document.querySelector('.od-canvas');
-  let button = null; // the toolbar or bubble button it opened from
-  let shown = null; // the link the card is for: { href, rect }
-
-  // `#heading` scrolls this doc; anything else is the app's to open.
-  function follow(href) {
-    if (href.startsWith('#')) editor.scrollToAnchor(href.slice(1));
-    else if (window.opendocDesktop) window.opendocDesktop.openLink(href).catch(() => {});
-    else window.open(href, '_blank', 'noopener');
-  }
-
-  function showCard(link) {
-    shown = link;
-    card.hidden = !link;
-    if (!link) return;
-    const { href } = link;
-    const doc = !/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith('#');
-    go.querySelector('.od-link-go-icon').replaceChildren(icon(doc ? 'file' : 'link'));
-    go.querySelector('.od-link-go-text').textContent = doc
-      ? decoded(href.split(/[?#]/)[0].split('/').at(-1)).replace(/\.(md|markdown)$/i, '') || href
-      : href.replace(/^(https?:|mailto:)(\/\/)?(www\.)?/i, '');
-    go.dataset.tip = href;
-    placeAt(card, link.rect);
-  }
-
-  card.addEventListener('mousedown', (event) => event.preventDefault()); // the caret stays in the link
-  card.addEventListener('click', (event) => {
-    const action = event.target.closest('button')?.dataset.action;
-    if (!shown || !action) return;
-    if (action === 'open') follow(shown.href);
-    else if (action === 'edit') open(null);
-    else if (action === 'unlink') {
-      editor.beginLink();
-      editor.endLink('');
-    }
-  });
-  document.addEventListener('click', (event) => {
-    const a = event.target.closest?.('.od-editor a[href]');
-    if (!a || !(mac ? event.metaKey : event.ctrlKey)) return;
-    event.preventDefault();
-    follow(a.getAttribute('href'));
-  });
-
-  function open(from) {
-    showCard(null);
-    button = from ?? null;
-    const href = editor.beginLink();
-    input.value = href ?? '';
-    unlink.hidden = href === null;
-    popover.hidden = false;
-    place();
-    input.focus();
-    input.select();
-  }
-
-  // `href`: the URL to set, '' to remove the link, null to cancel.
-  function close(href) {
-    if (popover.hidden) return;
-    popover.hidden = true;
-    button = null;
-    editor.endLink(href);
-  }
-
-  function place() {
-    const rect = editor.linkRect();
-    const view = canvas.getBoundingClientRect();
-    const visible = rect && rect.bottom > view.top && rect.top < view.bottom;
-    const onScreen = button?.isConnected && button.getClientRects().length > 0;
-    const anchor = visible || !onScreen ? rect : button.getBoundingClientRect();
-    if (!anchor) return;
-    placeAt(popover, anchor, visible ? rect.left - 10 : (anchor.left + anchor.right) / 2 - popover.offsetWidth / 2);
-  }
-
-  // Under `anchor`, or over it when there is no room below.
-  function placeAt(box, anchor, left = anchor.left - 10) {
-    const { offsetWidth: width, offsetHeight: height } = box;
-    const below = anchor.bottom + 8 + height < window.innerHeight - 8;
-    box.style.left = `${Math.min(Math.max(left, 8), window.innerWidth - width - 8)}px`;
-    box.style.top = `${below ? anchor.bottom + 8 : anchor.top - height - 8}px`;
-  }
-
-  popover.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      close(null);
-    } else if (event.key === 'Enter' && event.target === input) {
-      event.preventDefault();
-      close(input.value.trim());
-    } else if (event.key === 'Tab') {
-      // Focus stays in the popover: the URL, Apply, Remove.
-      const stops = [...popover.querySelectorAll('input, button:not([hidden])')];
-      const next = stops.indexOf(document.activeElement) + (event.shiftKey ? -1 : 1);
-      if (next < 0 || next >= stops.length) {
-        event.preventDefault();
-        stops.at(next < 0 ? -1 : 0).focus();
-      }
-    }
-  });
-  popover.addEventListener('click', (event) => {
-    const action = event.target.closest('button')?.dataset.action;
-    if (action === 'apply') close(input.value.trim());
-    else if (action === 'unlink') close('');
-  });
-  // Clicking anywhere else cancels; the link buttons toggle it themselves.
-  document.addEventListener('mousedown', (event) => {
-    if (popover.hidden || popover.contains(event.target) || event.target.closest?.('[data-command="link"]')) return;
-    close(null);
-  }, true);
-  const replace = () => {
-    if (!popover.hidden) place();
-    if (shown) showCard(editor.caretLink());
-  };
-  canvas.addEventListener('scroll', replace, { passive: true });
-  window.addEventListener('resize', replace);
-
-  return {
-    /** Show the card for the link at the caret, if any; none while the pointer is still down. */
-    refresh(pointerDown) {
-      if (popover.hidden) showCard(pointerDown ? null : editor.caretLink());
-    },
-    /** Open for the selection (`from`: the button that asked), or cancel when open. */
-    toggle(from) {
-      if (popover.hidden) open(from);
-      else close(null);
-    },
-  };
-}
-
-// ---- "Normal text ▾" block style picker ----
-
-function setupBlockPicker(editor) {
-  const root = document.querySelector('.od-block-picker');
-  const button = root.querySelector('.od-block-button');
-  const label = root.querySelector('.od-block-label');
-  const menu = root.querySelector('.od-block-menu');
-  button.append(icon('chevron', 'od-icon od-chevron'));
-
-  const close = () => {
-    menu.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-  };
-  button.addEventListener('mousedown', (event) => {
-    event.preventDefault();
-    menu.hidden = !menu.hidden;
-    button.setAttribute('aria-expanded', String(!menu.hidden));
-  });
-  menu.addEventListener('mousedown', (event) => {
-    event.preventDefault();
-    const item = event.target.closest('[data-command]');
-    if (!item) return;
-    close();
-    editor.run(item.dataset.command);
-  });
-  document.addEventListener('mousedown', (event) => {
-    if (!menu.hidden && !root.contains(event.target)) close();
-  });
-
-  return {
-    show(block) {
-      label.textContent = BLOCK_LABELS[block] ?? 'Normal text';
-      for (const item of menu.children) item.setAttribute('aria-selected', String(item.dataset.block === block));
-    },
-  };
-}
-
-// ---- "/" menu ----
-
-function setupSlash(editor) {
-  const menu = document.querySelector('.od-slash');
-  let range = null;
-  let items = [];
-  let selected = 0;
-  let dismissedAt = null; // slash position the human closed with Escape
-
-  function refresh() {
-    const query = editor.slashQuery();
-    if (!query || query.from === dismissedAt) {
-      if (!query) dismissedAt = null;
-      return close();
-    }
-    const q = query.query.toLowerCase();
-    const next = SLASH_ITEMS.filter((item) => !q || `${item.label} ${item.words}`.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)));
-    if (next.length === 0) return close();
-    if (range?.from !== query.from || items.length !== next.length) selected = 0;
-    range = query;
-    items = next;
-    draw();
-    const stage = menu.offsetParent.getBoundingClientRect();
-    const at = editor.coordsAt(query.from);
-    const room = window.innerHeight - at.bottom;
-    menu.style.left = `${at.left - stage.left}px`;
-    menu.style.top = room < menu.offsetHeight + 16 ? `${at.top - stage.top - menu.offsetHeight - 6}px` : `${at.bottom - stage.top + 6}px`;
-  }
-
-  function draw() {
-    menu.replaceChildren(...items.map((item, i) => {
-      const li = document.createElement('li');
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', String(i === selected));
-      const label = document.createElement('span');
-      label.className = 'od-slash-label';
-      label.textContent = item.label;
-      const glyph = document.createElement('span');
-      glyph.className = 'od-slash-icon';
-      glyph.append(icon(item.icon));
-      li.append(glyph, label);
-      li.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        pick(i);
-      });
-      li.addEventListener('mousemove', () => {
-        if (selected === i) return;
-        selected = i;
-        draw();
-      });
-      return li;
-    }));
-    menu.hidden = false;
-    menu.children[selected]?.scrollIntoView({ block: 'nearest' });
-  }
-
-  function pick(i) {
-    const item = items[i];
-    const at = range;
-    close();
-    editor.runSlash(at, item.command);
-  }
-
-  function close() {
-    menu.hidden = true;
-    range = null;
-    items = [];
-  }
-
-  function onKey(event) {
-    if (menu.hidden) return false;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-      draw();
-      return true;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      pick(selected);
-      return true;
-    }
-    if (event.key === 'Escape') {
-      dismissedAt = range.from;
-      close();
-      return true;
-    }
-    return false;
-  }
-
-  return { refresh, onKey };
-}
-
-// ---- outline: a tick per heading at the left edge, a list on hover ----
-
-function setupOutline(editor) {
-  const nav = document.querySelector('.od-outline');
-  const ticks = nav.querySelector('.od-outline-ticks');
-  const list = nav.querySelector('.od-outline-list');
-  const canvas = document.querySelector('.od-canvas');
-  let signature = '';
-  let current = [];
-
-  function refresh() {
-    const headings = editor.headings();
-    const next = JSON.stringify(headings.map((h) => [h.level, h.text]));
-    current = headings;
-    if (next === signature) return;
-    signature = next;
-    nav.hidden = headings.length < 2;
-    const minLevel = Math.min(...headings.map((h) => h.level));
-    ticks.replaceChildren(...headings.map((h) => {
-      const tick = document.createElement('i');
-      tick.dataset.depth = String(h.level - minLevel);
-      return tick;
-    }));
-    list.replaceChildren(...headings.map((h, i) => {
-      const li = document.createElement('li');
-      const link = document.createElement('button');
-      link.type = 'button';
-      link.dataset.depth = String(h.level - minLevel);
-      link.textContent = h.text;
-      link.addEventListener('click', () => editor.scrollToHeading(current[i].pos));
-      li.append(link);
-      return li;
-    }));
-    markActive();
-  }
-
-  function markActive() {
-    const top = canvas.getBoundingClientRect().top + 96;
-    const elements = [...document.querySelectorAll('.od-stage:not(.od-history-stage) .od-editor .ProseMirror > :is(h1, h2, h3, h4, h5, h6)')].filter((h) => h.textContent.trim());
-    let active = 0;
-    elements.forEach((h, i) => {
-      if (h.getBoundingClientRect().top <= top) active = i;
-    });
-    [...ticks.children].forEach((tick, i) => tick.classList.toggle('od-on', i === active));
-    [...list.querySelectorAll('button')].forEach((link, i) => link.classList.toggle('od-on', i === active));
-  }
-  canvas.addEventListener('scroll', () => requestAnimationFrame(markActive), { passive: true });
-
-  return { refresh };
-}
-
-// ---- tooltips: label plus shortcut, after a short hover ----
-
-function decoded(text) {
-  try {
-    return decodeURIComponent(text);
-  } catch {
-    return text;
-  }
+function words(text) {
+  return (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
 }
 
 function plural(n, word) {

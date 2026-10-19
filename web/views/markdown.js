@@ -1,9 +1,10 @@
 // The Markdown view: a Milkdown (ProseMirror) WYSIWYG editor that draws the
-// page's marks (comments, a draft, a revision), with named formatting
-// commands for the toolbar, selection bubble and "/" menu, and
-// collaborator-style application of changes made on disk: only the blocks
-// that differ are replaced (the caret stays put). A buddy's change is
-// flagged with its name; any other change glows with who made it.
+// page's marks (comments, a draft, a revision), with its own chrome (a
+// toolbar, selection bubble, link popover, "/" menu and outline, see
+// markdown-chrome.js), and collaborator-style application of changes made
+// on disk: only the blocks that differ are replaced (the caret stays put).
+// A buddy's change is flagged with its name; any other change glows with
+// who made it.
 //
 // The page talks to a view in offsets on the doc's text, the file's
 // markdown (the view interface is what createMarkdownView returns first;
@@ -31,15 +32,16 @@ import { lift } from '@milkdown/kit/prose/commands';
 import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
-import { createAnchor, locate } from '../src/core/anchor.js';
-import { project, renderedRange, sourceRange } from '../src/formats/markdown/project.js';
-import { splice } from '../src/formats/markdown/splice.js';
-import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
-import { editItems } from './review.js';
-import { markdownPlugins } from './markdown-schema.js';
-import { diagrams } from './diagrams.js';
-import { childPos, diffBlocks, replaceBlocks } from './blocks.js';
-import { buddyColor } from './faces.js';
+import { createAnchor, locate } from '../../src/core/anchor.js';
+import { project, renderedRange, sourceRange } from '../../src/formats/markdown/project.js';
+import { splice } from '../../src/formats/markdown/splice.js';
+import { docRange, projectDoc, selectionSpan, textRange } from '../pm-text.js';
+import { editItems } from '../review.js';
+import { markdownPlugins } from '../markdown-schema.js';
+import { diagrams } from '../diagrams.js';
+import { childPos, diffBlocks, replaceBlocks } from '../blocks.js';
+import { buddyColor } from '../faces.js';
+import { createChrome } from './markdown-chrome.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('opendoc-highlights');
@@ -107,7 +109,7 @@ const tableTab = $shortcut(() => ({
   },
 }));
 
-// Reports every view update and lets the page take keys first (for the "/"
+// Reports every view update and lets the chrome take keys first (for the "/"
 // menu), and marks the top-level block holding the caret (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
   view: () => ({ update: (view) => hooks.onUpdate(view) }),
@@ -136,21 +138,23 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *   number (0: none) animates it once.
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
- *           onMarkClick?: (id: string) => void, onLayout?: () => void }} options
+ *           onMarkClick?: (id: string) => void, onLayout?: () => void,
+ *           toolbar?: HTMLElement, onComment?: () => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
-export async function createMarkdownView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {} }) {
+// Given a `toolbar`, the view puts its tools there and the rest of its chrome
+// around `stage`; its bubble's Comment button calls `onComment`.
+export async function createMarkdownView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {} }) {
   // The human changed the doc since `updated` last fired: any change not
   // applied from disk, even one that brings back the text as it was saved.
   // What plugins append (the empty line kept after a last table or code
   // block, which saves as nothing) follows from another change.
   let edited = false;
-  const uiListeners = new Set();
-  let keyHandler = () => false;
+  let chrome = null;
   const hooks = {
-    onUpdate: () => { for (const fn of uiListeners) fn(); },
-    onKeyDown: (event) => keyHandler(event),
+    onUpdate: () => chrome?.update(),
+    onKeyDown: (event) => chrome?.onKey(event) ?? false,
   };
   const host = stage.querySelector('.od-editor');
   const editor = await Editor.make()
@@ -466,7 +470,7 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
     run(name);
   }
 
-  // ---- outline and counts ----
+  // ---- outline ----
 
   function headings() {
     const result = [];
@@ -491,17 +495,6 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
     dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
     v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, pos + 1)));
     v.focus();
-  }
-
-  function counts() {
-    const { state } = view();
-    const words = (text) => (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
-    const { empty } = state.selection;
-    const { from, to } = selectionSpan(state.selection);
-    return {
-      words: words(state.doc.textBetween(0, state.doc.content.size, ' ', ' ')),
-      selected: empty ? 0 : words(state.doc.textBetween(from, to, ' ', ' ')),
-    };
   }
 
   /** Viewport rectangle of the selection, or null when there is none to point at. */
@@ -551,6 +544,14 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
     v.dispatch(v.state.tr.setMeta(flashKey, next).setMeta('addToHistory', false));
   }
 
+  if (toolbar) {
+    chrome = createChrome({
+      run, formatState, slashQuery, runSlash, headings, scrollToHeading, scrollToAnchor,
+      selectionRect, beginLink, endLink, linkRect, caretLink,
+      coordsAt: (pos) => view().coordsAtPos(pos),
+    }, { toolbar, stage, host, onComment });
+  }
+
   return {
     // ---- the view interface: every view has these, in offsets on the doc's text ----
 
@@ -594,41 +595,13 @@ export async function createMarkdownView({ stage, text, editable = true, onChang
       (node.nodeType === 1 ? node : node.parentElement)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     },
     focus: () => view().focus(),
+    /** Undo or redo the human's last edit, in this view's own history. */
+    undo: () => run('undo'),
+    redo: () => run('redo'),
     destroy() {
+      chrome?.destroy();
       host.removeEventListener('click', clickMark);
       return editor.destroy();
-    },
-
-    // ---- the Markdown view's own, for the toolbar, the "/" menu and the outline ----
-
-    /** Which top-level block holds the caret (its index), or null when the editor has no focus. */
-    caretIndex() {
-      const v = view();
-      if (!v.hasFocus()) return null;
-      const { $from } = v.state.selection;
-      return $from.depth === 0 ? -1 : $from.index(0);
-    },
-    run,
-    formatState,
-    slashQuery,
-    runSlash,
-    headings,
-    scrollToHeading,
-    scrollToAnchor,
-    counts,
-    selectionRect,
-    beginLink,
-    endLink,
-    linkRect,
-    caretLink,
-    coordsAt: (pos) => view().coordsAtPos(pos),
-    /** Called after every editor update: typing, selection, focus. */
-    onUi(listener) {
-      uiListeners.add(listener);
-    },
-    /** Sees editor keydowns first; return true to consume one. */
-    setKeyHandler(handler) {
-      keyHandler = handler;
     },
   };
 }

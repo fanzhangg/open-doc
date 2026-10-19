@@ -7,7 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
-import { createMarkdownView } from './editor.js';
+import { createMarkdownView } from './views/markdown.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { setBuddies } from './faces.js';
@@ -118,9 +118,12 @@ async function start() {
   editor = await createMarkdownView({
     stage: document.querySelector('.od-stage'),
     text: initial.text,
+    toolbar: document.querySelector('.od-toolbar'),
+    onComment: requestComment,
     onChange: () => {
       hideRun();
       paintMarks();
+      chrome.recount();
       dirty = true;
       version++;
       setStatus('Saving…', 'saving');
@@ -139,7 +142,7 @@ async function start() {
   });
   synced = initial.text;
   chrome = createChrome({
-    editor, onComment: requestComment, settings, getName: () => me, setName,
+    view: editor, settings, getName: () => me, setName,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -395,6 +398,7 @@ async function doSync(by) {
   // A buddy's changes show as its revision; anything else glows.
   editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
   paintMarks();
+  chrome.recount();
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -603,7 +607,6 @@ function requestComment() {
   if (comments?.readOnly) return;
   const selection = editor.selection();
   if (!selection || selection.from === selection.to) return;
-  chrome?.hideBubble();
   if (narrow.matches) openSheet(true);
   else if (!commentsShown()) showComments(true);
   pendingSelection = createAnchor(editor.getText(), selection.from, selection.to);
@@ -704,6 +707,7 @@ async function restoreVersion(id) {
   const { text, docHash } = result.data;
   editor.applyText(text, { by: 'Restore' });
   paintMarks();
+  chrome.recount();
   synced = text;
   baseHash = docHash;
   dirty = false;
