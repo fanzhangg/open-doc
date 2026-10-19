@@ -59,9 +59,13 @@ edits and comments.
 
 ```sh
 #!/bin/sh
-exec claude -p --permission-mode acceptEdits --no-session-persistence \
+exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-persistence \
   ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
 ```
+
+`@"…"` attaches the doc copy to the prompt as already read, so Claude Code
+edits it without first spending a round trip to read it. The Windows script
+does not do this yet.
 
 ## Permissions
 
