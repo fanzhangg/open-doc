@@ -119,7 +119,11 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   gives its format a WYSIWYG one, and merges changes as plain text unless a
   plugin gives it rules of its own. Two are built in, both for Markdown, on
   by default and switched each on its own. The **Markdown editor**: its
-  toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are part of it.
+  toolbar, outline and focus mode (Ctrl+Shift+F) are part of it. The toolbar
+  is the only way to format: typed Markdown such as `## `, `**x**` or `- `
+  stays text (saved escaped), and the only shortcuts are Undo, Redo and
+  Comment. To write Markdown by hand, switch the plugin off; `.md` then opens
+  in the plain editor. Pasted Markdown is still formatted.
   The **Markdown harness**: a buddy's edit or a change from outside merges
   into a line you changed too only where that keeps how the line renders;
   where it would not, your text stays, as when you both change the same

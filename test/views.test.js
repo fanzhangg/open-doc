@@ -121,3 +121,19 @@ for (const name of VIEWS) {
     assert.equal(await getText(), 'Alpha.\n');
   });
 }
+
+test('markdown view: typed Markdown stays text and saves escaped', async () => {
+  await make('markdown', 'Start.\n');
+  await select('Start.', 6, 6);
+  // One key press per character, as typing is: input rules run on those.
+  const typeKeys = async (text) => {
+    for (const char of text) await page.send('Input.dispatchKeyEvent', { type: 'char', text: char, key: char, unmodifiedText: char });
+  };
+  for (const line of ['## x', '**x**', '- x']) {
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await typeKeys(line);
+  }
+  assert.equal(await getText(), 'Start.\n\n\\## x\n\n\\*\\*x\\*\\*\n\n\\- x\n');
+  assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
+});

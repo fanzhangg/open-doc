@@ -32,4 +32,10 @@ const link = linkSchema.extendSchema((schema) => (ctx) => ({ ...schema(ctx), inc
 
 const swapped = new Map([[imageSchema.ctx, image.ctx], [imageSchema.node, image.node], [linkSchema.ctx, link.ctx], [linkSchema.mark, link.mark]]);
 
-export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly].flat();
+// Typed Markdown stays text and the toolbar is the one formatting entry, so
+// the preset's input rules and formatting shortcuts are left out. Lists and
+// tables keep their Enter and Tab keys.
+const FORMATTING = /^(InputRule<|Keymap<(emphasis|strong|inlineCode|paragraph|heading|blockquote|codeBlock|bulletListKeymap|orderedList|strikethrough)>)/;
+const kept = (plugin) => !FORMATTING.test(plugin.meta?.displayName ?? '');
+
+export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly].flat().filter(kept);
