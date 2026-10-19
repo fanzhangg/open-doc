@@ -6,8 +6,8 @@
   <title>OpenDoc Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=b6617cd">
-  <link rel="stylesheet" href="site.css?v=b6617cd">
+  <link rel="stylesheet" href="./dist/web/app.css?v=a9eb46d">
+  <link rel="stylesheet" href="site.css?v=a9eb46d">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -123,6 +123,14 @@
     <input class="od-switch" type="checkbox" checked aria-label="On">
     <input class="od-switch" type="checkbox" aria-label="Off">
   </div>
+  <h3>Settings with a page of their own</h3>
+  <p>A group of settings with its own page, such as a plugin, is a row in a list: its name, what it is and whether it is on, the whole row one button with a chevron. Its page starts with <code>.od-back</code>, the same Back as the history's.</p>
+  <div class="ds-box ds-setting-pages">
+    <button type="button" class="od-back"><svg class="od-icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Plugins</button>
+    <ul class="od-setting-pages">
+      <li><button type="button"><span class="od-setting-text"><span class="od-setting-label">Markdown<span class="od-setting-ext">.md .markdown</span></span><span class="od-setting-hint">Edit Markdown docs as formatted text.</span></span><span class="od-setting-state"><span>On</span><svg class="od-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></button></li>
+    </ul>
+  </div>
   <h3>Lists: current is ink on grey</h3>
   <div class="od-files ds-files">
     <ul class="od-files-tree">
@@ -154,6 +162,6 @@
   </div>
 
 </main>
-<script type="module" src="site.js?v=b6617cd"></script>
+<script type="module" src="site.js?v=a9eb46d"></script>
 </body>
 </html>
