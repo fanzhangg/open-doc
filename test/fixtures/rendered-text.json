@@ -1,5 +1,5 @@
 {
-  "description": "Rendered text (src/formats/markdown/project.js) that the projection of the markdown and the editor's projection of its document must both produce for each input. One case per rule, plus the syntax most likely to drift between a markdown parser and an editor's document model.",
+  "description": "Rendered text (src/markdown/project.js) that the projection of the markdown and the editor's projection of its document must both produce for each input. One case per rule, plus the syntax most likely to drift between a markdown parser and an editor's document model.",
   "cases": [
     { "name": "paragraphs and headings", "markdown": "# Title\n\nFirst paragraph.\n\n## Sub\n\nSecond.", "text": "Title\nFirst paragraph.\nSub\nSecond." },
     { "name": "soft line breaks and whitespace runs collapse", "markdown": "one\ntwo   three\n  four", "text": "one two three four" },

@@ -14,9 +14,9 @@ import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './hel
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE } = {}) {
+async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE, settings = {} } = {}) {
   const docPath = await tempDoc(content);
-  const settingsDir = await fakeConfig();
+  const settingsDir = await fakeConfig(settings);
   let opened = await openTestDoc(docPath, { settingsDir, folder, buddies });
   const release = (buddy) => writeFile(join(settingsDir, `release-${buddy}`), '');
   const restart = async () => {
@@ -77,6 +77,22 @@ test('the human edits the same text during a run: theirs stays, the buddy\'s cha
     assert.match(text, /the extra traffic\./);
     assert.doesNotMatch(text, /peak/);
   });
+});
+
+test('a buddy\'s edit to a line the human changed too: the Markdown harness refuses a character merge that changes how it renders; switched off, it merges', { timeout: 30_000 }, async () => {
+  // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
+  for (const on of [true, false]) {
+    await withDoc(async ({ docPath, call, state, runs, release }) => {
+      const id = await comment(call, '@Clippy hold replace "1 *2* 3" with "1 *2* 3 4*"');
+      await until(async () => (await runs()).length === 1, 'the run to start');
+      const now = await state();
+      assert.ok(!(await call('saveDoc', { text: '1 *2 3\n', baseHash: now.docHash })).conflict);
+      await release('Clippy');
+      const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
+      assert.equal(Boolean(answer.conflict), on);
+      assert.equal(await readFile(docPath, 'utf8'), on ? '1 *2 3\n' : '1 *2 3 4*\n');
+    }, { content: '1 *2* 3\n', settings: { plugins: { 'markdown-harness': { enabled: on } } } });
+  }
 });
 
 test('two buddies run at once on one doc; both edits land', { timeout: 30_000 }, async () => {

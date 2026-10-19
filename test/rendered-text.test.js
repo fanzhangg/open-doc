@@ -1,5 +1,5 @@
 // The markdown editor's bridge to the doc's text: the projection of the
-// markdown (src/formats/markdown/project.js) and the editor's projection of
+// markdown (src/markdown/project.js) and the editor's projection of
 // its own document (web/pm-text.js) must produce the same rendered text, so
 // an anchor on the doc's text can be drawn in the editor and a selection
 // there becomes an anchor on the doc's text. Checked against
@@ -11,8 +11,8 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createAnchor, locate } from '../src/core/anchor.js';
-import { project, renderedAnchor, sourceAnchor } from '../src/formats/markdown/project.js';
-import { splice } from '../src/formats/markdown/splice.js';
+import { project, renderedAnchor, sourceAnchor } from '../src/markdown/project.js';
+import { splice } from '../src/markdown/splice.js';
 import { docRange, projectDoc, textRange } from '../web/pm-text.js';
 import { editorParser, editorSerializer } from './milkdown.js';
 

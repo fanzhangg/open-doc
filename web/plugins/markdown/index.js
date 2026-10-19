@@ -1,11 +1,11 @@
-// The Markdown plugin: Markdown docs as formatted text (view.js), with a
-// toolbar, "/" menu and outline (chrome.js), and its settings. Markdown's
-// format rules (src/formats/markdown) apply whatever view a doc is in, so
-// they are not part of it.
+// The Markdown editor plugin: Markdown docs as formatted text (view.js),
+// with a toolbar, "/" menu and outline (chrome.js), and its settings. How
+// Markdown merges is the Markdown harness's (src/plugins/markdown.js), a
+// plugin of its own, so it applies whatever view a doc is in.
 
 export const markdown = {
   id: 'markdown',
-  name: 'Markdown',
+  name: 'Markdown editor',
   about: 'Edit Markdown docs as formatted text, with a toolbar, a "/" menu and an outline.',
   extensions: ['md', 'markdown'],
   // Loaded with the first Markdown doc.

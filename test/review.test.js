@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { editItems } from '../web/review.js';
 import { revisionMarks } from '../web/marks.js';
 import { diffEdits } from '../src/core/diff.js';
-import { project } from '../src/formats/markdown/project.js';
+import { project } from '../src/markdown/project.js';
 import { locate } from '../src/core/anchor.js';
 import { SAMPLE } from './helpers.js';
 

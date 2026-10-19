@@ -92,7 +92,7 @@ const DIALOG = `
     <section class="od-settings-section" role="tabpanel" data-section="plugins" hidden>
       <div class="od-plugin-list">
         <h2>Plugins</h2>
-        <p class="od-settings-intro">Each gives one kind of file its own editor. Off, those files open as plain text.</p>
+        <p class="od-settings-intro">Each gives one kind of file its own editor, or its own rules for merging changes. Off, those files are plain text.</p>
         <ul class="od-setting-pages"></ul>
       </div>
     </section>
@@ -334,8 +334,8 @@ function pluginRowAndPage(plugin) {
   Object.assign(back.dataset, { action: 'plugins', icon: 'back' });
   page.append(
     back, el('h2', null, plugin.name), el('p', 'od-settings-intro', plugin.about),
-    switchRow('On', `Off, ${new Intl.ListFormat('en').format(extensions)} files open as plain text.`, 'enabled'),
-    ...Object.keys(plugin.settings).map((key) => switchRow(plugin.labels[key], null, key)),
+    switchRow('On', `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.`, 'enabled'),
+    ...Object.keys(plugin.settings ?? {}).map((key) => switchRow(plugin.labels[key], null, key)),
   );
   return { row, page, state };
 }

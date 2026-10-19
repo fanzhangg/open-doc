@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { project, renderedRange, sourceRange } from '../src/formats/markdown/project.js';
+import { project, renderedRange, sourceRange } from '../src/markdown/project.js';
 
 const textOf = (md) => project(md).text;
 

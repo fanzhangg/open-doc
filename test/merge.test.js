@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { followLines, merge3 } from '../src/core/merge.js';
-import { formatOf } from '../src/formats/index.js';
+import { DEFAULT_SETTINGS } from '../src/core/settings.js';
+import { harnessOf } from '../src/plugins/index.js';
 
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
@@ -75,17 +76,21 @@ test('preferring ours keeps our side of a conflict and reports theirs as dropped
   });
 });
 
-test('in markdown, a character merge that would change how the line renders conflicts; in plain text it merges', () => {
+test('with the Markdown harness on, a character merge that would change how the line renders conflicts; off, or in plain text, it merges', () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { format: formatOf('plan.md') }), { text: null, conflict: true });
-  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { format: formatOf('notes.txt') }), { text: '1 *2 3 4*', conflict: false, dropped: [] });
+  const off = { ...DEFAULT_SETTINGS, plugins: { 'markdown-harness': { enabled: false } } };
+  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { harness: harnessOf('plan.md', DEFAULT_SETTINGS) }), { text: null, conflict: true });
+  for (const harness of [harnessOf('plan.md', off), harnessOf('notes.txt', DEFAULT_SETTINGS)]) {
+    assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { harness }), { text: '1 *2 3 4*', conflict: false, dropped: [] });
+  }
 });
 
-test('a doc\'s format is found by its extension, any case', () => {
-  assert.equal(formatOf('a/README.MD'), formatOf('b.markdown'));
-  assert.ok(formatOf('b.markdown'));
-  assert.equal(formatOf('main.js'), undefined);
-  assert.equal(formatOf('Makefile'), undefined);
+test('a doc\'s harness is found by its extension, any case, and only while it is on', () => {
+  assert.equal(harnessOf('a/README.MD', DEFAULT_SETTINGS), harnessOf('b.markdown', DEFAULT_SETTINGS));
+  assert.ok(harnessOf('b.markdown', DEFAULT_SETTINGS));
+  assert.equal(harnessOf('b.markdown', { ...DEFAULT_SETTINGS, plugins: { markdown: { enabled: false } } }), harnessOf('b.markdown', DEFAULT_SETTINGS), 'the editor plugin is another switch');
+  assert.equal(harnessOf('main.js', DEFAULT_SETTINGS), undefined);
+  assert.equal(harnessOf('Makefile', DEFAULT_SETTINGS), undefined);
 });
 
 test('following lines into a later version takes in what changed around them', () => {

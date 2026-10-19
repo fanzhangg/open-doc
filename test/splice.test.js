@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { splice } from '../src/formats/markdown/splice.js';
+import { splice } from '../src/markdown/splice.js';
 
 const ORIGINAL = `Intro with __old-style bold__ and a hard
 wrapped line, plus a [link](./a.md "Title").

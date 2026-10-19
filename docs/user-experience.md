@@ -116,13 +116,19 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   those come with a doc's editor), and a change applies at once to all of
   them. Buddies are not in Settings: they are changed on their cards.
 - **Plugins.** Every text file opens in the plain editor unless a plugin
-  gives its format a WYSIWYG one. Markdown's is the one built in, on by
-  default: its toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are
-  part of it. Settings > Plugins lists each plugin with the files it
-  edits, what it does and whether it is on; its page has its switch and its
-  own settings (Outline, Focus mode) while it is on.
-  Switching it applies at once to every open doc: a Markdown doc turns to
-  plain text and back, comments still in the margin, and nothing is written.
+  gives its format a WYSIWYG one, and merges changes as plain text unless a
+  plugin gives it rules of its own. Two are built in, both for Markdown, on
+  by default and switched each on its own. The **Markdown editor**: its
+  toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are part of it.
+  The **Markdown harness**: a buddy's edit or a change from outside merges
+  into a line you changed too only where that keeps how the line renders;
+  where it would not, your text stays, as when you both change the same
+  words. Settings > Plugins lists each plugin with its files, what it does
+  and whether it is on; its page has its switch and, for the editor, its own
+  settings (Outline, Focus mode) while it is on.
+  Switching the editor applies at once to every open doc: a Markdown doc
+  turns to plain text and back, comments still in the margin, and nothing is
+  written. Switching the harness applies from the next merge.
 - **Files.** New Doc and Rename (the comments move too). Opening an already
   open doc focuses its window. If the file is moved or deleted outside the
   app, a banner says so and saving pauses.
