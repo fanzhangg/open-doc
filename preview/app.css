@@ -95,7 +95,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* ---- menu and list rows: one size everywhere ---- */
 
-:where(.od-block-menu li, .site-menu a, .od-slash li, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+:where(.od-block-menu li, .site-menu a, .od-mention, .od-outline-list button, .od-settings-nav button, .od-files-row, .od-people-row, .od-version, .od-start-open, .od-recent li button) { min-height: 28px; padding: 4px 8px; border-radius: 6px; font-size: 13px; }
 
 /* ---- header ---- */
 
@@ -413,13 +413,7 @@ del.od-buddy-del { margin-right: 0.15em; }
 .od-link-card [data-action="unlink"]:hover { color: var(--red); }
 .od-editor .od-link-target { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
-/* ---- "/" menu ---- */
 
-.od-slash { position: absolute; z-index: 12; width: 300px; max-height: 340px; overflow-y: auto; margin: 0; padding: 6px; list-style: none; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); font-family: var(--ui-font); animation: od-pop 0.12s ease-out; }
-.od-slash li { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.od-slash li[aria-selected="true"] { background: var(--hover); }
-.od-slash-icon { width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 6px; background: var(--canvas); color: var(--text-soft); }
-.od-slash-label { min-width: 0; }
 
 /* ---- outline: ticks at the left edge, a list on hover ---- */
 
