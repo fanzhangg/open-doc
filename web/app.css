@@ -413,7 +413,6 @@ del.od-buddy-del { margin-right: 0.15em; }
 .od-link-card [data-action="unlink"]:hover { color: var(--red); }
 .od-editor .od-link-target { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
-/* ---- "/" menu ---- */
 
 
 /* ---- outline: ticks at the left edge, a list on hover ---- */

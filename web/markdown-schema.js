@@ -9,7 +9,7 @@ import remarkCjkFriendly from 'remark-cjk-friendly';
 
 // CommonMark does not close `**熟悉：**直接` (a run after full-width
 // punctuation, before a CJK letter); this reads and writes it as bold, the
-// same way the core projection (src/core/project.js) does.
+// same way the core projection (src/markdown/project.js) does.
 const cjkFriendly = $remark('cjkFriendly', () => remarkCjkFriendly);
 
 // remark gives `![alt](a.png)` a null title, and Milkdown's image node only

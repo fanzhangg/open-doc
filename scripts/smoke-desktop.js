@@ -5,7 +5,9 @@
 // your typing and Undo on a reply the buddy's edit, that switching the
 // Markdown plugin off and on turns the Markdown docs to the plain view and
 // back without writing them, that its own settings apply at once, that the
-// app listens on no port, that a doc host that stops is started again, and
+// Markdown harness, apart from it, refuses a page's merge of an outside
+// change that would change how a line renders until it is switched off, that
+// the app listens on no port, that a doc host that stops is started again, and
 // that a setting survives a relaunch.
 //
 //   node scripts/smoke-desktop.js [path to OpenDoc.exe]
@@ -109,6 +111,16 @@ check(await switchesView(first, true, [first, notes], commented), 'on: Markdown\
 await first.evaluate(`document.querySelector('.od-history-bar [data-action="close"]').click()`);
 check(await ownSettingsApply(first), 'its Outline switch and the focus mode shortcut take effect at once');
 check(readFileSync(docs[0], 'utf8') === unswitched.text && (await versionCount(first)) === unswitched.versions, 'switching wrote no file and recorded no version');
+
+step('the Markdown harness, apart from the editor');
+await notes.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="enabled"]').click()`);
+await waitFor(() => notes.evaluate(`Boolean(document.querySelector('.od-stage .cm-content'))`), 15_000, 'the plain view');
+// Taking out one `*` and adding another elsewhere would pair them into new emphasis.
+const harnessOn = await mergesOutside(notes, docs[1]);
+check(harnessOn === '1 *2* 3 4*\n', `on, with the editor off: the line conflicts and your typing stays (${JSON.stringify(harnessOn)})`);
+await notes.evaluate(`document.querySelector('.od-settings [data-plugin="markdown-harness"][data-key="enabled"]').click()`);
+const harnessOff = await mergesOutside(notes, docs[1]);
+check(harnessOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(harnessOff)})`);
 
 if (process.platform === 'linux') {
   const all = listening(app.pid);
@@ -267,6 +279,31 @@ async function undoesReply(page, doc, before) {
   })()`);
   if (!clicked) return false;
   return waitFor(() => readFileSync(doc, 'utf8').includes(before), 15_000, 'the undo').catch(() => false);
+}
+
+// In `page`, `doc` in the plain view: type " 4*" at the end of "1 *2* 3"
+// while a change from outside takes out its second `*`. The doc once the page
+// has merged the two and saved it.
+async function mergesOutside(page, doc) {
+  const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
+  writeFileSync(doc, '1 *2* 3\n');
+  await waitFor(async () => (await page.evaluate(shown)) === '1 *2* 3\n', 15_000, 'the doc from disk');
+  await page.evaluate(`(async () => {
+    const editor = document.querySelector('.od-stage [contenteditable="true"]');
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor.querySelector('.cm-line'));
+    range.collapse(false);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    await new Promise((r) => setTimeout(r, 100)); // the editor takes in the selection
+  })()`);
+  await page.send('Input.insertText', { text: ' 4*' });
+  writeFileSync(doc, '1 *2 3\n'); // before the typing is saved
+  return waitFor(async () => {
+    const text = await page.evaluate(shown);
+    return text.includes('4*') && readFileSync(doc, 'utf8') === text && text;
+  }, 15_000, 'the merge to be saved').catch(() => null);
 }
 
 // Start the app on `paths`.
