@@ -20,7 +20,7 @@ import {
   moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
-import { docInFolder, firstDoc, isHiddenName, listDocs, neighbourDoc, readFolder, readText, relativeDoc } from './folder.js';
+import { docInFolder, firstDoc, firstTextFile, isHiddenName, listDocs, neighbourDoc, readFolder, readText, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -151,7 +151,8 @@ async function show(docPath, parent) {
 
 /**
  * Open a folder: a window that lists its docs, showing the one last open
- * there (or its README). A folder without docs offers to start one.
+ * there (or its README, or with no Markdown, a text file). A folder without
+ * any offers to start a doc.
  */
 async function openFolder(path, parent = null) {
   let folder;
@@ -167,7 +168,9 @@ async function openFolder(path, parent = null) {
   // A doc another window has open stays there; start with one that is free.
   const free = docs.filter((rel) => !windows.windowOf(docInFolder(folder, rel)));
   const remembered = Object.hasOwn(state.folderDocs, folder) ? state.folderDocs[folder] : null;
-  let rel = firstDoc(free, remembered) ?? firstDoc(docs);
+  const last = remembered && docInFolder(folder, remembered); // any doc, Markdown or not
+  const lastFree = last && isFile(last) && !windows.windowOf(last) && (await docPathFor(last)) === last;
+  let rel = (lastFree ? remembered : firstDoc(free)) ?? firstDoc(docs) ?? (await firstTextFile(folder));
   if (!rel) {
     const name = basename(folder) || folder;
     if (!(await ask(parent, `${name} has no docs yet.`, `Start one in ${folder}?`, 'New Doc'))) return false;

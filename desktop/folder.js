@@ -7,7 +7,7 @@ import { watch } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { SIDECAR_SUFFIX } from '../src/store/files.js';
-import { MAX_TEXT_BYTES, isDocName } from './files.js';
+import { MAX_TEXT_BYTES, isDocName, isTextFile } from './files.js';
 
 export const MAX_DOCS = 2000;
 export const MAX_DEPTH = 12;
@@ -107,6 +107,19 @@ export function relativeDoc(root, path) {
   const rel = relative(root, path);
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
   return rel.split(sep).join('/');
+}
+
+/**
+ * The first text file (isTextFile) in `root`, one at the top before those in
+ * its subfolders; null for none. A sidecar is not one.
+ */
+export async function firstTextFile(root) {
+  const files = await listDocs(root, { isDoc: (name) => !name.endsWith(SIDECAR_SUFFIX) });
+  const top = files.filter((rel) => !rel.includes('/'));
+  for (const rel of [...top, ...files.filter((rel) => rel.includes('/'))]) {
+    if (await isTextFile(docInFolder(root, rel))) return rel;
+  }
+  return null;
 }
 
 /**

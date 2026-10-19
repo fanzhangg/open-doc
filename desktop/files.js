@@ -35,11 +35,12 @@ export async function isTextFile(path) {
 
 /**
  * The doc a path opens: X for X or its sidecar X.opendoc.jsonl, when X is
- * named as Markdown or is a text file (isTextFile); null for any other file.
+ * named as Markdown, is a text file (isTextFile) or is not there yet; null
+ * for any other file.
  */
 export async function docPathFor(path) {
   const doc = path.endsWith(SIDECAR_SUFFIX) ? path.slice(0, -SIDECAR_SUFFIX.length) : path;
-  return isDocName(doc) || (await isTextFile(doc)) ? doc : null;
+  return isDocName(doc) || !(await exists(doc)) || (await isTextFile(doc)) ? doc : null;
 }
 
 /**
