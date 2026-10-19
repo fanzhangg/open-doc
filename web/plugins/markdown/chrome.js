@@ -1,11 +1,10 @@
 // The Markdown view's chrome: its tools in the page's toolbar (reflecting the
-// formatting at the caret), a formatting bubble over selections, the link
-// card and popover, the "/" block menu, a floating outline and focus mode.
+// formatting at the caret, the one place to format), a Comment bubble over
+// selections, the link card and popover, a floating outline and focus mode.
 // The view makes it when the page gives it a toolbar
 // (web/plugins/markdown/view.js).
 
 import { hydrateIcons, icon } from '../../icons.js';
-import { keyLabel } from '../../settings-dialog.js';
 
 const TOOLS = `
   <div class="od-tool-group">
@@ -18,39 +17,34 @@ const TOOLS = `
       <span class="od-block-label">Normal text</span>
     </button>
     <ul class="od-block-menu" role="listbox" aria-label="Text style" hidden>
-      <li role="option" data-command="paragraph" data-block="paragraph"><span class="od-sample-p">Normal text</span><kbd data-keys="Mod+Alt+0"></kbd></li>
-      <li role="option" data-command="h1" data-block="h1"><span class="od-sample-h1">Heading 1</span><kbd data-keys="Mod+Alt+1"></kbd></li>
-      <li role="option" data-command="h2" data-block="h2"><span class="od-sample-h2">Heading 2</span><kbd data-keys="Mod+Alt+2"></kbd></li>
-      <li role="option" data-command="h3" data-block="h3"><span class="od-sample-h3">Heading 3</span><kbd data-keys="Mod+Alt+3"></kbd></li>
+      <li role="option" data-command="paragraph" data-block="paragraph"><span class="od-sample-p">Normal text</span></li>
+      <li role="option" data-command="h1" data-block="h1"><span class="od-sample-h1">Heading 1</span></li>
+      <li role="option" data-command="h2" data-block="h2"><span class="od-sample-h2">Heading 2</span></li>
+      <li role="option" data-command="h3" data-block="h3"><span class="od-sample-h3">Heading 3</span></li>
     </ul>
   </div>
   <span class="od-sep"></span>
   <div class="od-tool-group">
-    <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" data-keys="Mod+B" aria-label="Bold"></button>
-    <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
-    <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
-    <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
-    <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
+    <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" aria-label="Bold"></button>
+    <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" aria-label="Italic"></button>
+    <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" aria-label="Strikethrough"></button>
+    <button type="button" data-command="code" data-icon="code" data-tip="Inline code" aria-label="Inline code"></button>
+    <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link" aria-haspopup="dialog"></button>
   </div>
   <span class="od-sep"></span>
   <div class="od-tool-group">
-    <button type="button" data-command="bullets" data-icon="bullets" data-tip="Bulleted list" data-keys="Mod+Alt+8" aria-label="Bulleted list"></button>
-    <button type="button" data-command="numbers" data-icon="numbers" data-tip="Numbered list" data-keys="Mod+Alt+7" aria-label="Numbered list"></button>
-    <button type="button" data-command="quote" data-icon="quote" data-tip="Quote" data-keys="Mod+Shift+B" aria-label="Quote"></button>
-    <button type="button" data-command="codeBlock" data-icon="codeBlock" data-tip="Code block" data-keys="Mod+Alt+C" aria-label="Code block"></button>
+    <button type="button" data-command="bullets" data-icon="bullets" data-tip="Bulleted list" aria-label="Bulleted list"></button>
+    <button type="button" data-command="numbers" data-icon="numbers" data-tip="Numbered list" aria-label="Numbered list"></button>
+    <button type="button" data-command="quote" data-icon="quote" data-tip="Quote" aria-label="Quote"></button>
+    <button type="button" data-command="codeBlock" data-icon="codeBlock" data-tip="Code block" aria-label="Code block"></button>
+    <button type="button" data-command="table" data-icon="table" data-tip="Table" aria-label="Table"></button>
+    <button type="button" data-command="divider" data-icon="divider" data-tip="Divider" aria-label="Divider"></button>
   </div>`;
 
 const BUBBLE = `
   <div class="od-bubble" role="toolbar" aria-label="Selection" hidden>
     <button type="button" class="od-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
-    <span class="od-sep"></span>
-    <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" data-keys="Mod+B" aria-label="Bold"></button>
-    <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
-    <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Alt+X" aria-label="Strikethrough"></button>
-    <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
-    <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
-  </div>
-  <ul class="od-slash" role="listbox" aria-label="Insert block" hidden></ul>`;
+  </div>`;
 
 const OUTLINE = `
   <nav class="od-outline" aria-label="Outline" hidden>
@@ -64,7 +58,7 @@ const OUTLINE = `
 const LINK = `
   <div class="od-link-card" role="toolbar" aria-label="Link" hidden>
     <button type="button" class="od-link-go" data-action="open" data-tip="Open" data-keys="Mod+Click"><span class="od-link-go-icon"></span><span class="od-link-go-text"></span></button>
-    <button type="button" class="od-icon-btn" data-action="edit" data-icon="pencil" data-tip="Edit link" data-keys="Mod+K" aria-label="Edit link"></button>
+    <button type="button" class="od-icon-btn" data-action="edit" data-icon="pencil" data-tip="Edit link" aria-label="Edit link"></button>
     <button type="button" class="od-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link"></button>
   </div>
   <div class="od-link" role="dialog" aria-label="Link" hidden>
@@ -75,18 +69,6 @@ const LINK = `
   </div>`;
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
-const SLASH_ITEMS = [
-  { command: 'paragraph', icon: 'text', label: 'Text', words: 'text paragraph normal p' },
-  { command: 'h1', icon: 'heading', label: 'Heading 1', words: 'heading h1 title' },
-  { command: 'h2', icon: 'heading', label: 'Heading 2', words: 'heading h2 subtitle' },
-  { command: 'h3', icon: 'heading', label: 'Heading 3', words: 'heading h3' },
-  { command: 'bullets', icon: 'bullets', label: 'Bulleted list', words: 'bullet list ul unordered' },
-  { command: 'numbers', icon: 'numbers', label: 'Numbered list', words: 'numbered list ol ordered' },
-  { command: 'quote', icon: 'quote', label: 'Quote', words: 'quote blockquote' },
-  { command: 'codeBlock', icon: 'codeBlock', label: 'Code block', words: 'code block fence pre' },
-  { command: 'table', icon: 'table', label: 'Table', words: 'table grid' },
-  { command: 'divider', icon: 'divider', label: 'Divider', words: 'divider hr rule line separator' },
-];
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -95,13 +77,12 @@ function elements(markup) {
   const template = document.createElement('template');
   template.innerHTML = markup;
   hydrateIcons(template.content);
-  for (const kbd of template.content.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   return [...template.content.children];
 }
 
 /**
  * `editor`: the Markdown view's own commands and queries. The tools go first
- * in `toolbar`, the bubble and "/" menu in `stage`, the outline before it.
+ * in `toolbar`, the bubble in `stage`, the outline before it.
  * `onComment` is the bubble's Comment button. `settings` are the plugin's:
  * whether the outline shows and focus mode is on; Mod+Shift+F changes focus
  * mode through `saveSettings`.
@@ -112,27 +93,26 @@ function elements(markup) {
  */
 export function createChrome(editor, { toolbar, stage, host, onComment, settings, saveSettings }) {
   const tools = elements(TOOLS);
-  const [bubble, slashMenu] = elements(BUBBLE);
+  const [bubble] = elements(BUBBLE);
   const [outlineNav] = elements(OUTLINE);
   const [card, popover] = elements(LINK);
   toolbar.prepend(...tools);
-  stage.append(bubble, slashMenu);
+  stage.append(bubble);
   stage.before(outlineNav);
   document.body.append(card, popover);
-  const made = [...tools, bubble, slashMenu, outlineNav, card, popover];
+  const made = [...tools, bubble, outlineNav, card, popover];
 
   const canvas = stage.parentElement; // scrolls the page
   const page = host.closest('.od-page');
   const done = new AbortController();
   const { signal } = done;
-  const slash = setupSlash(editor, slashMenu);
   const link = setupLink(editor, { card, popover, host, canvas, signal });
   const outline = setupOutline(editor, { nav: outlineNav, host, canvas, signal });
   const blockPicker = setupBlockPicker(editor, tools.find((el) => el.matches('.od-block-picker')), signal);
-  const buttons = [...tools, bubble].flatMap((el) => [...el.querySelectorAll('button[data-command]')]);
+  const buttons = tools.flatMap((el) => [...el.querySelectorAll('button[data-command]')]);
   const commentButton = bubble.querySelector('[data-action="comment"]');
 
-  // Tools and bubble buttons act on the editor without taking its selection.
+  // Tools and the Comment button act on the editor without taking its selection.
   for (const bar of [toolbar, bubble]) {
     bar.addEventListener('mousedown', (event) => {
       const target = event.target.closest('button');
@@ -168,7 +148,6 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     blockPicker.show(block);
     placeBubble();
     link.refresh(pointerDown);
-    slash.refresh();
     outline.refresh();
   }
 
@@ -211,14 +190,6 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     if (!bubble.hidden) placeBubble();
   }, { passive: true, signal });
 
-  document.addEventListener('keydown', (event) => {
-    const mod = mac ? event.metaKey : event.ctrlKey;
-    if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'k' && host.contains(event.target)) {
-      event.preventDefault();
-      link.toggle();
-    }
-  }, { signal });
-
   // ---- the plugin's settings: the outline, and focus mode (app.css) ----
 
   const root = document.documentElement;
@@ -240,8 +211,6 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
   return {
     /** After every editor update: typing, selection, focus. */
     update,
-    /** Sees editor keydowns first (for the "/" menu); true when it took one. */
-    onKey: (event) => slash.onKey(event),
     applySettings,
     destroy() {
       done.abort();
@@ -427,96 +396,6 @@ function setupBlockPicker(editor, root, signal) {
       for (const item of menu.children) item.setAttribute('aria-selected', String(item.dataset.block === block));
     },
   };
-}
-
-// ---- "/" menu ----
-
-function setupSlash(editor, menu) {
-  let range = null;
-  let items = [];
-  let selected = 0;
-  let dismissedAt = null; // slash position the human closed with Escape
-
-  function refresh() {
-    const query = editor.slashQuery();
-    if (!query || query.from === dismissedAt) {
-      if (!query) dismissedAt = null;
-      return close();
-    }
-    const q = query.query.toLowerCase();
-    const next = SLASH_ITEMS.filter((item) => !q || `${item.label} ${item.words}`.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)));
-    if (next.length === 0) return close();
-    if (range?.from !== query.from || items.length !== next.length) selected = 0;
-    range = query;
-    items = next;
-    draw();
-    const stage = menu.offsetParent.getBoundingClientRect();
-    const at = editor.coordsAt(query.from);
-    const room = window.innerHeight - at.bottom;
-    menu.style.left = `${at.left - stage.left}px`;
-    menu.style.top = room < menu.offsetHeight + 16 ? `${at.top - stage.top - menu.offsetHeight - 6}px` : `${at.bottom - stage.top + 6}px`;
-  }
-
-  function draw() {
-    menu.replaceChildren(...items.map((item, i) => {
-      const li = document.createElement('li');
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', String(i === selected));
-      const label = document.createElement('span');
-      label.className = 'od-slash-label';
-      label.textContent = item.label;
-      const glyph = document.createElement('span');
-      glyph.className = 'od-slash-icon';
-      glyph.append(icon(item.icon));
-      li.append(glyph, label);
-      li.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        pick(i);
-      });
-      li.addEventListener('mousemove', () => {
-        if (selected === i) return;
-        selected = i;
-        draw();
-      });
-      return li;
-    }));
-    menu.hidden = false;
-    menu.children[selected]?.scrollIntoView({ block: 'nearest' });
-  }
-
-  function pick(i) {
-    const item = items[i];
-    const at = range;
-    close();
-    editor.runSlash(at, item.command);
-  }
-
-  function close() {
-    menu.hidden = true;
-    range = null;
-    items = [];
-  }
-
-  function onKey(event) {
-    if (menu.hidden) return false;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-      draw();
-      return true;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      pick(selected);
-      return true;
-    }
-    if (event.key === 'Escape') {
-      dismissedAt = range.from;
-      close();
-      return true;
-    }
-    return false;
-  }
-
-  return { refresh, onKey };
 }
 
 // ---- outline: a tick per heading at the left edge, a list on hover ----

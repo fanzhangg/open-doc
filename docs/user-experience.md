@@ -117,8 +117,11 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   them. Buddies are not in Settings: they are changed on their cards.
 - **Plugins.** Every text file opens in the plain editor unless a plugin
   gives its format a WYSIWYG one. Markdown's is the one built in, on by
-  default: its toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are
-  part of it. Settings > Plugins lists each plugin with the files it
+  default: its toolbar, outline and focus mode (Ctrl+Shift+F) are part of
+  it. The toolbar is the only way to format: typed Markdown such as `## `,
+  `**x**` or `- ` stays text (saved escaped), and the only shortcuts are
+  Undo, Redo and Comment. To write Markdown by hand, switch the plugin off;
+  `.md` then opens in the plain editor. Pasted Markdown is still formatted. Settings > Plugins lists each plugin with the files it
   edits, what it does and whether it is on; its page has its switch and its
   own settings (Outline, Focus mode) while it is on.
   Switching it applies at once to every open doc: a Markdown doc turns to

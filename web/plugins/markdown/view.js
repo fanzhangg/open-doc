@@ -1,6 +1,6 @@
 // The Markdown view: a Milkdown (ProseMirror) WYSIWYG editor that draws the
 // page's marks (comments, a draft, a revision), with its own chrome (a
-// toolbar, selection bubble, link popover, "/" menu and outline, see
+// toolbar, comment bubble, link popover and outline, see
 // chrome.js), and collaborator-style application of changes made
 // on disk: only the blocks that differ are replaced (the caret stays put).
 // A buddy's change is flagged with its name; any other change glows with
@@ -18,7 +18,7 @@ import {
   toggleStrongCommand, toggleEmphasisCommand, wrapInHeadingCommand,
   wrapInBulletListCommand, wrapInOrderedListCommand, turnIntoTextCommand,
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
-  headingKeymap, listItemKeymap,
+  listItemKeymap,
 } from '@milkdown/kit/preset/commonmark';
 import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
@@ -109,12 +109,11 @@ const tableTab = $shortcut(() => ({
   },
 }));
 
-// Reports every view update and lets the chrome take keys first (for the "/"
-// menu), and marks the top-level block holding the caret (for focus mode).
+// Reports every view update, and marks the top-level block holding the caret
+// (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
   view: () => ({ update: (view) => hooks.onUpdate(view) }),
   props: {
-    handleKeyDown: (_view, event) => hooks.onKeyDown(event),
     handleDOMEvents: {
       focus: (view) => hooks.onUpdate(view),
       blur: (view) => hooks.onUpdate(view),
@@ -160,7 +159,6 @@ export async function createMarkdownView({
   let chrome = null;
   const hooks = {
     onUpdate: () => chrome?.update(),
-    onKeyDown: (event) => chrome?.onKey(event) ?? false,
   };
   const host = stage.querySelector('.od-editor');
   const editor = await Editor.make()
@@ -168,11 +166,7 @@ export async function createMarkdownView({
       ctx.set(rootCtx, host);
       ctx.set(defaultValueCtx, text);
       if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
-      // Milkdown edits headings as if they were source: Backspace or Delete at
-      // the start of one takes off a `#` (h3, h2, h1, text). Here Backspace
-      // joins the line above and Delete deletes, as in any text; Delete at the
-      // start of a list item deletes forward too.
-      ctx.update(headingKeymap.key, (keys) => ({ ...keys, DowngradeHeading: { shortcuts: [] } }));
+      // Delete at the start of a list item deletes forward, as in any text.
       ctx.update(listItemKeymap.key, (keys) => ({ ...keys, LiftFirstListItem: { shortcuts: 'Backspace' } }));
       // Match common markdown style so edited blocks change as little as possible.
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
@@ -338,7 +332,7 @@ export async function createMarkdownView({
   };
   host.addEventListener('click', clickMark);
 
-  // ---- formatting commands, shared by the toolbar, the selection bubble and "/" ----
+  // ---- formatting commands, run from the toolbar ----
 
   const listCommand = (type, wrap) => (state, dispatch) => {
     const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
@@ -455,27 +449,6 @@ export async function createMarkdownView({
     return run ? { href: run.mark.attrs.href, rect: rangeRect(v, run.from, run.to) } : null;
   }
 
-  // ---- "/" menu: the query typed after a slash at the caret ----
-
-  function slashQuery() {
-    const v = view();
-    const { selection } = v.state;
-    if (!selection.empty || !v.hasFocus()) return null;
-    const { $from } = selection;
-    if ($from.parent.type.name === 'code_block' || !$from.parent.isTextblock) return null;
-    const before = $from.parent.textBetween(0, $from.parentOffset, undefined, '￼');
-    const match = before.match(/(?:^|\s)\/([A-Za-z0-9]{0,20})$/);
-    if (!match) return null;
-    return { query: match[1], from: selection.from - match[1].length - 1, to: selection.from };
-  }
-
-  /** Remove the typed "/query", then run `name`. */
-  function runSlash(range, name) {
-    const v = view();
-    v.dispatch(v.state.tr.delete(range.from, range.to));
-    run(name);
-  }
-
   // ---- outline ----
 
   function headings() {
@@ -552,9 +525,8 @@ export async function createMarkdownView({
 
   if (toolbar) {
     chrome = createChrome({
-      run, formatState, slashQuery, runSlash, headings, scrollToHeading, scrollToAnchor,
+      run, formatState, headings, scrollToHeading, scrollToAnchor,
       selectionRect, beginLink, endLink, linkRect, caretLink,
-      coordsAt: (pos) => view().coordsAtPos(pos),
     }, { toolbar, stage, host, onComment, settings, saveSettings });
   }
 
