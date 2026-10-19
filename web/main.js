@@ -7,7 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
-import { createDocEditor } from './editor.js';
+import { createMarkdownView } from './editor.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { setBuddies } from './faces.js';
@@ -15,10 +15,12 @@ import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
 import { icon } from './icons.js';
+import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
 import { formatOf } from '../src/formats/index.js';
 import { diffEdits } from '../src/core/diff.js';
 import { createHistory } from './history.js';
+import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { FORMAT_VERSION } from '../src/core/comments.js';
@@ -61,7 +63,9 @@ let saving = false;
 let version = 0;
 let saveTimer;
 let pendingExternal = null;
-let pendingSelection = null;
+let pendingSelection = null; // an anchor on the doc's text while a comment is written on it
+let activeId = null; // the selected thread
+let hoverId = null; // the thread whose card is under the pointer
 let typedAt = -Infinity; // when the human last typed in the doc
 let shownAgents = ''; // the agent statuses on screen, as JSON
 let shownComments = ''; // the comments on screen, as JSON
@@ -111,38 +115,31 @@ async function start() {
   offerRename();
   paintNameChip();
 
-  editor = await createDocEditor({
+  editor = await createMarkdownView({
     stage: document.querySelector('.od-stage'),
     text: initial.text,
     onChange: () => {
       hideRun();
+      paintMarks();
       dirty = true;
       version++;
       setStatus('Saving…', 'saving');
       scheduleSave();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
-    onSelectThread: (id) => {
+    onMarkClick: (id) => {
+      if (id === 'draft') return;
       if (narrow.matches) {
         openSheet(true);
         select(id, { focus: false });
         revealText(id);
       } else if (commentsShown()) select(id, { focus: false });
     },
-    onCommentRequest: (hint) => {
-      if (comments?.readOnly) return;
-      chrome?.hideBubble();
-      if (narrow.matches) openSheet(true);
-      else if (!commentsShown()) showComments(true);
-      pendingSelection = hint;
-      paintEmpty();
-      editor.setDraft(hint);
-      margin.startDraft(hint);
-    },
+    onLayout: () => margin.layout(),
   });
   synced = initial.text;
   chrome = createChrome({
-    editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName,
+    editor, onComment: requestComment, settings, getName: () => me, setName,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -158,7 +155,7 @@ async function start() {
     onCancelDraft: () => {
       pendingSelection = null;
       paintEmpty();
-      editor.setDraft(null);
+      paintMarks();
     },
     onReply: (thread, body) => send(api.reply(thread, body)),
     onResolve: (thread) => send(api.resolve(thread)),
@@ -169,12 +166,15 @@ async function start() {
       select(id);
       if (narrow.matches) revealText(id);
     },
-    onHover: (id) => editor.setHover(id),
-    anchorTops: (items) => editor.anchorTops(items),
+    onHover: (id) => {
+      if (id === hoverId) return;
+      hoverId = id;
+      paintMarks();
+    },
+    anchorTops,
     mentionChoices: (query) => people?.mentionChoices(query) ?? [],
     mentionable: () => people?.mentionable() ?? [],
   });
-  editor.onLayout(() => margin.layout());
 
   people = createPeople({
     root: document.querySelector('.od-agents'),
@@ -251,7 +251,7 @@ async function start() {
       history.toggle();
     } else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'KeyM' && !history.isOpen()) {
       event.preventDefault();
-      editor.requestComment();
+      requestComment();
     }
   });
   // Clicking empty page space deselects the active comment, as in Docs.
@@ -298,7 +298,6 @@ async function save() {
     } else {
       baseHash = data.docHash;
       synced = text;
-      editor.setDisk(text);
       if (version === savedVersion) dirty = false;
       if (dirty) setStatus('Saving…', 'saving');
       else setStatus('Saved');
@@ -394,8 +393,8 @@ async function doSync(by) {
   // Where the change overlaps what the human typed since, the human's stays.
   const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', format: formatOf(docName) });
   // A buddy's changes show as its revision; anything else glows.
-  editor.applyText(merged.text, run?.by ?? by, { buddy: Boolean(run) });
-  editor.setDisk(theirs);
+  editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
+  paintMarks();
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -459,7 +458,6 @@ missingBanner.querySelector('[data-action="recreate"]').addEventListener('click'
     }
     baseHash = data.docHash;
     synced = text;
-    editor.setDisk(text);
     if (version === savedVersion) dirty = false;
     setMissing(false);
   } catch (error) {
@@ -503,7 +501,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   failedShown = new Set(failed.map((c) => c.id));
   comments = { threads, people: writers, edits, notice, readOnly };
   showReadOnly(readOnly);
-  editor.setThreads(threads);
+  paintMarks();
   margin.update(threads, { id: myId, name: me }, edits);
   people?.render({ people: writers });
   noticeBanner.hidden = !notice;
@@ -600,14 +598,30 @@ function revealText(id) {
   document.querySelector(`.od-page [data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
+// Comments are on selected text only.
+function requestComment() {
+  if (comments?.readOnly) return;
+  const selection = editor.selection();
+  if (!selection || selection.from === selection.to) return;
+  chrome?.hideBubble();
+  if (narrow.matches) openSheet(true);
+  else if (!commentsShown()) showComments(true);
+  pendingSelection = createAnchor(editor.getText(), selection.from, selection.to);
+  paintEmpty();
+  paintMarks();
+  margin.startDraft(pendingSelection);
+}
+
 async function createThread(body) {
   await flushSave();
   // The selection on the doc's text that is now on disk; if it is gone, the
   // comment is on the whole doc.
-  const { id } = await send(api.comment(editor.anchorOf(pendingSelection), body));
+  const text = editor.getText();
+  const found = locate(text, pendingSelection);
+  const { id } = await send(api.comment(found && createAnchor(text, found.start, found.end), body));
   pendingSelection = null;
   paintEmpty();
-  editor.setDraft(null);
+  paintMarks();
   select(id);
 }
 
@@ -643,6 +657,8 @@ async function undoReply(id) {
 // human types, presses Escape or toggles them off on the reply; `scroll`
 // brings the first into view. An edit changed since is left out.
 let shownRun = null;
+let preview = null; // { edits, by, replay } of the run shown
+let replays = 0;
 async function showRun(id, { scroll = true } = {}) {
   const run = comments?.edits?.[id];
   if (run?.state !== 'edited') return;
@@ -652,14 +668,17 @@ async function showRun(id, { scroll = true } = {}) {
   if (shownRun !== id) return;
   if (!found?.before) return hideRun();
   const edits = diffEdits(found.before, found.text).map((change) => change.edit);
-  editor.setPreview(edits, { replay: true, scroll, by: run.by });
+  preview = { edits, by: run.by, replay: ++replays };
+  const marks = paintMarks().filter((m) => m.kind === 'edit');
+  if (scroll && marks.length > 0) editor.scrollTo(marks[0].from);
 }
 
 function hideRun() {
   if (shownRun === null) return;
   shownRun = null;
+  preview = null;
   margin.setShownEdits(null);
-  editor.setPreview([]);
+  paintMarks();
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js). The
@@ -683,8 +702,8 @@ async function restoreVersion(id) {
     throw new Error('the doc changed just now. Try again.');
   }
   const { text, docHash } = result.data;
-  editor.applyText(text, 'Restore');
-  editor.setDisk(text);
+  editor.applyText(text, { by: 'Restore' });
+  paintMarks();
   synced = text;
   baseHash = docHash;
   dirty = false;
@@ -697,8 +716,50 @@ async function restoreVersion(id) {
 }
 
 function select(id, { focus = true } = {}) {
-  editor.setActive(id);
+  activeId = id;
+  paintMarks();
   margin.setActive(id, { focus });
+}
+
+// ---- marks in the text ----
+
+// Where each anchor is in the doc's text, worked out once per text: comment
+// and agent events that leave the text alone cost next to nothing.
+let locatedIn = null;
+let located = new Map();
+function where(text, anchor) {
+  if (text !== locatedIn) {
+    locatedIn = text;
+    located = new Map();
+  }
+  const key = JSON.stringify(anchor);
+  if (!located.has(key)) located.set(key, locate(text, anchor));
+  return located.get(key);
+}
+
+// Draw the open threads' text, the draft's and the run shown; returns the marks.
+function paintMarks() {
+  const text = editor.getText();
+  const marks = [];
+  const comment = (id, anchor, active) => {
+    const found = where(text, anchor);
+    if (found) marks.push({ kind: 'comment', id, from: found.start, to: found.end, active });
+  };
+  for (const t of comments?.threads ?? []) {
+    if (t.anchor && !t.detached && !t.resolved) comment(t.id, t.anchor, t.id === activeId || t.id === hoverId);
+  }
+  if (pendingSelection) comment('draft', pendingSelection, true);
+  if (preview) marks.push(...revisionMarks(text, preview.edits, preview));
+  editor.setMarks(marks);
+  return marks;
+}
+
+// The viewport top of each margin card's text, by thread id.
+function anchorTops(items) {
+  const text = editor.getText();
+  const placed = items.map(({ id, anchor }) => [id, where(text, anchor)]).filter(([, found]) => found);
+  const tops = editor.tops(placed.map(([, found]) => found.start));
+  return new Map(placed.map(([id], i) => [id, tops[i]]).filter(([, top]) => top !== null));
 }
 
 // ---- identity ----

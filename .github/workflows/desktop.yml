@@ -131,7 +131,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm test
+      - run: xvfb-run -a npm test # the view contract tests open an Electron window
 
   stress:
     # The buddy concurrency stress test: deterministic, a couple of minutes.

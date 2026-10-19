@@ -31,7 +31,7 @@ export function createCommentMargin(margin, handlers) {
   let edits = {}; // the buddy replies that edited the doc here: { [id]: 'edited' | 'undone' }
   let shownEdits = null; // the reply whose edits the text shows
   let activeId = null;
-  let draft = null; // { hint } while composing a comment on the selected text
+  let draft = null; // { anchor } while composing a comment on the selected text
   let showResolved = false;
   const replyDrafts = new Map();
   const unfolded = new Set(); // ids of long comments shown in full
@@ -360,7 +360,7 @@ export function createCommentMargin(margin, handlers) {
       const id = card.dataset.thread;
       // The draft card can outlive `draft` until the next render (cancelling
       // repaints the doc, which lays out the margin first).
-      return { card, id, anchor: id === 'draft' ? draft && hintAnchor(draft.hint) : byId.get(id)?.anchor };
+      return { card, id, anchor: id === 'draft' ? draft?.anchor : byId.get(id)?.anchor };
     });
     const tops = handlers.anchorTops(items.filter((i) => i.anchor));
     const origin = margin.getBoundingClientRect().top;
@@ -423,8 +423,8 @@ export function createCommentMargin(margin, handlers) {
       agents = statuses ?? [];
       render();
     },
-    startDraft(hint) {
-      draft = { hint };
+    startDraft(anchor) {
+      draft = { anchor };
       replyDrafts.delete('draft');
       showResolved = false;
       render();
@@ -466,8 +466,6 @@ function patchCard(card, fresh) {
   card.className = fresh.className;
   return true;
 }
-
-const hintAnchor = (hint) => ({ exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start });
 
 /**
  * Fills `menu` (an `.od-mentions` list) with `choices` from mentionChoices,
