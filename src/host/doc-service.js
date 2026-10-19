@@ -14,17 +14,16 @@ import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
-import { project } from '../core/project.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
+import { formatOf } from '../formats/index.js';
 import { revertEdits } from '../core/diff.js';
-import { StoreError, hashBytes, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic } from '../store/files.js';
+import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic, writeDoc } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
-import { splice } from './splice.js';
 import { Runner } from './runner.js';
 
 /** A call refused: `code` says why ('bad_input', 'not_found', 'read_only'). */
@@ -53,7 +52,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
-    doc: async () => ({ name: basename(docPath), markdown: (await readDoc(docPath)).markdown, comments: await readSidecarText(docPath) }),
+    doc: async () => ({ name: basename(docPath), text: (await readDoc(docPath)).text, comments: await readSidecarText(docPath) }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
     human: async () => (await me()).name,
@@ -82,11 +81,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- the doc ----
 
-  // `recreate: true` writes the page's text back when the doc has gone
-  // missing from disk; otherwise a save needs the doc to be there.
+  // The page's text, written as it is. `recreate: true` writes it back when
+  // the doc has gone missing from disk; otherwise a save needs the doc to be
+  // there.
   async function saveDoc(body) {
-    if (typeof body.markdown !== 'string' || typeof body.baseHash !== 'string') {
-      throw new DocError('bad_input', 'expected { markdown, baseHash }');
+    if (typeof body.text !== 'string' || typeof body.baseHash !== 'string') {
+      throw new DocError('bad_input', 'expected { text, baseHash }');
     }
     let current;
     try {
@@ -94,18 +94,16 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     } catch (error) {
       if (body.recreate !== true || error.code !== 'no_doc') throw error;
       await mkdir(dirname(docPath), { recursive: true });
-      lastWritten = hashBytes(Buffer.from(body.markdown));
-      await writeAtomic(docPath, body.markdown);
-      await noteVersion(body.markdown, { kind: 'edit', author: await me() });
-      return { docHash: lastWritten, markdown: body.markdown };
+      lastWritten = hashText(body.text);
+      await writeDoc(docPath, body.text);
+      await noteVersion(body.text, { kind: 'edit', author: await me() });
+      return { docHash: lastWritten, text: body.text };
     }
     if (current.hash !== body.baseHash) {
-      return { conflict: true, markdown: current.markdown, docHash: current.hash };
+      return { conflict: true, text: current.text, docHash: current.hash };
     }
-    const incoming = current.markdown.includes('\r\n') ? body.markdown.replace(/\r?\n/g, '\r\n') : body.markdown;
-    const next = splice(current.markdown, incoming);
-    await writeChange(current, next, { kind: 'edit', author: await me() });
-    return { docHash: hashBytes(Buffer.from(next)), markdown: next };
+    await writeChange(current, body.text, { kind: 'edit', author: await me() });
+    return { docHash: hashText(body.text), text: body.text };
   }
 
   // Put the doc back the way it was in an earlier version, as the human's
@@ -116,22 +114,22 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (typeof body.baseHash !== 'string') throw new DocError('bad_input', 'expected { id, baseHash }');
     const current = await readDoc(docPath);
     if (current.hash !== body.baseHash) {
-      return { conflict: true, markdown: current.markdown, docHash: current.hash };
+      return { conflict: true, text: current.text, docHash: current.hash };
     }
     const found = await readVersion(docPath, settingsDir, id);
     if (!found) throw new DocError('not_found', 'no such version');
-    const next = found.markdown;
+    const next = found.text;
     await writeChange(current, next, { kind: 'restore', author: await me(), restoredFrom: id });
-    return { docHash: hashBytes(Buffer.from(next)), markdown: next };
+    return { docHash: hashText(next), text: next };
   }
 
   async function state() {
     const doc = await readDoc(docPath);
     const { settings } = await readSettings(settingsDir);
-    const comments = await commentsView(doc.markdown);
+    const comments = await commentsView(doc.text);
     return {
       doc: basename(docPath),
-      markdown: doc.markdown,
+      text: doc.text,
       docHash: doc.hash,
       ...comments,
       settings,
@@ -151,14 +149,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return text === null ? { lines: [], bad: [], problem: null } : parseSidecar(text);
   }
 
-  // The threads as a window shows them: each anchor where its text is now
-  // in `markdown` (it is never rewritten in the file), or `detached`; who
+  // The threads as a window shows them: each anchor where it is now in the
+  // doc's `text` (it is never rewritten in the file), or `detached`; who
   // wrote in them; why they are read-only (`readOnly`, parseSidecar's
   // problem); and a notice about lines of the sidecar that cannot be read.
-  async function commentsView(markdown) {
+  async function commentsView(text) {
     const { lines, bad, problem } = await readComments();
     const comments = lines.map((l) => l.comment).filter(Boolean);
-    const text = project(markdown).text;
     const threads = threadsOf(comments, (await buddies()).map((b) => b.name)).map((thread) => {
       if (!thread.anchor) return { ...thread, detached: false };
       const found = locate(text, thread.anchor);
@@ -177,8 +174,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (next !== current.lines) await writeAtomic(sidecarPath(docPath), serializeSidecar(next));
   }
 
-  // A comment by this user: a first comment (`anchor` on the doc's rendered
-  // text, or null for the whole doc), or a reply in `thread`. Resolving and
+  // A comment by this user: a first comment (`anchor` on the doc's text, or
+  // null for the whole doc), or a reply in `thread`. Resolving and
   // reopening are empty replies, which ask no one.
   async function comment({ thread, anchor = null, body, resolved = false, reopen = false } = {}) {
     if (typeof body !== 'string' || (body.trim() === '' && !resolved && !reopen)) throw new DocError('bad_input', 'a comment needs text');
@@ -191,7 +188,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
       return [...lines, { comment: added }];
     }));
-    return { ...(await commentsView((await readDoc(docPath)).markdown)), id: added.id };
+    return { ...(await commentsView((await readDoc(docPath)).text)), id: added.id };
   }
 
   // ---- the doc's buddies ----
@@ -260,7 +257,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         // the doc is gone: nothing to merge into
       }
       if (current) {
-        const merged = mergeInto(current.markdown, base, edited);
+        const merged = merge3(base, current.text, edited, { prefer: 'ours', format: formatOf(docPath) });
         conflict = merged.dropped.length > 0;
         await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
       }
@@ -272,7 +269,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
     // Its comments are on the doc as it is now, its edit merged in.
-    const text = comments ? project((await readDoc(docPath).catch(() => null))?.markdown ?? base).text : '';
+    const text = comments ? (await readDoc(docPath).catch(() => null))?.text ?? base : '';
     await changeComments((lines) => {
       if (!lines.some((l) => l.comment?.id === threadId)) return lines;
       const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
@@ -293,11 +290,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const found = edit && (await readVersion(docPath, settingsDir, edit.id));
     if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
     const current = await readDoc(docPath);
-    const lf = (text) => text.replace(/\r\n/g, '\n');
-    const reverted = revertEdits(lf(current.markdown), lf(found.before), lf(found.markdown));
-    const next = current.markdown.includes('\r\n') ? reverted.replace(/\n/g, '\r\n') : reverted;
+    const next = revertEdits(current.text, found.before, found.text);
     await writeChange(current, next, { kind: 'undo', author: await me(), undid: body.id });
-    return { docHash: hashBytes(Buffer.from(next)), markdown: next, ...(await commentsView(next)) };
+    return { docHash: hashText(next), text: next, ...(await commentsView(next)) };
   }
 
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
@@ -316,11 +311,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // Write `next` over the doc, which read `current`, as `change`: the doc
   // as it was is in history first (an outside change included), then this.
+  // The file keeps its byte order mark and line ends.
   async function writeChange(current, next, change) {
-    if (next === current.markdown) return;
+    if (next === current.text) return;
     await noteDisk(current);
-    lastWritten = hashBytes(Buffer.from(next));
-    await writeAtomic(docPath, next);
+    lastWritten = hashText(next);
+    await writeDoc(docPath, next, current.form);
     await noteVersion(next, change);
   }
 
@@ -390,9 +386,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // Add the doc as it now reads to its history (one version at a time, in
   // order); a failure is logged and never stops a save.
-  function noteVersion(markdown, change) {
+  function noteVersion(text, change) {
     const run = chronicle.then(async () => {
-      const version = await recordVersion(docPath, settingsDir, markdown, change);
+      const version = await recordVersion(docPath, settingsDir, text, change);
       if (version) emit('history', { id: version.id });
     });
     chronicle = run.catch((error) => console.error('Could not record a version:', error));
@@ -403,7 +399,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // outside OpenDoc (buddies edit only their copies).
   function noteDisk(doc) {
     if (doc.hash === lastWritten) return chronicle;
-    return noteVersion(doc.markdown, { kind: 'external', author: null });
+    return noteVersion(doc.text, { kind: 'external', author: null });
   }
 
   // This user, as their comments name them: their id (made once, kept when
@@ -598,15 +594,6 @@ function defaultName() {
   if (!name) name = userInfo().username;
   cachedName = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64) || 'me';
   return cachedName;
-}
-
-// `theirs` (a change from `base`) merged into `current`; where both changed
-// the same text, `current` stays and the change there is `dropped`. Line
-// ends follow `current`.
-function mergeInto(current, base, theirs) {
-  const lf = (text) => text.replace(/\r\n/g, '\n');
-  const merged = merge3(lf(base), lf(current), lf(theirs), { prefer: 'ours' });
-  return { ...merged, text: current.includes('\r\n') ? merged.text.replace(/\n/g, '\r\n') : merged.text };
 }
 
 // A line per run in the config folder's logs/runs.jsonl: what a slow or

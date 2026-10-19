@@ -1,5 +1,5 @@
-// The sidecar, version 2 (spec/SPEC.md): `X.md.opendoc.jsonl`, a first
-// line `{"opendoc":2}` and then one comment per line. A comment never
+// The sidecar, version 3 (spec/SPEC.md): `X.opendoc.jsonl`, a first
+// line `{"opendoc":3}` and then one comment per line. A comment never
 // changes or goes; resolving is a comment. Threads, who is
 // mentioned and who is asked are read from the comments, never stored.
 // Pure, so the doc host and the page read a sidecar the same way.
@@ -7,7 +7,7 @@
 import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
 import { createAnchor } from './anchor.js';
 
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 export const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
 const AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
@@ -26,7 +26,7 @@ export function newId(prefix) {
  * in order, each `{ text, comment }` with `comment` null for a line that is
  * not one (reported in `bad`, skipped, and kept as it is when the file is
  * written again). Of lines with the same id, the first is the comment.
- * `problem` is 'version' when the first line is another version and
+ * `problem` is 'older' or 'newer' when the first line is another version and
  * 'invalid' when it is not a header at all; the lines are still read, to
  * show, but the file must not be written (§2).
  */
@@ -39,7 +39,7 @@ export function parseSidecar(text) {
   } catch {
     header = null;
   }
-  const problem = !isObject(header) || !Number.isInteger(header.opendoc) ? 'invalid' : header.opendoc !== FORMAT_VERSION ? 'version' : null;
+  const problem = !isObject(header) || !Number.isInteger(header.opendoc) ? 'invalid' : header.opendoc < FORMAT_VERSION ? 'older' : header.opendoc > FORMAT_VERSION ? 'newer' : null;
   const lines = [];
   const bad = [];
   const seen = new Set();
@@ -88,8 +88,8 @@ function invalid(c) {
  * (docs/agent-config.md, Comments): lines in `after` that were not in
  * `before` and have no `id` (a changed comment has one), each `{ anchor: { exact }, body }`, `{ body }` or `{ thread,
  * body }`, made comments `by` the buddy `at` a time. A reply needs a thread
- * of `threads`; a quote found other than once in `text` (the doc's rendered
- * text) is on the whole doc. Anything else is ignored.
+ * of `threads`; a quote found other than once in `text` (the doc's text) is
+ * on the whole doc. Anything else is ignored.
  */
 export function appendedComments(before, after, { text, by, at, threads }) {
   const had = new Set(before.split('\n'));
@@ -116,17 +116,23 @@ export function appendedComments(before, after, { text, by, at, threads }) {
 }
 
 // The anchor of `exact` when it is in `text` once, else null. An agent may
-// quote a paragraph's line breaks, which `text` has as spaces, so a quote not
-// found as it is is looked for with its whitespace collapsed.
+// quote a hard-wrapped line as one, or the other way round, so a quote not
+// found as it is is looked for with any run of whitespace standing for any
+// other.
 function quoted(text, exact) {
-  if (typeof exact !== 'string' || !exact) return null;
-  return once(text, exact) ?? once(text, exact.replace(/\s+/g, ' '));
+  if (typeof exact !== 'string' || !exact.trim()) return null;
+  const escape = (part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return once(text, escape(exact)) ?? once(text, exact.trim().split(/\s+/).map(escape).join('\\s+'));
 }
 
-function once(text, exact) {
-  const start = text.indexOf(exact);
-  if (start < 0 || text.indexOf(exact, start + 1) >= 0) return null;
-  return createAnchor(text, start, start + exact.length);
+// The anchor of the one match of `pattern` in `text`, else null.
+function once(text, pattern) {
+  const regex = new RegExp(pattern, 'g');
+  const found = regex.exec(text);
+  if (!found) return null;
+  regex.lastIndex = found.index + 1;
+  if (regex.exec(text)) return null;
+  return createAnchor(text, found.index, found.index + found[0].length);
 }
 
 /** Whether `anchor` is `{ exact, prefix, suffix, start }` (§3). */

@@ -10,9 +10,10 @@ comment: the app starts an agent program on a copy of the doc, then merges
 what it changed back in. (The code calls a turn a run: `Runner`,
 `runs.jsonl`.)
 
-No backward compatibility with OpenDoc 1: a version 1 sidecar is ignored.
-A sidecar this version must not write (another version, or no header)
-shows its comments read-only, with a way to fix it.
+No backward compatibility with earlier formats: a version 1 sidecar is
+ignored, and a version 2 one is not converted. A sidecar this version must
+not write (another version, or no header) shows its comments read-only,
+with a way to fix it.
 
 ### Principles
 
@@ -70,11 +71,12 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 
 | Component | Owns |
 | --- | --- |
-| Format | `X.md` + `X.md.opendoc.jsonl` ([SPEC](../spec/SPEC.md)) |
-| Model (`src/core`) | rendered text, anchors, diff and three-way merge, reading the sidecar, the inbox. No I/O. |
+| Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
+| Model (`src/core`) | anchors, diff and three-way merge on text, reading the sidecar, the inbox. No I/O, and no file format. |
+| Formats (`src/formats`) | what a format adds to text, by extension: markdown refuses a merge inside a line that would change how it renders |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner | which turns should start (the inbox), runs them, their status in memory |
-| Windows | editing and commenting, through DocService |
+| Windows | editing and commenting, through DocService. The markdown editor maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written |
 
 DocService and Runner run in the doc host, the app's utility process.
 Windows reach it over Electron message ports.
@@ -91,6 +93,9 @@ Windows reach it over Electron message ports.
   being typed, the typing wins and the outside version is saved to history.
 - Every file is written whole: a temporary file in the same folder,
   renamed over it.
+- Above the files, a doc is its text: UTF-8, no byte order mark, lines
+  ending in `\n`. The file's byte order mark and CRLF line ends are put
+  back when it is written; a file that is not UTF-8 does not open.
 
 ### Undoing changes
 

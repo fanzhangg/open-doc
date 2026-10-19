@@ -6,7 +6,7 @@
 // History is kept per doc in the user's config folder, not next to the doc,
 // so it never shows up in the doc's folder or in git:
 //   <config>/history/<key>/index.json   the versions, oldest first
-//   <config>/history/<key>/<sha256>.md  each version's bytes, by content
+//   <config>/history/<key>/<sha256>.md  each version's text, by content
 // `key` is derived from the doc's absolute path; renaming a doc in OpenDoc
 // moves its history along (moveHistory).
 //
@@ -20,7 +20,7 @@ import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { diffEdits } from '../core/diff.js';
 import { newId } from '../core/comments.js';
-import { hashBytes, lockFile, writeAtomic } from './files.js';
+import { hashText, lockFile, writeAtomic } from './files.js';
 
 export const HISTORY_VERSION = 1;
 export const COALESCE_MS = 2 * 60 * 1000;
@@ -50,32 +50,32 @@ export async function readHistory(docPath, root) {
 
 /**
  * One version with its text, and the text of the version before it (null
- * for the first): { version, markdown, before }, or null when it is gone.
+ * for the first): { version, text, before }, or null when it is gone.
  */
 export async function readVersion(docPath, root, id) {
   const dir = historyDir(docPath, root);
   const { versions } = await readIndex(dir);
   const i = versions.findIndex((v) => v.id === id);
   if (i === -1) return null;
-  const markdown = await readBlob(dir, versions[i].hash);
-  if (markdown === null) return null;
+  const text = await readBlob(dir, versions[i].hash);
+  if (text === null) return null;
   const before = i > 0 ? await readBlob(dir, versions[i - 1].hash) : null;
-  return { version: versions[i], markdown, before };
+  return { version: versions[i], text, before };
 }
 
 /**
- * Note that the doc now reads `markdown`. Returns the version that holds it
+ * Note that the doc now reads `text`. Returns the version that holds it
  * (new or extended), or null when it is the latest version already.
  * `change` is { kind, author, thread?, reply?, undid?, restoredFrom? }.
  */
-export async function recordVersion(docPath, root, markdown, change, now = Date.now()) {
+export async function recordVersion(docPath, root, text, change, now = Date.now()) {
   const dir = historyDir(docPath, root);
   await mkdir(dir, { recursive: true });
   const release = await lockFile(join(dir, 'index.json.lock'), dir);
   try {
     const index = await readIndex(dir);
     const { versions } = index;
-    const hash = hashBytes(Buffer.from(markdown));
+    const hash = hashText(text);
     const last = versions.at(-1);
     if (last?.hash === hash) return null;
 
@@ -83,7 +83,7 @@ export async function recordVersion(docPath, root, markdown, change, now = Date.
     const dropped = [];
     let version;
     if (last && continues(last, change, now)) {
-      // Same author, still at it: this version now ends at `markdown`.
+      // Same author, still at it: this version now ends at `text`.
       versions.pop();
       dropped.push(last.hash);
       const previous = versions.at(-1);
@@ -105,8 +105,8 @@ export async function recordVersion(docPath, root, markdown, change, now = Date.
       };
     }
     const before = versions.length > 0 ? await readBlob(dir, versions.at(-1).hash) : null;
-    Object.assign(version, countChanges(before, markdown));
-    await writeBlob(dir, hash, markdown);
+    Object.assign(version, countChanges(before, text));
+    await writeBlob(dir, hash, text);
     versions.push(version);
     while (versions.length > MAX_VERSIONS) dropped.push(versions.shift().hash);
     await saveIndex(dir, index, docPath, dropped);
@@ -187,8 +187,8 @@ async function readBlob(dir, hash) {
   }
 }
 
-async function writeBlob(dir, hash, markdown) {
-  if (!(await exists(blobPath(dir, hash)))) await writeAtomic(blobPath(dir, hash), markdown);
+async function writeBlob(dir, hash, text) {
+  if (!(await exists(blobPath(dir, hash)))) await writeAtomic(blobPath(dir, hash), text);
 }
 
 async function exists(path) {

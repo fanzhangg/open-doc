@@ -772,6 +772,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'folderSidebar' && fromDoc) return void windows.setSidebar(win, Boolean(arg));
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'revealSidecar' && fromDoc) return void shell.showItemInFolder(sidecarPath(windows.docFor(win).docPath));
+  if (action === 'trashSidecar' && fromDoc) return void (await shell.trashItem(sidecarPath(windows.docFor(win).docPath)));
   if (action === 'folderList' && fromDoc) return readFolder(checkInFolder(sidebarOf(win), arg, arg ? 'folder' : 'root'));
   if (action === 'folderRead' && fromDoc) return readText(checkInFolder(sidebarOf(win), arg, 'file'));
   if (action === 'folderCreate' && fromDoc) return sidebarCreate(win, arg);

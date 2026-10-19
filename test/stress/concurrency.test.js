@@ -41,7 +41,7 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
     for (const h of human) {
       for (;;) {
         const now = await state();
-        const saved = await call('saveDoc', { markdown: now.markdown.replace(`Para ${h} old.`, `Para ${h} typed.`), baseHash: now.docHash });
+        const saved = await call('saveDoc', { text: now.text.replace(`Para ${h} old.`, `Para ${h} typed.`), baseHash: now.docHash });
         if (!saved.conflict) break; // a buddy's merge landed first: read again
       }
       await sleep(Math.floor(random() * 40));

@@ -8,7 +8,7 @@
 
 import { createAnchor } from '../src/core/anchor.js';
 import { findEdit } from '../src/core/diff.js';
-import { project } from '../src/core/project.js';
+import { project, renderedRange } from '../src/formats/markdown/project.js';
 
 /**
  * Recorded edits as a revision: the text they added highlighted as new, the
@@ -20,7 +20,7 @@ export function editItems(markdown, edits) {
   const items = [];
   for (const edit of edits) {
     const range = findEdit(markdown, edit);
-    const span = range && renderedSpan(projection, range);
+    const span = range && renderedRange(projection, range.start, range.end);
     if (!span || projection.text.length === 0) continue;
     const removed = project(edit.before).text;
     const widget = removed ? { side: 'before', kind: 'del', text: removed } : null;
@@ -33,20 +33,4 @@ export function editItems(markdown, edits) {
     }
   }
   return items;
-}
-
-// The rendered-text span drawn from source range [start, end): the
-// characters whose source offset falls inside it; for an empty range, the
-// position of the first character at or after it.
-function renderedSpan({ text, offsets }, range) {
-  let start = -1;
-  let end = -1;
-  for (let i = 0; i < text.length; i++) {
-    if (offsets[i] < range.start) continue;
-    if (start === -1) start = i;
-    if (offsets[i] >= range.end) break;
-    end = i + 1;
-  }
-  if (start === -1) return { start: text.length, end: text.length };
-  return { start, end: Math.max(start, end) };
 }

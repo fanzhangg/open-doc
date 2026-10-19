@@ -7,7 +7,6 @@
 import { diffEdits } from '../src/core/diff.js';
 import { createDocEditor } from './editor.js';
 import { icon } from './icons.js';
-import { editItems } from './review.js';
 import { avatar } from './threads.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -33,7 +32,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
   let view = null; // the read-only editor, made the first time history opens
   let versions = [];
   let selected = null;
-  let shown = null; // { version, markdown, before } of the selected version
+  let shown = null; // { version, text, before } of the selected version
   let loads = 0;
   let restoring = false;
 
@@ -45,7 +44,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     root.setAttribute('data-history', '');
     toggleButton.setAttribute('aria-pressed', 'true');
     view ??= await createDocEditor({
-      stage, markdown: '', editable: false, onChange() {}, onSelectThread() {}, onCommentRequest() {},
+      stage, text: '', editable: false, onChange() {}, onSelectThread() {}, onCommentRequest() {},
     });
     await refresh();
     await select(latest()?.id ?? null);
@@ -155,7 +154,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     const load = ++loads;
     if (!id) {
       shown = null;
-      view.setMarkdown('');
+      view.setText('');
       showHeading();
       return;
     }
@@ -168,16 +167,16 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     }
     if (load !== loads) return; // another version was picked meanwhile
     shown = data;
-    view.setMarkdown(data.markdown);
+    view.setText(data.text);
     showChanges({ replay: true });
     showHeading();
   }
 
   function showChanges({ replay = false } = {}) {
-    const items = shown?.before != null && changesToggle.checked
-      ? editItems(shown.markdown, diffEdits(shown.before, shown.markdown).map((change) => change.edit))
+    const edits = shown?.before != null && changesToggle.checked
+      ? diffEdits(shown.before, shown.text).map((change) => change.edit)
       : [];
-    view.setPreview(items, { replay });
+    view.setPreview(edits, { replay });
   }
 
   // The selected row says which version this is; the bar only offers to

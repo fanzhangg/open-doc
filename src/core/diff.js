@@ -1,4 +1,4 @@
-// Edits: what changed between two versions of a doc's markdown source,
+// Edits: what changed between two versions of a doc's text,
 // compact enough to show (web/history.js) and to count. Also the line
 // alignment the three-way merge is built on.
 
@@ -115,21 +115,21 @@ export function diffEdits(before, after) {
   return changes;
 }
 
-/** Where an edit's `after` text sits in `markdown` now, or null when it has changed or gone. */
-export function findEdit(markdown, edit) {
+/** Where an edit's `after` text sits in `doc` now, or null when it has changed or gone. */
+export function findEdit(doc, edit) {
   if (edit.after) {
-    const found = locate(markdown, { exact: edit.after, prefix: edit.prefix, suffix: edit.suffix, start: edit.start });
+    const found = locate(doc, { exact: edit.after, prefix: edit.prefix, suffix: edit.suffix, start: edit.start });
     if (found?.method !== 'exact') return null;
     // Still in place: at least one side of its context is untouched.
-    const prefixKept = markdown.slice(Math.max(0, found.start - edit.prefix.length), found.start) === edit.prefix;
-    const suffixKept = markdown.slice(found.end, found.end + edit.suffix.length) === edit.suffix;
+    const prefixKept = doc.slice(Math.max(0, found.start - edit.prefix.length), found.start) === edit.prefix;
+    const suffixKept = doc.slice(found.end, found.end + edit.suffix.length) === edit.suffix;
     return prefixKept || suffixKept ? { start: found.start, end: found.end } : null;
   }
   // A deletion left nothing behind: find the spot between its context.
   const gap = edit.prefix + edit.suffix;
-  if (gap === '') return markdown === '' ? { start: 0, end: 0 } : null;
+  if (gap === '') return doc === '' ? { start: 0, end: 0 } : null;
   let best = null;
-  for (let i = markdown.indexOf(gap); i !== -1; i = markdown.indexOf(gap, i + 1)) {
+  for (let i = doc.indexOf(gap); i !== -1; i = doc.indexOf(gap, i + 1)) {
     const at = i + edit.prefix.length;
     if (best === null || Math.abs(at - edit.start) < Math.abs(best - edit.start)) best = at;
   }
@@ -137,23 +137,23 @@ export function findEdit(markdown, edit) {
 }
 
 /**
- * Undo by changes (docs/architecture.md, Undo): `markdown` with each change
+ * Undo by changes (docs/architecture.md, Undo): `doc` with each change
  * from `before` to `after` put back where its new text still is, as
  * findEdit finds it; a change anyone touched since is skipped.
  */
-export function revertEdits(markdown, before, after) {
+export function revertEdits(doc, before, after) {
   const spots = diffEdits(before, after)
-    .map(({ edit }) => ({ edit, at: findEdit(markdown, edit) }))
+    .map(({ edit }) => ({ edit, at: findEdit(doc, edit) }))
     .filter((s) => s.at)
     .sort((x, y) => y.at.start - x.at.start);
-  let text = markdown;
+  let out = doc;
   let limit = Infinity; // from the end, so earlier offsets hold; an overlap is skipped
   for (const { edit, at } of spots) {
     if (at.end > limit) continue;
-    text = text.slice(0, at.start) + edit.before + text.slice(at.end);
+    out = out.slice(0, at.start) + edit.before + out.slice(at.end);
     limit = at.start;
   }
-  return text;
+  return out;
 }
 
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].

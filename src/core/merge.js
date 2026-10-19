@@ -1,12 +1,9 @@
-// Three-way merge of markdown by line, for an agent editing the file while the
-// human types. The editor serializes each paragraph to one line, so a line is
-// close to a block: edits to different paragraphs merge, and edits to
-// different parts of the same paragraph merge by character (unless that would
-// change how the line renders, such as splitting a `**` pair). Edits that
-// overlap conflict.
+// Three-way merge of a doc's text by line, for an agent editing the file
+// while the human types: edits to different lines merge, and edits to
+// different parts of the same line merge by character, unless the doc's
+// format refuses (src/formats). Edits that overlap conflict.
 
 import { lineMatches as matches } from './diff.js';
-import { project } from './project.js';
 
 /**
  * With `prefer: 'ours'`, a conflict keeps our side and reports theirs as
@@ -16,10 +13,10 @@ import { project } from './project.js';
  * @param {string} base the text both sides started from
  * @param {string} ours
  * @param {string} theirs
- * @param {{ prefer?: 'ours' }} [options]
+ * @param {{ prefer?: 'ours', format?: { mergeLine?: Function } }} [options] `format` from formatOf
  * @returns {{ text: string, conflict: false, dropped: { at: number, count: number, base: string, ours: string, theirs: string }[] } | { text: null, conflict: true }}
  */
-export function merge3(base, ours, theirs, { prefer } = {}) {
+export function merge3(base, ours, theirs, { prefer, format } = {}) {
   if (ours === theirs || theirs === base) return { text: ours, conflict: false, dropped: [] };
   if (ours === base) return { text: theirs, conflict: false, dropped: [] };
   const b = base.split('\n');
@@ -56,7 +53,7 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
     else if (same(theirChunk, baseChunk) || same(ourChunk, theirChunk)) out.push(...ourChunk);
     else {
       const line = baseChunk.length === 1 && ourChunk.length === 1 && theirChunk.length === 1
-        ? mergeMarkdownLine(baseChunk[0], ourChunk[0], theirChunk[0])
+        ? mergeOneLine(baseChunk[0], ourChunk[0], theirChunk[0], format)
         : null;
       if (line !== null) out.push(line);
       else if (prefer === 'ours') {
@@ -71,14 +68,11 @@ export function merge3(base, ours, theirs, { prefer } = {}) {
   return { text: out.join('\n'), conflict: false, dropped };
 }
 
-// A character merge of one line of markdown, kept only when it renders as
-// the same merge of the rendered lines: merging next to markup can otherwise
-// pair a `*` from one side with a `*` from the other.
-function mergeMarkdownLine(base, ours, theirs) {
+// A character merge of one line, unless the format refuses it.
+function mergeOneLine(base, ours, theirs, format) {
   const line = mergeLine(base, ours, theirs);
-  if (line === null) return null;
-  const text = (md) => project(md).text;
-  return text(line) === mergeLine(text(base), text(ours), text(theirs)) ? line : null;
+  if (line === null || format?.mergeLine?.(base, ours, theirs, line) === false) return null;
+  return line;
 }
 
 /**

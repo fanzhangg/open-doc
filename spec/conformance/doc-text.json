@@ -1,0 +1,51 @@
+{
+  "description": "A doc's text (SPEC.md §1): its bytes decoded as UTF-8, without a byte order mark, every line end as LF; `text` null when the bytes are not UTF-8. `written` is the file a tool writes back for that same text: the byte order mark kept, CRLF throughout when the file had any. Bytes are hex.",
+  "cases": [
+    {
+      "name": "LF lines are the text as it is",
+      "bytes": "2320506c616e0a0a536869702069742e0a",
+      "text": "# Plan\n\nShip it.\n",
+      "written": "2320506c616e0a0a536869702069742e0a"
+    },
+    {
+      "name": "CRLF line ends are LF in the text and CRLF on disk",
+      "bytes": "6f6e650d0a74776f0d0a",
+      "text": "one\ntwo\n",
+      "written": "6f6e650d0a74776f0d0a"
+    },
+    {
+      "name": "a byte order mark is not in the text and stays on disk",
+      "bytes": "efbbbf6f6e650a",
+      "text": "one\n",
+      "written": "efbbbf6f6e650a"
+    },
+    {
+      "name": "mixed line ends: any CRLF writes CRLF everywhere",
+      "bytes": "6f6e650d0a74776f0a7468726565",
+      "text": "one\ntwo\nthree",
+      "written": "6f6e650d0a74776f0d0a7468726565"
+    },
+    {
+      "name": "a lone CR is a line end",
+      "bytes": "6f6e650d74776f",
+      "text": "one\ntwo",
+      "written": "6f6e650a74776f"
+    },
+    {
+      "name": "CJK text in UTF-8",
+      "bytes": "e58588e8aea8e8aebaefbc8ce5868de5ae9ee78eb0e380820a",
+      "text": "先讨论，再实现。\n",
+      "written": "e58588e8aea8e8aebaefbc8ce5868de5ae9ee78eb0e380820a"
+    },
+    {
+      "name": "GBK is not UTF-8: not a doc's text",
+      "bytes": "c4e3bac30a",
+      "text": null
+    },
+    {
+      "name": "an invalid UTF-8 byte: not a doc's text",
+      "bytes": "6f6e6520ff0a",
+      "text": null
+    }
+  ]
+}

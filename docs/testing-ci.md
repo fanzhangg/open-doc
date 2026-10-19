@@ -10,8 +10,9 @@ Each test guards a rule there; a test that guards none is not needed.
 1. **Test invariants, not code paths.** Lost text first, then everything
    else.
 2. **The format is a contract.** Its tests are fixtures in
-   `spec/conformance/` that any tool can run. Rendered text and anchors run
-   in Node and in the browser, the only code both share.
+   `spec/conformance/` that any tool can run. Anchors run in Node and in the
+   browser. The markdown editor's rendered text matches the markdown
+   projection on fixtures and on every markdown file in the repository.
 3. **Agents are always faked.** A fake agent script edits its copy and
    prints a reply. No test runs Claude Code, Codex or a model.
 4. **Every platform, every PR.** Rename, scripts and process trees differ
@@ -37,7 +38,9 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - Writing (§5): the file replaced whole, never torn; only a human sets
   `resolved`.
 - Mentions (§6): `@name` matches a buddy's name, case-insensitively.
-- Anchors: rendered text, then exact → context → fuzzy → detached.
+- A doc's text: UTF-8 only, no byte order mark, LF; written back with its
+  byte order mark and CRLF.
+- Anchors on the doc's text: exact → context → fuzzy → detached.
 
 ### Model — unit, property
 

@@ -16,7 +16,7 @@ import { tempDoc } from './helpers.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
 
-const SIDECAR = '{"opendoc":2}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
+const SIDECAR = '{"opendoc":3}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
 
 test('docPathFor opens docs and sidecars and refuses other files', () => {
   assert.equal(docPathFor('/a/plan.md'), '/a/plan.md');
@@ -60,7 +60,7 @@ test('new docs in a folder take the next free Untitled name', async () => {
 
 test('a leftover sidecar keeps its name from being reused', async () => {
   const dir = await tempDir();
-  await writeFile(join(dir, 'Untitled.md.opendoc.jsonl'), '{"opendoc":2}\n');
+  await writeFile(join(dir, 'Untitled.md.opendoc.jsonl'), '{"opendoc":3}\n');
   assert.equal(await freeUntitledPath(dir), join(dir, 'Untitled 2.md'));
 });
 

@@ -8,8 +8,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { merge3 } from '../src/core/merge.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
-async function withDoc(fn) {
-  const docPath = await tempDoc();
+async function withDoc(fn, content = SAMPLE) {
+  const docPath = await tempDoc(content);
   const settingsDir = await fakeConfig();
   const opened = await openTestDoc(docPath, { settingsDir, buddies: { Ada: '\n', Ben: '\n' } });
   const versions = async () => (await opened.call('history')).versions;
@@ -23,8 +23,8 @@ async function withDoc(fn) {
   // Save as the page does: on the doc as last read.
   const type = async (from, to) => {
     const now = await opened.state();
-    assert.ok(now.markdown.includes(from), from);
-    await opened.call('saveDoc', { markdown: now.markdown.replace(from, to), baseHash: now.docHash });
+    assert.ok(now.text.includes(from), from);
+    await opened.call('saveDoc', { text: now.text.replace(from, to), baseHash: now.docHash });
   };
   try {
     await fn({ ...opened, docPath, versions, disk, ask, type });
@@ -32,6 +32,16 @@ async function withDoc(fn) {
     await opened.doc.close();
   }
 }
+
+test('a buddy\'s edit and its Undo keep the file\'s byte order mark and CRLF line ends', { timeout: 30_000 }, async () => {
+  const file = `\uFEFF${SAMPLE.replace(/\n/g, '\r\n')}`;
+  await withDoc(async ({ call, ask, docPath }) => {
+    const ada = await ask('@Ada replace "extra load" with "extra peak load"');
+    assert.equal(await readFile(docPath, 'utf8'), file.replace('extra load', 'extra peak load'));
+    await call('undoReply', { id: ada.id });
+    assert.equal(await readFile(docPath, 'utf8'), file);
+  }, file);
+});
 
 test('Undo on a reply removes that buddy\'s edit and keeps later edits, yours and another buddy\'s', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, ask, type, disk, versions }) => {
@@ -86,28 +96,28 @@ test('where another buddy changed the run\'s text since, Undo leaves that change
 test('an outside change (git pull) to the paragraph being typed: the typing stays, the pulled version is in history', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, docPath, disk, versions }) => {
     const before = await state();
-    const typed = before.markdown.replace('extra load.', 'extra load at launch.');
+    const typed = before.text.replace('extra load.', 'extra load at launch.');
     const pulled = SAMPLE.replace('The main risk is', 'The risk we see is');
     await writeFile(docPath, pulled);
-    const saved = await call('saveDoc', { markdown: typed, baseHash: before.docHash });
+    const saved = await call('saveDoc', { text: typed, baseHash: before.docHash });
     assert.equal(saved.conflict, true, 'the page learns the file changed');
     // The page merges what it has into the file, its own text first (web/main.js).
-    const merged = merge3(before.markdown, typed, saved.markdown, { prefer: 'ours' });
-    await call('saveDoc', { markdown: merged.text, baseHash: saved.docHash });
+    const merged = merge3(before.text, typed, saved.text, { prefer: 'ours' });
+    await call('saveDoc', { text: merged.text, baseHash: saved.docHash });
     assert.match(await disk(), /The risk we see is .* extra load at launch\./);
     const external = (await versions()).filter((v) => v.kind === 'external');
     assert.equal(external.length, 1);
-    assert.equal((await call('version', { id: external[0].id })).markdown, pulled);
+    assert.equal((await call('version', { id: external[0].id })).text, pulled);
 
     // Where the two overlap, the typing wins and the pulled text is only in history.
     const now = await state();
-    const mine = now.markdown.replace('beta cohort', 'beta testers');
-    const theirs = now.markdown.replace('beta cohort', 'early users');
+    const mine = now.text.replace('beta cohort', 'beta testers');
+    const theirs = now.text.replace('beta cohort', 'early users');
     await writeFile(docPath, theirs);
-    const again = await call('saveDoc', { markdown: mine, baseHash: now.docHash });
-    await call('saveDoc', { markdown: merge3(now.markdown, mine, again.markdown, { prefer: 'ours' }).text, baseHash: again.docHash });
+    const again = await call('saveDoc', { text: mine, baseHash: now.docHash });
+    await call('saveDoc', { text: merge3(now.text, mine, again.text, { prefer: 'ours' }).text, baseHash: again.docHash });
     assert.match(await disk(), /beta testers/);
-    const history = await Promise.all((await versions()).map(async (v) => (await call('version', { id: v.id })).markdown));
+    const history = await Promise.all((await versions()).map(async (v) => (await call('version', { id: v.id })).text));
     assert.ok(history.includes(theirs), 'the pulled version is saved');
   });
 });
@@ -123,7 +133,7 @@ test('every undo and restore can itself be restored', { timeout: 30_000 }, async
     const restore = async (text) => {
       const list = await versions();
       const found = [];
-      for (const v of list) if ((await call('version', { id: v.id })).markdown === text) found.push(v);
+      for (const v of list) if ((await call('version', { id: v.id })).text === text) found.push(v);
       await call('restoreVersion', { id: found.at(-1).id, baseHash: (await state()).docHash });
     };
     await restore(edited); // undo the undo

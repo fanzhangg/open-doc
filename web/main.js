@@ -16,13 +16,12 @@ import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { merge3 } from '../src/core/merge.js';
-import { project } from '../src/core/project.js';
-import { createAnchor, locate } from '../src/core/anchor.js';
+import { formatOf } from '../src/formats/index.js';
 import { diffEdits } from '../src/core/diff.js';
-import { editItems } from './review.js';
 import { createHistory } from './history.js';
 import { createFileList } from './files.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
+import { FORMAT_VERSION } from '../src/core/comments.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
@@ -55,7 +54,8 @@ let me; // your name
 let myId; // your id, which your comments carry
 let comments; // the doc's threads, who wrote in them, and a notice about its sidecar (state())
 let baseHash;
-let synced; // the doc as last loaded or saved, in the editor's own markdown style
+let synced; // the doc's text as last loaded or saved
+let docName; // the doc's file name
 let dirty = false;
 let saving = false;
 let version = 0;
@@ -113,7 +113,7 @@ async function start() {
 
   editor = await createDocEditor({
     stage: document.querySelector('.od-stage'),
-    markdown: initial.markdown,
+    text: initial.text,
     onChange: () => {
       hideRun();
       dirty = true;
@@ -140,7 +140,7 @@ async function start() {
       margin.startDraft(hint);
     },
   });
-  synced = editor.getMarkdown();
+  synced = initial.text;
   chrome = createChrome({
     editor, onComment: () => editor.requestComment(), settings, getName: () => me, setName,
   });
@@ -288,16 +288,17 @@ async function save() {
   if (saving || !dirty || missing) return;
   saving = true;
   const savedVersion = version;
-  const markdown = editor.getMarkdown();
+  const text = editor.getText();
   let conflicted = false;
   setStatus('Saving…', 'saving');
   try {
-    const { status: code, data } = await api.saveDoc(markdown, baseHash);
+    const { status: code, data } = await api.saveDoc(text, baseHash);
     if (code === 409) {
       conflicted = true;
     } else {
       baseHash = data.docHash;
-      synced = markdown;
+      synced = text;
+      editor.setDisk(text);
       if (version === savedVersion) dirty = false;
       if (dirty) setStatus('Saving…', 'saving');
       else setStatus('Saved');
@@ -341,7 +342,7 @@ window.addEventListener('beforeunload', (event) => {
 // Typing the editor has not reported yet (it does so on a debounce) is an
 // edit to save too.
 function takeUnreportedTyping() {
-  if (editor && !dirty && editor.getMarkdown() !== synced) {
+  if (editor && !dirty && editor.getText() !== synced) {
     dirty = true;
     version++;
   }
@@ -388,12 +389,13 @@ async function doSync(by) {
   if (fresh.docHash === baseHash) return;
   // A buddy's run wrote this doc when its version is the doc on disk.
   const [reply, run] = Object.entries(fresh.edits ?? {}).find(([, e]) => e.hash === fresh.docHash && e.state === 'edited') ?? [];
-  const theirs = editor.normalize(fresh.markdown);
+  const theirs = fresh.text;
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
-  const merged = merge3(synced, editor.getMarkdown(), theirs, { prefer: 'ours' });
+  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', format: formatOf(docName) });
   // A buddy's changes show as its revision; anything else glows.
-  editor.applyMarkdown(merged.text, run?.by ?? by, { buddy: Boolean(run) });
+  editor.applyText(merged.text, run?.by ?? by, { buddy: Boolean(run) });
+  editor.setDisk(theirs);
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -447,16 +449,17 @@ function setMissing(on) {
 
 missingBanner.querySelector('[data-action="recreate"]').addEventListener('click', async () => {
   const savedVersion = version;
-  const markdown = editor.getMarkdown();
+  const text = editor.getText();
   try {
-    const { status: code, data } = await api.saveDoc(markdown, baseHash, { recreate: true });
+    const { status: code, data } = await api.saveDoc(text, baseHash, { recreate: true });
     if (code === 409) {
       setMissing(false); // it is back already: merge what is there
       await syncFromDisk();
       return;
     }
     baseHash = data.docHash;
-    synced = markdown;
+    synced = text;
+    editor.setDisk(text);
     if (version === savedVersion) dirty = false;
     setMissing(false);
   } catch (error) {
@@ -511,24 +514,32 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
 }
 
 // A sidecar this app must not write (spec/SPEC.md §2): its comments show,
-// nothing adds to them, and the banner says how to fix it. Once fixed, the
-// sidecar's change event brings the comments back to normal.
+// nothing adds to them, and the banner says how to fix it, or offers to put
+// it in the Trash and start new comments. Once fixed, the sidecar's change
+// event brings the comments back to normal.
 const REVEAL_LABEL = /Mac/.test(navigator.platform) ? 'Reveal in Finder' : /Win/.test(navigator.platform) ? 'Show in File Explorer' : 'Show in Folder';
 function showReadOnly(problem) {
   document.documentElement.toggleAttribute('data-read-only', Boolean(problem));
   readOnlyBanner.hidden = !problem;
   if (!problem) return;
-  readOnlyBanner.querySelector('.od-banner-text').textContent = problem === 'version'
-    ? 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.'
-    : 'This doc\'s comments file does not start with {"opendoc":2}, so comments are read-only. Fix the file to add comments.';
-  readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'version';
+  readOnlyBanner.querySelector('.od-banner-text').textContent = {
+    older: 'These comments are from an older OpenDoc, so they are read-only here.',
+    newer: 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.',
+    invalid: `This doc's comments file does not start with {"opendoc":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
+  }[problem];
+  readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'newer';
+  readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.opendocDesktop;
   const reveal = readOnlyBanner.querySelector('[data-action="reveal"]');
   reveal.textContent = REVEAL_LABEL;
-  reveal.hidden = problem !== 'invalid' || !window.opendocDesktop;
+  reveal.hidden = problem === 'newer' || !window.opendocDesktop;
 }
 
 readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
   window.open('https://github.com/fanzhangg/open-doc/releases/tag/nightly');
+});
+readOnlyBanner.querySelector('[data-action="start-over"]').addEventListener('click', () => {
+  if (!window.confirm('Move this doc\'s comments file to the Trash and start new comments?\n\nIts comments are no longer shown here. You can put the file back from the Trash.')) return;
+  window.opendocDesktop.trashSidecar().catch((error) => setStatus(`Could not move the comments file: ${error.message}`, 'error'));
 });
 readOnlyBanner.querySelector('[data-action="reveal"]').addEventListener('click', () => {
   window.opendocDesktop.revealSidecar().catch(() => {});
@@ -591,13 +602,9 @@ function revealText(id) {
 
 async function createThread(body) {
   await flushSave();
-  // Canonical anchor: re-find the selection in the core projection of the
-  // markdown that is now on disk.
-  const { text } = project(editor.getMarkdown());
-  const hint = { exact: pendingSelection.quote, prefix: pendingSelection.prefix, suffix: pendingSelection.suffix, start: pendingSelection.start };
-  const found = locate(text, hint);
-  const anchor = found ? createAnchor(text, found.start, found.end) : hint;
-  const { id } = await send(api.comment(anchor, body));
+  // The selection on the doc's text that is now on disk; if it is gone, the
+  // comment is on the whole doc.
+  const { id } = await send(api.comment(editor.anchorOf(pendingSelection), body));
   pendingSelection = null;
   paintEmpty();
   editor.setDraft(null);
@@ -644,8 +651,8 @@ async function showRun(id, { scroll = true } = {}) {
   const found = await api.version(run.version).catch(() => null);
   if (shownRun !== id) return;
   if (!found?.before) return hideRun();
-  const edits = diffEdits(editor.normalize(found.before), editor.normalize(found.markdown)).map((change) => change.edit);
-  editor.setPreview(editItems(editor.getMarkdown(), edits), { replay: true, scroll, by: run.by });
+  const edits = diffEdits(found.before, found.text).map((change) => change.edit);
+  editor.setPreview(edits, { replay: true, scroll, by: run.by });
 }
 
 function hideRun() {
@@ -675,9 +682,10 @@ async function restoreVersion(id) {
     await syncFromDisk();
     throw new Error('the doc changed just now. Try again.');
   }
-  const { markdown, docHash } = result.data;
-  editor.applyMarkdown(markdown, 'Restore');
-  synced = editor.normalize(markdown);
+  const { text, docHash } = result.data;
+  editor.applyText(text, 'Restore');
+  editor.setDisk(text);
+  synced = text;
   baseHash = docHash;
   dirty = false;
   setStatus('Saved');
@@ -696,6 +704,7 @@ function select(id, { focus = true } = {}) {
 // ---- identity ----
 
 function showDocName(name) {
+  docName = name;
   document.title = `${name} — opendoc`;
   document.querySelector('.od-doc-name').textContent = name;
 }

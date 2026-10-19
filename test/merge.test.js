@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { followLines, merge3 } from '../src/core/merge.js';
+import { formatOf } from '../src/formats/index.js';
 
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
@@ -74,9 +75,17 @@ test('preferring ours keeps our side of a conflict and reports theirs as dropped
   });
 });
 
-test('a character merge that would change how the line renders conflicts', () => {
+test('in markdown, a character merge that would change how the line renders conflicts; in plain text it merges', () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*'), { text: null, conflict: true });
+  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { format: formatOf('plan.md') }), { text: null, conflict: true });
+  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { format: formatOf('notes.txt') }), { text: '1 *2 3 4*', conflict: false, dropped: [] });
+});
+
+test('a doc\'s format is found by its extension, any case', () => {
+  assert.equal(formatOf('a/README.MD'), formatOf('b.markdown'));
+  assert.ok(formatOf('b.markdown'));
+  assert.equal(formatOf('main.js'), undefined);
+  assert.equal(formatOf('Makefile'), undefined);
 });
 
 test('following lines into a later version takes in what changed around them', () => {

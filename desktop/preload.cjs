@@ -134,6 +134,8 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   rename: () => act('rename'),
   /** Show the doc's sidecar in Finder, to fix it by hand. */
   revealSidecar: () => act('revealSidecar'),
+  /** Put the doc's sidecar in the Trash, to start new comments. */
+  trashSidecar: () => act('trashSidecar'),
   /** Show the folder of the agent scripts. */
   showAgents: () => act('showAgents'),
   /** The start window's Settings > Agent: { agents, shipped, folder }, and resetting a shipped script. */

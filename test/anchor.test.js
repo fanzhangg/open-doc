@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { project } from '../src/core/project.js';
-import { AnchorError, createAnchor, findQuote, locate } from '../src/core/anchor.js';
+import { createAnchor, locate } from '../src/core/anchor.js';
 
 const BASE = `# Q4 Launch Plan
 
@@ -19,15 +18,16 @@ The main risk is that the \`sync\` service cannot handle the extra load.
 See the [capacity doc](./capacity.md) for details.
 `;
 
-// Anchor `quote` in `before`, then return what it re-finds in `after`
-// (the matched text), or null when it detaches.
-function follow(before, quote, after, options) {
-  const oldText = project(before).text;
-  const range = findQuote(oldText, quote, options);
-  const anchor = createAnchor(oldText, range.start, range.end);
-  const newText = project(after).text;
-  const found = locate(newText, anchor);
-  return found && { text: newText.slice(found.start, found.end), method: found.method };
+// Anchor `quote` (its `occurrence`, 0 by default) in the doc text `before`,
+// then return what it re-finds in `after` (the matched text), or null when
+// it detaches.
+function follow(before, quote, after, { occurrence = 0 } = {}) {
+  let start = before.indexOf(quote);
+  for (let i = 0; i < occurrence; i++) start = before.indexOf(quote, start + 1);
+  assert.ok(start >= 0, `"${quote}" is not in the doc`);
+  const anchor = createAnchor(before, start, start + quote.length);
+  const found = locate(after, anchor);
+  return found && { text: after.slice(found.start, found.end), method: found.method };
 }
 
 test('createAnchor takes up to 32 characters of context', () => {
@@ -81,20 +81,18 @@ test('a paragraph moved elsewhere is followed', () => {
   assert.equal(follow(BASE, 'cannot handle the extra load', after).text, 'cannot handle the extra load');
 });
 
-test('formatting added around the quote does not break it', () => {
+test('formatting added inside the quote is followed, marks included', () => {
   const after = BASE.replace('Reduce onboarding time', 'Reduce **onboarding** time');
-  assert.equal(follow(BASE, 'Reduce onboarding time', after).text, 'Reduce onboarding time');
+  assert.equal(follow(BASE, 'Reduce onboarding time', after).text, 'Reduce **onboarding** time');
 });
 
 test('duplicate phrase: context picks the right occurrence', () => {
   const doc = 'Alpha says ship it now.\n\nBeta says ship it now.\n';
-  const text = project(doc).text;
-  const range = findQuote(text, 'ship it now', { occurrence: 1 });
-  const anchor = createAnchor(text, range.start, range.end);
+  const start = doc.lastIndexOf('ship it now');
+  const anchor = createAnchor(doc, start, start + 'ship it now'.length);
   const after = 'Intro line.\n\n' + doc;
-  const newText = project(after).text;
-  const found = locate(newText, anchor);
-  assert.equal(newText.slice(found.start - 'Beta says '.length, found.end), 'Beta says ship it now');
+  const found = locate(after, anchor);
+  assert.equal(after.slice(found.start - 'Beta says '.length, found.end), 'Beta says ship it now');
 });
 
 test('a deleted quote detaches', () => {
@@ -124,29 +122,20 @@ test('a heavily rewritten passage detaches instead of guessing', () => {
   assert.equal(follow(BASE, 'cannot handle the extra load', after), null);
 });
 
-test('findQuote: markdown in the quote, whitespace, ambiguity, missing', () => {
-  const text = project(BASE).text;
-  assert.equal(text.slice(...Object.values(findQuote(text, 'ship **all six** features'))), 'ship all six features');
-  assert.equal(text.slice(...Object.values(findQuote(text, 'feedback   from the\n beta'))), 'feedback from the beta');
-  assert.throws(() => findQuote(text, 'the'), (e) => e instanceof AnchorError && e.code === 'ambiguous' && e.count > 1);
-  assert.throws(() => findQuote(text, 'not in the doc'), (e) => e instanceof AnchorError && e.code === 'not_found');
-  assert.throws(() => findQuote(text, 'Risks', { occurrence: 3 }), (e) => e.code === 'not_found');
-});
-
 test('performance: 200 anchors are found again in a 100 KB doc quickly', () => {
   const paragraphs = Array.from({ length: 700 }, (_, i) =>
     `Paragraph ${i} discusses milestone ${i * 7} and the risk register entry R-${i}, owned by team ${i % 9}, with notes on scope, budget and timeline for item ${i}.`);
   const doc = paragraphs.join('\n\n') + '\n';
-  const text = project(doc).text;
   const threads = Array.from({ length: 200 }, (_, i) => {
-    const r = findQuote(text, `risk register entry R-${i * 2},`);
-    return createAnchor(text, r.start, r.end);
+    const quote = `risk register entry R-${i * 2},`;
+    const start = doc.indexOf(quote);
+    return createAnchor(doc, start, start + quote.length);
   });
   // Edit the context around every quote and the quote itself, so every thread
   // takes the fuzzy path.
-  const edited = project(doc
+  const edited = doc
     .replace(/milestone (\d+)/g, 'milestone #$1')
-    .replace(/risk register entry/g, 'risk-register entry')).text;
+    .replace(/risk register entry/g, 'risk-register entry');
 
   const started = performance.now();
   const found = threads.map((anchor) => locate(edited, anchor));

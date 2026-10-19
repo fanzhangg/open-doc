@@ -31,7 +31,7 @@ const BY = { id: 'Clippy', name: 'Clippy', kind: 'ai' };
 const AT = '2026-10-17T10:00:00.000Z';
 
 test('appended lines are comments; changed lines, unknown threads and bad lines are not', () => {
-  const before = '{"opendoc":2}\n{"id":"c_first01","by":{"id":"u_1","name":"fzhan","kind":"human"},"at":"2026-10-17T09:00:00Z","body":"Hi"}\n';
+  const before = '{"opendoc":3}\n{"id":"c_first01","by":{"id":"u_1","name":"fzhan","kind":"human"},"at":"2026-10-17T09:00:00Z","body":"Hi"}\n';
   const after = before.replace('"Hi"', '"Changed"') + [
     '{"anchor":{"exact":"beta cohort"},"body":"Who is in it?"}',
     '{"anchor":{"exact":"gather\\nfeedback"},"body":"From whom?"}',
@@ -65,7 +65,7 @@ test('a run appends a thread on a quote, one on the whole doc and a reply, and p
     assert.deepEqual(asked.comments.map((c) => [c.by.name, c.body]), [['fzhan', asked.comments[0].body], ['Clippy', '']], 'the reply is empty');
     const quote = threads.find((t) => t.anchor?.exact === 'beta cohort');
     assert.deepEqual(quote.comments.map((c) => [c.by.kind, c.body]), [['ai', 'Who is in it?']]);
-    assert.match(quote.anchor.prefix, /gather feedback from the $/);
+    assert.match(quote.anchor.prefix, /gather feedback from the\n$/, 'on the text as written, line break included');
     const whole = threads.find((t) => t.comments[0].body === 'Reads well.');
     assert.equal(whole.anchor, null);
     assert.deepEqual(threads.find((t) => t.id === earlier).comments.map((c) => [c.by.name, c.body]), [['fzhan', 'Is week one too soon?'], ['Clippy', 'Yes, make it week two.']]);
