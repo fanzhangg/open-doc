@@ -538,6 +538,17 @@ label.od-setting { cursor: pointer; }
 .od-setting-hint { margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--text-soft); }
 .od-setting-hint code { font-family: var(--mono); font-size: 0.92em; }
 .od-setting-row { display: flex; align-items: center; gap: 8px; }
+.od-settings-intro { margin: -4px 0 16px; font-size: 12px; color: var(--text-soft); }
+/* Settings with a page of their own (a plugin): a row per page, the whole row its button */
+.od-setting-pages { list-style: none; margin: 0; padding: 0; }
+.od-setting-pages li { border-top: 1px solid var(--border); }
+.od-setting-pages button { display: flex; align-items: center; gap: 16px; width: calc(100% + 16px); min-height: 52px; margin: 0 -8px; padding: 12px 8px; border: 0; border-radius: 6px; background: none; font-size: 13px; text-align: left; }
+.od-setting-pages button:hover { background: var(--hover); }
+.od-setting-pages .od-setting-text { flex: 1; }
+.od-setting-ext { margin-left: 6px; font-family: var(--mono); font-size: 11px; font-weight: 400; color: var(--text-faint); }
+.od-setting-state { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-soft); }
+.od-setting-state .od-icon { width: 16px; height: 16px; color: var(--text-faint); transform: rotate(-90deg); }
+.od-settings-section .od-back { margin: -4px 0 8px -6px; }
 [data-kind="claude"] [data-for]:not([data-for~="claude"]),
 [data-kind="codex"] [data-for]:not([data-for~="codex"]),
 [data-kind="custom"] [data-for]:not([data-for~="custom"]) { display: none; }
@@ -595,8 +606,9 @@ label.od-setting { cursor: pointer; }
 [data-history] .od-history-bar { display: flex; align-items: center; gap: 8px; margin: 0 12px 8px; padding: 4px; min-height: 36px; background: var(--bg-soft); border-radius: 10px; flex: none; font-size: 13px; }
 [data-history] .od-history-stage { display: grid; --margin-w: 320px; --stage-gap: 24px; }
 .od-toolbar .od-tool-history { color: var(--text-soft); }
-.od-history-back { border: 0; background: none; border-radius: 6px; height: 28px; padding: 0 8px 0 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--text); }
-.od-history-back:hover { background: var(--hover); }
+/* Back to where you were: the history's Back, a settings page's */
+.od-back { border: 0; background: none; border-radius: 6px; height: 28px; padding: 0 8px 0 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text); }
+.od-back:hover { background: var(--hover); }
 .od-history-heading { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .od-history-changes { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); white-space: nowrap; cursor: pointer; }
 .od-history-changes input { accent-color: var(--text); margin: 0; }

@@ -118,8 +118,9 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 - **Plugins.** Every text file opens in the plain editor unless a plugin
   gives its format a WYSIWYG one. Markdown's is the one built in, on by
   default: its toolbar, "/" menu, outline and focus mode (Ctrl+Shift+F) are
-  part of it. Settings > Plugins shows each plugin with what it does, a
-  switch, and its own settings (Outline, Focus mode) while it is on.
+  part of it. Settings > Plugins lists each plugin with the files it
+  edits, what it does and whether it is on; its page has its switch and its
+  own settings (Outline, Focus mode) while it is on.
   Switching it applies at once to every open doc: a Markdown doc turns to
   plain text and back, comments still in the margin, and nothing is written.
 - **Files.** New Doc and Rename (the comments move too). Opening an already
