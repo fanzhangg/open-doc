@@ -162,7 +162,8 @@ export function threadsOf(comments, mentionable = []) {
  * comment by user `me` (an id) asks, newer than X's last comment there. A
  * comment asks whom it @mentions; one that mentions no one asks the
  * thread's buddies, unless it is empty (it resolved or reopened the thread): the one that opened it and each that `me` @mentioned
- * there before (docs/architecture.md, Who answers).
+ * there before (docs/architecture.md, Who answers). Resolving drops what
+ * was asked before it, so reopening asks no one.
  */
 export function askedOf(thread, me) {
   if (thread.resolved) return [];
@@ -170,6 +171,7 @@ export function askedOf(thread, me) {
   const theirs = thread.comments[0].by.kind === 'ai' ? [thread.comments[0].by.id] : [];
   const asked = [];
   thread.comments.forEach((c, i) => {
+    if (c.by.kind === 'human' && c.resolved) asked.length = 0;
     if (c.by.kind !== 'human' || c.by.id !== me || c.body.trim() === '') return;
     for (const name of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && sameName(r.by.id, name));

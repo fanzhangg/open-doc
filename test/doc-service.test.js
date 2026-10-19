@@ -118,7 +118,7 @@ test('a comment written while a buddy works asks it again once it replies', { ti
 test('resolving stops the thread\'s buddy, with nothing it did landing; reopening asks no one', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, settingsDir }) => {
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
-    await until(async () => (await state()).agents.some((a) => a.state === 'running'), 'the run');
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
     await call('resolve', { thread: id });
     await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
     await writeFile(join(settingsDir, 'release-Pilot'), '');
