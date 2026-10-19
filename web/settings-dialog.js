@@ -1,12 +1,15 @@
-// The Settings dialog (General, Appearance, Editor, Shortcuts), tooltips that
-// show shortcuts, and how shortcuts are written: shared by the editor
-// (web/ui.js) and the desktop start window (desktop/start.js), so both look
-// and behave the same. Settings are saved for every doc and window (see
-// settings.js); a change made in another window shows up here too. Every
-// window shows the same sections, Agent among them (the agent script that
-// runs every buddy); buddies are not here: they belong to a doc's People.
+// The Settings dialog (General, Appearance, Editor, Plugins, Shortcuts,
+// Agent), tooltips that show shortcuts, and how shortcuts are written: shared
+// by the editor (web/ui.js) and the desktop start window (desktop/start.js),
+// so both look and behave the same. Settings are saved for every doc and
+// window (see settings.js); a change made in another window shows up here
+// too. Every window shows the same sections, Agent among them (the agent
+// script that runs every buddy), except Plugins, which only a doc's window
+// has: the plugins come with the views (web/plugins/). Buddies are not here:
+// they belong to a doc's People.
 
-import { hydrateIcons } from './icons.js';
+import { hydrateIcons, icon } from './icons.js';
+import { pluginSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
@@ -23,6 +26,7 @@ const DIALOG = `
     <button type="button" role="tab" data-section="general" data-icon="user">General</button>
     <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
     <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
+    <button type="button" role="tab" data-section="plugins" data-icon="plugin">Plugins</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
   </nav>
@@ -79,22 +83,18 @@ const DIALOG = `
       <h2>Editor</h2>
       <label class="od-setting">
         <span class="od-setting-text">
-          <span class="od-setting-label">Outline</span>
-        </span>
-        <input type="checkbox" class="od-switch" data-setting="outline">
-      </label>
-      <label class="od-setting">
-        <span class="od-setting-text">
           <span class="od-setting-label">Word count</span>
         </span>
         <input type="checkbox" class="od-switch" data-setting="wordCount">
       </label>
-      <label class="od-setting">
-        <span class="od-setting-text">
-          <span class="od-setting-label">Focus mode</span>
-        </span>
-        <input type="checkbox" class="od-switch" data-setting="focus">
-      </label>
+    </section>
+
+    <section class="od-settings-section" role="tabpanel" data-section="plugins" hidden>
+      <div class="od-plugin-list">
+        <h2>Plugins</h2>
+        <p class="od-settings-intro">Each gives one kind of file its own editor. Off, those files open as plain text.</p>
+        <ul class="od-setting-pages"></ul>
+      </div>
     </section>
 
     <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
@@ -132,15 +132,23 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. `scripts` ({ list() → { agents, shipped, folder }, reset(name),
+ * one page shows. `plugins` (web/plugins/index.js) fill Plugins, which shows
+ * only when there are some: a list of them, each opening its own page.
+ * `scripts` ({ list() → { agents, shipped, folder }, reset(name),
  * showFolder? }) backs Agent, which picks the agent script.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, scripts: object }} options
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, plugins?: object[],
+ *           scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, scripts }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, plugins = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
+  const pluginList = dialog.querySelector('.od-plugin-list');
+  const pluginParts = plugins.map(pluginRowAndPage);
+  pluginList.querySelector('ul').append(...pluginParts.map((part) => part.row));
+  pluginList.after(...pluginParts.map((part) => part.page));
   hydrateIcons(dialog);
+  if (plugins.length === 0) dialog.querySelector('[role="tab"][data-section="plugins"]').remove();
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
   const nameInput = dialog.querySelector('#od-name-input');
@@ -178,8 +186,6 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     else root.dataset.theme = settings.theme;
     root.dataset.font = settings.font;
     root.dataset.width = settings.width;
-    root.toggleAttribute('data-focus', settings.focus);
-    root.toggleAttribute('data-no-outline', !settings.outline);
     const mark = (selector, attr, value) => {
       for (const button of dialog.querySelectorAll(selector)) button.setAttribute('aria-checked', String(button.dataset[attr] === value));
     };
@@ -187,6 +193,14 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     mark('[data-theme-choice]', 'themeChoice', settings.theme);
     mark('[data-width]', 'width', settings.width);
     for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
+    for (const [i, plugin] of plugins.entries()) {
+      const own = pluginSettings(settings, plugin);
+      pluginParts[i].state.textContent = own.enabled ? 'On' : 'Off';
+      for (const box of dialog.querySelectorAll(`[data-plugin="${plugin.id}"]`)) {
+        box.checked = own[box.dataset.key];
+        if (box.dataset.key !== 'enabled') box.closest('.od-setting').hidden = !own.enabled;
+      }
+    }
     if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
   }
@@ -197,6 +211,13 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
     for (const panel of sections) panel.hidden = panel.dataset.section !== section;
     if (section === 'agent') paintScripts();
+    showPlugin(null);
+  }
+
+  // Plugins shows the list, or the page of plugin `id`.
+  function showPlugin(id) {
+    pluginList.hidden = id !== null;
+    for (const { page } of pluginParts) page.hidden = page.dataset.pluginPage !== id;
   }
 
   function open(section = 'general') {
@@ -227,13 +248,22 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
       const name = scriptSelect.value;
       if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
     } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    else if (button.dataset.openPlugin) {
+      showPlugin(button.dataset.openPlugin);
+      dialog.querySelector(`[data-plugin-page="${button.dataset.openPlugin}"] .od-back`).focus();
+    } else if (button.dataset.action === 'plugins') {
+      const id = button.closest('[data-plugin-page]').dataset.pluginPage;
+      showPlugin(null);
+      dialog.querySelector(`[data-open-plugin="${id}"]`).focus();
+    }
     else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
     else if (button.dataset.width) set({ width: button.dataset.width });
   });
   dialog.addEventListener('change', (event) => {
-    const key = event.target.dataset?.setting;
-    if (key) set({ [key]: event.target.checked });
+    const { setting, plugin, key } = event.target.dataset ?? {};
+    if (setting) set({ [setting]: event.target.checked });
+    else if (plugin) set({ plugins: { [plugin]: { [key]: event.target.checked } } });
   });
   // Up and down move between sections, as in a vertical tab list.
   dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {
@@ -264,6 +294,57 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, scr
 
   apply();
   return { get: () => store.get(), set, open, toggle };
+}
+
+// A plugin's row in the list (its name and extensions, what it does, on or
+// off) and its page: its switch, then its own settings (shown while it is on).
+// `state` says on or off in the row.
+function pluginRowAndPage(plugin) {
+  const extensions = plugin.extensions.map((extension) => `.${extension}`);
+  const name = el('span', 'od-setting-label', plugin.name);
+  name.append(el('span', 'od-setting-ext', extensions.join(' ')));
+  const summary = el('span', 'od-setting-text');
+  summary.append(name, el('span', 'od-setting-hint', plugin.about));
+  const state = el('span');
+  const stateBox = el('span', 'od-setting-state');
+  stateBox.append(state, icon('chevron'));
+  const open = el('button');
+  open.type = 'button';
+  open.dataset.openPlugin = plugin.id;
+  open.append(summary, stateBox);
+  const row = el('li');
+  row.append(open);
+
+  const switchRow = (label, hint, key) => {
+    const line = el('label', 'od-setting');
+    const text = el('span', 'od-setting-text');
+    text.append(el('span', 'od-setting-label', label));
+    if (hint) text.append(el('span', 'od-setting-hint', hint));
+    const box = el('input', 'od-switch');
+    box.type = 'checkbox';
+    Object.assign(box.dataset, { plugin: plugin.id, key });
+    line.append(text, box);
+    return line;
+  };
+  const page = el('div');
+  page.dataset.pluginPage = plugin.id;
+  page.hidden = true;
+  const back = el('button', 'od-back', 'Plugins');
+  back.type = 'button';
+  Object.assign(back.dataset, { action: 'plugins', icon: 'back' });
+  page.append(
+    back, el('h2', null, plugin.name), el('p', 'od-settings-intro', plugin.about),
+    switchRow('On', `Off, ${new Intl.ListFormat('en').format(extensions)} files open as plain text.`, 'enabled'),
+    ...Object.keys(plugin.settings).map((key) => switchRow(plugin.labels[key], null, key)),
+  );
+  return { row, page, state };
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
 function fillShortcuts(body) {

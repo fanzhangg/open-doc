@@ -7,7 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
-import { viewsFor } from './views/index.js';
+import { viewFor } from './plugins/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { setBuddies } from './faces.js';
@@ -45,6 +45,7 @@ const commentsToggle = document.querySelector('.od-tool-comment');
 const narrow = window.matchMedia('(max-width: 900px)');
 
 let editor;
+let made; // what `editor` was made from: viewFor's { id, createView, settings }
 let chrome;
 let margin;
 let people;
@@ -115,35 +116,11 @@ async function start() {
   offerRename();
   paintNameChip();
 
-  const createView = viewsFor(docName)[0];
-  editor = await createView({
-    stage: document.querySelector('.od-stage'),
-    text: initial.text,
-    toolbar: document.querySelector('.od-toolbar'),
-    onComment: requestComment,
-    onChange: () => {
-      hideRun();
-      paintMarks();
-      chrome.recount();
-      dirty = true;
-      version++;
-      setStatus('Saving…', 'saving');
-      scheduleSave();
-    },
-    // Clicking commented text selects its thread but keeps the caret in the doc.
-    onMarkClick: (id) => {
-      if (id === 'draft') return;
-      if (narrow.matches) {
-        openSheet(true);
-        select(id, { focus: false });
-        revealText(id);
-      } else if (commentsShown()) select(id, { focus: false });
-    },
-    onLayout: () => margin.layout(),
-  });
+  made = viewFor(docName, settings.get());
+  editor = await makeView(made, initial.text);
   synced = initial.text;
   chrome = createChrome({
-    view: editor, settings, getName: () => me, setName,
+    getView: () => editor, settings, getName: () => me, setName,
   });
   window.opendocDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
@@ -245,11 +222,12 @@ async function start() {
   });
   history = createHistory({
     api,
-    createView,
+    chooseView: () => viewFor(docName, settings.get()),
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
     onClose: () => editor.focus(),
   });
+  settings.subscribe(followPlugins);
   document.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.altKey && event.shiftKey && event.code === 'KeyH') {
       event.preventDefault();
@@ -271,7 +249,10 @@ async function start() {
   events.on('history', () => history.changed());
   events.on('agents', (data) => showAgents(data));
   events.on('settings', (data) => settings.receive(data));
-  events.on('renamed', (data) => showDocName(data.doc));
+  events.on('renamed', (data) => {
+    showDocName(data.doc);
+    followPlugins(); // a new extension may open in another view
+  });
   events.on('missing', (data) => setMissing(data.missing));
   // First on the line: the doc may have gone missing, or runs started, since `state`.
   events.on('hello', (data) => {
@@ -280,6 +261,69 @@ async function start() {
   });
   await files.ready;
   if (startTyping) editor.focus();
+}
+
+// ---- the doc's view ----
+
+// The doc's text in the view `chosen` (from viewFor), in the page's stage.
+function makeView(chosen, text) {
+  return chosen.createView({
+    stage: document.querySelector('.od-stage'),
+    text,
+    toolbar: document.querySelector('.od-toolbar'),
+    onComment: requestComment,
+    onChange: () => {
+      hideRun();
+      paintMarks();
+      chrome.recount();
+      dirty = true;
+      version++;
+      setStatus('Saving…', 'saving');
+      scheduleSave();
+    },
+    // Clicking commented text selects its thread but keeps the caret in the doc.
+    onMarkClick: (id) => {
+      if (id === 'draft') return;
+      if (narrow.matches) {
+        openSheet(true);
+        select(id, { focus: false });
+        revealText(id);
+      } else if (commentsShown()) select(id, { focus: false });
+    },
+    onLayout: () => margin.layout(),
+    settings: chosen.settings,
+    saveSettings: (patch) => settings.set({ plugins: { [chosen.id]: patch } }),
+  });
+}
+
+// The view follows the plugins. Switching one on or off makes the doc's view
+// again from the same text, typing not saved yet saved first, comments and
+// a revision drawn again; a plugin's own setting reaches its view as it is.
+// One change at a time, each against the settings as they are by then.
+let following = Promise.resolve();
+function followPlugins() {
+  following = following.then(async () => {
+    const chosen = viewFor(docName, settings.get());
+    if (chosen.id !== made.id) await remakeView(chosen);
+    else if (chosen.settings && JSON.stringify(chosen.settings) !== JSON.stringify(made.settings)) editor.applySettings(chosen.settings);
+    made = chosen;
+  }).catch((error) => setStatus(`Could not switch the view: ${error.message}`, 'error'));
+}
+
+async function remakeView(chosen) {
+  takeUnreportedTyping();
+  await flushSave().catch(() => {}); // a missing doc keeps its typing in the page
+  const old = editor;
+  const text = old.getText();
+  const next = await makeView(chosen, text);
+  // A change from disk taken in while the new view was made.
+  if (old.getText() !== text) next.applyText(old.getText(), { by: ON_DISK });
+  editor = next;
+  await old.destroy();
+  paintMarks();
+  chrome.recount();
+  margin.layout();
+  await history.viewChanged();
 }
 
 // ---- saving ----

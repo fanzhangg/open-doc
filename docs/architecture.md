@@ -76,7 +76,8 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | Formats (`src/formats`) | what a format adds to text, by extension: markdown refuses a merge inside a line that would change how it renders |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner | which turns should start (the inbox), runs them, their status in memory |
-| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision); every view passes one contract (`test/views.test.js`) and brings its own tools (the Markdown view: its toolbar, "/" menu and outline). `web/views/index.js` picks a doc's view by extension: Markdown for `.md`, the plain view (CodeMirror, the text as it is) for any other UTF-8 text file up to 1 MB. The Markdown view maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written |
+| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision); every view passes one contract (`test/views.test.js`). The plain view (`web/views/plain.js`, CodeMirror, the text as it is) is the app's own, for any UTF-8 text file up to 1 MB. A view plugin (`web/plugins/`) gives one format a view of its own with its UI and settings, and can be switched off; `viewFor` in `web/plugins/index.js` picks a doc's view: an enabled plugin's that claims its extension, else the plain one. The page knows no format |
+| Plugins (`web/plugins/`) | built in, each a declaration with no lifecycle: `{ id, name, about, extensions, createView, settings, labels }`, `settings` its boolean switches and their defaults, `labels` their names in Settings. Markdown's (`web/plugins/markdown/`) is a WYSIWYG view with its toolbar, "/" menu, outline and focus mode; it maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written. Settings keep `plugins: { <id>: { enabled, ...switches } }`; the core checks only that shape and keeps ids it does not know. Switching a plugin makes the affected views again from the same text in every window, the history's too, after saving pending typing; a plugin's own switch reaches its view as it is. Format rules (`src/formats`) apply by extension whatever the view, so they are not plugins |
 
 DocService and Runner run in the doc host, the app's utility process.
 Windows reach it over Electron message ports.
@@ -117,7 +118,7 @@ written only by the app.
 
 | File | Holds |
 | --- | --- |
-| `settings.json` | the user's id and name; editor preferences; which agent runs buddies |
+| `settings.json` | the user's id and name; editor preferences; plugins' switches; which agent runs buddies |
 | `agents/` | agent scripts; Claude Code and Codex ship as two |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |

@@ -57,6 +57,9 @@ a { color: var(--accent); }
 .ds-files { position: static; width: 240px; padding: 8px; border: 0; border-radius: 10px; }
 .ds-files .od-files-tree { padding: 0; }
 .ds-files .od-files-file { padding-left: 8px; }
+.ds-setting-pages { max-width: 480px; }
+.ds-setting-pages ul, .ds-setting-pages li { margin: 0; padding: 0; color: inherit; line-height: inherit; }
+.ds-setting-pages .od-back { margin: 0 0 8px -6px; }
 .ds-tip { position: static; }
 .ds-faces { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px; }
 .ds-face { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--text-soft); }

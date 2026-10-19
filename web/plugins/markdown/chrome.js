@@ -1,10 +1,11 @@
 // The Markdown view's chrome: its tools in the page's toolbar (reflecting the
 // formatting at the caret), a formatting bubble over selections, the link
-// card and popover, the "/" block menu and a floating outline. The view
-// makes it when the page gives it a toolbar (web/views/markdown.js).
+// card and popover, the "/" block menu, a floating outline and focus mode.
+// The view makes it when the page gives it a toolbar
+// (web/plugins/markdown/view.js).
 
-import { hydrateIcons, icon } from '../icons.js';
-import { keyLabel } from '../settings-dialog.js';
+import { hydrateIcons, icon } from '../../icons.js';
+import { keyLabel } from '../../settings-dialog.js';
 
 const TOOLS = `
   <div class="od-tool-group">
@@ -101,12 +102,15 @@ function elements(markup) {
 /**
  * `editor`: the Markdown view's own commands and queries. The tools go first
  * in `toolbar`, the bubble and "/" menu in `stage`, the outline before it.
- * `onComment` is the bubble's Comment button.
+ * `onComment` is the bubble's Comment button. `settings` are the plugin's:
+ * whether the outline shows and focus mode is on; Mod+Shift+F changes focus
+ * mode through `saveSettings`.
  *
  * @param {object} editor
- * @param {{ toolbar: HTMLElement, stage: HTMLElement, host: HTMLElement, onComment: () => void }} options
+ * @param {{ toolbar: HTMLElement, stage: HTMLElement, host: HTMLElement, onComment: () => void,
+ *           settings: { outline: boolean, focus: boolean }, saveSettings: (patch: object) => void }} options
  */
-export function createChrome(editor, { toolbar, stage, host, onComment }) {
+export function createChrome(editor, { toolbar, stage, host, onComment, settings, saveSettings }) {
   const tools = elements(TOOLS);
   const [bubble, slashMenu] = elements(BUBBLE);
   const [outlineNav] = elements(OUTLINE);
@@ -215,16 +219,36 @@ export function createChrome(editor, { toolbar, stage, host, onComment }) {
     }
   }, { signal });
 
+  // ---- the plugin's settings: the outline, and focus mode (app.css) ----
+
+  const root = document.documentElement;
+  function applySettings(next) {
+    settings = next;
+    root.toggleAttribute('data-focus', next.focus);
+    root.toggleAttribute('data-no-outline', !next.outline);
+  }
+  document.addEventListener('keydown', (event) => {
+    const mod = mac ? event.metaKey : event.ctrlKey;
+    if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      saveSettings({ focus: !settings.focus });
+    }
+  }, { signal });
+
+  applySettings(settings);
   refresh();
   return {
     /** After every editor update: typing, selection, focus. */
     update,
     /** Sees editor keydowns first (for the "/" menu); true when it took one. */
     onKey: (event) => slash.onKey(event),
+    applySettings,
     destroy() {
       done.abort();
       cancelAnimationFrame(frame);
       for (const el of made) el.remove();
+      root.removeAttribute('data-focus');
+      root.removeAttribute('data-no-outline');
     },
   };
 }

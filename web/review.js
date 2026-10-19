@@ -1,4 +1,4 @@
-// How a revision (edit marks, see web/views/markdown.js) shows in the Markdown
+// How a revision (edit marks, see web/plugins/markdown/view.js) shows in the Markdown
 // view's rendered text.
 //
 // An item is { anchor, mark, widget, by, replay } in rendered-text terms:

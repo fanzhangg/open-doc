@@ -339,10 +339,12 @@ function saveState() {
 
 // ---- menu ----
 
-// The page handles its own shortcuts (Ctrl+, settings, Ctrl+/ shortcuts,
-// Ctrl+Shift+F focus) on Windows and Linux, where a menu accelerator would
-// take the key away from it, so there the menu only shows them. On macOS a
-// menu key equivalent comes first, so the menu does the work.
+// The page handles its own shortcuts (Ctrl+, settings, Ctrl+/ shortcuts) on
+// Windows and Linux, where a menu accelerator would take the key away from
+// it, so there the menu only shows them. On macOS a menu key equivalent
+// comes first, so the menu does the work. A plugin's settings and shortcuts
+// (focus mode, the outline) are its view's, in the page: the menu knows no
+// plugin.
 const PAGE_KEY = { registerAccelerator: isMac };
 
 function buildMenu() {
@@ -404,11 +406,6 @@ function buildMenu() {
     {
       label: isMac ? 'View' : '&View',
       submenu: [
-        {
-          label: 'Focus Mode', type: 'checkbox', checked: settings.focus, accelerator: 'CmdOrCtrl+Shift+F', ...PAGE_KEY,
-          click: () => setSettings({ focus: !settings.focus }),
-        },
-        { label: 'Outline', type: 'checkbox', checked: settings.outline, click: () => setSettings({ outline: !settings.outline }) },
         { label: 'Word Count', type: 'checkbox', checked: settings.wordCount, click: () => setSettings({ wordCount: !settings.wordCount }) },
         { type: 'separator' },
         { label: 'Theme', submenu: choices('theme', [['system', 'Match System'], ['light', 'Light'], ['dark', 'Dark']]) },
@@ -487,9 +484,9 @@ function recentMenu() {
 
 // ---- the start window's settings ----
 
-// The settings the start window shows and changes (its Settings dialog, the
-// same as a doc's): your name, how things look and the agent, never buddies.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'outline', 'wordCount', 'focus', 'agent'];
+// The settings the start window shows and changes (its Settings dialog, a
+// doc's but Plugins): your name, how things look and the agent, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'wordCount', 'agent'];
 
 // Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
 const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });

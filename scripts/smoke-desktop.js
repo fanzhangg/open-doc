@@ -2,9 +2,11 @@
 // file, check that each window's editor loads its doc, that a buddy answers
 // an @mention in each (the agent is a fake script), that comments and a
 // buddy's revision show in the .js file's plain view, that Cmd+Z undoes only
-// your typing and Undo on a reply the buddy's edit, that the app listens on
-// no port, that a doc host that stops is started again, and that a setting
-// survives a relaunch.
+// your typing and Undo on a reply the buddy's edit, that switching the
+// Markdown plugin off and on turns the Markdown docs to the plain view and
+// back without writing them, that its own settings apply at once, that the
+// app listens on no port, that a doc host that stops is started again, and
+// that a setting survives a relaunch.
 //
 //   node scripts/smoke-desktop.js [path to OpenDoc.exe]
 //
@@ -97,6 +99,17 @@ const first = await app.page('plan.md');
 const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { font: 'serif' }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
 
+step('the Markdown plugin, off and on');
+const commented = await commentShows(first, readFileSync(docs[0], 'utf8'), 'gather feedback');
+check(Boolean(commented), 'a comment on plan.md is drawn over its text');
+const unswitched = { text: readFileSync(docs[0], 'utf8'), versions: await versionCount(first) };
+await first.evaluate(`document.querySelector('.od-tool-history').click()`);
+check(await switchesView(first, false, [first, notes], commented), 'off: both Markdown docs and the history show in the plain view, the comment still drawn, no outline');
+check(await switchesView(first, true, [first, notes], commented), 'on: Markdown\'s view is back, with the comment and the outline');
+await first.evaluate(`document.querySelector('.od-history-bar [data-action="close"]').click()`);
+check(await ownSettingsApply(first), 'its Outline switch and the focus mode shortcut take effect at once');
+check(readFileSync(docs[0], 'utf8') === unswitched.text && (await versionCount(first)) === unswitched.versions, 'switching wrote no file and recorded no version');
+
 if (process.platform === 'linux') {
   const all = listening(app.pid);
   const ports = all.filter((port) => port !== app.devtoolsPort);
@@ -115,7 +128,8 @@ await app.quit();
 
 step('relaunch');
 app = await launch([docs[0]]);
-const second = await (await app.page('plan.md')).evaluate('document.documentElement.dataset.font');
+const relaunched = await app.page('plan.md');
+const second = await waitFor(() => relaunched.evaluate('document.documentElement.dataset.font'), 15_000, 'the settings').catch(() => undefined);
 check(second === 'serif', `the setting survived the relaunch (font: ${second})`);
 await app.quit();
 
@@ -139,15 +153,57 @@ async function answers(page, from, title, doc) {
   return replied && readFileSync(doc, 'utf8').includes(title);
 }
 
-// Comment on the first `quote` in `text`, the doc in `page`: true once its
-// thread's highlight covers just that.
+// Comment on the first `quote` in `text`, the doc in `page`: its thread's id
+// once its highlight covers just that, else false.
 async function commentShows(page, text, quote) {
   const start = text.indexOf(quote);
   const end = start + quote.length;
   const anchor = { exact: quote, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32), start };
   const id = await page.evaluate(`window.opendocHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
   return waitFor(() => page.evaluate(`document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
-    .catch(() => false);
+    .then(() => id, () => false);
+}
+
+// Switch the Markdown plugin `on` or off in Settings in `page`, which shows
+// its history and comment `id`: true once every page in `pages` shows its
+// doc in the view that goes with that (Markdown's, with its outline, or the
+// plain one), and `page` its history too, with the comment drawn as before.
+async function switchesView(page, on, pages, id) {
+  await page.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="enabled"]').click()`);
+  const [shown, gone] = on ? ['.ProseMirror', '.cm-content'] : ['.cm-content', '.ProseMirror'];
+  const inView = (stage) => `Boolean(document.querySelector('${stage} ${shown}')) && !document.querySelector('${stage} ${gone}')`;
+  const doc = `${inView('.od-stage:not(.od-history-stage)')} && Boolean(document.querySelector('.od-outline')) === ${on}`;
+  const drawn = `document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === 'gather feedback'`;
+  const own = `document.querySelector('.od-settings [data-key="outline"]').closest('.od-setting').hidden === ${!on}`;
+  const probes = pages.map((p) => [p, p === page ? `${doc} && ${inView('.od-history-stage')} && ${drawn} && ${own}` : doc]);
+  for (const [p, probe] of probes) {
+    if (!(await waitFor(() => p.evaluate(probe), 15_000, 'the view').catch(() => false))) return false;
+  }
+  return true;
+}
+
+// In `page`, a Markdown doc: true when the Markdown plugin's Outline switch
+// hides the outline and Mod+Shift+F turns focus mode on, each at once and
+// back again.
+async function ownSettingsApply(page) {
+  const has = (attr) => page.evaluate(`document.documentElement.hasAttribute('${attr}')`);
+  const outline = () => page.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="outline"]').click()`);
+  const modifiers = (process.platform === 'darwin' ? 4 : 2) | 8; // Meta or Ctrl, and Shift
+  const focusKey = async () => {
+    for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'F', code: 'KeyF', windowsVirtualKeyCode: 70 });
+  };
+  await outline();
+  const hidden = await has('data-no-outline');
+  await outline();
+  await focusKey();
+  const focused = await has('data-focus');
+  await focusKey();
+  return hidden && !(await has('data-no-outline')) && focused && !(await has('data-focus'));
+}
+
+// How many versions of its doc the history of `page` holds.
+function versionCount(page) {
+  return page.evaluate(`window.opendocHost.call('history').then((r) => r.result.versions.length)`);
 }
 
 // Select `quote` in the doc in `page` and click the bubble's Comment: true
