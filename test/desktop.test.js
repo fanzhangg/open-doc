@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import {
-  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
+  MAX_TEXT_BYTES, cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
   nameParts, nameProblem, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
-  MAX_TEXT_BYTES, docInFolder, firstDoc, listDocs, neighbourDoc, readFolder, readText, relativeDoc, watchFolder,
+  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, readFolder, readText, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
@@ -18,13 +18,26 @@ const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
 
 const SIDECAR = '{"opendoc":3}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
 
-test('docPathFor opens docs and sidecars and refuses other files', () => {
-  assert.equal(docPathFor('/a/plan.md'), '/a/plan.md');
-  assert.equal(docPathFor('/a/Notes.MARKDOWN'), '/a/Notes.MARKDOWN');
-  assert.equal(docPathFor('/a/plan.md.opendoc.jsonl'), '/a/plan.md');
-  assert.equal(docPathFor('/a/plan.txt'), null);
-  assert.equal(docPathFor('/a/data.json'), null);
-  assert.equal(docPathFor('/a/plan.txt.opendoc.jsonl'), null);
+test('docPathFor opens Markdown, any UTF-8 text file up to 1 MB, a file not there yet, and their sidecars', async () => {
+  const dir = await tempDir();
+  const at = (name) => join(dir, name);
+  await writeFile(at('app.js'), 'const x = 1;\n');
+  await writeFile(at('Makefile'), 'all:\n\techo 你好\n');
+  await writeFile(at('empty.txt'), '');
+  await writeFile(at('big.log'), 'x'.repeat(MAX_TEXT_BYTES + 1));
+  await writeFile(at('pic.png'), Buffer.from([0x89, 0x50, 0x00, 0x47]));
+  await writeFile(at('latin1.txt'), Buffer.from([0x63, 0x61, 0x66, 0xe9])); // "café" in Latin-1
+  await mkdir(at('folder.js'));
+  assert.equal(await docPathFor(at('plan.md')), at('plan.md'), 'a Markdown name, even before it exists');
+  assert.equal(await docPathFor(at('Notes.MARKDOWN')), at('Notes.MARKDOWN'));
+  assert.equal(await docPathFor(at('plan.md.opendoc.jsonl')), at('plan.md'));
+  for (const name of ['app.js', 'Makefile', 'empty.txt']) assert.equal(await docPathFor(at(name)), at(name), name);
+  assert.equal(await docPathFor(at('app.js.opendoc.jsonl')), at('app.js'));
+  assert.equal(await docPathFor(at('new.js')), at('new.js'), 'not there yet: it can be found or made');
+  assert.equal(await docPathFor(at('new.js.opendoc.jsonl')), at('new.js'));
+  for (const name of ['big.log', 'pic.png', 'latin1.txt', 'folder.js']) {
+    assert.equal(await docPathFor(at(name)), null, name);
+  }
 });
 
 test('withDocExtension adds .md only when missing', () => {
@@ -166,6 +179,7 @@ test('listDocs: the docs in a folder and its subfolders, subfolders first, hidde
   await symlink(join(dir, 'guides'), join(dir, 'linked'), 'junction'); // a junction on Windows, which needs no admin rights
   assert.deepEqual(await listDocs(dir), ['guides/deep/more.md', 'guides/intro.md', 'a 2.md', 'a 10.md', 'b.markdown', 'README.md']);
   assert.deepEqual(await listDocs(dir, { max: 2 }), ['guides/deep/more.md', 'guides/intro.md']);
+  assert.deepEqual(await listDocs(join(dir, 'empty'), { isDoc: () => true }), ['nothing.txt'], 'any file, when isDoc says so');
   assert.deepEqual(await listDocs(join(dir, 'missing')), []);
   assert.equal(docInFolder(dir, 'guides/deep/more.md'), join(dir, 'guides', 'deep', 'more.md'));
 });
@@ -187,6 +201,18 @@ test('readFolder: every file and folder, folders first, without .git, .DS_Store 
     { name: 'gone.md.opendoc.jsonl', folder: false },
   ]);
   assert.deepEqual(await readFolder(join(dir, 'missing')), []);
+});
+
+test('firstTextFile: a text file at the top before one below, never a sidecar or binary', async () => {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'src'));
+  await writeFile(join(dir, 'src', 'app.js'), 'let x = 1;\n');
+  assert.equal(await firstTextFile(dir), 'src/app.js');
+  await writeFile(join(dir, 'a.png'), Buffer.from([0x89, 0x50, 0x00, 0x47]));
+  await writeFile(join(dir, 'b.json.opendoc.jsonl'), '{"opendoc":3}\n');
+  await writeFile(join(dir, 'c.json'), '{}\n');
+  assert.equal(await firstTextFile(dir), 'c.json');
+  assert.equal(await firstTextFile(join(dir, 'missing')), null);
 });
 
 test('readText: a text file\'s text, but not a large or binary one', async () => {

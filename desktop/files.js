@@ -2,11 +2,12 @@
 // file's sidecar goes with it. Plain Node (no Electron), so the tests run
 // under `node --test`.
 
-import { mkdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { SIDECAR_SUFFIX, moveDoc, sidecarPath } from '../src/store/files.js';
+import { SIDECAR_SUFFIX, decodeText, moveDoc, sidecarPath } from '../src/store/files.js';
 
 export const DOC_EXTENSIONS = ['.md', '.markdown'];
+export const MAX_TEXT_BYTES = 1024 * 1024;
 const UNTITLED = 'Untitled';
 const MAX_UNTITLED = 10_000;
 
@@ -21,10 +22,25 @@ export class DocFileError extends Error {
 
 export const isDocName = (path) => DOC_EXTENSIONS.includes(extname(path).toLowerCase());
 
-/** The doc a path opens: X.md for X.md or its sidecar X.md.opendoc.jsonl, null for any other file. */
-export function docPathFor(path) {
+/** Whether the file at `path` is UTF-8 text, with no NUL, of at most MAX_TEXT_BYTES. */
+export async function isTextFile(path) {
+  try {
+    if ((await stat(path)).size > MAX_TEXT_BYTES) return false;
+    const bytes = await readFile(path);
+    return !bytes.includes(0) && decodeText(bytes) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The doc a path opens: X for X or its sidecar X.opendoc.jsonl, when X is
+ * named as Markdown, is a text file (isTextFile) or is not there yet; null
+ * for any other file.
+ */
+export async function docPathFor(path) {
   const doc = path.endsWith(SIDECAR_SUFFIX) ? path.slice(0, -SIDECAR_SUFFIX.length) : path;
-  return isDocName(doc) ? doc : null;
+  return isDocName(doc) || !(await exists(doc)) || (await isTextFile(doc)) ? doc : null;
 }
 
 /**

@@ -76,7 +76,7 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | Formats (`src/formats`) | what a format adds to text, by extension: markdown refuses a merge inside a line that would change how it renders |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner | which turns should start (the inbox), runs them, their status in memory |
-| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision); every view passes one contract (`test/views.test.js`) and brings its own tools (the Markdown view: its toolbar, "/" menu and outline). The Markdown view maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written |
+| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision); every view passes one contract (`test/views.test.js`) and brings its own tools (the Markdown view: its toolbar, "/" menu and outline). `web/views/index.js` picks a doc's view by extension: Markdown for `.md`, the plain view (CodeMirror, the text as it is) for any other UTF-8 text file up to 1 MB. The Markdown view maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written |
 
 DocService and Runner run in the doc host, the app's utility process.
 Windows reach it over Electron message ports.

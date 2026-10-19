@@ -7,7 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
-import { createMarkdownView } from './views/markdown.js';
+import { viewsFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { setBuddies } from './faces.js';
@@ -115,7 +115,8 @@ async function start() {
   offerRename();
   paintNameChip();
 
-  editor = await createMarkdownView({
+  const createView = viewsFor(docName)[0];
+  editor = await createView({
     stage: document.querySelector('.od-stage'),
     text: initial.text,
     toolbar: document.querySelector('.od-toolbar'),
@@ -244,6 +245,7 @@ async function start() {
   });
   history = createHistory({
     api,
+    createView,
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
     onClose: () => editor.focus(),

@@ -7,10 +7,9 @@ import { watch } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { SIDECAR_SUFFIX } from '../src/store/files.js';
-import { isDocName } from './files.js';
+import { MAX_TEXT_BYTES, isDocName, isTextFile } from './files.js';
 
 export const MAX_DOCS = 2000;
-export const MAX_TEXT_BYTES = 1024 * 1024;
 export const MAX_DEPTH = 12;
 export const DEBOUNCE_MS = 300;
 export const POLL_INTERVAL_MS = 3000;
@@ -59,10 +58,11 @@ export async function readText(path) {
  * The docs in `root` and its subfolders, as paths relative to it with `/`
  * between folders: each folder's subfolders first, then its docs, both by
  * name. Hidden folders, installed packages and symlinked folders are left
- * out. At most `max` docs.
+ * out. At most `max` docs. Docs are the files `isDoc` names one: by
+ * default, Markdown.
  * @returns {Promise<string[]>}
  */
-export async function listDocs(root, { max = MAX_DOCS } = {}) {
+export async function listDocs(root, { max = MAX_DOCS, isDoc = isDocName } = {}) {
   const docs = [];
   let truncated = false;
   async function walk(dir, prefix, depth) {
@@ -77,7 +77,7 @@ export async function listDocs(root, { max = MAX_DOCS } = {}) {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (!skipped(entry.name)) folders.push(entry.name);
-      } else if (isDocName(entry.name) && !entry.name.startsWith('.')) {
+      } else if (isDoc(entry.name) && !entry.name.startsWith('.')) {
         if (entry.isFile() || (entry.isSymbolicLink() && (await isFile(join(dir, entry.name))))) files.push(entry.name);
       }
     }
@@ -107,6 +107,19 @@ export function relativeDoc(root, path) {
   const rel = relative(root, path);
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
   return rel.split(sep).join('/');
+}
+
+/**
+ * The first text file (isTextFile) in `root`, one at the top before those in
+ * its subfolders; null for none. A sidecar is not one.
+ */
+export async function firstTextFile(root) {
+  const files = await listDocs(root, { isDoc: (name) => !name.endsWith(SIDECAR_SUFFIX) });
+  const top = files.filter((rel) => !rel.includes('/'));
+  for (const rel of [...top, ...files.filter((rel) => rel.includes('/'))]) {
+    if (await isTextFile(docInFolder(root, rel))) return rel;
+  }
+  return null;
 }
 
 /**

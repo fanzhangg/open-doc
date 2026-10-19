@@ -1,4 +1,4 @@
-// The view contract (web/views/markdown.js): what every view of a doc must do,
+// The view contract (web/views/): what every view of a doc must do,
 // checked on each view in Electron, driven over the DevTools protocol.
 
 import { after, before, test } from 'node:test';
@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
 
-const VIEWS = ['markdown'];
+const VIEWS = ['markdown', 'plain'];
 const root = fileURLToPath(new URL('..', import.meta.url));
 const MOD = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
 
@@ -72,20 +72,22 @@ for (const name of VIEWS) {
   test(`${name} view: setMarks draws comments and a revision over their text`, async () => {
     const text = 'Some **bold** words here.\n\nA new line.\n';
     const at = (quote, from) => text.indexOf(quote, from);
+    // What is drawn over the text, whether or not the view shows its markup.
+    const drawn = async (selector) => (await run(`contract.drawn(${JSON.stringify(selector)})`)).replaceAll('**', '');
     await make(name, text);
     await run(`view.setMarks(${JSON.stringify([
       { kind: 'comment', id: 't1', from: at('bold'), to: at(' here'), active: false },
       { kind: 'comment', id: 't2', from: at('A new'), to: at(' new'), active: true },
       { kind: 'edit', from: at('line'), to: at('.\n', at('line')), removed: 'old **row**', by: null, replay: 0 },
     ])})`);
-    assert.equal(await run(`contract.drawn('[data-thread="t1"]')`), 'bold words');
-    assert.equal(await run(`contract.drawn('[data-thread="t2"].od-hl-active')`), 'A');
-    assert.equal(await run(`contract.drawn('.od-mark-ins')`), 'line');
-    assert.equal(await run(`contract.drawn('del')`), 'old row');
+    assert.equal(await drawn('[data-thread="t1"]'), 'bold words');
+    assert.equal(await drawn('[data-thread="t2"].od-hl-active'), 'A');
+    assert.equal(await drawn('.od-mark-ins'), 'line');
+    assert.equal(await drawn('del'), 'old row');
     await run(`document.querySelector('[data-thread="t1"]').click()`);
     assert.deepEqual(await run('contract.clicked'), ['t1']);
     await run('view.setMarks([])');
-    assert.equal(await run(`contract.drawn('[data-thread], .od-mark-ins, del')`), '');
+    assert.equal(await drawn('[data-thread], .od-mark-ins, del'), '');
   });
 
   test(`${name} view: selection is in offsets on the text`, async () => {

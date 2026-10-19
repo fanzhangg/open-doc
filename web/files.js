@@ -2,15 +2,14 @@
 // a folder at a time as it opens, the open one marked, and light file
 // management: new file, rename and delete (from its menu), and move (drag). The app does each
 // on disk and checks it; the page only names files and folders by their
-// place in the folder. Clicking a doc asks the app to show it in this window
-// (the page is replaced by that doc's); any other file shows here, read only,
-// in place of the doc. The app keeps which subfolders are open, whether the
-// sidebar shows and how far it was scrolled, so the next page draws it just
-// as this one left it.
+// place in the folder. Clicking a file asks the app to show it in this
+// window as a doc (the page is replaced by that doc's); a file that is not
+// one (not text, or too large) shows here, read only, in place of the doc.
+// The app keeps which subfolders are open, whether the sidebar shows and how
+// far it was scrolled, so the next page draws it just as this one left it.
 
 import { icon } from './icons.js';
 
-const DOC_EXTENSION = /\.(md|markdown)$/i;
 const DRAG_SLOP_PX = 4;
 const OPEN_ON_HOVER_MS = 700;
 const SCROLL_EDGE_PX = 28; // a drag this close to the tree's top or bottom scrolls it
@@ -214,12 +213,14 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     }
   }
 
-  function openDoc(node) {
+  // Open the file as a doc, or show it read only when it is not one.
+  function openFile(node) {
     const path = node.dataset.path;
     if (path === view.current) return void closePreview();
     node.setAttribute('aria-busy', 'true');
     // The page saves any edit still on its way before it is replaced.
-    desktop.openInFolder(path).catch((error) => onError(`Could not open ${nameOf(path)}: ${reason(error)}`))
+    desktop.openInFolder(path).then((opened) => opened || showFile(path))
+      .catch((error) => onError(`Could not open ${nameOf(path)}: ${reason(error)}`))
       .finally(() => node.removeAttribute('aria-busy'));
   }
 
@@ -250,10 +251,8 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   }
 
   function activate(node) {
-    const { kind, path } = node.dataset;
-    if (kind === 'folder') setOpen(node, node.getAttribute('aria-expanded') !== 'true');
-    else if (DOC_EXTENSION.test(path)) openDoc(node);
-    else showFile(path);
+    if (node.dataset.kind === 'folder') setOpen(node, node.getAttribute('aria-expanded') !== 'true');
+    else openFile(node);
   }
 
   function menu(node, at = null) {
@@ -431,7 +430,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
       label: 'New file name',
       check: (typed) => problem(typed, parent),
       commit: (typed) => {
-        created = DOC_EXTENSION.test(typed);
+        created = true; // an empty file is text: it opens as a doc
         return desktop.folderCreate(parent, typed).finally(() => { created = null; });
       },
       cancel: () => item.remove(),
