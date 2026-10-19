@@ -7,11 +7,10 @@
 // Buddies don't run: one asked answers with a set reply after a moment.
 // No history, no undo, no menus.
 
-import { createAnchor, findQuote, locate } from '../src/core/anchor.js';
+import { createAnchor, locate } from '../src/core/anchor.js';
 import { askedOf, newId, peopleOf, threadsOf } from '../src/core/comments.js';
 import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
-import { project } from '../src/core/project.js';
 import { DEFAULT_SETTINGS, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
 
 const params = new URLSearchParams(location.search);
@@ -72,11 +71,11 @@ function seed() {
   const files = inFolder ? { ...PROJECT } : { 'Welcome.md': WELCOME };
   const comments = {};
   for (const t of THREADS) {
-    const text = project(files[t.doc]).text;
-    const found = findQuote(text, t.quote);
+    const text = files[t.doc];
+    const start = text.indexOf(t.quote);
     const id = newId('c');
     (comments[t.doc] ??= []).push(
-      { id, anchor: createAnchor(text, found.start, found.end), by: me, at: ago(30), body: t.ask },
+      { id, anchor: createAnchor(text, start, start + t.quote.length), by: me, at: ago(30), body: t.ask },
       { id: newId('c'), thread: id, by: ai(t.by), at: ago(29), body: t.answer },
     );
   }
@@ -121,7 +120,7 @@ const running = new Map(); // buddy name → thread ids
 const agents = () => buddies().map((b) => ({ ...b, state: running.has(b.name) ? 'running' : 'ready', threadIds: running.get(b.name) ?? [] }));
 
 function view() {
-  const text = project(s.files[current]).text;
+  const text = s.files[current];
   const threads = threadsOf(comments(), buddies().map((b) => b.name)).map((thread) => {
     if (!thread.anchor) return { ...thread, detached: false };
     const found = locate(text, thread.anchor);
@@ -178,13 +177,13 @@ function changedBuddies() {
 }
 
 const calls = {
-  state: () => ({ doc: name(current), markdown: s.files[current], docHash: hash(s.files[current]), ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
-  saveDoc({ markdown, baseHash }) {
+  state: () => ({ doc: name(current), text: s.files[current], docHash: hash(s.files[current]), ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
+  saveDoc({ text, baseHash }) {
     const now = s.files[current];
-    if (baseHash !== hash(now)) return { conflict: true, markdown: now, docHash: hash(now) };
-    s.files[current] = markdown;
+    if (baseHash !== hash(now)) return { conflict: true, text: now, docHash: hash(now) };
+    s.files[current] = text;
     save();
-    return { docHash: hash(markdown), markdown };
+    return { docHash: hash(text), text };
   },
   comment: ({ anchor, body }) => add({ anchor, body }),
   reply: ({ thread, body }) => add({ thread, body }),

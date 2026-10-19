@@ -68,7 +68,7 @@ test('the human edits the same text during a run: theirs stays, the buddy\'s cha
     const id = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     await until(async () => (await runs()).length === 1, 'the run to start');
     const now = await state();
-    const saved = await call('saveDoc', { markdown: now.markdown.replace('extra load', 'extra traffic'), baseHash: now.docHash });
+    const saved = await call('saveDoc', { text: now.text.replace('extra load', 'extra traffic'), baseHash: now.docHash });
     assert.ok(!saved.conflict);
     await release('Clippy');
     const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');

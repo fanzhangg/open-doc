@@ -2,27 +2,38 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic } from '../src/store/files.js';
+import { readFileSync } from 'node:fs';
+import { decodeText, encodeText, lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic } from '../src/store/files.js';
 import { watchDoc } from '../src/store/watch.js';
 import { tempDoc } from './helpers.js';
+
+const { cases: docText } = JSON.parse(readFileSync(new URL('../spec/conformance/doc-text.json', import.meta.url), 'utf8'));
+
+for (const c of docText) {
+  test(`doc text: ${c.name}`, () => {
+    const decoded = decodeText(Buffer.from(c.bytes, 'hex'));
+    assert.equal(decoded?.text ?? null, c.text);
+    if (c.written) assert.equal(encodeText(decoded.text, decoded.form).toString('hex'), c.written);
+  });
+}
 
 const LINE = '{"id":"c_store0001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"note"}';
 
 test('a doc without a sidecar has none; writing one leaves no temp file', async () => {
   const docPath = await tempDoc();
   assert.equal(await readSidecarText(docPath), null);
-  await writeAtomic(sidecarPath(docPath), `{"opendoc":2}\n${LINE}\n`);
-  assert.equal(await readSidecarText(docPath), `{"opendoc":2}\n${LINE}\n`);
+  await writeAtomic(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
+  assert.equal(await readSidecarText(docPath), `{"opendoc":3}\n${LINE}\n`);
   assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
 });
 
 test('moveDoc renames the doc and its sidecar together, never over another file', async () => {
   const docPath = await tempDoc();
-  await writeFile(sidecarPath(docPath), `{"opendoc":2}\n${LINE}\n`);
+  await writeFile(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
   const target = join(dirname(docPath), 'renamed.md');
   await moveDoc(docPath, target);
   assert.deepEqual((await readdir(dirname(docPath))).sort(), ['renamed.md', 'renamed.md.opendoc.jsonl']);
-  assert.equal(await readSidecarText(target), `{"opendoc":2}\n${LINE}\n`, 'byte for byte');
+  assert.equal(await readSidecarText(target), `{"opendoc":3}\n${LINE}\n`, 'byte for byte');
   await writeFile(docPath, 'other');
   await assert.rejects(moveDoc(target, docPath), (e) => e.code === 'exists');
 });
@@ -49,7 +60,7 @@ test('watchDoc reports changes to the sidecar', async () => {
   const stop = watchDoc(docPath, () => { calls++; });
   try {
     await new Promise((r) => setTimeout(r, 100));
-    await writeAtomic(sidecarPath(docPath), `{"opendoc":2}\n${LINE}\n`);
+    await writeAtomic(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
     const deadline = Date.now() + 2000;
     while (calls === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
     assert.ok(calls > 0);

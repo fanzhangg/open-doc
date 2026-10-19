@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { editItems } from '../web/review.js';
 import { diffEdits } from '../src/core/diff.js';
-import { project } from '../src/core/project.js';
+import { project } from '../src/formats/markdown/project.js';
 import { locate } from '../src/core/anchor.js';
 import { SAMPLE } from './helpers.js';
 

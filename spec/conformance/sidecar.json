@@ -1,10 +1,10 @@
 {
-  "description": "Reading a version 2 sidecar (spec/SPEC.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
+  "description": "Reading a version 3 sidecar (spec/SPEC.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
   "reading": [
     {
       "name": "a first comment and its replies, in order of at, then id",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_first01\",\"anchor\":{\"exact\":\"extra load\",\"prefix\":\"cannot handle the \",\"suffix\":\".\",\"start\":150},\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Is this right?\"}",
         "{\"id\":\"c_reply03\",\"thread\":\"c_first01\",\"by\":{\"id\":\"u_bob0001\",\"name\":\"bob\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:05:00Z\",\"body\":\"Second\"}",
         "{\"id\":\"c_reply02\",\"thread\":\"c_first01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:02:00Z\",\"body\":\"@Clippy check it\"}",
@@ -27,7 +27,7 @@
     {
       "name": "threads in the order of their first comments",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_later01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-02T09:00:00Z\",\"body\":\"Later\"}",
         "{\"id\":\"c_early01\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T09:00:00Z\",\"body\":\"Earlier\"}"
       ],
@@ -52,7 +52,7 @@
     {
       "name": "the first of two lines with one id is the comment",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_dupe0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Kept\"}",
         "{\"id\":\"c_dupe0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Dropped\"}"
       ],
@@ -73,7 +73,7 @@
     {
       "name": "a reply whose first comment is missing is hidden",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_orphan01\",\"thread\":\"c_gone0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Lost\"}"
       ],
       "threads": [],
@@ -82,7 +82,7 @@
     {
       "name": "resolved when the latest human comment says so; a later comment reopens",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_res00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Fix this\"}",
         "{\"id\":\"c_res00002\",\"thread\":\"c_res00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
         "{\"id\":\"c_open0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Another\"}",
@@ -113,7 +113,7 @@
     {
       "name": "only people resolve and reopen: a buddy's later comment leaves it resolved; an empty human reply reopens",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "{\"id\":\"c_late0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"@Ada look\"}",
         "{\"id\":\"c_late0002\",\"thread\":\"c_late0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
         "{\"id\":\"c_late0003\",\"thread\":\"c_late0001\",\"by\":{\"id\":\"Ada\",\"name\":\"Ada\",\"kind\":\"ai\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"Done.\"}",
@@ -146,7 +146,7 @@
     {
       "name": "bad lines are reported and skipped; unknown fields are kept",
       "sidecar": [
-        "{\"opendoc\":2}",
+        "{\"opendoc\":3}",
         "not json",
         "{\"id\":\"c_nobody01\",\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"no by\"}",
         "{\"id\":\"c_extra001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Hi\",\"future\":{\"x\":1}}",

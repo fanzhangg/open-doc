@@ -1,4 +1,4 @@
-// What re-finding an anchor (SPEC.md §3.3) must always do, checked on
+// What re-finding an anchor (SPEC.md §3.2) must always do, checked on
 // generated docs and edits as well as on the cases that once broke it.
 
 import { test } from 'node:test';
@@ -93,7 +93,7 @@ test('a short quote follows its own sentence when text around it changes a littl
   assert.equal(found?.start, after.indexOf('cache'));
 });
 
-test('a long quote whose sentence was deleted may still move to an exact copy (SPEC §3.3 step 1)', () => {
+test('a long quote whose sentence was deleted may still move to an exact copy (SPEC §3.2 step 1)', () => {
   const before = 'Opening words.\nWe need the capacity doc first.\nFooter: see the capacity doc for details.';
   const anchor = createAnchor(before, before.indexOf('capacity doc'), before.indexOf('capacity doc') + 12);
   const after = 'Opening words.\nFooter: see the capacity doc for details.';

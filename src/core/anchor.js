@@ -1,9 +1,8 @@
-// Anchors (SPEC.md §3): create them from a selection or a quote, and re-find
+// Anchors (SPEC.md §3): create them from a selection, and re-find
 // them after the doc changes — exact match, then context bracket, then fuzzy,
 // else detach.
 
 import search from 'approx-string-match';
-import { project } from './project.js';
 
 export const CONTEXT_LENGTH = 32;
 export const MIN_FUZZY_LENGTH = 4;
@@ -12,16 +11,7 @@ export const MIN_BRACKET_CONTEXT = 8;
 const WINDOW_SLACK = 2048;
 const WEIGHTS = { quote: 50, prefix: 20, suffix: 20, position: 2 };
 
-export class AnchorError extends Error {
-  /** @param {'not_found' | 'ambiguous'} code */
-  constructor(code, message, details = {}) {
-    super(message);
-    this.code = code;
-    Object.assign(this, details);
-  }
-}
-
-/** Anchor for the rendered-text range `[start, end)` (SPEC.md §3.2). */
+/** Anchor for the range `[start, end)` of a doc's text (SPEC.md §3.1). */
 export function createAnchor(text, start, end) {
   if (!(Number.isInteger(start) && Number.isInteger(end) && start >= 0 && start < end && end <= text.length)) {
     throw new RangeError(`invalid range [${start}, ${end}) for text of length ${text.length}`);
@@ -35,36 +25,7 @@ export function createAnchor(text, start, end) {
 }
 
 /**
- * Find an agent-supplied quote in the rendered text. A quote containing
- * markdown syntax is rendered first, so `**ship** it` finds `ship it`.
- *
- * @param {string} text rendered text
- * @param {string} quote
- * @param {{ occurrence?: number }} [options] 0-based pick when the quote repeats
- * @returns {{ start: number, end: number }}
- */
-export function findQuote(text, quote, { occurrence } = {}) {
-  const candidates = [quote, project(quote).text, quote.replace(/\s+/g, ' ').trim()];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const starts = occurrences(text, candidate);
-    if (starts.length === 0) continue;
-    if (occurrence !== undefined) {
-      if (occurrence < 0 || occurrence >= starts.length) {
-        throw new AnchorError('not_found', `occurrence ${occurrence} out of range: the quote appears ${starts.length} time(s)`, { count: starts.length });
-      }
-      return { start: starts[occurrence], end: starts[occurrence] + candidate.length };
-    }
-    if (starts.length > 1) {
-      throw new AnchorError('ambiguous', `the quote appears ${starts.length} times; pick an occurrence`, { count: starts.length });
-    }
-    return { start: starts[0], end: starts[0] + candidate.length };
-  }
-  throw new AnchorError('not_found', 'the quote does not appear in the doc');
-}
-
-/**
- * Re-find an anchor in new rendered text (SPEC.md §3.3).
+ * Re-find an anchor in a doc's text as it is now (SPEC.md §3.2).
  * @returns {{ start: number, end: number, method: 'exact' | 'bracket' | 'fuzzy', score: number } | null}
  */
 export function locate(text, anchor) {
@@ -95,7 +56,7 @@ export function locate(text, anchor) {
   return null;
 }
 
-// Context bracket (SPEC.md §3.3 step 2): when the full prefix and suffix both
+// Context bracket (SPEC.md §3.2 step 2): when the full prefix and suffix both
 // survive unchanged, the anchor is whatever now sits between them.
 function bracket(text, anchor) {
   const { exact, prefix, suffix } = anchor;
@@ -113,7 +74,7 @@ function bracket(text, anchor) {
   return best && { start: best.start, end: best.end, method: 'bracket', score: 0 };
 }
 
-// The one acceptance rule for exact and fuzzy candidates (SPEC.md §3.3). A
+// The one acceptance rule for exact and fuzzy candidates (SPEC.md §3.2). A
 // short quote always needs its context: an exact copy elsewhere is also a
 // perfect fuzzy match, so checking it only in the exact step lets it through.
 function acceptable(candidate, anchor) {

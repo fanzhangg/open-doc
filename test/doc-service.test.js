@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
-import { project } from '../src/core/project.js';
+import { openDoc } from '../src/host/doc-service.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,7 +32,7 @@ test('state returns the doc, its hash, its threads and who you are', async () =>
   await withDoc(async ({ state }) => {
     const now = await state();
     assert.equal(now.doc, 'plan.md');
-    assert.equal(now.markdown, SAMPLE);
+    assert.equal(now.text, SAMPLE);
     assert.match(now.docHash, /^sha256:/);
     assert.deepEqual(now.threads, []);
     assert.equal(now.notice, null);
@@ -41,48 +41,55 @@ test('state returns the doc, its hash, its threads and who you are', async () =>
   });
 });
 
-test('saves are conditional and byte-preserving', async () => {
+test('saves are conditional and write the text as sent', async () => {
   await withDoc(async ({ call, state, docPath }) => {
     const before = await state();
-    const stale = await call('saveDoc', { markdown: 'x', baseHash: 'sha256:0' });
-    assert.deepEqual([stale.conflict, stale.markdown], [true, SAMPLE]);
+    const stale = await call('saveDoc', { text: 'x', baseHash: 'sha256:0' });
+    assert.deepEqual([stale.conflict, stale.text], [true, SAMPLE]);
 
-    // The editor reformats the link and joins the hard wrap, and edits one heading.
-    const fromEditor = SAMPLE.replace('from the\nbeta cohort', 'from the beta cohort').replace('## Risks', '## Main risks');
-    const saved = await call('saveDoc', { markdown: fromEditor, baseHash: before.docHash });
+    const next = SAMPLE.replace('## Risks', '## Main risks');
+    const saved = await call('saveDoc', { text: next, baseHash: before.docHash });
     assert.ok(!saved.conflict);
-    const onDisk = await readFile(docPath, 'utf8');
-    assert.equal(onDisk, SAMPLE.replace('## Risks', '## Main risks'));
+    assert.equal(await readFile(docPath, 'utf8'), next);
     assert.notEqual(saved.docHash, before.docHash);
-    assert.equal(saved.markdown, onDisk, 'the save says what is on disk now');
+    assert.equal(saved.text, next, 'the save says what is on disk now');
   });
 });
 
-test('CRLF docs stay CRLF', async () => {
+test('the doc is its text: a byte order mark and CRLF line ends are kept on disk only', async () => {
   await withDoc(async ({ call, state, docPath }) => {
-    await call('saveDoc', { markdown: '# Title\n\nNew text.\n', baseHash: (await state()).docHash });
-    assert.equal(await readFile(docPath, 'utf8'), '# Title\r\n\r\nNew text.\r\n');
-  }, { content: '# Title\r\n\r\nOld text.\r\n' });
+    const now = await state();
+    assert.equal(now.text, '# Title\n\nOld text.\n');
+    await call('saveDoc', { text: '# Title\n\nNew text.\n', baseHash: now.docHash });
+    assert.equal(await readFile(docPath, 'utf8'), '\uFEFF# Title\r\n\r\nNew text.\r\n');
+  }, { content: '\uFEFF# Title\r\n\r\nOld text.\r\n' });
+});
+
+test('a doc that is not UTF-8 does not open, and is left as it is', async () => {
+  const gbk = Buffer.from([0x23, 0x20, 0xc4, 0xe3, 0xba, 0xc3, 0x0a]); // "# 你好" in GBK
+  const docPath = await tempDoc(gbk);
+  await assert.rejects(openDoc(docPath, { settingsDir: await fakeConfig() }), refused('not_text'));
+  assert.deepEqual(await readFile(docPath), gbk);
 });
 
 test('comments: written as the user, one line each; the anchor is never rewritten, and a reader finds it', async () => {
   await withDoc(async ({ call, state, docPath }) => {
-    const anchor = { exact: 'extra load', prefix: 'service cannot handle the ', suffix: '.', start: project(SAMPLE).text.indexOf('extra load') };
+    const anchor = { exact: 'extra load', prefix: 'service cannot handle the ', suffix: '.', start: SAMPLE.indexOf('extra load') };
     const { id, threads } = await call('comment', { anchor, body: 'Is this right?' });
     assert.match(id, /^c_/);
     const [first] = threads[0].comments;
     assert.equal(first.by.id, (await state()).me.id, 'the page cannot post as someone else');
     await call('reply', { thread: id, body: 'More.' });
     const lines = (await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n');
-    assert.equal(lines[0], '{"opendoc":2}');
+    assert.equal(lines[0], '{"opendoc":3}');
     assert.deepEqual(lines.slice(1).map((l) => JSON.parse(l).body), ['Is this right?', 'More.']);
     assert.deepEqual(JSON.parse(lines[1]).anchor, anchor);
 
-    await call('saveDoc', { markdown: SAMPLE.replace('The main risk', 'The one main risk'), baseHash: (await state()).docHash });
+    await call('saveDoc', { text: SAMPLE.replace('The main risk', 'The one main risk'), baseHash: (await state()).docHash });
     const moved = (await threadOf(state, id)).anchor;
     assert.deepEqual([moved.exact, moved.start], ['extra load', anchor.start + 4], 'found where its text is now');
     assert.deepEqual(JSON.parse((await readFile(sidecarPath(docPath), 'utf8')).split('\n')[1]).anchor, anchor, 'never rewritten');
-    await call('saveDoc', { markdown: SAMPLE.replace('The main risk is that the `sync` service cannot handle the extra load.\n', ''), baseHash: (await state()).docHash });
+    await call('saveDoc', { text: SAMPLE.replace('The main risk is that the `sync` service cannot handle the extra load.\n', ''), baseHash: (await state()).docHash });
     assert.equal((await threadOf(state, id)).detached, true);
 
     for (const bad of [{ body: '' }, { anchor: { exact: '' }, body: 'x' }]) await assert.rejects(call('comment', bad), refused('bad_input'));
@@ -97,8 +104,10 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
     assert.equal((await call('resolve', { thread: id })).threads[0].resolved, true);
     const resolving = JSON.parse((await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n').at(-1));
     assert.deepEqual([resolving.thread, resolving.body, resolving.resolved], [id, '', true]);
+    await pause(2); // comments are ordered by their time, to the millisecond
     assert.equal((await call('reply', { thread: id, body: 'Not yet' })).threads[0].resolved, false);
     await call('resolve', { thread: id });
+    await pause(2);
     assert.equal((await call('reopen', { thread: id })).threads[0].resolved, false);
     assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['Fix this', '', 'Not yet', '', ''], 'reopening is an empty reply');
   });
@@ -125,7 +134,7 @@ test('resolving stops the thread\'s buddy, with nothing it did landing; reopenin
     await pause(500);
     assert.equal((await threadOf(state, id)).resolved, true);
     assert.equal((await threadOf(state, id)).comments.length, 2);
-    assert.match((await state()).markdown, /extra load/);
+    assert.match((await state()).text, /extra load/);
     await call('reopen', { thread: id });
     await pause(1000);
     assert.equal((await fakeRuns(settingsDir)).length, 1);
@@ -141,7 +150,7 @@ test('deleting a buddy stops its runs', { timeout: 30_000 }, async () => {
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await pause(1000);
     assert.equal((await threadOf(state, id)).comments.length, 1);
-    assert.match((await state()).markdown, /extra load/);
+    assert.match((await state()).text, /extra load/);
   });
 });
 
@@ -153,7 +162,7 @@ test('a comment by another user that @mentions a buddy runs nothing; one by you 
     await call('reply', { thread: theirs.id, body: '@Pilot replace "extra load" with "peak load"' });
     await until(async () => (await threadOf(state, theirs.id)).comments.length === 3, 'Pilot\'s reply');
     assert.equal((await fakeRuns(settingsDir)).length, 1);
-  }, { sidecar: `{"opendoc":2}\n${line(theirs)}\n` });
+  }, { sidecar: `{"opendoc":3}\n${line(theirs)}\n` });
 });
 
 test('a v1 sidecar is not read, and its bytes are unchanged', async () => {
@@ -176,7 +185,7 @@ test('a v1 sidecar is not read, and its bytes are unchanged', async () => {
 
 test('a sidecar of another version, or without a header, is shown read-only; a bad line is reported and kept', async () => {
   const theirs = { id: 'c_theirs1', anchor: null, by: { id: 'u_sam', name: 'Sam', kind: 'human' }, at: '2026-01-01T00:00:00Z', body: 'Hi' };
-  for (const [header, readOnly] of [['{"opendoc":3}', 'version'], ['<<<<<<< HEAD', 'invalid']]) {
+  for (const [header, readOnly] of [['{"opendoc":2}', 'older'], ['{"opendoc":4}', 'newer'], ['<<<<<<< HEAD', 'invalid']]) {
     const sidecar = `${header}\n${JSON.stringify(theirs)}\n`;
     await withDoc(async ({ call, state, docPath }) => {
       const now = await state();
@@ -191,12 +200,12 @@ test('a sidecar of another version, or without a header, is shown read-only; a b
     assert.equal((await state()).readOnly, null);
     await call('comment', { anchor: null, body: 'x' });
     assert.equal((await readFile(sidecarPath(docPath), 'utf8')).split('\n')[1], 'not json', 'kept as it is');
-  }, { sidecar: '{"opendoc":2}\nnot json\n' });
+  }, { sidecar: '{"opendoc":3}\nnot json\n' });
 });
 
 test('events: the sidecar and the doc changed on disk', { timeout: 15_000 }, async () => {
   await withDoc(async ({ events, docPath }) => {
-    await writeFile(sidecarPath(docPath), '{"opendoc":2}\n');
+    await writeFile(sidecarPath(docPath), '{"opendoc":3}\n');
     await until(() => events.some(([name]) => name === 'sidecar'), 'a sidecar event');
     await writeFile(docPath, SAMPLE.replace('Q4 Launch Plan', 'Q4 Plan'));
     await until(() => events.some(([name]) => name === 'doc'), 'a doc event');
@@ -211,7 +220,7 @@ test('a doc renamed while open is found at its new path, with its comments', asy
     // A save sent while the rename runs waits for it, then lands in the new file.
     const [moved, saved] = await Promise.all([
       doc.moveTo(newPath),
-      call('saveDoc', { markdown: SAMPLE.replace('Q4', 'Q1'), baseHash: before.docHash }),
+      call('saveDoc', { text: SAMPLE.replace('Q4', 'Q1'), baseHash: before.docHash }),
     ]);
     assert.equal(moved, newPath);
     assert.equal(doc.docPath(), newPath);
@@ -252,18 +261,18 @@ test('a doc deleted while open: missing event, saves refused, recreate writes it
     await until(() => last('missing')?.missing === true, 'the missing event');
     assert.equal(last('missing').doc, 'plan.md');
     assert.equal(doc.hello().missing, true, 'a window that connects now hears it too');
-    await assert.rejects(call('saveDoc', { markdown: '# Back\n', baseHash: before.docHash }), refused('no_doc'));
-    await call('saveDoc', { markdown: '# Back\n', baseHash: before.docHash, recreate: true });
+    await assert.rejects(call('saveDoc', { text: '# Back\n', baseHash: before.docHash }), refused('no_doc'));
+    await call('saveDoc', { text: '# Back\n', baseHash: before.docHash, recreate: true });
     assert.equal(await readFile(docPath, 'utf8'), '# Back\n');
     await until(() => last('missing')?.missing === false, 'the doc back');
     // Recreate on a doc that is there is an ordinary conditional save.
-    assert.equal((await call('saveDoc', { markdown: 'x', baseHash: 'sha256:0', recreate: true })).conflict, true);
+    assert.equal((await call('saveDoc', { text: 'x', baseHash: 'sha256:0', recreate: true })).conflict, true);
   });
 });
 
 test('an @name typed in the doc text is plain text: it asks no one', { timeout: 15_000 }, async () => {
   await withDoc(async ({ call, state, settingsDir }) => {
-    await call('saveDoc', { markdown: `${SAMPLE}\nShip it. @Pilot add the risks here.\n`, baseHash: (await state()).docHash });
+    await call('saveDoc', { text: `${SAMPLE}\nShip it. @Pilot add the risks here.\n`, baseHash: (await state()).docHash });
     await pause(1500);
     assert.deepEqual((await state()).threads, []);
     assert.deepEqual(await fakeRuns(settingsDir), []);
@@ -275,7 +284,7 @@ test('several docs open at once: each saves, comments and runs its buddies', { t
   const opened = await Promise.all([0, 1, 2].map(async () => openTestDoc(await tempDoc(), { settingsDir, buddies: PILOT })));
   try {
     await Promise.all(opened.map(async ({ call, state }, i) => {
-      await call('saveDoc', { markdown: SAMPLE.replace('Q4', `Q${i}`), baseHash: (await state()).docHash });
+      await call('saveDoc', { text: SAMPLE.replace('Q4', `Q${i}`), baseHash: (await state()).docHash });
       await call('comment', { anchor: null, body: `@Pilot replace "extra load" with "load ${i}"` });
     }));
     for (const [i, { state, doc }] of opened.entries()) {
@@ -294,5 +303,5 @@ test('a person is shown by the name in their latest comment', async () => {
   const later = { id: 'c_frank0002', thread: old.id, by: { id: 'u_frank001', name: 'Frank', kind: 'human' }, at: '2026-10-02T10:00:00Z', body: 'second' };
   await withDoc(async ({ state }) => {
     assert.deepEqual((await state()).people, [{ id: 'u_frank001', name: 'Frank' }]);
-  }, { sidecar: `{"opendoc":2}\n${line(old)}\n${line(later)}\n` });
+  }, { sidecar: `{"opendoc":3}\n${line(old)}\n${line(later)}\n` });
 });

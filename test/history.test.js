@@ -28,7 +28,7 @@ test('versions record who changed the doc and how much', async () => {
   assert.deepEqual([versions[2].thread, versions[2].reply], ['c_aaaaaa', 'c_bbbbbb']);
 
   const shown = await readVersion(doc, root, versions[2].id);
-  assert.equal(shown.markdown, 'one two three\n');
+  assert.equal(shown.text, 'one two three\n');
   assert.equal(shown.before, 'one two\n');
   assert.equal((await readVersion(doc, root, versions[0].id)).before, null);
   assert.equal(await readVersion(doc, root, 'v_missing1'), null);
@@ -94,7 +94,7 @@ test('the doc service records saves, changes on disk and restores', async () => 
   await withDoc(async ({ call, state, docPath, versions }) => {
     assert.deepEqual((await versions()).map((v) => v.kind), ['opened']);
     const before = await state();
-    assert.ok(!(await call('saveDoc', { markdown: SAMPLE.replace('six', 'seven'), baseHash: before.docHash })).conflict);
+    assert.ok(!(await call('saveDoc', { text: SAMPLE.replace('six', 'seven'), baseHash: before.docHash })).conflict);
 
     // Written by another program: noticed by the watcher.
     await writeFile(docPath, SAMPLE.replace('six', 'eight'));
@@ -103,13 +103,13 @@ test('the doc service records saves, changes on disk and restores', async () => 
     assert.deepEqual(list.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['external', null]]);
 
     const shown = await call('version', { id: list[1].id });
-    assert.equal(shown.markdown, SAMPLE.replace('six', 'seven'));
+    assert.equal(shown.text, SAMPLE.replace('six', 'seven'));
     assert.equal(shown.before, SAMPLE);
 
     // Restoring needs the doc the page last saw.
     assert.equal((await call('restoreVersion', { id: list[0].id, baseHash: before.docHash })).conflict, true);
     const restored = await call('restoreVersion', { id: list[0].id, baseHash: (await state()).docHash });
-    assert.equal(restored.markdown, SAMPLE);
+    assert.equal(restored.text, SAMPLE);
     assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
     const last = (await versions()).at(-1);
     assert.equal(last.kind, 'restore');

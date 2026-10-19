@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { project, sourceRange, lineOf } from '../src/core/project.js';
+import { project, renderedRange, sourceRange } from '../src/formats/markdown/project.js';
 
 const textOf = (md) => project(md).text;
 
@@ -49,8 +49,17 @@ test('offsets map rendered text back to source', () => {
   const start = p.text.indexOf('ship all six');
   const range = sourceRange(p, start, start + 'ship all six'.length);
   assert.equal(md.slice(range.start, range.end), 'ship all six');
-  assert.equal(lineOf(md, range.start), 3);
   assert.equal(p.offsets.length, p.text.length + 1);
+});
+
+test('a source range draws the rendered characters inside it; markup alone draws an empty range after it', () => {
+  const md = 'We will **ship all six** features.';
+  const p = project(md);
+  const bold = md.indexOf('**ship');
+  const drawn = renderedRange(p, bold, bold + '**ship all six**'.length);
+  assert.equal(p.text.slice(drawn.start, drawn.end), 'ship all six');
+  assert.deepEqual(renderedRange(p, bold, bold + 2), { start: p.text.indexOf('ship'), end: p.text.indexOf('ship') });
+  assert.deepEqual(renderedRange(p, md.length, md.length), { start: p.text.length, end: p.text.length });
 });
 
 test('offsets skip escape characters', () => {

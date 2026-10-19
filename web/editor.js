@@ -5,6 +5,11 @@
 // that differ are replaced (the caret stays put). A buddy's run is flagged
 // with its name (its edits show as a revision, see setPreview); any other
 // change glows with who made it.
+//
+// The page speaks in the doc's text, the file's markdown: anchors and edits
+// on it. Inside, comments and changes are drawn on the rendered text of the
+// editor's document (web/pm-text.js), which the markdown projection of the
+// text (src/formats/markdown/project.js) matches character for character.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
@@ -26,7 +31,10 @@ import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { locate } from '../src/core/anchor.js';
+import { project, renderedAnchor, sourceAnchor } from '../src/formats/markdown/project.js';
+import { splice } from '../src/formats/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
+import { editItems } from './review.js';
 import { markdownPlugins } from './markdown-schema.js';
 import { diagrams } from './diagrams.js';
 import { childPos, diffBlocks, replaceBlocks } from './blocks.js';
@@ -51,7 +59,7 @@ function projectionOf(doc) {
   return projection;
 }
 
-/** The doc range `anchor` is at in `doc` ({ from, to }), or null. */
+/** The doc range rendered-text `anchor` is at in `doc` ({ from, to }), or null. */
 function rangeOf(doc, anchor) {
   let ranges = anchorRanges.get(doc);
   if (!ranges) anchorRanges.set(doc, (ranges = new Map()));
@@ -134,13 +142,13 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 }));
 
 /**
- * @param {{ stage: HTMLElement, markdown: string,
+ * @param {{ stage: HTMLElement, text: string,
  *           onChange: () => void, onSelectThread: (id: string) => void,
  *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
-export async function createDocEditor({ stage, markdown, onChange, onSelectThread, onCommentRequest, editable = true }) {
+export async function createDocEditor({ stage, text, onChange, onSelectThread, onCommentRequest, editable = true }) {
   // The human changed the doc since `updated` last fired: any change not
   // applied from disk, even one that brings back the text as it was saved.
   // What plugins append (the empty line kept after a last table or code
@@ -157,7 +165,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
-      ctx.set(defaultValueCtx, markdown);
+      ctx.set(defaultValueCtx, text);
       if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
       // Milkdown edits headings as if they were source: Backspace or Delete at
       // the start of one takes off a `#` (h3, h2, h1, text). Here Backspace
@@ -206,7 +214,17 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     if (md === undefined) serialized.set(doc, (md = editor.ctx.get(serializerCtx)(doc)));
     return md;
   };
-  const currentMarkdown = () => serialize(view().state.doc);
+  // The doc's text as last read from or written to disk (setDisk). Saving
+  // writes it with each block the human changed in this editor's style and
+  // every other block as it was.
+  let disk = text;
+  let diskProjection = null; // project(disk), when asked for
+  const projectDisk = () => (diskProjection?.source === disk ? diskProjection : (diskProjection = project(disk)));
+  const rendered = (anchor) => renderedAnchor(disk, anchor, projectDisk());
+  const currentText = () => {
+    const ours = serialize(view().state.doc);
+    return ours === serialize(parse(disk)) ? disk : splice(disk, ours);
+  };
   let threads = [];
   let activeId = null;
   let hoverId = null; // the thread whose card is under the pointer
@@ -295,24 +313,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
     const { text } = projection;
     return {
       quote: text.slice(range.start, range.end),
-      prefix: text.slice(Math.max(0, range.start - 32), range.start),
-      suffix: text.slice(range.end, range.end + 32),
-      start: range.start,
-    };
-  }
-
-  // The top-level block holding the caret, as an anchor on the rendered text
-  // ({ exact, prefix, suffix, start }); null when it has no text.
-  function caretBlock() {
-    const v = view();
-    const { $from } = v.state.selection;
-    if ($from.depth === 0) return null;
-    const projection = projectionOf(v.state.doc);
-    const range = textRange(projection, $from.before(1), $from.after(1));
-    if (!range || range.start === range.end) return null;
-    const { text } = projection;
-    return {
-      exact: text.slice(range.start, range.end),
       prefix: text.slice(Math.max(0, range.start - 32), range.start),
       suffix: text.slice(range.end, range.end + 32),
       start: range.start,
@@ -519,7 +519,7 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
    * are replaced, flagged `by` for a while; anything but a buddy's run
    * (`buddy`) also glows.
    */
-  function applyMarkdown(next, by, { buddy = false } = {}) {
+  function applyText(next, by, { buddy = false } = {}) {
     const v = view();
     const current = v.state.doc;
     const target = parse(next);
@@ -550,25 +550,26 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
   }
 
   return {
-    getMarkdown: currentMarkdown,
-    /** Markdown as this editor would write it, for comparing with its own output. */
-    normalize: (md) => {
-      const doc = parse(md);
-      const normal = serialize(doc);
-      // The normal text is usually what gets applied next: same doc.
-      if (normal !== md) parsed = [[normal, doc], ...parsed].slice(0, 4);
-      return normal;
+    /** The doc's text as saving would write it: `disk` unless the human changed something. */
+    getText: currentText,
+    /** The doc's text is now `next` on disk. */
+    setDisk(next) {
+      disk = next;
     },
-    applyMarkdown,
-    /** Replace the content without reporting it as a local edit. */
-    setMarkdown(next) {
+    applyText,
+    /** Show `next`, the doc's text on disk, without reporting it as a local edit. */
+    setText(next) {
+      disk = next;
       editor.action(replaceAll(next, true));
       paintHighlights();
     },
+    /** Threads with anchors on the doc's text, as the doc host sends them. */
     setThreads(next) {
-      threads = next;
+      threads = next.map((t) => (t.anchor && !t.detached ? { ...t, anchor: rendered(t.anchor) } : t));
       paintHighlights();
     },
+    /** The anchor on the doc's text of a selection `hint` (from onCommentRequest), or null. */
+    anchorOf: (hint) => sourceAnchor(currentText(), { exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start }),
     setActive(id) {
       activeId = id;
       paintHighlights();
@@ -579,11 +580,12 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       paintHighlights();
     },
     /**
-     * Show changes in the text (items from web/review.js); [] clears.
-     * `replay` animates them once, `scroll` brings the first into view; `by`
-     * shows them as that buddy's.
+     * Show `edits` (diffEdits records on the doc's text) as a revision; []
+     * clears. `replay` animates them once, `scroll` brings the first into
+     * view; `by` shows them as that buddy's.
      */
-    setPreview(items, { replay = false, scroll = replay, by = null } = {}) {
+    setPreview(edits, { replay = false, scroll = replay, by = null } = {}) {
+      const items = edits.length > 0 ? editItems(disk, edits) : [];
       preview = { items, replay: replay ? ++replays : 0, by };
       paintHighlights();
       if (!scroll || items.length === 0) return;
@@ -598,7 +600,6 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       paintHighlights();
     },
     requestComment,
-    caretBlock,
     /** Which top-level block holds the caret (its index), or null when the editor has no focus. */
     caretIndex() {
       const v = view();
@@ -629,11 +630,13 @@ export async function createDocEditor({ stage, markdown, onChange, onSelectThrea
       keyHandler = handler;
     },
     focus: () => view().focus(),
-    /** Viewport top of each anchor (or of the draft), by thread id. */
+    /** Viewport top of each thread's text (or of the draft's), by id. */
     anchorTops(items) {
       const v = view();
+      const anchors = new Map(threads.map((t) => [t.id, t.anchor]));
       const tops = new Map();
-      for (const { id, anchor } of items) {
+      for (const { id } of items) {
+        const anchor = id === 'draft' ? draft : anchors.get(id);
         const range = anchor && rangeOf(v.state.doc, anchor);
         if (range) tops.set(id, v.coordsAtPos(range.from).top);
       }

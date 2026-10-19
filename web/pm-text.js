@@ -1,7 +1,7 @@
-// The editor-side rendered text (SPEC.md §3.1) built from the ProseMirror
-// document, with a map from each character to a document position. Used to
-// place highlights and to turn a selection into a quote; the canonical anchor
-// is always computed from the markdown with the core projection.
+// The editor-side rendered text (src/formats/markdown/project.js) built from
+// the ProseMirror document, with a map from each character to a document
+// position. Used to place highlights and to turn a selection into a quote,
+// which the markdown projection turns into an anchor on the doc's text.
 
 const WHITESPACE = /\s/;
 
@@ -18,7 +18,7 @@ export function projectDoc(doc) {
       } else if (child.type.name === 'hardbreak' || child.type.name === 'hard_break') {
         chars.push([' ', start]);
       } else if (child.type.name === 'html') {
-        // Raw HTML counts as written (SPEC §3.1); the editor keeps it as one
+        // Raw HTML counts as written; the editor keeps it as one
         // atom, so all of its characters sit at the atom's position.
         for (const ch of child.attrs.value ?? '') chars.push([ch, start]);
       }

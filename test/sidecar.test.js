@@ -1,4 +1,4 @@
-// The version 2 sidecar (spec/SPEC.md): conformance fixtures
+// The version 3 sidecar (spec/SPEC.md): conformance fixtures
 // (spec/conformance/sidecar.json), any order or duplication of lines
 // reading to the same threads, and writing.
 
@@ -54,8 +54,9 @@ test('any order or duplication of lines reads to the same threads (what makes me
 });
 
 test('a version this tool does not know, or no header, is a problem; the lines are still read', () => {
-  assert.equal(parseSidecar('{"opendoc":2}\n').problem, null);
-  assert.equal(parseSidecar('{"opendoc":3}\n').problem, 'version');
+  assert.equal(parseSidecar('{"opendoc":3}\n').problem, null);
+  assert.equal(parseSidecar('{"opendoc":2}\n').problem, 'older');
+  assert.equal(parseSidecar('{"opendoc":4}\n').problem, 'newer');
   assert.equal(parseSidecar('{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": []\n}\n').problem, 'invalid');
   assert.equal(parseSidecar('').problem, 'invalid');
 });

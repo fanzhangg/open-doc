@@ -13,7 +13,7 @@ const saved = (result) => ({ status: result.conflict ? 409 : 200, data: result }
 
 export const api = {
   state: () => call('state'),
-  saveDoc: async (markdown, baseHash, { recreate = false } = {}) => saved(await call('saveDoc', { markdown, baseHash, ...(recreate ? { recreate } : {}) })),
+  saveDoc: async (text, baseHash, { recreate = false } = {}) => saved(await call('saveDoc', { text, baseHash, ...(recreate ? { recreate } : {}) })),
   /** A comment on `anchor` (or the whole doc, for null): the comments now, and its `id`. */
   comment: (anchor, body) => call('comment', { anchor, body }),
   reply: (thread, body) => call('reply', { thread, body }),
@@ -37,11 +37,11 @@ export const api = {
   updateBuddy: (name, patch) => call('updateBuddy', { name, patch }),
   /** Delete buddy `name`'s file: { agents }. */
   deleteBuddy: (name) => call('deleteBuddy', { name }),
-  /** Undo the edit of buddy reply `id`: { docHash, markdown, threads, … }. */
+  /** Undo the edit of buddy reply `id`: { docHash, text, threads, … }. */
   undoReply: (id) => call('undoReply', { id }),
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await call('history')).versions,
-  /** One version: { version, markdown, before }. */
+  /** One version: { version, text, before }. */
   version: (id) => call('version', { id }),
   /** Put the doc back to version `id`; 409 when the doc is no longer at `baseHash`. */
   restoreVersion: async (id, baseHash) => saved(await call('restoreVersion', { id, baseHash })),
