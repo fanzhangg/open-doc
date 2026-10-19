@@ -5,7 +5,6 @@
 // restored, which adds a new version, so a restore can be undone the same way.
 
 import { diffEdits } from '../src/core/diff.js';
-import { createMarkdownView } from './views/markdown.js';
 import { revisionMarks } from './marks.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';
@@ -16,11 +15,12 @@ const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'shor
 const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 /**
- * `api` is web/api.js; `commentOf(threadId)` is the text of the comment a
+ * `api` is web/api.js; `createView` makes the doc's default view (from
+ * web/views/index.js); `commentOf(threadId)` is the text of the comment a
  * buddy's version answered, or null; `onRestore(id)` puts the doc back to
  * version `id` and resolves once the page shows it.
  */
-export function createHistory({ api, commentOf, onRestore, onClose }) {
+export function createHistory({ api, createView, commentOf, onRestore, onClose }) {
   const root = document.documentElement;
   const stage = document.querySelector('.od-history-stage');
   const list = stage.querySelector('.od-history-list');
@@ -45,7 +45,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     if (isOpen()) return;
     root.setAttribute('data-history', '');
     toggleButton.setAttribute('aria-pressed', 'true');
-    view ??= await createMarkdownView({ stage, text: '', editable: false });
+    view ??= await createView({ stage, text: '', editable: false });
     await refresh();
     await select(latest()?.id ?? null);
     list.focus({ preventScroll: true });

@@ -9,12 +9,11 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-const DROPPABLE = /\.(md|markdown)(\.opendoc\.json)?$/i;
 const carriesFiles = (event) => Boolean(event.dataTransfer?.types.includes('Files'));
 
 // Dropping a doc or a folder on any window opens it. Other files are ignored
-// (the app tells a folder from a file); the browser never navigates to a
-// dropped file.
+// (the app tells a doc or a folder from another file); the browser never
+// navigates to a dropped file.
 window.addEventListener('dragover', (event) => {
   if (!carriesFiles(event)) return;
   event.preventDefault();
@@ -24,8 +23,7 @@ window.addEventListener('drop', (event) => {
   if (!carriesFiles(event)) return;
   event.preventDefault();
   if (!event.isTrusted) return;
-  const paths = [...event.dataTransfer.files].map((file) => webUtils.getPathForFile(file))
-    .filter((path) => path && (DROPPABLE.test(path) || !/\.[^\\/.]+$/.test(path)));
+  const paths = [...event.dataTransfer.files].map((file) => webUtils.getPathForFile(file)).filter(Boolean);
   if (paths.length === 0) return;
   event.stopPropagation();
   ipcRenderer.invoke('opendoc:action', 'drop', paths).catch(() => {});
@@ -100,7 +98,7 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   folderList: (path) => ipcRenderer.invoke('opendoc:action', 'folderList', String(path)),
   /** The sidebar's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
   folderRead: (path) => ipcRenderer.invoke('opendoc:action', 'folderRead', String(path)),
-  /** Show the folder's doc `path` in this window. */
+  /** Show the folder's file `path` in this window if it is a doc; false if it is not. */
   openInFolder: (path) => act('openInFolder', String(path)),
   /** Follow a link in this doc: a URL, or a path from the doc's folder. */
   openLink: (href) => act('openLink', String(href)),

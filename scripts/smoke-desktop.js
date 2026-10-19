@@ -1,9 +1,10 @@
-// Smoke test for the desktop app: launch it on two fixture docs, check that
-// each window's editor loads its doc, that a buddy answers an @mention in
-// each (the agent is a fake script), that Cmd+Z undoes only your typing and
-// Undo on a reply the buddy's edit, that the app listens on no port, that
-// a doc host that stops is started again, and that a setting survives a
-// relaunch.
+// Smoke test for the desktop app: launch it on two fixture docs and a .js
+// file, check that each window's editor loads its doc, that a buddy answers
+// an @mention in each (the agent is a fake script), that comments and a
+// buddy's revision show in the .js file's plain view, that Cmd+Z undoes only
+// your typing and Undo on a reply the buddy's edit, that the app listens on
+// no port, that a doc host that stops is started again, and that a setting
+// survives a relaunch.
 //
 //   node scripts/smoke-desktop.js [path to OpenDoc.exe]
 //
@@ -37,6 +38,9 @@ const docs = ['plan.md', 'notes.md'].map((name) => {
   copyFileSync(join(root, 'test', 'fixtures', 'plan.md'), doc);
   return doc;
 });
+const code = join(work, 'app.js');
+const CODE = "function greet(name) {\n\treturn 'Hello, ' + name;\n}\n\nconsole.log(greet('world'));\n";
+writeFileSync(code, CODE);
 // The fake agent runs every buddy: it makes the edit a comment asks for.
 const config = join(work, 'config');
 mkdirSync(join(config, 'agents'), { recursive: true });
@@ -57,8 +61,8 @@ const check = (ok, text) => {
 
 step(`testing ${packaged ? exe : 'the app from this checkout'}`);
 
-step('first launch, on two docs');
-let app = await launch(docs);
+step('first launch, on two docs and a .js file');
+let app = await launch([...docs, code]);
 for (const [i, doc] of docs.entries()) {
   const name = doc.split(/[\\/]/).at(-1);
   const page = await app.page(name);
@@ -72,8 +76,22 @@ for (const [i, doc] of docs.entries()) {
 }
 step('undo');
 const notes = await app.page('notes.md');
-check(await undoesOwnOnly(notes, docs[1]), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
-check(await undoesReply(notes, docs[1]), 'Undo on the reply takes the buddy\'s edit back');
+check(await undoesOwnOnly(notes, docs[1], 'Q2 Launch Plan', 'Q7 Launch Plan'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
+check(await undoesReply(notes, docs[1], 'Q2 Launch Plan'), 'Undo on the reply takes the buddy\'s edit back');
+
+step('a .js file, in the plain view');
+const plain = await app.page('app.js');
+const lines = await plain.evaluate(`(async () => {
+  for (let i = 0; i < 100 && !document.querySelector('.cm-content'); i++) await new Promise((r) => setTimeout(r, 100));
+  return [...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n');
+})()`);
+check(lines === CODE, 'the plain view shows app.js as it is');
+check(await commentShows(plain, CODE, 'greet'), 'a comment on its text is drawn over that text');
+check(await answers(plain, 'Hello', 'Howdy', code), 'a buddy answers in app.js and its edit lands');
+const revision = await waitFor(() => plain.evaluate(`document.querySelector('.od-stage .od-buddy-edit')?.textContent`), 15_000, 'the revision').catch(() => null);
+check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
+check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
+check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
 const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { font: 'serif' }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
@@ -117,43 +135,55 @@ async function answers(page, from, title, doc) {
     }
     return false;
   })()`);
-  return replied && readFileSync(doc, 'utf8').includes(`# ${title}`);
+  return replied && readFileSync(doc, 'utf8').includes(title);
 }
 
-// Type at the end of the doc in `page`, have a buddy change its title, then
-// press Cmd+Z (Ctrl+Z): true when the typing is gone and the title stays.
-async function undoesOwnOnly(page, doc) {
-  await page.evaluate(`(() => {
-    const editor = document.querySelector('.ProseMirror');
+// Comment on the first `quote` in `text`, the doc in `page`: true once its
+// thread's highlight covers just that.
+async function commentShows(page, text, quote) {
+  const start = text.indexOf(quote);
+  const end = start + quote.length;
+  const anchor = { exact: quote, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32), start };
+  const id = await page.evaluate(`window.opendocHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
+  return waitFor(() => page.evaluate(`document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
+    .catch(() => false);
+}
+
+// Type at the end of the doc in `page`, have a buddy change `from` to `to`,
+// then press Cmd+Z (Ctrl+Z): true when the typing is gone and the change stays.
+async function undoesOwnOnly(page, doc, from, to) {
+  await page.evaluate(`(async () => {
+    const editor = document.querySelector('.od-stage [contenteditable="true"]');
     editor.focus();
     const range = document.createRange();
-    range.selectNodeContents([...editor.querySelectorAll('p')].at(-1));
+    range.selectNodeContents([...editor.querySelectorAll('p, .cm-line')].at(-1));
     range.collapse(false);
     getSelection().removeAllRanges();
     getSelection().addRange(range);
+    await new Promise((r) => setTimeout(r, 100)); // the editor takes in the selection
   })()`);
   await page.send('Input.insertText', { text: ' Typed here.' });
   const onDisk = (text) => readFileSync(doc, 'utf8').includes(text);
   await waitFor(() => onDisk('Typed here.'), 15_000, 'the typing to be saved');
-  if (!(await answers(page, 'Q2 Launch Plan', 'Q7 Launch Plan', doc))) return false;
-  await waitFor(() => page.evaluate(`document.querySelector('.ProseMirror').textContent.includes('Q7 Launch Plan')`), 15_000, 'the edit to show');
+  if (!(await answers(page, from, to, doc))) return false;
+  await waitFor(() => page.evaluate(`document.querySelector('.od-stage .od-editor').textContent.includes('${to}')`), 15_000, 'the edit to show');
   await new Promise((done) => setTimeout(done, 2000)); // its typing-in ends
   const modifiers = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
   for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90 });
   await waitFor(() => !onDisk('Typed here.'), 15_000, 'the undo to be saved').catch(() => {});
-  return !onDisk('Typed here.') && onDisk('# Q7 Launch Plan');
+  return !onDisk('Typed here.') && onDisk(to);
 }
 
-// Click Undo on the latest buddy reply in `page`: true once the title it
-// changed is back on disk.
-async function undoesReply(page, doc) {
+// Click Undo on the latest buddy reply in `page`: true once `before`, the
+// text it changed, is back on disk.
+async function undoesReply(page, doc, before) {
   const clicked = await page.evaluate(`(() => {
     const button = [...document.querySelectorAll('.od-receipt-undo')].at(-1);
     button?.click();
     return Boolean(button);
   })()`);
   if (!clicked) return false;
-  return waitFor(() => readFileSync(doc, 'utf8').includes('# Q2 Launch Plan'), 15_000, 'the undo').catch(() => false);
+  return waitFor(() => readFileSync(doc, 'utf8').includes(before), 15_000, 'the undo').catch(() => false);
 }
 
 // Start the app on `paths`.

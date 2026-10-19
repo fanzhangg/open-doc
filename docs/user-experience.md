@@ -12,6 +12,8 @@ How a person writes with buddies in OpenDoc. For why, see the
    files in a sidebar, and lists the recent ones.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
+   Any other text file (code, config, notes) opens as plain text, and
+   comments and buddies work the same there.
 3. **Comment.** Select text and click the comment button at the page edge
    (Ctrl+Alt+M). The comment sits in the margin beside its text and follows
    it as the text changes.

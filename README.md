@@ -17,7 +17,7 @@ Nightly installers for macOS (`.dmg`) and Windows are on the [nightly release](h
 ## Getting started
 
 1. Install the app, or build it from source (see below).
-2. Open a markdown file or a folder.
+2. Open a markdown file or a folder. Other text files open as plain text.
 3. Select some text, add a comment and @mention a buddy. Its reply and any edits show up in the doc as it works.
 
 Buddies run on a command-line agent you already have, such as Claude Code or Codex. See [Agent Config](docs/agent-config.md) to set one up.

@@ -91,10 +91,10 @@ let docHostDown = false;
  */
 async function openPath(path, { create = false, parent = null } = {}) {
   if (isDirectory(path)) return openFolder(path, parent);
-  const docPath = docPathFor(path);
+  const docPath = await docPathFor(path);
   if (!docPath) {
     await warn(parent, `OpenDoc can't open ${basename(path)}.`,
-      'It opens Markdown docs (.md or .markdown) and their comment files (.md.opendoc.jsonl).');
+      'It opens text files (UTF-8, up to 1 MB) and their comment files (.opendoc.jsonl).');
     return false;
   }
   if (!isFile(docPath)) {
@@ -234,21 +234,26 @@ async function newDocDialog(parent) {
   await show(path, parent);
 }
 
-/** File > Rename: the doc and its comments move together, and the window stays open. */
+/**
+ * File > Rename: the doc and its comments move together, and the window
+ * stays open. A Markdown doc stays one (.md added if left off).
+ */
 async function renameDialog(win) {
   const entry = windows.docFor(win);
   if (!entry) return;
   const from = entry.docPath;
+  const markdown = isDocName(from);
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: `Rename ${basename(from)}`,
     buttonLabel: 'Rename',
     defaultPath: from,
-    filters: [MARKDOWN],
+    filters: markdown ? [MARKDOWN] : [],
     properties: ['createDirectory'],
   });
-  if (canceled || !filePath || withDocExtension(filePath) === from) return;
+  const toPath = filePath && markdown ? withDocExtension(filePath) : filePath;
+  if (canceled || !toPath || toPath === from) return;
   try {
-    const to = await windows.renameOpenDoc(entry, withDocExtension(filePath));
+    const to = await windows.renameOpenDoc(entry, toPath);
     state.recent = renameRecent(state.recent, from, to);
     app.addRecentDocument(to);
     state.lastFolder = dirname(to);
@@ -542,7 +547,7 @@ async function sidebarCreate(win, { parent, name } = {}) {
   const rel = relativeDoc(entry.folder, path);
   windows.expandFolder(entry, parentRel(rel));
   windows.relist(entry);
-  if (isDocName(path)) await show(path, win);
+  if (await docPathFor(path)) await show(path, win);
   return { rel };
 }
 
@@ -600,14 +605,14 @@ async function moveFolderOf(fromPath, toPath) {
   if (windows.openDocs().some((other) => other.folder && inFolder(other.folder))) {
     throw Object.assign(new Error(`${basename(fromPath)} is open in its own window`), { code: 'busy' });
   }
-  const docs = await listDocs(fromPath, { max: Infinity });
+  const files = await listDocs(fromPath, { max: Infinity, isDoc: () => true });
   const open = windows.openDocs().filter((other) => inFolder(other.docPath));
   const openPaths = new Set(open.map((other) => other.docPath));
   await moveFolder(fromPath, toPath);
   const target = (path) => join(toPath, relative(fromPath, path));
   await Promise.all(open.map((other) => windows.renameOpenDoc(other, target(other.docPath), { moved: true })
     .catch((error) => console.error(error))));
-  for (const rel of docs) {
+  for (const rel of files) {
     const before = docInFolder(fromPath, rel);
     if (!openPaths.has(before)) await followDoc(before, target(before));
   }
@@ -763,7 +768,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   const fromDoc = Boolean(windows.docFor(win));
   if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
-  if (action === 'openInFolder' && fromDoc) return void (await openInFolder(win, arg));
+  if (action === 'openInFolder' && fromDoc) return openInFolder(win, arg);
   if (action === 'openLink' && fromDoc) return void (await openLink(win, arg));
   if (action === 'folderExpand' && fromDoc) {
     if (typeof arg?.path === 'string') windows.setExpanded(win, arg.path, Boolean(arg.open));
@@ -788,7 +793,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'drop' && (fromStart || fromDoc)) {
     // Docs and folders; any other file dropped is ignored.
     for (const path of cleanPaths(arg, 20)) {
-      if (isDirectory(path) || docPathFor(path)) await openPath(path, { parent: win });
+      if (isDirectory(path) || (await docPathFor(path))) await openPath(path, { parent: win });
     }
     return undefined;
   }
@@ -802,12 +807,13 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   throw new Error(`not allowed: ${action}`);
 });
 
-// The sidebar of a folder window names one of its docs (`/` between
-// folders); anything else is refused.
+// The sidebar of a folder window names one of its files (`/` between
+// folders); a doc opens, and false says the file is not one.
 async function openInFolder(win, rel) {
   const path = checkInFolder(sidebarOf(win), rel, 'file');
-  if (!isDocName(path)) throw new Error('not allowed');
+  if ((await docPathFor(path)) !== path) return false;
   await openPath(path, { parent: win });
+  return true;
 }
 
 // A link followed in a doc: the web goes to the browser; a path, from the

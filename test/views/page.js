@@ -3,8 +3,9 @@
 // for any view that edits through contenteditable.
 
 import { createMarkdownView } from '../../web/views/markdown.js';
+import { createPlainView } from '../../web/views/plain.js';
 
-const VIEWS = { markdown: createMarkdownView };
+const VIEWS = { markdown: createMarkdownView, plain: createPlainView };
 const stage = document.querySelector('.od-stage');
 let view = null;
 
