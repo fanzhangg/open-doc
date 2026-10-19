@@ -17,7 +17,7 @@ import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
-import { formatOf } from '../src/formats/index.js';
+import { harnessOf } from '../src/plugins/index.js';
 import { diffEdits } from '../src/core/diff.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
@@ -440,7 +440,7 @@ async function doSync(by) {
   const theirs = fresh.text;
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
-  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', format: formatOf(docName) });
+  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', harness: harnessOf(docName, settings.get()) });
   // A buddy's changes show as its revision; anything else glows.
   editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
   paintMarks();

@@ -10,7 +10,7 @@
 // markdown (the view interface is what createMarkdownView returns first;
 // test/views.test.js is its contract). Inside, marks are drawn on the
 // rendered text of the editor's document (web/pm-text.js), which the
-// markdown projection of the text (src/formats/markdown/project.js) matches
+// markdown projection of the text (src/markdown/project.js) matches
 // character for character.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
@@ -33,8 +33,8 @@ import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { createAnchor, locate } from '../../../src/core/anchor.js';
-import { project, renderedRange, sourceRange } from '../../../src/formats/markdown/project.js';
-import { splice } from '../../../src/formats/markdown/splice.js';
+import { project, renderedRange, sourceRange } from '../../../src/markdown/project.js';
+import { splice } from '../../../src/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
 import { editItems } from '../../review.js';
 import { markdownPlugins } from '../../markdown-schema.js';

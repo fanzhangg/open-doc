@@ -1,7 +1,7 @@
 // Rendered text: what a reader of a markdown doc sees, with its syntax
 // removed, plus a map from each character back to the source. The WYSIWYG
 // editor reaches its document through it (web/plugins/markdown/view.js builds the same text
-// from its own document), and the merge check compares it (./index.js).
+// from its own document), and the Markdown harness compares it (src/plugins/markdown.js).
 //
 // Built from the CommonMark + GFM tree, with emphasis read the CJK-friendly
 // way (`**熟悉：**直接` is bold): each text block (paragraph, heading, table
@@ -13,7 +13,7 @@
 // the line is trimmed.
 
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import { createAnchor, locate } from '../../core/anchor.js';
+import { createAnchor, locate } from '../core/anchor.js';
 import { gfm } from 'micromark-extension-gfm';
 import { cjkFriendlyExtension } from 'micromark-extension-cjk-friendly';
 import { gfmFromMarkdown } from 'mdast-util-gfm';

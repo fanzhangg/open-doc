@@ -12,7 +12,7 @@ export const SETTINGS_VERSION = 2;
  * "not chosen yet": the doc host suggests one. `agent` names the agent
  * script that runs every buddy (src/store/agents.js). Buddies are files
  * (src/store/buddies.js), never settings. `plugins` holds each plugin's
- * switches by its id (`{ markdown: { enabled: false } }`); a switch not
+ * switches by its id (`{ <id>: { enabled: false } }`); a switch not
  * there takes the default the plugin declares (pluginSettings).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -88,7 +88,7 @@ export function resolveSettings(stored) {
   return out;
 }
 
-/** The settings of `plugin` (a declaration, web/plugins/): on unless switched off, its own defaults for the rest. */
+/** The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on unless switched off, its own defaults for the rest. */
 export function pluginSettings(settings, plugin) {
   return { enabled: true, ...plugin.settings, ...settings.plugins[plugin.id] };
 }

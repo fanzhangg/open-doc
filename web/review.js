@@ -7,7 +7,7 @@
 // doc, shown before or after the span: the old text an edit removed.
 
 import { createAnchor } from '../src/core/anchor.js';
-import { project, renderedRange } from '../src/formats/markdown/project.js';
+import { project, renderedRange } from '../src/markdown/project.js';
 
 /**
  * Edit marks on `markdown` as a revision: the text they added highlighted

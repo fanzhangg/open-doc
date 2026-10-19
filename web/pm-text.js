@@ -1,4 +1,4 @@
-// The editor-side rendered text (src/formats/markdown/project.js) built from
+// The editor-side rendered text (src/markdown/project.js) built from
 // the ProseMirror document, with a map from each character to a document
 // position. Used to place highlights and to turn a selection into a quote,
 // which the markdown projection turns into an anchor on the doc's text.
