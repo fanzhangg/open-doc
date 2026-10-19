@@ -86,6 +86,8 @@ test('who is asked: whom my comment @mentions, or with no mention the thread\'s 
   assert.deepEqual(askedOf(thread([me, '@Clippy @Ada'], [clippy, 'Mine']), 'u_me000001'), ['Ada']);
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [me, '', { resolved: true }]), 'u_me000001'), [], 'a resolved thread asks no one');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [me, '', { resolved: true }], [me, '']), 'u_me000001'), [], 'reopening asks no one');
+  assert.deepEqual(askedOf(thread([me, '@Clippy look'], [me, '', { resolved: true }], [me, '']), 'u_me000001'), [], 'resolving drops an unanswered ask');
+  assert.deepEqual(askedOf(thread([me, '@Clippy look'], [me, '', { resolved: true }], [me, ''], [me, 'and now this']), 'u_me000001'), ['Clippy'], 'after reopening, a follow-up asks the thread\'s buddies');
   assert.equal(thread([me, '@Clippy look'], [me, '', { resolved: true }], [clippy, 'Late.']).resolved, true, "a buddy's comment does not reopen");
   const ada = by('Ada', 'Ada', 'ai');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [me, 'and now this']), 'u_me000001'), ['Clippy'], 'a follow-up with no mention asks the thread\'s buddies');
