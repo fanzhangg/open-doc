@@ -12,12 +12,12 @@
 // folder, so a running OpenDoc and the user's settings are not touched. The
 // app is driven over the DevTools protocol, the one port it opens here.
 
-import { spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launchElectron, waitFor } from './devtools.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGED = {
@@ -156,89 +156,9 @@ async function undoesReply(page, doc) {
   return waitFor(() => readFileSync(doc, 'utf8').includes('# Q2 Launch Plan'), 15_000, 'the undo').catch(() => false);
 }
 
-// Start the app on `paths` with the DevTools protocol on a port it picks.
-async function launch(paths) {
-  const child = spawn(exe, [...appArgs, '--remote-debugging-port=0', `--user-data-dir=${join(work, 'profile')}`, ...paths], { env, stdio: ['ignore', 'ignore', 'pipe'] });
-  const exited = new Promise((done) => child.once('exit', done));
-  const devtoolsPort = await new Promise((done, fail) => {
-    let text = '';
-    const timer = setTimeout(() => fail(new Error('the app did not start')), 30_000);
-    child.stderr.on('data', (chunk) => {
-      text += chunk;
-      const found = text.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
-      if (found) {
-        clearTimeout(timer);
-        done(Number(found[1]));
-      }
-    });
-  });
-  const base = `http://127.0.0.1:${devtoolsPort}`;
-  return {
-    pid: child.pid,
-    devtoolsPort,
-    // The page whose title starts with `name`, once there.
-    async page(name) {
-      const target = await waitFor(async () => (await (await fetch(`${base}/json`)).json())
-        .find((t) => t.type === 'page' && t.title.startsWith(name)), 30_000, `the ${name} window`);
-      const cdp = await connect(target.webSocketDebuggerUrl);
-      return {
-        send: (method, params) => cdp.send(method, params),
-        async evaluate(expression) {
-          const res = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-          if (res.result?.exceptionDetails) throw new Error(res.result.exceptionDetails.text);
-          return res.result?.result?.value;
-        },
-      };
-    },
-    async quit() {
-      const { webSocketDebuggerUrl } = await (await fetch(`${base}/json/version`)).json();
-      const browser = await connect(webSocketDebuggerUrl);
-      browser.send('Browser.close').catch(() => {});
-      const code = await Promise.race([exited, new Promise((done) => setTimeout(() => done('timeout'), 15_000))]);
-      if (code === 'timeout') {
-        child.kill();
-        throw new Error('the app did not quit');
-      }
-    },
-  };
-}
-
-async function waitFor(probe, ms, what) {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    try {
-      const value = await probe();
-      if (value) return value;
-    } catch {
-      // not up yet
-    }
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await new Promise((done) => setTimeout(done, 250));
-  }
-}
-
-async function connect(url) {
-  const ws = new WebSocket(url);
-  await new Promise((done, fail) => {
-    ws.onopen = done;
-    ws.onerror = fail;
-  });
-  let id = 0;
-  const pending = new Map();
-  ws.onmessage = (event) => {
-    const message = JSON.parse(event.data);
-    pending.get(message.id)?.(message);
-    pending.delete(message.id);
-  };
-  return {
-    send(method, params = {}) {
-      return new Promise((done) => {
-        const n = ++id;
-        pending.set(n, done);
-        ws.send(JSON.stringify({ id: n, method, params }));
-      });
-    },
-  };
+// Start the app on `paths`.
+function launch(paths) {
+  return launchElectron(exe, [...appArgs, `--user-data-dir=${join(work, 'profile')}`, ...paths], { env });
 }
 
 // Linux: `pid` and every process under it.

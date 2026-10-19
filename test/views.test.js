@@ -1,0 +1,121 @@
+// The view contract (web/editor.js): what every view of a doc must do,
+// checked on each view in Electron, driven over the DevTools protocol.
+
+import { after, before, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { launchElectron, waitFor } from '../scripts/devtools.js';
+
+const VIEWS = ['markdown'];
+const root = fileURLToPath(new URL('..', import.meta.url));
+const MOD = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
+
+let app;
+let page;
+
+before(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'opendoc-views-'));
+  await build({
+    entryPoints: [join(root, 'test', 'views', 'page.js')], outfile: join(dir, 'page.js'),
+    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
+  });
+  await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
+  await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>views</title><link rel="stylesheet" href="app.css">
+<main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main>
+<script src="page.js"></script>`);
+  const electron = createRequire(import.meta.url)('electron');
+  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html') };
+  delete env.ELECTRON_RUN_AS_NODE;
+  app = await launchElectron(electron, [join(root, 'test', 'views', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
+  page = await app.page('views');
+  await waitFor(() => page.evaluate('Boolean(window.contract)'), 30_000, 'the contract page');
+});
+
+after(() => app?.quit());
+
+const run = (expression) => page.evaluate(`(async () => ${expression})()`);
+const make = (name, text, options = {}) => run(`contract.make(${JSON.stringify(name)}, ${JSON.stringify(text)}, ${JSON.stringify(options)})`);
+const select = (quote, start, end) => run(`contract.select(${JSON.stringify(quote)}, ${start}, ${end})`);
+const getText = () => run('view.getText()');
+const type = (text) => page.send('Input.insertText', { text });
+async function undo() {
+  for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers: MOD, key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90 });
+}
+
+for (const name of VIEWS) {
+  test(`${name} view: getText gives back the text it was made with`, async () => {
+    const plan = await readFile(join(root, 'test', 'fixtures', 'plan.md'), 'utf8');
+    for (const text of [plan, 'Some __bold__ and _slanted_ text\n\n* one\n* two\n', '']) {
+      await make(name, text);
+      assert.equal(await getText(), text);
+    }
+    assert.equal(await run(`document.querySelectorAll('[contenteditable]').length`), 1, 'destroy takes a view away');
+  });
+
+  test(`${name} view: applyText is outside the undo history and keeps the caret`, async () => {
+    await make(name, 'Alpha.\n\nBeta.\n');
+    await select('Beta.', 5, 5);
+    await type(' X');
+    assert.equal(await getText(), 'Alpha.\n\nBeta. X\n');
+    await run(`view.applyText('Alpha one.\\n\\nBeta. X\\n', { by: 'Someone' })`);
+    await type(' Y');
+    assert.equal(await getText(), 'Alpha one.\n\nBeta. X Y\n');
+    for (let i = 0; i < 3; i++) await undo();
+    assert.equal(await getText(), 'Alpha one.\n\nBeta.\n');
+  });
+
+  test(`${name} view: setMarks draws comments and a revision over their text`, async () => {
+    const text = 'Some **bold** words here.\n\nA new line.\n';
+    const at = (quote, from) => text.indexOf(quote, from);
+    await make(name, text);
+    await run(`view.setMarks(${JSON.stringify([
+      { kind: 'comment', id: 't1', from: at('bold'), to: at(' here'), active: false },
+      { kind: 'comment', id: 't2', from: at('A new'), to: at(' new'), active: true },
+      { kind: 'edit', from: at('line'), to: at('.\n', at('line')), removed: 'old **row**', by: null, replay: 0 },
+    ])})`);
+    assert.equal(await run(`contract.drawn('[data-thread="t1"]')`), 'bold words');
+    assert.equal(await run(`contract.drawn('[data-thread="t2"].od-hl-active')`), 'A');
+    assert.equal(await run(`contract.drawn('.od-mark-ins')`), 'line');
+    assert.equal(await run(`contract.drawn('del')`), 'old row');
+    await run(`document.querySelector('[data-thread="t1"]').click()`);
+    assert.deepEqual(await run('contract.clicked'), ['t1']);
+    await run('view.setMarks([])');
+    assert.equal(await run(`contract.drawn('[data-thread], .od-mark-ins, del')`), '');
+  });
+
+  test(`${name} view: selection is in offsets on the text`, async () => {
+    const text = 'Some **bold** words.\n';
+    await make(name, text);
+    await select('bold');
+    assert.deepEqual(await run('view.selection()'), { from: text.indexOf('bold'), to: text.indexOf('bold') + 4 });
+    await select('words', 2, 2);
+    assert.deepEqual(await run('view.selection()'), { from: text.indexOf('words') + 2, to: text.indexOf('words') + 2 });
+  });
+
+  test(`${name} view: tops places offsets outside the viewport, and scrollTo brings one in`, async () => {
+    const text = Array.from({ length: 300 }, (_, i) => `Paragraph ${i}.`).join('\n\n') + '\n';
+    const last = text.indexOf('Paragraph 299');
+    await make(name, text);
+    const [first, end] = await run(`view.tops([0, ${last}])`);
+    const height = await run('innerHeight');
+    assert.ok(first < height && end > height, `tops ${first}, ${end} in a viewport ${height} high`);
+    await run(`view.scrollTo(${last})`);
+    await waitFor(async () => {
+      const [top] = await run(`view.tops([${last}])`);
+      return top >= 0 && top < height;
+    }, 5_000, 'the offset to scroll into view');
+  });
+
+  test(`${name} view: a read-only view cannot be edited`, async () => {
+    await make(name, 'Alpha.\n', { editable: false });
+    await select('Alpha', 2, 2);
+    await type('Z');
+    await new Promise((done) => setTimeout(done, 100));
+    assert.equal(await getText(), 'Alpha.\n');
+  });
+}

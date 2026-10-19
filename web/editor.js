@@ -1,15 +1,16 @@
-// The page: a Milkdown (ProseMirror) WYSIWYG editor with comment highlights,
-// a suggestion-style view of a proposal or a past edit, named
-// formatting commands for the toolbar, selection bubble and "/" menu, and
+// The Markdown view: a Milkdown (ProseMirror) WYSIWYG editor that draws the
+// page's marks (comments, a draft, a revision), with named formatting
+// commands for the toolbar, selection bubble and "/" menu, and
 // collaborator-style application of changes made on disk: only the blocks
-// that differ are replaced (the caret stays put). A buddy's run is flagged
-// with its name (its edits show as a revision, see setPreview); any other
-// change glows with who made it.
+// that differ are replaced (the caret stays put). A buddy's change is
+// flagged with its name; any other change glows with who made it.
 //
-// The page speaks in the doc's text, the file's markdown: anchors and edits
-// on it. Inside, comments and changes are drawn on the rendered text of the
-// editor's document (web/pm-text.js), which the markdown projection of the
-// text (src/formats/markdown/project.js) matches character for character.
+// The page talks to a view in offsets on the doc's text, the file's
+// markdown (the view interface is what createMarkdownView returns first;
+// test/views.test.js is its contract). Inside, marks are drawn on the
+// rendered text of the editor's document (web/pm-text.js), which the
+// markdown projection of the text (src/formats/markdown/project.js) matches
+// character for character.
 
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, serializerCtx, remarkStringifyOptionsCtx } from '@milkdown/kit/core';
 import {
@@ -25,13 +26,13 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { cursor } from '@milkdown/kit/plugin/cursor';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { $prose, $shortcut, callCommand, replaceAll } from '@milkdown/kit/utils';
+import { $prose, $shortcut, callCommand } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
 import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
-import { locate } from '../src/core/anchor.js';
-import { project, renderedAnchor, sourceAnchor } from '../src/formats/markdown/project.js';
+import { createAnchor, locate } from '../src/core/anchor.js';
+import { project, renderedRange, sourceRange } from '../src/formats/markdown/project.js';
 import { splice } from '../src/formats/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from './pm-text.js';
 import { editItems } from './review.js';
@@ -46,30 +47,14 @@ const flashKey = new PluginKey('opendoc-flash');
 const linkKey = new PluginKey('opendoc-link');
 const FROM_DISK = 'opendoc-from-disk'; // meta of a change applied from disk, not typed
 
-// A ProseMirror doc never changes, so its projection and where each anchor is
-// in it are worked out once per doc, however often the highlights, the
-// margin ask. Comment and agent events that leave the
-// text alone then cost next to nothing.
+// A ProseMirror doc never changes, so its projection is worked out once per
+// doc, however often the marks, the margin ask.
 const projections = new WeakMap();
-const anchorRanges = new WeakMap();
 
 function projectionOf(doc) {
   let projection = projections.get(doc);
   if (!projection) projections.set(doc, (projection = projectDoc(doc)));
   return projection;
-}
-
-/** The doc range rendered-text `anchor` is at in `doc` ({ from, to }), or null. */
-function rangeOf(doc, anchor) {
-  let ranges = anchorRanges.get(doc);
-  if (!ranges) anchorRanges.set(doc, (ranges = new Map()));
-  const key = JSON.stringify(anchor);
-  if (!ranges.has(key)) {
-    const projection = projectionOf(doc);
-    const found = locate(projection.text, anchor);
-    ranges.set(key, found ? docRange(projection, found.start, found.end) : null);
-  }
-  return ranges.get(key);
 }
 
 // Decorations replaced wholesale through a meta, mapped through other edits.
@@ -142,19 +127,25 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 }));
 
 /**
- * @param {{ stage: HTMLElement, text: string,
- *           onChange: () => void, onSelectThread: (id: string) => void,
- *           onCommentRequest: (selection: { quote: string, prefix: string, suffix: string, start: number } | null) => void }} options
+ * A mark is drawn over a range of the doc's text:
+ * - { kind: 'comment', id, from, to, active }: commented text, `id` its
+ *   thread's (or 'draft'); clicking it calls onMarkClick(id).
+ * - { kind: 'edit', from, to, removed, by, replay }: part of a revision,
+ *   [from, to) new text and `removed` the text it replaced, shown struck
+ *   through before it; `by` shows it as that buddy's, and a new `replay`
+ *   number (0: none) animates it once.
+ *
+ * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
+ *           onMarkClick?: (id: string) => void, onLayout?: () => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
-export async function createDocEditor({ stage, text, onChange, onSelectThread, onCommentRequest, editable = true }) {
+export async function createMarkdownView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {} }) {
   // The human changed the doc since `updated` last fired: any change not
   // applied from disk, even one that brings back the text as it was saved.
   // What plugins append (the empty line kept after a last table or code
   // block, which saves as nothing) follows from another change.
   let edited = false;
-  let onDocUpdated = () => {};
   const uiListeners = new Set();
   let keyHandler = () => false;
   const hooks = {
@@ -179,7 +170,6 @@ export async function createDocEditor({ stage, text, onChange, onSelectThread, o
       }));
       // `updated` is debounced (200 ms) and fires only when the doc changed.
       ctx.get(listenerCtx).updated(() => {
-        onDocUpdated();
         if (edited) {
           edited = false;
           onChange();
@@ -214,116 +204,129 @@ export async function createDocEditor({ stage, text, onChange, onSelectThread, o
     if (md === undefined) serialized.set(doc, (md = editor.ctx.get(serializerCtx)(doc)));
     return md;
   };
-  // The doc's text as last read from or written to disk (setDisk). Saving
-  // writes it with each block the human changed in this editor's style and
-  // every other block as it was.
-  let disk = text;
-  let diskProjection = null; // project(disk), when asked for
-  const projectDisk = () => (diskProjection?.source === disk ? diskProjection : (diskProjection = project(disk)));
-  const rendered = (anchor) => renderedAnchor(disk, anchor, projectDisk());
-  const currentText = () => {
-    const ours = serialize(view().state.doc);
-    return ours === serialize(parse(disk)) ? disk : splice(disk, ours);
+  // The doc's text as this view was last given it. Its text is that, with
+  // each block the human changed in this editor's style and every other
+  // block as it was; worked out once per doc, and projected once when asked.
+  let given = text;
+  const texts = new WeakMap(); // doc → { given, text, projection }
+  const sourceOf = (doc) => {
+    let source = texts.get(doc);
+    if (source?.given !== given) {
+      const ours = serialize(doc);
+      texts.set(doc, (source = { given, text: ours === serialize(parse(given)) ? given : splice(given, ours), projection: null }));
+    }
+    return source;
   };
-  let threads = [];
-  let activeId = null;
-  let hoverId = null; // the thread whose card is under the pointer
-  let preview = { items: [], replay: 0 }; // see web/review.js; replay > 0 animates it once
-  let replays = 0;
-  let draft = null; // anchor-like hint of the selection being commented on
-  const layoutListeners = new Set();
+  const currentText = () => sourceOf(view().state.doc).text;
+  const projected = (doc) => {
+    const source = sourceOf(doc);
+    return (source.projection ??= project(source.text));
+  };
 
+  // Rendered ranges of the doc's text and of the editor's document are the
+  // same when the two rendered texts agree, as they should
+  // (test/rendered-text.test.js); otherwise one is found in the other by its
+  // words, or not at all.
+  const across = (from, to, start, end) => (from.text === to.text
+    ? { start, end }
+    : locate(to.text, createAnchor(from.text, start, end)));
+
+  /** The document range drawn from text range [from, to), or null when it draws nothing. */
+  function docRangeOf(doc, from, to) {
+    const projection = projected(doc);
+    const rendered = renderedRange(projection, from, to);
+    if (rendered.start === rendered.end) return null;
+    const editorProjection = projectionOf(doc);
+    const found = across(projection, editorProjection, rendered.start, rendered.end);
+    return found && docRange(editorProjection, found.start, found.end);
+  }
+
+  /**
+   * The document range of the character drawn at text offset `at`, or of the
+   * last one when none is at or after it; null for a doc with no text.
+   */
+  function charAt(doc, at) {
+    const projection = projected(doc);
+    if (projection.text.length === 0) return null;
+    const i = Math.min(renderedRange(projection, at, at).start, projection.text.length - 1);
+    const editorProjection = projectionOf(doc);
+    const found = across(projection, editorProjection, i, i + 1);
+    return found && docRange(editorProjection, found.start, found.end);
+  }
+
+  /** Text offset of document position `pos`, or null when it is not in the text. */
+  function offsetAt(doc, pos) {
+    const editorProjection = projectionOf(doc);
+    const { positions, text: rendered } = editorProjection;
+    const projection = projected(doc);
+    let i = positions.findIndex((p) => p >= pos);
+    if (i === -1) i = rendered.length;
+    if (rendered[i] === '\n' && positions[i + 1] === positions[i]) i++;
+    // Before the character at `pos`, else after the one before it.
+    const before = i < rendered.length && positions[i] === pos;
+    const at = before ? i : i - 1;
+    if (at < 0) return 0;
+    const found = across(editorProjection, projection, at, at + 1);
+    return found && projection.offsets[found.start] + (before ? 0 : 1);
+  }
+
+  let marks = [];
   // What was last painted, so a repaint that would draw the same is skipped.
   let paintedDoc = null;
   let painted = '';
 
-  function paintHighlights() {
+  function paintMarks() {
     const v = view();
+    const { doc } = v.state;
     const decorations = [];
     const drawn = [];
-    const open = new Map(threads.filter((t) => t.anchor && !t.detached && !t.resolved).map((t) => [t.id, t]));
-    const comment = (from, to, id) => {
-      const thread = open.get(id);
-      if (!thread && id !== 'draft') return;
-      const active = id === 'draft' || id === activeId || id === hoverId;
-      const classes = active ? 'od-hl od-hl-active' : 'od-hl';
-      decorations.push(Decoration.inline(from, to, { class: classes, 'data-thread': id }, { thread: id, active }));
-      drawn.push(from, to, id, classes);
-    };
-    {
-      const find = (anchor) => rangeOf(v.state.doc, anchor);
-      for (const [id, thread] of open) {
-        const range = find(thread.anchor);
-        if (range) comment(range.from, range.to, id);
+    for (const mark of marks) {
+      if (mark.kind === 'comment') {
+        const range = docRangeOf(doc, mark.from, mark.to);
+        if (!range) continue;
+        const classes = mark.active ? 'od-hl od-hl-active' : 'od-hl';
+        decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': mark.id }, { thread: mark.id, active: mark.active }));
+        drawn.push(range.from, range.to, mark.id, classes);
       }
-      const drafted = draft && find(draft);
-      if (drafted) comment(drafted.from, drafted.to, 'draft');
-      // A proposal or a past edit shows as a suggestion: removed text struck
-      // through, new text marked. Decorations only; the doc does not change. A
-      // new `replay` number gives the marks new attributes, so ProseMirror
-      // redraws them and their animation runs again.
-      // A buddy's (`by`) is in its colour, its removed text grey.
-      const { replay, by } = preview;
+    }
+    // A revision shows as a suggestion: removed text struck through, new
+    // text marked. Decorations only; the doc does not change. A new `replay`
+    // number gives the marks new attributes, so ProseMirror redraws them and
+    // their animation runs again. A buddy's (`by`) is in its colour, its
+    // removed text grey.
+    const edits = marks.filter((m) => m.kind === 'edit');
+    const projection = edits.length > 0 ? projected(doc) : null;
+    const editorProjection = projectionOf(doc);
+    (projection ? editItems(projection.source, edits, projection) : []).forEach(({ anchor, mark, widget, by, replay }, i) => {
       const kindClass = (kind) => (by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`);
       const classes = (kind) => `${kindClass(kind)}${replay ? ' od-replay' : ''}`;
       const style = by ? `--buddy: ${buddyColor(by)}` : '';
-      drawn.push(by);
-      preview.items.forEach(({ anchor, mark, widget }, i) => {
-        const range = find(anchor);
-        if (!range) return;
-        if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), style, 'data-replay': String(replay) }));
-        drawn.push(range.from, range.to, mark, replay);
-        if (!widget) return;
-        const before = widget.side === 'before';
-        const key = `change-${replay}-${i}-${widget.kind}-${widget.text}`;
-        decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
-          side: before ? -1 : 1, key,
-        }));
-        drawn.push(key, widget.side);
-      });
-    }
+      const found = across(projection, editorProjection, anchor.start, anchor.start + anchor.exact.length);
+      if (!found) return;
+      const range = docRange(editorProjection, found.start, found.end);
+      drawn.push(by, range.from, range.to, mark, replay);
+      if (mark) decorations.push(Decoration.inline(range.from, range.to, { class: classes(mark), style, 'data-replay': String(replay) }));
+      if (!widget) return;
+      const before = widget.side === 'before';
+      const key = `change-${replay}-${i}-${widget.kind}-${widget.text}`;
+      decorations.push(Decoration.widget(before ? range.from : range.to, () => el(widget.kind, classes(widget.kind), widget.text), {
+        side: before ? -1 : 1, key,
+      }));
+      drawn.push(key, widget.side);
+    });
     const signature = JSON.stringify(drawn);
-    if (v.state.doc === paintedDoc && signature === painted) return;
-    paintedDoc = v.state.doc;
+    if (doc === paintedDoc && signature === painted) return;
+    paintedDoc = doc;
     painted = signature;
-    v.dispatch(v.state.tr.setMeta(highlightKey, DecorationSet.create(v.state.doc, decorations)).setMeta('addToHistory', false));
-    for (const listener of layoutListeners) listener();
+    v.dispatch(v.state.tr.setMeta(highlightKey, DecorationSet.create(doc, decorations)).setMeta('addToHistory', false));
+    onLayout();
   }
 
-  // Re-place highlights shortly after typing stops; mapping keeps them close meanwhile.
-  let repaintTimer;
-  onDocUpdated = () => {
-    clearTimeout(repaintTimer);
-    repaintTimer = setTimeout(paintHighlights, 250);
-  };
-
-  host.addEventListener('click', (event) => {
+  const clickMark = (event) => {
     const mark = event.target.closest?.('[data-thread]');
-    if (mark && mark.dataset.thread !== 'draft') onSelectThread(mark.dataset.thread);
-  });
-
-  // ---- selection → comment ----
-
-  function selectionHint() {
-    const v = view();
-    const projection = projectionOf(v.state.doc);
-    const { from, to } = selectionSpan(v.state.selection);
-    const range = textRange(projection, from, to);
-    if (!range) return null;
-    const { text } = projection;
-    return {
-      quote: text.slice(range.start, range.end),
-      prefix: text.slice(Math.max(0, range.start - 32), range.start),
-      suffix: text.slice(range.end, range.end + 32),
-      start: range.start,
-    };
-  }
-
-  // Comments are on selected text only.
-  function requestComment() {
-    const hint = view().state.selection.empty ? null : selectionHint();
-    if (hint) onCommentRequest(hint);
-  }
+    if (mark) onMarkClick(mark.dataset.thread);
+  };
+  host.addEventListener('click', clickMark);
 
   // ---- formatting commands, shared by the toolbar, the selection bubble and "/" ----
 
@@ -515,20 +518,19 @@ export async function createDocEditor({ stage, text, onChange, onSelectThread, o
   // ---- changes from disk ----
 
   /**
-   * Show `next`, a change made by `by`: only the top-level blocks that differ
-   * are replaced, flagged `by` for a while; anything but a buddy's run
-   * (`buddy`) also glows.
+   * Show `next`, outside the human's undo history: only the top-level blocks
+   * that differ are replaced, flagged `by` for a while, if given; anything
+   * but a buddy's change (`buddy`) also glows.
    */
-  function applyText(next, by, { buddy = false } = {}) {
+  function applyText(next, { by = null, buddy = false } = {}) {
+    given = next;
     const v = view();
     const current = v.state.doc;
     const target = parse(next);
     const hunks = diffBlocks(current, target);
     if (hunks.length === 0) return;
     v.dispatch(replaceBlocks(v.state.tr, current, target, hunks).setMeta('addToHistory', false).setMeta(FROM_DISK, true));
-    const ranges = hunks.map((h) => changedRange(current, target, h)).filter(Boolean);
-    flash(ranges, by, buddy);
-    paintHighlights();
+    if (by) flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by, buddy);
   }
 
   function flash(ranges, by, buddy) {
@@ -550,56 +552,55 @@ export async function createDocEditor({ stage, text, onChange, onSelectThread, o
   }
 
   return {
-    /** The doc's text as saving would write it: `disk` unless the human changed something. */
+    // ---- the view interface: every view has these, in offsets on the doc's text ----
+
+    /** The doc's text as saving would write it. */
     getText: currentText,
-    /** The doc's text is now `next` on disk. */
-    setDisk(next) {
-      disk = next;
-    },
     applyText,
-    /** Show `next`, the doc's text on disk, without reporting it as a local edit. */
-    setText(next) {
-      disk = next;
-      editor.action(replaceAll(next, true));
-      paintHighlights();
+    /** Draw `marks` (see above) in place of the ones drawn. */
+    setMarks(next) {
+      marks = next;
+      paintMarks();
     },
-    /** Threads with anchors on the doc's text, as the doc host sends them. */
-    setThreads(next) {
-      threads = next.map((t) => (t.anchor && !t.detached ? { ...t, anchor: rendered(t.anchor) } : t));
-      paintHighlights();
+    /** The selection: { from, to }, or null when it is not in the text. */
+    selection() {
+      const { doc, selection } = view().state;
+      const { from, to } = selectionSpan(selection);
+      const rendered = textRange(projectionOf(doc), from, to);
+      if (!rendered) {
+        const at = offsetAt(doc, from);
+        return at === null ? null : { from: at, to: at };
+      }
+      const projection = projected(doc);
+      const found = across(projectionOf(doc), projection, rendered.start, rendered.end);
+      if (!found) return null;
+      const range = sourceRange(projection, found.start, found.end);
+      return { from: range.start, to: range.end };
     },
-    /** The anchor on the doc's text of a selection `hint` (from onCommentRequest), or null. */
-    anchorOf: (hint) => sourceAnchor(currentText(), { exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start }),
-    setActive(id) {
-      activeId = id;
-      paintHighlights();
-    },
-    setHover(id) {
-      if (id === hoverId) return;
-      hoverId = id;
-      paintHighlights();
-    },
-    /**
-     * Show `edits` (diffEdits records on the doc's text) as a revision; []
-     * clears. `replay` animates them once, `scroll` brings the first into
-     * view; `by` shows them as that buddy's.
-     */
-    setPreview(edits, { replay = false, scroll = replay, by = null } = {}) {
-      const items = edits.length > 0 ? editItems(disk, edits) : [];
-      preview = { items, replay: replay ? ++replays : 0, by };
-      paintHighlights();
-      if (!scroll || items.length === 0) return;
+    /** The viewport top of each text offset in `offsets`, or null where it is not drawn. */
+    tops(offsets) {
       const v = view();
-      const range = rangeOf(v.state.doc, items[0].anchor);
+      return offsets.map((at) => {
+        const range = charAt(v.state.doc, at);
+        return range && v.coordsAtPos(range.from).top;
+      });
+    },
+    /** Scroll text offset `at` into the middle of the view. */
+    scrollTo(at) {
+      const v = view();
+      const range = charAt(v.state.doc, at);
       if (!range) return;
       const { node } = v.domAtPos(range.from);
       (node.nodeType === 1 ? node : node.parentElement)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     },
-    setDraft(hint) {
-      draft = hint && { exact: hint.quote, prefix: hint.prefix, suffix: hint.suffix, start: hint.start };
-      paintHighlights();
+    focus: () => view().focus(),
+    destroy() {
+      host.removeEventListener('click', clickMark);
+      return editor.destroy();
     },
-    requestComment,
+
+    // ---- the Markdown view's own, for the toolbar, the "/" menu and the outline ----
+
     /** Which top-level block holds the caret (its index), or null when the editor has no focus. */
     caretIndex() {
       const v = view();
@@ -628,22 +629,6 @@ export async function createDocEditor({ stage, text, onChange, onSelectThread, o
     /** Sees editor keydowns first; return true to consume one. */
     setKeyHandler(handler) {
       keyHandler = handler;
-    },
-    focus: () => view().focus(),
-    /** Viewport top of each thread's text (or of the draft's), by id. */
-    anchorTops(items) {
-      const v = view();
-      const anchors = new Map(threads.map((t) => [t.id, t.anchor]));
-      const tops = new Map();
-      for (const { id } of items) {
-        const anchor = id === 'draft' ? draft : anchors.get(id);
-        const range = anchor && rangeOf(v.state.doc, anchor);
-        if (range) tops.set(id, v.coordsAtPos(range.from).top);
-      }
-      return tops;
-    },
-    onLayout(listener) {
-      layoutListeners.add(listener);
     },
   };
 }

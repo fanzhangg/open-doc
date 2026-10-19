@@ -1,11 +1,12 @@
 // Version history: every version of the doc (src/store/history.js), who made
-// it and what it changed. A version shows read-only in a second editor, with
+// it and what it changed. A version shows read-only in a second view, with
 // what it changed from the version before marked as a revision (added text
 // highlighted, removed text struck through); any earlier version can be
 // restored, which adds a new version, so a restore can be undone the same way.
 
 import { diffEdits } from '../src/core/diff.js';
-import { createDocEditor } from './editor.js';
+import { createMarkdownView } from './editor.js';
+import { revisionMarks } from './marks.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';
 
@@ -29,12 +30,13 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
   const changesToggle = bar.querySelector('.od-history-changes input');
   const toggleButton = document.querySelector('.od-tool-history');
 
-  let view = null; // the read-only editor, made the first time history opens
+  let view = null; // the read-only view, made the first time history opens
   let versions = [];
   let selected = null;
   let shown = null; // { version, text, before } of the selected version
   let loads = 0;
   let restoring = false;
+  let replays = 0;
 
   const isOpen = () => root.hasAttribute('data-history');
   const latest = () => versions.at(-1) ?? null;
@@ -43,9 +45,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     if (isOpen()) return;
     root.setAttribute('data-history', '');
     toggleButton.setAttribute('aria-pressed', 'true');
-    view ??= await createDocEditor({
-      stage, text: '', editable: false, onChange() {}, onSelectThread() {}, onCommentRequest() {},
-    });
+    view ??= await createMarkdownView({ stage, text: '', editable: false });
     await refresh();
     await select(latest()?.id ?? null);
     list.focus({ preventScroll: true });
@@ -154,7 +154,8 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     const load = ++loads;
     if (!id) {
       shown = null;
-      view.setText('');
+      view.applyText('');
+      showChanges();
       showHeading();
       return;
     }
@@ -167,7 +168,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     }
     if (load !== loads) return; // another version was picked meanwhile
     shown = data;
-    view.setText(data.text);
+    view.applyText(data.text);
     showChanges({ replay: true });
     showHeading();
   }
@@ -176,7 +177,7 @@ export function createHistory({ api, commentOf, onRestore, onClose }) {
     const edits = shown?.before != null && changesToggle.checked
       ? diffEdits(shown.before, shown.text).map((change) => change.edit)
       : [];
-    view.setPreview(edits, { replay });
+    view.setMarks(revisionMarks(shown?.text ?? '', edits, { replay: replay ? ++replays : 0 }));
   }
 
   // The selected row says which version this is; the bar only offers to
