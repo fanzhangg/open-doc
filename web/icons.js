@@ -59,7 +59,7 @@ export function icon(name, className = 'od-icon') {
   return svg;
 }
 
-/** Fill every `[data-icon]` placeholder under `root` with its icon, before any label. */
+/** Fill every `[data-icon]` placeholder under `root` not filled yet with its icon, before any label. */
 export function hydrateIcons(root = document) {
-  for (const node of root.querySelectorAll('[data-icon]')) node.prepend(icon(node.dataset.icon));
+  for (const node of root.querySelectorAll('[data-icon]:not(:has(> .od-icon))')) node.prepend(icon(node.dataset.icon));
 }
