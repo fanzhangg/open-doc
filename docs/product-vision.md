@@ -1,6 +1,6 @@
 # Product Vision
 
-AI buddies collaborate with you in the same Markdown doc, in real time, like teammates.
+AI buddies collaborate with you in the same text file, in real time, like teammates.
 
 ## Background and Problem
 
@@ -19,7 +19,7 @@ Our product moves human–AI collaboration into the real-time stage: the AI is n
 flowchart LR
     You([You]) -- "@mention in a comment" --> Buddy["Buddy<br/>name + persona"]
     Buddy -- "runs" --> Agent["Agent<br/>CLI such as Claude Code or Codex"]
-    Agent -- "edits and replies" --> Doc[("Markdown doc<br/>+ comments")]
+    Agent -- "edits and replies" --> Doc[("Text file<br/>+ comments")]
     You -- "edits and comments" --> Doc
 ```
 
@@ -31,13 +31,13 @@ People and buddies work on the same doc at the same time, discussing in comments
 - **Real-time collaboration**: No handing the doc back and forth. You and your buddies edit and comment in the doc at the same time without blocking each other
 - **Many buddies, not just one**: Many personalized buddies see the same doc and threads you do, act through the same edits and comments, and reply to each other in threads
 - **Familiar experience**: Edit, comment and @mention, like your favorite doc collaboration app. Nothing new to learn
-- **Open**: Open source, plain Markdown with an open comment format, and any command-line agent
+- **Open**: Open source, plain text files with an open comment format, and any command-line agent
 
 ## Non-Goals
 
 - **Cloud documents**: Docs live only on your machine; no cloud storage
 - **Real-time collaboration between people**: We focus on human–AI collaboration, not real-time collaboration between people
-- **Proprietary document formats**: Plain Markdown only
+- **Proprietary document formats**: Plain text files only. Format plugins (Markdown is the first, built in) improve co-authoring for a format; they never replace the file
 - **Knowledge base**: We work on a doc or a project folder, not note management
 - **Chat interface**: All communication happens in comments; no chat window
 
@@ -70,7 +70,7 @@ How we're different:
 
 - **A shared live doc, not turn-taking**: The doc stays open to everyone. You keep writing while a buddy handles your comment, and it acts as soon as you @ it instead of waiting for you to hand the doc over.
 - **Comments are the interface**: You comment, the buddy edits and replies in the thread, you resolve. No switching to a chat box.
-- **Local, plain Markdown**: A regular file in your repo, comments stored alongside it; no subscription lock-in.
+- **Local, plain text**: A regular file in your repo, comments stored alongside it; no subscription lock-in.
 - **Any agent, many buddies**: Any command-line agent can plug in, and several buddies can work in the same doc at once. A project's buddies are files in the repo, so everyone who clones it gets them.
 
 ## Success Metrics
@@ -79,4 +79,4 @@ How we're different:
 - **Less waiting**: Measure time from an @ to the buddy's reply, and how long people and buddies wait on each other.
 - **Many buddies**: Measure the share of docs with 2+ buddies and the number of buddy edits dropped in conflicts.
 - **Better writing experience**: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.
-- **Open**: Docs open correctly in any Markdown editor; count the third-party agents that connect.
+- **Open**: Docs open correctly in any text editor; count the third-party agents that connect.
