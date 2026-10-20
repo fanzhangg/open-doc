@@ -10,6 +10,7 @@
 //   may be merged by character into `merged`; if not, the line conflicts.
 // - mergeDoc(base, ours, theirs, merged): whether the whole merged text may
 //   stand, checked once at the end of a merge; if not, the merge conflicts.
+//   `base` has the changes both sides made alike applied.
 
 import { pluginSettings } from '../core/settings.js';
 import { markdownHarness } from './markdown.js';

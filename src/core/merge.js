@@ -30,12 +30,14 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
 
   const out = [];
   const dropped = [];
+  const agreed = []; // base with the changes both sides made alike
   let i = 0;
   let oi = 0;
   let ti = 0;
   for (;;) {
     while (i < b.length && mo[i] === oi && mt[i] === ti) {
       out.push(b[i]);
+      agreed.push(b[i]);
       i++;
       oi++;
       ti++;
@@ -49,6 +51,7 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
     const baseChunk = b.slice(i, j);
     const ourChunk = o.slice(oi, oEnd);
     const theirChunk = t.slice(ti, tEnd);
+    agreed.push(...(same(ourChunk, theirChunk) ? ourChunk : baseChunk));
     if (same(ourChunk, baseChunk)) out.push(...theirChunk);
     else if (same(theirChunk, baseChunk) || same(ourChunk, theirChunk)) out.push(...ourChunk);
     else {
@@ -66,7 +69,7 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
     ti = tEnd;
   }
   const text = out.join('\n');
-  if (harness?.mergeDoc?.(base, ours, theirs, text) === false) {
+  if (harness?.mergeDoc?.(agreed.join('\n'), ours, theirs, text) === false) {
     return prefer === 'ours' ? { text: ours, conflict: false, dropped: [{ at: 0, count: o.length, base, ours, theirs }] } : { text: null, conflict: true };
   }
   return { text, conflict: false, dropped };

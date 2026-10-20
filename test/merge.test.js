@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { followLines, merge3 } from '../src/core/merge.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
+import { project } from '../src/markdown/project.js';
 import { harnessOf } from '../src/plugins/index.js';
 
 const doc = (...lines) => lines.join('\n');
@@ -98,4 +99,36 @@ test('following lines into a later version takes in what changed around them', (
   assert.deepEqual(followLines(from, doc('# Plan', '', 'Mine, and more.', '', 'End.'), 2, 1), { start: 2, end: 3 });
   assert.deepEqual(followLines(from, doc('# Plan', '', 'Mine.', 'More.', '', 'End.'), 2, 1), { start: 2, end: 4 });
   assert.deepEqual(followLines(from, doc('Intro.', '', '# Plan', '', 'Mine.', '', 'End.'), 2, 1), { start: 4, end: 5 });
+});
+
+test('with the Markdown harness on, a merge that glues blocks for want of a blank line conflicts; off, or in plain text, it merges', () => {
+  const base = doc('# T', 'P.', 'Q.');
+  const ours = doc('# T', 'P.', '> x', 'Q.');
+  const theirs = doc('# T', 'P.', 'Q.', '> x');
+  const merged = doc('# T', 'P.', '> x', 'Q.', '> x');
+  const blocks = (text) => project(text).text.split('\n').length;
+  assert.deepEqual([ours, theirs].map(blocks), [3, 3], 'each side adds one block');
+  assert.equal(blocks(merged), 3, 'merged, the two quotes become one and swallow Q.');
+  const off = { ...DEFAULT_SETTINGS, plugins: { 'markdown-harness': { enabled: false } } };
+  assert.deepEqual(merge3(base, ours, theirs, { harness: harnessOf('plan.md', DEFAULT_SETTINGS) }), { text: null, conflict: true });
+  const kept = merge3(base, ours, theirs, { harness: harnessOf('plan.md', DEFAULT_SETTINGS), prefer: 'ours' });
+  assert.deepEqual(kept, { text: ours, conflict: false, dropped: [{ at: 0, count: 4, base, ours, theirs }] });
+  for (const harness of [harnessOf('plan.md', off), harnessOf('notes.txt', DEFAULT_SETTINGS)]) {
+    assert.deepEqual(merge3(base, ours, theirs, { harness }), { text: merged, conflict: false, dropped: [] });
+  }
+});
+
+test('with the Markdown harness on, ordinary merges are kept: blank-separated blocks, list items, code, the same edit on both sides', () => {
+  const harness = harnessOf('plan.md', DEFAULT_SETTINGS);
+  const merges = (base, ours, theirs, text) => assert.deepEqual(merge3(base, ours, theirs, { harness }), { text, conflict: false, dropped: [] });
+  const ours = BASE.replace('Intro.', 'Intro.\n\nMine.');
+  const theirs = BASE.replace('End.', 'End.\n\nTheirs.');
+  merges(BASE, ours, theirs, doc('# Plan', '', 'Intro.', '', 'Mine.', '', 'Middle.', '', 'End.', '', 'Theirs.'));
+  const list = doc('* a', '* b', '', 'End.');
+  merges(list, doc('* x', '* a', '* b', '', 'End.'), doc('* a', '* b', '* y', '', 'End.'), doc('* x', '* a', '* b', '* y', '', 'End.'));
+  const code = doc('```', 'one', 'two', '```', '', 'End.');
+  merges(code, code.replace('one', 'one\nmore'), code.replace('End.', 'End.\n\nNext.'), doc('```', 'one', 'more', 'two', '```', '', 'End.', '', 'Next.'));
+  const long = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'Later.', '', 'End.');
+  const gone = long.replace('Middle.\n\n', '');
+  merges(long, gone.replace('# Plan', '# Plan!'), gone.replace('End.', 'End!\n\nNext.'), doc('# Plan!', '', 'Intro.', '', 'Later.', '', 'End!', '', 'Next.'));
 });
