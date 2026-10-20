@@ -7,6 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
+import { markdown } from './views/markdown/index.js';
 import { viewFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
@@ -15,6 +16,7 @@ import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
 import { icon } from './icons.js';
+import { viewSettings } from '../src/core/settings.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
 import { rulesOf } from '../src/rules/index.js';
@@ -234,6 +236,9 @@ async function start() {
     if ((event.ctrlKey || event.metaKey) && event.altKey && event.shiftKey && event.code === 'KeyH') {
       event.preventDefault();
       history.toggle();
+    } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === 'KeyT') {
+      event.preventDefault();
+      settings.set({ views: { markdown: { enabled: !viewSettings(settings.get(), markdown).enabled } } }); // the Plain text view, and back
     } else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === 'KeyM' && !history.isOpen()) {
       event.preventDefault();
       requestComment();
