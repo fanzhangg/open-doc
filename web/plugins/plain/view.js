@@ -109,9 +109,24 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
   }
 
   // The doc's text, read out once per version of it.
+  // CodeMirror's lines end in "\n" whatever the text's do; a text whose every line break is "\r\n" is
+  // written back so, and its offsets are moved by one for each line above them (toDoc, toText).
+  let crlf = isCrlf(text);
+  const toDoc = (offset) => {
+    if (!crlf) return offset;
+    const { doc } = view.state;
+    let low = 1;
+    for (let high = doc.lines; low < high;) {
+      const mid = (low + high + 1) >> 1;
+      if (doc.line(mid).from + mid - 1 <= offset) low = mid;
+      else high = mid - 1;
+    }
+    return Math.min(offset - (low - 1), doc.line(low).to);
+  };
+  const toText = (at) => (crlf ? at + view.state.doc.lineAt(at).number - 1 : at);
   let textOf = { doc: view.state.doc, text };
   const currentText = () => {
-    if (textOf.doc !== view.state.doc) textOf = { doc: view.state.doc, text: view.state.doc.toString() };
+    if (textOf.doc !== view.state.doc) textOf = { doc: view.state.doc, text: view.state.doc.sliceString(0, view.state.doc.length, crlf ? '\r\n' : '\n') };
     return textOf.text;
   };
 
@@ -129,8 +144,12 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
    * buddy's change (`buddy`) also glows.
    */
   function applyText(next, { by = null, buddy = false } = {}) {
-    const edits = diffEdits(currentText(), next);
-    if (edits.length === 0) return;
+    crlf = isCrlf(next);
+    const edits = diffEdits(view.state.doc.toString(), next.replaceAll('\r\n', '\n'));
+    if (edits.length === 0) {
+      textOf = { doc: view.state.doc, text: next };
+      return;
+    }
     const flashId = Symbol('flash');
     const flashes = [];
     if (by) {
@@ -156,17 +175,20 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
     setMarks(marks) {
       if (painted?.doc === view.state.doc && JSON.stringify(painted.marks) === JSON.stringify(marks)) return;
       painted = { doc: view.state.doc, marks };
-      view.dispatch({ effects: setMarks.of(decorations(marks)) });
+      view.dispatch({ effects: setMarks.of(decorations(marks, toDoc)) });
       onLayout();
     },
     selection() {
       const { from, to } = view.state.selection.main;
-      return { from, to };
+      return { from: toText(from), to: toText(to) };
     },
     // Lines outside the viewport are not drawn: their tops are where they would be.
-    tops: (offsets) => offsets.map((at) => view.coordsAtPos(at)?.top ?? view.documentTop + view.lineBlockAt(at).top),
+    tops: (offsets) => offsets.map((offset) => {
+      const at = toDoc(offset);
+      return view.coordsAtPos(at)?.top ?? view.documentTop + view.lineBlockAt(at).top;
+    }),
     scrollTo(at) {
-      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+      view.dispatch({ effects: EditorView.scrollIntoView(toDoc(at), { y: 'center' }) });
     },
     focus: () => view.focus(),
     /** The plugin's settings changed. */
@@ -253,16 +275,18 @@ function createBubble(view, { stage, host, onComment }) {
 
 // The page's marks as decorations: commented text, and a revision's new
 // text marked and the text it removed struck through before it.
-function decorations(marks) {
+function decorations(marks, toDoc) {
   const ranges = [];
   for (const mark of marks) {
+    const from = toDoc(mark.from);
+    const to = toDoc(mark.to);
     if (mark.kind === 'comment') {
-      if (mark.from < mark.to) {
-        ranges.push(Decoration.mark({ class: mark.active ? 'od-hl od-hl-active' : 'od-hl', attributes: { 'data-thread': mark.id } }).range(mark.from, mark.to));
+      if (from < to) {
+        ranges.push(Decoration.mark({ class: mark.active ? 'od-hl od-hl-active' : 'od-hl', attributes: { 'data-thread': mark.id } }).range(from, to));
       }
       continue;
     }
-    const { from, to, removed, by, replay } = mark;
+    const { removed, by, replay } = mark;
     const className = (kind) => `${by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`}${replay ? ' od-replay' : ''}`;
     const style = by ? `--buddy: ${buddyColor(by)}` : '';
     if (removed) ranges.push(Decoration.widget({ widget: new Removed(removed, className('del'), style, replay), side: -1 }).range(from));
@@ -313,3 +337,6 @@ class Flag extends WidgetType {
     return wrap;
   }
 }
+
+// Whether every line break of `text` is "\r\n".
+const isCrlf = (text) => text.includes('\r\n') && !/\r(?!\n)|(?<!\r)\n/.test(text);

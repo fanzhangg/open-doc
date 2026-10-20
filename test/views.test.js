@@ -231,3 +231,22 @@ test('plain view: the status bar shows the indent and saves what its menu and to
   assert.equal(await run(`document.querySelector('[data-setting="wrap"]').getAttribute('aria-pressed')`), 'false');
   assert.equal(await run(`document.querySelector('[data-setting="whitespace"]').getAttribute('aria-pressed')`), 'true');
 });
+
+test('plain view: a text with "\\r\\n" line breaks is written back with them, and offsets are in that text', async () => {
+  const text = 'one\r\ntwo\r\nthree\r\n';
+  await make('plain', text);
+  assert.equal(await getText(), text);
+  await select('two', 3, 3);
+  await type('!');
+  assert.equal(await getText(), 'one\r\ntwo!\r\nthree\r\n', 'typing keeps the line breaks');
+  assert.deepEqual(await run('view.selection()'), { from: 9, to: 9 }, 'the caret is an offset in the text');
+  const typed = 'one\r\ntwo!\r\nthree\r\n';
+  await run(`view.setMarks([{ kind: 'comment', id: 't', from: ${typed.indexOf('three') + 1}, to: ${typed.indexOf('three') + 4}, active: false }])`);
+  assert.equal(await run(`contract.drawn('[data-thread="t"]')`), 'hre', 'a mark is drawn over the characters it names');
+  const [two, three] = await run(`view.tops([${typed.indexOf('two')}, ${typed.indexOf('three')}])`);
+  assert.ok(three > two, 'tops finds the line an offset is on');
+  await run(`view.applyText('one\\r\\ntwo!\\r\\nthree\\r\\nfour\\r\\n')`);
+  assert.equal(await getText(), 'one\r\ntwo!\r\nthree\r\nfour\r\n', 'a change from disk keeps them too');
+  await make('plain', 'a\nb\r\n');
+  assert.equal(await getText(), 'a\nb\r\n', 'mixed line breaks are left as they were until edited');
+});
