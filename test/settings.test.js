@@ -175,3 +175,8 @@ test('plugins: on by default, the Markdown editor and its harness included', () 
   assert.equal(pluginSettings(resolveSettings(null), markdown).enabled, true);
   assert.equal(pluginSettings(resolveSettings(null), markdownHarness).enabled, true);
 });
+
+test('plugins: an always-on plugin stays enabled whatever is stored', () => {
+  const plain = { id: 'plain', always: true, settings: [] };
+  assert.equal(pluginSettings(resolveSettings({ plugins: { plain: { enabled: false } } }), plain).enabled, true);
+});

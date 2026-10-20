@@ -98,13 +98,13 @@ const FIELD_RULES = {
 
 /**
  * The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on
- * unless switched off, and each field of its `settings` (an ordered list of
+ * unless switched off (an `always` plugin cannot be), and each field of its `settings` (an ordered list of
  * { key, type: 'switch' | 'choice' | 'number', label, default, ... }, see
  * web/plugins/index.js) as stored if valid, else its default.
  */
 export function pluginSettings(settings, plugin) {
   const stored = objectOr(settings.plugins[plugin.id]);
-  const out = { enabled: boolean(stored.enabled) ? stored.enabled : true };
+  const out = { enabled: plugin.always || (boolean(stored.enabled) ? stored.enabled : true) };
   for (const field of plugin.settings ?? []) {
     out[field.key] = FIELD_RULES[field.type](field, stored[field.key]) ? stored[field.key] : field.default;
   }

@@ -1,5 +1,5 @@
 // The plain view: a text file as it is, in CodeMirror, with no formatting,
-// for any text file that is not Markdown. The doc's text is the editor's,
+// for any text file no other plugin claims (index.js). The doc's text is the editor's,
 // so offsets on it are positions in the editor and marks are decorations
 // as given. A change made on disk goes in as changes to the lines that
 // differ, outside the human's undo history; a buddy's is flagged with its
@@ -8,9 +8,9 @@
 import { Annotation, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
 import { history, historyKeymap, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits } from '../../src/core/diff.js';
-import { buddyColor } from '../faces.js';
-import { hydrateIcons } from '../icons.js';
+import { diffEdits } from '../../../src/core/diff.js';
+import { buddyColor } from '../../faces.js';
+import { hydrateIcons } from '../../icons.js';
 
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
