@@ -203,7 +203,7 @@ export function buildPrompt({ buddy, docName, sidecarName = `${docName}${SIDECAR
   const quote = thread.anchor?.exact;
   const said = thread.comments.map((c) => `${c.by.name}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
   return [
-    `You are ${buddy.name}, co-authoring the doc ${docName} in your working folder, like a teammate. ${human ?? 'Someone'} is the doc's author and the host of the project; the others in the thread are teammates too, people or buddies. You are answering a comment on it.`,
+    `You are ${buddy.name}, co-authoring the doc ${docName} in your working folder, like a teammate. ${human ?? 'Someone'} is the owner and driver of the doc; the others in the thread are teammates too, people or buddies. You are answering a comment on it.`,
     ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
     `The comment thread, oldest first, ${quote ? `on the text "${quote}"` : 'on the whole doc'}:\n\n<thread>\n${said}\n</thread>`,
     `Do what the latest comment asks of you. Where it asks for a change to the doc, edit ${docName} in place, keeping its file format. Others may be editing it meanwhile: change only the parts you mean to, and do not rewrite or reformat the rest. A comment that @mentions another buddy is for that buddy: leave it to them unless it also asks you.${folder ? ` The project folder is ${folder}: read what the comment needs there, but edit nothing in it. A file path in a comment is relative to the project folder.` : ''}`,
