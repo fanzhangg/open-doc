@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { decodeText, encodeText, lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic } from '../src/store/files.js';
+import { promisify } from 'node:util';
+import { decodeText, encodeText, lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic, writeSidecar } from '../src/store/files.js';
 import { watchDoc } from '../src/store/watch.js';
 import { tempDoc } from './helpers.js';
 
@@ -67,4 +69,25 @@ test('watchDoc reports changes to the sidecar', async () => {
   } finally {
     stop();
   }
+});
+
+const git = (cwd, ...args) => promisify(execFile)('git', args, { cwd });
+
+test('a sidecar written in a git work tree is excluded, once; a repo made later is covered', async () => {
+  const docPath = await tempDoc();
+  const dir = dirname(docPath);
+  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n`);
+  await git(dir, 'init', '-q');
+  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n`);
+  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n${LINE}\n`);
+  assert.equal((await git(dir, 'status', '--porcelain', '-uall')).stdout.includes('opendoc.jsonl'), false);
+  const exclude = readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8');
+  assert.equal(exclude.split('\n').filter((l) => l === '*.opendoc.jsonl').length, 1);
+});
+
+test('a sidecar outside a git work tree is written as before', async () => {
+  const docPath = await tempDoc();
+  await writeSidecar(docPath, `{"opendoc":3}\n`);
+  assert.equal(await readSidecarText(docPath), `{"opendoc":3}\n`);
+  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
 });

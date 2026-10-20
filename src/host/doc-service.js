@@ -18,7 +18,7 @@ import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
 import { rulesOf } from '../rules/index.js';
 import { revertEdits } from '../core/diff.js';
-import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic, writeDoc } from '../store/files.js';
+import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
@@ -171,7 +171,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const current = await readComments();
     if (current.problem) throw new DocError('read_only', `${basename(sidecarPath(docPath))} is read-only here, so it is not changed`);
     const next = change(current.lines);
-    if (next !== current.lines) await writeAtomic(sidecarPath(docPath), serializeSidecar(next));
+    if (next !== current.lines) await writeSidecar(docPath, serializeSidecar(next));
   }
 
   // A comment by this user: a first comment (`anchor` on the doc's text, or

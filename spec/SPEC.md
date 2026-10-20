@@ -18,6 +18,10 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 - The sidecar is created with the first comment. A sidecar whose doc is
   missing is orphaned: tools report it and MUST NOT delete it on their own.
 - Renaming a doc renames its sidecar.
+- Comments may be private and a repo public. A tool SHOULD, before writing a
+  sidecar inside a git work tree, add `*.opendoc.jsonl` to the repo's
+  `info/exclude`, so a stray `git add .` does not publish them. Sharing
+  comments is then a choice: add `!*.opendoc.jsonl` after it.
 - Sidecars of earlier versions are not converted: a version 1 sidecar
   (`X.opendoc.json`) is not read, and a version 2 one, whose anchors were on
   a markdown doc's rendered text, is another version (§2).
