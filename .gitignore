@@ -4,6 +4,7 @@ release/
 .DS_Store
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 
 # OpenDoc's own comments and buddies: local only
 *.opendoc.json
