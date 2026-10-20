@@ -352,6 +352,11 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 /* the plain view's status bar, under the page */
 .od-statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; padding: 0 16px; flex: none; background: var(--bg-soft); border-top: 1px solid var(--border); font-size: 12px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.od-statusbar .od-block-menu { color: var(--text); }
+.od-status-actions { display: flex; align-items: center; gap: 2px; }
+.od-statusbar button { height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: none; font-size: 12px; color: var(--text-soft); }
+.od-statusbar button:hover, .od-statusbar button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.od-statusbar button[aria-pressed="true"] { background: var(--active); color: var(--text); }
 
 /* focus mode: no toolbar or outline, everything but the current block recedes */
 [data-focus] .od-toolbar, [data-focus] .od-outline, [data-no-outline] .od-outline { display: none !important; }
