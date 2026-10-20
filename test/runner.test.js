@@ -203,9 +203,10 @@ test('the prompt tells a buddy who the other buddies are, as the app shows them'
   const thread = { anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
   const buddies = [{ name: 'Ada', about: 'Edits for tone.' }, { name: 'Bo', about: '' }, { name: 'Cy', about: 'Checks facts.' }];
   const prompt = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread });
-  assert.match(prompt, /The other buddies here:\n\nBo\n\nCy: Checks facts\./);
+  assert.match(prompt, /The other members here:\n\nBo\n\nCy: Checks facts\./);
   assert.doesNotMatch(prompt, /Ada: /, 'not itself');
   const withUser = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread, human: { name: 'fzhan', about: 'I write novels.' } });
-  assert.match(withUser, /Who fzhan is:\n\nI write novels\./);
-  assert.doesNotMatch(prompt, /Who .* is:\n\nI write/, 'nothing about a user who wrote nothing');
+  assert.match(withUser, /The other members here:\n\nfzhan \(owner\): I write novels\.\n\nBo/);
+  assert.match(withUser, /Only fzhan resolves threads/);
+  assert.doesNotMatch(prompt, /I write novels/, 'nothing about an owner who wrote nothing');
 });
