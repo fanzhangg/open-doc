@@ -7,6 +7,8 @@
 
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemirror/view';
+import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
 import { diffEdits } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
@@ -50,19 +52,22 @@ const flashField = StateField.define({
  * plugin's (web/plugins/plain/index.js), changed through `saveSettings`; an editable
  * view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, settings, saveSettings = () => {}, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
+  stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
   let bubble = null;
+  let destroyed = false;
   let status = null;
   // The settings that change what CodeMirror does; the font size is a CSS variable.
   const numbers = new Compartment();
   const wrapping = new Compartment();
   const numbersFor = (own) => (own.lineNumbers ? lineNumbers() : []);
   const wrapFor = (own) => (own.wrap ? EditorView.lineWrapping : []);
+  const syntax = new Compartment();
   const marking = new Compartment();
   const guiding = new Compartment();
   const markingFor = (own) => (own.whitespace === 'off' ? [] : whitespaceMarks(own.whitespace));
@@ -86,7 +91,7 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
+        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
@@ -101,6 +106,12 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
       ],
     }),
   });
+
+  // The file's language, by its name, loads after the text is shown; no language, no colour.
+  const language = LanguageDescription.matchFilename(languages, name);
+  language?.load().then((support) => {
+    if (!destroyed) view.dispatch({ effects: syntax.reconfigure([support, syntaxHighlighting(defaultHighlightStyle)]) });
+  }, () => {});
 
   if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
   if (editable) {
@@ -201,6 +212,8 @@ export async function createPlainView({ stage, text, settings, saveSettings = ()
     undo: () => undo(view),
     redo: () => redo(view),
     destroy() {
+      destroyed = true;
+      delete stage.dataset.plain;
       clearTimeout(changeTimer);
       host.removeEventListener('click', clickMark);
       bubble?.destroy();
