@@ -11,7 +11,9 @@ import { history, historyKeymap, insertNewline, redo, standardKeymap, undo } fro
 import { diffEdits } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
 import { hydrateIcons } from '../../icons.js';
+import { detectIndent } from './indent.js';
 import { createStatusBar } from './status.js';
+import { indentGuides, whitespaceMarks } from './whitespace.js';
 
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
@@ -75,13 +77,23 @@ export async function createPlainView({ stage, text, settings, editable = true, 
   const wrapping = new Compartment();
   const numbersFor = (own) => (own.lineNumbers ? lineNumbers() : []);
   const wrapFor = (own) => (own.wrap ? EditorView.lineWrapping : []);
+  const marking = new Compartment();
+  const guiding = new Compartment();
+  const markingFor = (own) => (own.whitespace === 'off' ? [] : whitespaceMarks(own.whitespace));
+  const guidingFor = (own) => (own.guides ? indentGuides : []);
+  const shown = (own) => [
+    numbers.reconfigure(numbersFor(own)), wrapping.reconfigure(wrapFor(own)),
+    marking.reconfigure(markingFor(own)), guiding.reconfigure(guidingFor(own)),
+  ];
+  const indent = detectIndent(text) ?? { tabs: false, size: 4 };
+  host.style.setProperty('--indent', indent.tabs ? 4 : indent.size);
   host.style.setProperty('--code-size', `${settings.fontSize}px`);
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of(keys), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), marksField, flashField,
+        history(), keymap.of(keys), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
@@ -163,7 +175,7 @@ export async function createPlainView({ stage, text, settings, editable = true, 
     /** The plugin's settings changed. */
     applySettings(next) {
       host.style.setProperty('--code-size', `${next.fontSize}px`);
-      view.dispatch({ effects: [numbers.reconfigure(numbersFor(next)), wrapping.reconfigure(wrapFor(next))] });
+      view.dispatch({ effects: shown(next) });
     },
     undo: () => undo(view),
     redo: () => redo(view),

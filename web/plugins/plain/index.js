@@ -15,5 +15,11 @@ export const plain = {
     { key: 'lineNumbers', type: 'switch', label: 'Line numbers', default: true, group: 'Display' },
     { key: 'wrap', type: 'switch', label: 'Wrap long lines', default: true },
     { key: 'fontSize', type: 'number', label: 'Font size', min: 12, max: 20, step: 1, unit: 'px', default: 14 },
+    {
+      key: 'whitespace', type: 'choice', label: 'Show whitespace', group: 'Whitespace', default: 'selection',
+      options: [['selection', 'Selection'], ['all', 'All'], ['off', 'Off']],
+      hint: 'Dots for spaces and arrows for tabs, in the selection only, everywhere, or not at all.',
+    },
+    { key: 'guides', type: 'switch', label: 'Indent guides', default: true, hint: 'A faint line at each indent level.' },
   ],
 };
