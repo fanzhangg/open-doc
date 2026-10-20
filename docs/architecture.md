@@ -31,6 +31,11 @@ with a way to fix it.
    [Undoing changes](#undoing-changes).
 6. **Only my own comments start turns.** Nothing in a shared file makes a
    buddy run, or chooses what program runs, on this machine.
+7. **One component does one thing.** If it takes two sentences to say what
+   a component does, it is two components.
+8. **The fewest interfaces.** A new call is the last resort: first reuse one
+   that exists, or delete the need. Who a writer is (a person, a buddy) is
+   known only where its buffer is made, never by the component that merges.
 
 ## The app
 
@@ -133,6 +138,40 @@ the core checks only that shape (values boolean, string or number) and keeps
 ids it does not know. Switching a view makes the affected views again from
 the same text in every window, the history's too, after saving pending
 typing; its own settings reach its view as they are.
+
+### Interfaces
+
+The target: each component does one thing (principle 7) through the few
+calls below (principle 8). The code is not there yet; the steps are #177,
+#178, #179 and #180.
+
+Every writer works the same way: it holds a **buffer** (the page's editor,
+or a buddy's copy), and **submits** the buffer's difference from the base it
+started from. Only DocService writes the files. Where a submission and the
+file changed the same text, the caller says which stays (`prefer`): the page
+asks for its own, a buddy's turn for the file's. DocService does not know
+which is which.
+
+| Component | Its one thing | Interface |
+| --- | --- | --- |
+| Core | compute on text, purely | `merge3(base, ours, theirs, { prefer, rules })`, `diffEdits`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf` |
+| Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts and history are paths and parsers over these, not interfaces of their own |
+| DocService | merge a submission into the doc and record the version | `state()`, `submit({ text, baseHash })`, `comment({ thread?, anchor?, body, resolved? })`, `undo(replyId)`, `move(to)`; events `doc`, `sidecar`, `agents`, `missing` |
+| History | keep the doc as it was after each write | `record`, `list`, `read`; read by DocService, the page asks through it |
+| Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)` |
+| Config | own the settings, buddies and agent scripts | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
+| Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?` |
+| View | hold a buffer, submit it, and rebase typing not yet submitted onto what comes back | the calls of DocService and Config above, nothing else |
+| Shell | windows, menus, dialogs, recent docs | renaming goes through `DocService.move`; it reads no sidecar and no history |
+| Agent | edit its copy, append to its sidecar, print a reply | none: it cannot call anything |
+
+The page's calls shrink from sixteen to about eleven: `reply`, `resolve`,
+`reopen` and `restoreVersion` go (a reply, a resolve and a reopen are each
+`comment`; a restore is a `submit` of an old version's text).
+
+A **journal** of what happened (history, comments, `runs.jsonl`) is not a
+component: if it is wanted, a view joins the three by `reply` and `thread`
+when read. Nothing stores it.
 
 ### How files are read and written
 
