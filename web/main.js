@@ -342,12 +342,15 @@ async function save() {
   saving = true;
   const savedVersion = version;
   const text = editor.getText();
-  let conflicted = false;
+  let behind = false; // the doc has changes this save did not have
   setStatus('Saving…', 'saving');
   try {
     const { status: code, data } = await api.saveDoc(text, baseHash);
     if (code === 409) {
-      conflicted = true;
+      behind = true;
+    } else if (data.text !== text) {
+      synced = text; // the doc host merged the doc's changes into this save: carry on from what was sent
+      behind = true;
     } else {
       baseHash = data.docHash;
       synced = text;
@@ -360,7 +363,7 @@ async function save() {
   } finally {
     saving = false;
   }
-  if (conflicted) {
+  if (behind) {
     await syncFromDisk(); // the file changed under us: merge it in, then save again
     return;
   }

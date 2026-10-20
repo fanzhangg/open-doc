@@ -78,6 +78,20 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // someone else's, and the queue that keeps versions in order.
   let lastWritten = null;
   let chronicle = Promise.resolve();
+  // The last few texts of the doc given to the page, by hash: a save based on
+  // one of them is merged into the doc if it has changed since.
+  const given = new Map();
+  const give = (hash, text) => {
+    given.set(hash, text);
+    if (given.size > 8) given.delete(given.keys().next().value);
+    return { docHash: hash, text };
+  };
+  // `ours` and `theirs`, both changed from `base`: where they changed the
+  // same text, `ours` stays (and what is lost is in the history).
+  async function mergeInto(base, ours, theirs) {
+    const { settings } = await readSettings(settingsDir);
+    return merge3(base, ours, theirs, { prefer: 'ours', rules: rulesOf(docPath, settings) });
+  }
 
   // ---- the doc ----
 
@@ -97,13 +111,17 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       lastWritten = hashText(body.text);
       await writeDoc(docPath, body.text);
       await noteVersion(body.text, { kind: 'edit', author: await me() });
-      return { docHash: lastWritten, text: body.text };
+      return give(lastWritten, body.text);
     }
+    let next = body.text;
     if (current.hash !== body.baseHash) {
-      return { conflict: true, text: current.text, docHash: current.hash };
+      // Not a text this service gave the page (it started again since): the page merges.
+      const base = given.get(body.baseHash);
+      if (base === undefined) return { conflict: true, text: current.text, docHash: current.hash };
+      next = (await mergeInto(base, body.text, current.text)).text;
     }
-    await writeChange(current, body.text, { kind: 'edit', author: await me() });
-    return { docHash: hashText(body.text), text: body.text };
+    await writeChange(current, next, { kind: 'edit', author: await me() });
+    return give(hashText(next), next);
   }
 
   // Put the doc back the way it was in an earlier version, as the human's
@@ -120,7 +138,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (!found) throw new DocError('not_found', 'no such version');
     const next = found.text;
     await writeChange(current, next, { kind: 'restore', author: await me(), restoredFrom: id });
-    return { docHash: hashText(next), text: next };
+    return give(hashText(next), next);
   }
 
   async function state() {
@@ -129,8 +147,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const comments = await commentsView(doc.text);
     return {
       doc: basename(docPath),
-      text: doc.text,
-      docHash: doc.hash,
+      ...give(doc.hash, doc.text),
       ...comments,
       settings,
       defaultName: defaultName(),
@@ -255,8 +272,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         // the doc is gone: nothing to merge into
       }
       if (current) {
-        const { settings } = await readSettings(settingsDir);
-        const merged = merge3(base, current.text, edited, { prefer: 'ours', rules: rulesOf(docPath, settings) });
+        const merged = await mergeInto(base, current.text, edited);
         conflict = merged.dropped.length > 0;
         await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
       }
@@ -291,7 +307,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const current = await readDoc(docPath);
     const next = revertEdits(current.text, found.before, found.text);
     await writeChange(current, next, { kind: 'undo', author: await me(), undid: body.id });
-    return { docHash: hashText(next), text: next, ...(await commentsView(next)) };
+    return { ...give(hashText(next), next), ...(await commentsView(next)) };
   }
 
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
