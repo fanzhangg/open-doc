@@ -2,7 +2,7 @@
 // formatting at the caret, the one place to format), a Comment bubble over
 // selections, the link card and popover, a floating outline and focus mode.
 // The view makes it when the page gives it a toolbar
-// (web/plugins/markdown/view.js).
+// (web/views/markdown/view.js).
 
 import { hydrateIcons, icon } from '../../icons.js';
 
@@ -83,7 +83,7 @@ function elements(markup) {
 /**
  * `editor`: the Markdown view's own commands and queries. The tools go first
  * in `toolbar`, the bubble in `stage`, the outline before it.
- * `onComment` is the bubble's Comment button. `settings` are the plugin's:
+ * `onComment` is the bubble's Comment button. `settings` are the view's:
  * the page's font and width, whether the outline and the word count show and
  * focus mode is on; Mod+Shift+F changes focus mode through `saveSettings`.
  *
@@ -210,7 +210,7 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     if (!bubble.hidden) placeBubble();
   }, { passive: true, signal });
 
-  // ---- the plugin's settings: the page's font and width, the outline, the word count and focus mode (app.css) ----
+  // ---- the view's settings: the page's font and width, the outline, the word count and focus mode (app.css) ----
 
   const root = document.documentElement;
   function applySettings(next) {

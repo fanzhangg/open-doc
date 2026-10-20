@@ -6,7 +6,7 @@
 import { mkdir, readFile, rename } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { SETTINGS_VERSION, USER_ID, checkSettingsPatch, mergeSettings, migrateSettings, resolveSettings } from '../core/settings.js';
+import { SETTINGS_VERSION, USER_ID, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
 import { newId } from '../core/comments.js';
 import { lockFile, writeAtomic } from './files.js';
 import { watchFiles } from './watch.js';
@@ -88,7 +88,7 @@ async function readStored(dir) {
   try {
     const stored = JSON.parse(text);
     // A version 1 file (agents and faces in it) is discarded: the next write replaces it.
-    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored.version < 2 ? null : migrateSettings(stored);
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored.version < 2 ? null : stored;
   } catch {
     // fall through
   }

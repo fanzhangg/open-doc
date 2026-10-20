@@ -1,4 +1,4 @@
-// The Plain text plugin: any text file no other plugin claims, as it is, in
+// The Plain text view: any text file no other view claims, as it is, in
 // CodeMirror (view.js). Always on: it is where a doc falls back to, so it
 // has no switch.
 

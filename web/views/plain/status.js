@@ -1,6 +1,6 @@
 // The plain view's status bar, under the page: where the caret is and the
 // selection's size on the left; on the right the indent Tab types, which
-// opens a menu of others (they change the plugin's settings, so only what is
+// opens a menu of others (they change the view's settings, so only what is
 // typed later, never the file), and toggles for wrapping and whitespace.
 // Only an editable view has one.
 
@@ -20,7 +20,7 @@ const BAR = `
 
 /**
  * Put a status bar after `canvas` for `view` (a CodeMirror EditorView).
- * `save(patch)` saves a change to the plugin's settings. `update()` repaints
+ * `save(patch)` saves a change to the view's settings. `update()` repaints
  * the caret's place; `paint(settings, indent)` what depends on the settings;
  * `destroy()` takes the bar away.
  */

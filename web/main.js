@@ -7,7 +7,7 @@
 // stays: no one is asked to choose.
 
 import { api } from './api.js';
-import { viewFor } from './plugins/index.js';
+import { viewFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople } from './agent.js';
 import { setBuddies } from './faces.js';
@@ -17,7 +17,7 @@ import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
-import { harnessOf } from '../src/plugins/index.js';
+import { rulesOf } from '../src/rules/index.js';
 import { diffEdits } from '../src/core/diff.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
@@ -229,7 +229,7 @@ async function start() {
     onRestore: restoreVersion,
     onClose: () => editor.focus(),
   });
-  settings.subscribe(followPlugins);
+  settings.subscribe(followViews);
   document.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.altKey && event.shiftKey && event.code === 'KeyH') {
       event.preventDefault();
@@ -253,7 +253,7 @@ async function start() {
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
     showDocName(data.doc);
-    followPlugins(); // a new extension may open in another view
+    followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
   // First on the line: the doc may have gone missing, or runs started, since `state`.
@@ -294,16 +294,16 @@ function makeView(chosen, text) {
     },
     onLayout: () => margin.layout(),
     settings: chosen.settings,
-    saveSettings: (patch) => settings.set({ plugins: { [chosen.id]: patch } }),
+    saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),
   });
 }
 
-// The view follows the plugins. Switching one on or off makes the doc's view
-// again from the same text, typing not saved yet saved first, comments and
-// a revision drawn again; a plugin's own setting reaches its view as it is.
+// The view follows the Views settings. Switching one on or off makes the doc's
+// view again from the same text, typing not saved yet saved first, comments
+// and a revision drawn again; a view's own setting reaches it as it is.
 // One change at a time, each against the settings as they are by then.
 let following = Promise.resolve();
-function followPlugins() {
+function followViews() {
   following = following.then(async () => {
     const chosen = viewFor(docName, settings.get());
     if (chosen.id !== made.id) await remakeView(chosen);
@@ -444,7 +444,7 @@ async function doSync(by) {
   const theirs = fresh.text;
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
-  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', harness: harnessOf(docName, settings.get()) });
+  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', rules: rulesOf(docName, settings.get()) });
   // A buddy's changes show as its revision; anything else glows.
   editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
   paintMarks();

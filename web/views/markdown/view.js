@@ -145,7 +145,7 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 // it shows diagrams as their source, so the changes in them can be seen.
 // Given a `toolbar`, the view puts its tools there and the rest of its chrome
 // around `stage`; its bubble's Comment button calls `onComment`. The chrome
-// follows the plugin's `settings` (web/plugins/markdown/index.js) and changes
+// follows the view's `settings` (web/views/markdown/index.js) and changes
 // them through `saveSettings` (the focus mode shortcut).
 export async function createMarkdownView({
   stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
@@ -153,7 +153,7 @@ export async function createMarkdownView({
 }) {
   // The human changed the doc since `updated` last fired: any change not
   // applied from disk, even one that brings back the text as it was saved.
-  // What plugins append (the empty line kept after a last table or code
+  // What Milkdown plugins append (the empty line kept after a last table or code
   // block, which saves as nothing) follows from another change.
   let edited = false;
   let chrome = null;
@@ -585,9 +585,9 @@ export async function createMarkdownView({
       return editor.destroy();
     },
 
-    // ---- as a plugin's view ----
+    // ---- the view interface ----
 
-    /** The plugin's settings changed. */
+    /** The view's settings changed. */
     applySettings: (next) => chrome?.applySettings(next),
   };
 }

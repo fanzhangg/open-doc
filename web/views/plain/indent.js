@@ -30,7 +30,7 @@ export function detectIndent(text) {
   return size ? { tabs: false, size } : null;
 }
 
-/** The indent to type under the plugin's `indent` ('auto', 'tabs' or 'spaces') and `tabWidth` settings, for `text`. */
+/** The indent to type under the view's `indent` ('auto', 'tabs' or 'spaces') and `tabWidth` settings, for `text`. */
 export function resolveIndent({ indent, tabWidth }, text) {
   if (indent === 'tabs') return { tabs: true };
   return (indent === 'auto' && detectIndent(text)) || { tabs: false, size: tabWidth };

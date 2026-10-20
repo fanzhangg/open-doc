@@ -16,7 +16,7 @@ const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month
 
 /**
  * `api` is web/api.js; `chooseView()` is the view the doc opens in (viewFor
- * in web/plugins/index.js); `commentOf(threadId)` is the text of the comment
+ * in web/views/index.js); `commentOf(threadId)` is the text of the comment
  * a buddy's version answered, or null; `onRestore(id)` puts the doc back to
  * version `id` and resolves once the page shows it.
  */
@@ -31,7 +31,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   const toggleButton = document.querySelector('.od-tool-history');
 
   let view = null; // the read-only view, made when history first opens
-  let viewId; // the plugin `view` is of (null: the plain view)
+  let viewId; // the view `view` is of (null: the plain view)
   let versions = [];
   let selected = null;
   let shown = null; // { version, text, before } of the selected version
@@ -59,8 +59,8 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
     onClose?.();
   }
 
-  // The view, made again when the doc opens in another one (a plugin was
-  // switched), or given the plugin's settings again; one at a time.
+  // The view, made again when the doc opens in another one (a view was
+  // switched), or given the view's settings again; one at a time.
   let making = Promise.resolve();
   function makeView() {
     making = making.catch(() => {}).then(remakeView);

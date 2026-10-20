@@ -73,7 +73,7 @@
   <p>Each buddy has its own colour, the one in its face (see <a href="avatars.html">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag and the card it is working on. A run's edits show in the text as a revision: new text in its colour, removed text grey and struck through where it was.</p>
 
   <h2>Type</h2>
-  <p>Inter for the UI. The Markdown editor's page font (sans, serif or mono, set in that plugin) and its sizes in <code>em</code> are the writer's, not the UI's. A text file that is not Markdown shows as it is, in <code>--mono</code> at 14px by default (a size from 12 to 20 in its plugin).</p>
+  <p>Inter for the UI. The Markdown editor's page font (sans, serif or mono, set in that view) and its sizes in <code>em</code> are the writer's, not the UI's. A text file that is not Markdown shows as it is, in <code>--mono</code> at 14px by default (a size from 12 to 20 in its plugin).</p>
   <div class="ds-box ds-scale">
     <div><span>24 / 600</span><span style="font-size: 24px; font-weight: 600">Display</span></div>
     <div><span>20 / 600</span><span style="font-size: 20px; font-weight: 600">Large heading</span></div>
@@ -124,11 +124,11 @@
     <input class="od-switch" type="checkbox" aria-label="Off">
     <div class="od-segmented od-stepper" role="group" aria-label="Font size"><button type="button" aria-label="Decrease">−</button><span>14 px</span><button type="button" aria-label="Increase">+</button></div>
   </div>
-  <p>A stepper is a <code>.od-segmented</code> with <code>.od-stepper</code>: − value +, for a whole number in a range. A plugin's settings are rows of a switch, a segmented choice or a stepper; the first row of a group has a heading, <code>.od-setting-group</code>: 12px, semibold, faint.</p>
+  <p>A stepper is a <code>.od-segmented</code> with <code>.od-stepper</code>: − value +, for a whole number in a range. A view's or rule's settings are rows of a switch, a segmented choice or a stepper; the first row of a group has a heading, <code>.od-setting-group</code>: 12px, semibold, faint.</p>
   <h3>Settings with a page of their own</h3>
-  <p>A group of settings with its own page, such as a plugin, is a row in a list: its name, what it is and whether it is on, the whole row one button with a chevron. Its page starts with <code>.od-back</code>, the same Back as the history's.</p>
+  <p>A group of settings with its own page, such as a view or a rule, is a row in a list: its name, what it is and whether it is on, the whole row one button with a chevron. Its page starts with <code>.od-back</code>, the same Back as the history's.</p>
   <div class="ds-box ds-setting-pages">
-    <button type="button" class="od-back"><svg class="od-icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Plugins</button>
+    <button type="button" class="od-back"><svg class="od-icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Views</button>
     <ul class="od-setting-pages">
       <li><button type="button"><span class="od-setting-text"><span class="od-setting-label">Markdown<span class="od-setting-ext">.md .markdown</span></span><span class="od-setting-hint">Edit Markdown docs as formatted text.</span></span><span class="od-setting-state"><span>On</span><svg class="od-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></button></li>
     </ul>

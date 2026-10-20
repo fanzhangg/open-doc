@@ -1,12 +1,13 @@
 // The page's chrome around the doc's view: the Settings dialog and the desktop
-// app's menu commands. A plugin's view brings its own tools and shortcuts
-// (web/plugins/). Tooltips and the Settings dialog are in settings-dialog.js,
+// app's menu commands. A view brings its own tools and shortcuts
+// (web/views/). Tooltips and the Settings dialog are in settings-dialog.js,
 // shared with the desktop start window.
 
 import { hydrateIcons } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { api } from './api.js';
-import { PLUGINS } from './plugins/index.js';
+import { VIEWS } from './views/index.js';
+import { RULES } from '../src/rules/index.js';
 
 /**
  * @param {{ getView: () => object, settings: ReturnType<typeof import('./settings.js').createSettings>,
@@ -20,7 +21,8 @@ export function createChrome({ getView, settings: store, getName, setName }) {
 
   const settings = setupSettings({
     store,
-    plugins: PLUGINS,
+    views: VIEWS,
+    rules: RULES,
     getName,
     setName,
     onApply() {

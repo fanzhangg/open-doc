@@ -1,7 +1,7 @@
 // Three-way merge of a doc's text by line, for an agent editing the file
 // while the human types: edits to different lines merge, and edits to
-// different parts of the same line merge by character, unless the doc's
-// harness plugin refuses (src/plugins). Edits that overlap conflict.
+// different parts of the same line merge by character, unless one of the
+// doc's rules refuses (src/rules). Edits that overlap conflict.
 
 import { lineMatches as matches } from './diff.js';
 
@@ -13,10 +13,10 @@ import { lineMatches as matches } from './diff.js';
  * @param {string} base the text both sides started from
  * @param {string} ours
  * @param {string} theirs
- * @param {{ prefer?: 'ours', harness?: { mergeLine?: Function } }} [options] `harness` from harnessOf
+ * @param {{ prefer?: 'ours', rules?: { mergeLine?: Function }[] }} [options] `rules` from rulesOf
  * @returns {{ text: string, conflict: false, dropped: { at: number, count: number, base: string, ours: string, theirs: string }[] } | { text: null, conflict: true }}
  */
-export function merge3(base, ours, theirs, { prefer, harness } = {}) {
+export function merge3(base, ours, theirs, { prefer, rules = [] } = {}) {
   if (ours === theirs || theirs === base) return { text: ours, conflict: false, dropped: [] };
   if (ours === base) return { text: theirs, conflict: false, dropped: [] };
   const b = base.split('\n');
@@ -53,7 +53,7 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
     else if (same(theirChunk, baseChunk) || same(ourChunk, theirChunk)) out.push(...ourChunk);
     else {
       const line = baseChunk.length === 1 && ourChunk.length === 1 && theirChunk.length === 1
-        ? mergeOneLine(baseChunk[0], ourChunk[0], theirChunk[0], harness)
+        ? mergeOneLine(baseChunk[0], ourChunk[0], theirChunk[0], rules)
         : null;
       if (line !== null) out.push(line);
       else if (prefer === 'ours') {
@@ -68,10 +68,10 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
   return { text: out.join('\n'), conflict: false, dropped };
 }
 
-// A character merge of one line, unless the harness refuses it.
-function mergeOneLine(base, ours, theirs, harness) {
+// A character merge of one line, unless a rule refuses it.
+function mergeOneLine(base, ours, theirs, rules) {
   const line = mergeLine(base, ours, theirs);
-  if (line === null || harness?.mergeLine?.(base, ours, theirs, line) === false) return null;
+  if (line === null || rules.some((rule) => rule.mergeLine?.(base, ours, theirs, line) === false)) return null;
   return line;
 }
 

@@ -80,7 +80,7 @@ test('the human edits the same text during a run: theirs stays, the buddy\'s cha
   });
 });
 
-test('a buddy\'s edit to a line the human changed too: the Markdown harness refuses a character merge that changes how it renders; switched off, it merges', { timeout: 30_000 }, async () => {
+test('a buddy\'s edit to a line the human changed too: the Markdown rule refuses a character merge that changes how it renders; switched off, it merges', { timeout: 30_000 }, async () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
   for (const on of [true, false]) {
     await withDoc(async ({ docPath, call, state, runs, release }) => {
@@ -92,7 +92,7 @@ test('a buddy\'s edit to a line the human changed too: the Markdown harness refu
       const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
       assert.equal(Boolean(answer.conflict), on);
       assert.equal(await readFile(docPath, 'utf8'), on ? '1 *2 3\n' : '1 *2 3 4*\n');
-    }, { content: '1 *2* 3\n', settings: { plugins: { 'markdown-harness': { enabled: on } } } });
+    }, { content: '1 *2* 3\n', settings: { rules: { 'markdown-rule': { enabled: on } } } });
   }
 });
 
