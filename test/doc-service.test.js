@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -139,6 +139,45 @@ test('resolving stops the thread\'s buddy, with nothing it did landing; reopenin
     await pause(1000);
     assert.equal((await fakeRuns(settingsDir)).length, 1);
     assert.equal((await threadOf(state, id)).resolved, false);
+  });
+});
+
+test('a thread resolved in the file, not by a call, stops its buddy too', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir, docPath }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+    const { me } = await state();
+    const resolving = { id: 'c_byhand001', thread: id, by: me, at: new Date(Date.now() + 1000).toISOString(), body: '', resolved: true };
+    await appendFile(sidecarPath(docPath), `${JSON.stringify(resolving)}\n`);
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(500);
+    assert.equal((await threadOf(state, id)).comments.length, 2, 'no reply landed');
+    assert.match((await state()).text, /extra load/);
+  });
+});
+
+test('a sidecar that cannot be written ends the runs: a reply could not be posted', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir, docPath }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+    const before = await readFile(sidecarPath(docPath), 'utf8');
+    await writeFile(sidecarPath(docPath), before.replace('{"opendoc":3}', '{"opendoc":9}'));
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(500);
+    assert.match((await state()).text, /extra load/, 'nothing it did landed');
+    assert.ok((await state()).readOnly, `thread ${id} is read-only`);
+  });
+});
+
+test('a buddy that has answered is not run again by its own reply', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot replace "extra load" with "peak load"' });
+    await until(async () => (await threadOf(state, id)).comments.length === 2, 'the reply');
+    await pause(1500);
+    assert.equal((await fakeRuns(settingsDir)).length, 1);
+    assert.equal((await threadOf(state, id)).comments.length, 2);
   });
 });
 

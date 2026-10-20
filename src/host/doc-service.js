@@ -232,7 +232,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       console.error('Could not read the buddies:', error);
     }
     broadcastAgents();
-    await runner.notify();
+    await runner.reconcile();
   }
 
   // A run ended (runner.js): merge what it changed in its copy into the doc,
@@ -379,7 +379,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   async function deleteBuddy({ name } = {}) {
     const found = await buddyNamed(name);
     if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be deleted`);
-    runner.cancel((run) => sameName(run.name, found.name));
     return changeBuddies(() => removeBuddy(projectDir(), found.name));
   }
 
@@ -493,12 +492,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const calls = {
     state,
     saveDoc: (body) => serial(() => saveDoc(body ?? {})),
-    // Resolving a thread stops the runs on it, with no answer.
-    async comment(body) {
-      const result = await comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved });
-      if (body?.resolved === true) runner.cancel((run) => run.threadId === body.thread);
-      return result;
-    },
+    comment: (body) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }),
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
       // Your name is no buddy's here, as no buddy's is yours.
