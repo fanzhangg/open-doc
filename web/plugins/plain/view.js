@@ -47,12 +47,13 @@ const flashField = StateField.define({
  * The same options and interface as the Markdown view (createMarkdownView in
  * web/plugins/markdown/view.js). It has no tools, so `toolbar` is not used; given
  * `onComment`, a bubble over a selection offers Comment. `settings` are the
- * plugin's (web/plugins/plain/index.js); an editable view also has a status bar.
+ * plugin's (web/plugins/plain/index.js), changed through `saveSettings`; an editable
+ * view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, settings: object, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, settings, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, settings, saveSettings = () => {}, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   let changeTimer = 0;
   let bubble = null;
@@ -76,6 +77,7 @@ export async function createPlainView({ stage, text, settings, editable = true, 
   const reindent = (current) => {
     indent = resolveIndent(own, current);
     host.style.setProperty('--indent', indent.tabs ? 4 : indent.size);
+    status?.paint(own, indent);
   };
   reindent(text);
   host.style.setProperty('--code-size', `${settings.fontSize}px`);
@@ -101,7 +103,10 @@ export async function createPlainView({ stage, text, settings, editable = true, 
   });
 
   if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
-  if (editable) status = createStatusBar(view, stage.parentElement);
+  if (editable) {
+    status = createStatusBar(view, stage.parentElement, saveSettings);
+    status.paint(own, indent);
+  }
 
   // The doc's text, read out once per version of it.
   let textOf = { doc: view.state.doc, text };
