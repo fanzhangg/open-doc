@@ -142,9 +142,9 @@ test('plain view: line numbers and font size follow the settings; the status bar
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);
   await select('cd', 1, 1);
-  await waitFor(async () => (await run(`document.querySelector('.od-statusbar').textContent`)) === 'Ln 2, Col 2', 5_000, 'the caret place');
+  await waitFor(async () => (await run(`document.querySelector('.od-status-position').textContent`)) === 'Ln 2, Col 2', 5_000, 'the caret place');
   await select('cd', 0, 2);
-  await waitFor(async () => (await run(`document.querySelector('.od-statusbar').textContent`)).endsWith('2 selected'), 5_000, 'the selection size');
+  await waitFor(async () => (await run(`document.querySelector('.od-status-position').textContent`)).endsWith('2 selected'), 5_000, 'the selection size');
   await run(`view.applySettings({ lineNumbers: false, wrap: false, fontSize: 18 })`);
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 0);
   assert.equal(await run(`getComputedStyle(document.querySelector('.cm-scroller')).fontSize`), '18px');
@@ -208,4 +208,26 @@ test('plain view: Tab indents and Shift+Tab outdents the lines of a selection', 
   assert.equal(await getText(), 'x\n  one\n  two\n');
   for (let i = 0; i < 2; i++) await press('Tab', { modifiers: 8 });
   assert.equal(await getText(), 'x\none\ntwo\n');
+});
+
+test('plain view: the status bar shows the indent and saves what its menu and toggles pick', async () => {
+  await make('plain', 'a\n  b\n    c\n');
+  const text = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).textContent`);
+  const click = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  assert.equal(await text('.od-status-indent'), 'Indent: 2 spaces', 'found in the file');
+  await click('.od-status-indent');
+  assert.equal(await run(`document.querySelector('.od-statusbar .od-block-menu').hidden`), false);
+  assert.equal(await run(`document.querySelector('[aria-selected="true"]').textContent`), '2 spaces');
+  await click('[data-indent="8"]');
+  assert.equal(await run(`document.querySelector('.od-statusbar .od-block-menu').hidden`), true);
+  await click('.od-status-indent');
+  await click('[data-indent="tabs"]');
+  await click('[data-setting="wrap"]');
+  await click('[data-setting="whitespace"]');
+  assert.deepEqual(await run('contract.saved'), [{ indent: 'spaces', tabWidth: 8 }, { indent: 'tabs' }, { wrap: false }, { whitespace: 'all' }]);
+  assert.equal(await getText(), 'a\n  b\n    c\n', 'the file is not changed');
+  await run(`view.applySettings({ lineNumbers: true, wrap: false, fontSize: 14, whitespace: 'all', guides: true, indent: 'tabs', tabWidth: 4, keepIndent: true })`);
+  assert.equal(await text('.od-status-indent'), 'Indent: Tab');
+  assert.equal(await run(`document.querySelector('[data-setting="wrap"]').getAttribute('aria-pressed')`), 'false');
+  assert.equal(await run(`document.querySelector('[data-setting="whitespace"]').getAttribute('aria-pressed')`), 'true');
 });

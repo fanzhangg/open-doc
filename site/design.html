@@ -143,8 +143,8 @@
   </div>
   <p>A sidebar is resized by dragging its edge: the cursor turns to <code>col-resize</code> and the edge shows a 2px <code>--text-faint</code> line; double-click the edge for the default width back.</p>
   <h3>Status bar</h3>
-  <p>The plain view has a status bar under the page: <code>.od-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left, its settings on the right. Line numbers, whitespace marks (dots for spaces, arrows for tabs) are <code>--text-faint</code>; indent guides are <code>--border-strong</code>.</p>
-  <div class="ds-box"><div class="od-statusbar"><span>Ln 12, Col 8 · 24 selected</span></div></div>
+  <p>The plain view has a status bar under the page: <code>.od-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left; on the right text buttons, 22px, grey on hover and ink on grey while pressed or open, and a menu above them in the <code>.od-block-menu</code> style. Line numbers, whitespace marks (dots for spaces, arrows for tabs) are <code>--text-faint</code>; indent guides are <code>--border-strong</code>.</p>
+  <div class="ds-box"><div class="od-statusbar"><span>Ln 12, Col 8 · 24 selected</span><span class="od-status-actions"><button type="button">Indent: 4 spaces</button><button type="button" aria-pressed="true">Wrap</button><button type="button">Whitespace</button></span></div></div>
   <h3>Text: comments, buddy edits, links</h3>
   <div class="ds-box ds-prose od-editor">
     We ship the beta to <span class="od-hl">fifty design partners</span> in March, then

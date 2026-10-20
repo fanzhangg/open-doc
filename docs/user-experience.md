@@ -135,8 +135,10 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   font size, whitespace marks (in the selection, everywhere or off) and
   indent guides, and indentation: Tab types the file's indent (found from
   the file, or tabs or spaces as set), Tab and Shift+Tab indent and outdent
-  selected lines, and Enter keeps the line's indent; it has a status bar with the caret's line and column and
-  the size of the selection. The Markdown editor's: the page's font and width,
+  selected lines, and Enter keeps the line's indent; it has a status bar with the caret's line and column, the size of
+  the selection, the indent Tab types (a menu of others, for what you type
+  next, never the file) and Wrap and Whitespace toggles that change the same
+  settings. The Markdown editor's: the page's font and width,
   Outline, Focus mode and Word count (shown in its toolbar).
   Switching the editor applies at once to every open doc: a Markdown doc
   turns to plain text and back, comments still in the margin, and nothing is
