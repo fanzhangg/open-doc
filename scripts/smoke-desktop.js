@@ -186,7 +186,7 @@ async function switchesView(page, on, pages, id) {
   const inView = (stage) => `Boolean(document.querySelector('${stage} ${shown}')) && !document.querySelector('${stage} ${gone}')`;
   const doc = `${inView('.od-stage:not(.od-history-stage)')} && Boolean(document.querySelector('.od-outline')) === ${on}`;
   const drawn = `document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === 'gather feedback'`;
-  const own = `document.querySelector('.od-settings [data-key="outline"]').closest('.od-setting').hidden === ${!on}`;
+  const own = `document.querySelector('.od-settings [data-key="outline"]').closest('.od-setting').parentElement.hidden === ${!on}`;
   const probes = pages.map((p) => [p, p === page ? `${doc} && ${inView('.od-history-stage')} && ${drawn} && ${own}` : doc]);
   for (const [p, probe] of probes) {
     if (!(await waitFor(() => p.evaluate(probe), 15_000, 'the view').catch(() => false))) return false;
