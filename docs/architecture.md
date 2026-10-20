@@ -2,13 +2,18 @@
 
 ## Overview
 
-How OpenDoc is built, in two parts. [The app](#the-app): the doc host, a
-background process that does every file write and runs the buddies, and
-the windows you edit in. [A buddy's turn](#a-buddys-turn): buddies are AI
-agents that answer comments, and a turn is one buddy answering one
+How OpenDoc is built, in three parts. [The app](#the-app): the doc host, a
+background process that does every file write and runs the AI buddies, and
+the windows you edit in. [A buddy's turn](#a-buddys-turn): AI buddies are
+agents that answer comments, and a turn is one AI buddy answering one
 comment: the app starts an agent program on a copy of the doc, then merges
 what it changed back in. (The code calls a turn a run: `Runner`,
-`runs.jsonl`.)
+`runs.jsonl`.) [Sharing](#sharing): how a teammate's browser joins the same
+host.
+
+Sharing, and the revisions every edit goes through with it, are designed,
+not built. What they change is marked *planned*; everything else is what
+the code does.
 
 No backward compatibility with earlier formats: a version 1 sidecar is
 ignored, and a version 2 one is not converted. A sidecar this version must
@@ -25,17 +30,21 @@ with a way to fix it.
 3. **An agent is a filter:** prompt on stdin, copies of the doc and its
    comments to edit, reply on stdout. It knows nothing of OpenDoc and
    remembers nothing.
-4. **No one resolves a conflict by hand.** The person typing always wins.
-   What loses is redone (ask the buddy again) or restored (history).
-5. **Buddies always edit, and every edit can be undone.** See
+4. **No one resolves a conflict by hand.** Between people, nothing typed is
+   dropped: the host orders their edits and merges them by character. An
+   AI buddy's edit, or one from outside, yields to a person's. What loses is
+   redone (ask the buddy again) or restored (history).
+5. **AI buddies always edit, and every edit can be undone.** See
    [Undoing changes](#undoing-changes).
-6. **Only my own comments start turns.** Nothing in a shared file makes a
-   buddy run, or chooses what program runs, on this machine.
+6. **Only a person's comment starts a turn:** mine, or a teammate's who can
+   edit. Nothing in a shared file makes an AI buddy run, or chooses what
+   program runs, on this machine.
 7. **One component does one thing.** If it takes two sentences to say what
    a component does, it is two components.
 8. **The fewest interfaces.** A new call is the last resort: first reuse one
    that exists, or delete the need. Who a writer is (a person, a buddy) is
-   known only where its buffer is made, never by the component that merges.
+   known only at the door every call comes through, never by the component
+   that merges.
 9. **Never take mutable state as the truth.** Find and join things by a
    stable id; a name, a path or a color is an alias that may change, kept
    only for show. A buddy is its id, not its name.
@@ -60,8 +69,9 @@ The app has two modes:
 | Window | One doc | File tree and docs |
 | Folder | none | the opened folder |
 
-The asymmetry is intentional: doc mode is a light editor with one
-buddy; project mode is the full multi-doc, multi-buddy experience.
+The asymmetry is intentional: doc mode is a light editor for one person
+and Clippy, with no team and no sharing; project mode is the full
+experience, many docs, many AI buddies and a team.
 
 Clippy is the same in both modes: who it is lives in the user's config
 folder, not in any project. That is what sets it apart from every other
@@ -80,16 +90,18 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | Component | Owns |
 | --- | --- |
 | Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
-| Model (`src/core`) | anchors, diff and three-way merge on text, reading the sidecar, the inbox. No I/O, and no file format. |
+| Model (`src/core`) | anchors, diff and three-way merge on text (*planned:* operations on revisions instead), reading the sidecar, the inbox. No I/O, and no file format. |
 | Markdown library (`src/markdown`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner | which turns should start (the inbox), runs them, their status in memory |
 | Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision). The page knows no format |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules |
 | Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |
+| Team, ProjectService | *planned:* who is on a project and what each may do; the project's files, the same for everyone. See Sharing |
 
 DocService and Runner run in the doc host, the app's utility process.
-Windows reach it over Electron message ports.
+Windows reach it over Electron message ports; a teammate's page, *planned*,
+over a relay.
 
 ### Views and rules
 
@@ -110,7 +122,7 @@ or off alone (`settings.json`: `views` and `rules`, each by id).
 The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
 is; line numbers, wrapping, font size, whitespace marks, indent guides and
 indentation are its settings, with a status bar (`status.js`) whose menu and
-toggles save the same settings. The Markdown view (`web/views/markdown/`) is
+toggles save the same settings. The Markdown view (`web/views/markdown/`, [design](markdown-view.md)) is
 WYSIWYG; its toolbar (the only formatting entry), outline, focus mode and
 word count are parts of it, switched by its settings, not separate extensions.
 It maps the doc's text to its own document through the rendered text, and
@@ -149,33 +161,70 @@ calls below (principle 8). Done: one `comment` call and one function that
 builds a comment (#177), the Runner's `reconcile` (#178), and a save from an
 older text merged by the host (#179; the code calls it `saveDoc`, and
 `stop`/`resume` for `pause`). Not yet: Config, History and Store as the
-components below, and `DocService.move`. The page still runs the rules when
-it merges typing with an outside change, since a rule's switch applies there
-too (#180).
+components below, `DocService.move`, and all that [Sharing](#sharing) needs:
+the door, Team, ProjectService, revisions and the views' side of them. Until
+revisions land, the page merges typing with an outside change itself,
+running the rules (#180).
 
-Every writer works the same way: it holds a **buffer** (the page's editor,
-or a buddy's copy), and **submits** the buffer's difference from the base it
-started from. Only DocService writes the files. Where a submission and the
-file changed the same text, the caller says which stays (`prefer`): the page
-asks for its own, a buddy's turn for the file's. DocService does not know
-which is which.
+**Every writer comes through one door.** A page's call, a buddy's finished
+turn and a change from outside each arrive as `call(type, arg, who)`. The
+door asks `Team.can(who, action)` once, for the action the call is, and lets
+it through or refuses it; nothing behind it checks again. The door also says
+whether an edit **yields**: a buddy's and an outside change's do, a
+person's never. Behind the door DocService sees `yields`, and `who` only to
+put in a comment's `by`. A connection is bound to one doc at a time, as a
+window's port is, so no call names a doc.
+
+| Calls | Action |
+| --- | --- |
+| `state`, `history`, `version`, `cursor`; ProjectService's `list`, `read`, `open` | read |
+| `submit`, `undo`, `comment` (resolving and reopening too) | edit; an AI buddy resolves only with its switch on |
+| everything else: `move`, settings, AI buddies, agent scripts, Team's own calls | owner only |
+
+**Every edit is operations on a revision.** A submission is insert and delete
+operations (offsets in UTF-16 code units of the doc's text) on
+`{ epoch, rev }`, the revision it started from. DocService transforms it
+against what landed since: one function, two policies. A person's edit
+merges by character and loses nothing. An edit that yields is dropped
+wherever anything changed the same line since, unless the doc's rules allow a
+character merge there; what was dropped comes back (a buddy's reply says
+`conflict`). Of two edits that yield, the first to land wins. What landed
+goes to every window as `ops`, and a window rebases what it has typed and not
+yet heard back. The epoch changes when the doc host starts: a window that
+sees a new one takes `diffOps(its base, the new text)` as what landed and
+rebases on that, the same function again. The log is kept back to the
+oldest base still in use, a long turn's included. The file is written, and
+History records a version, when typing pauses, and before and after each
+buddy's edit.
+
+**Every undo is one thing**, whatever it undoes: the inverse of some edits,
+rebased with `transform` over everything written since and submitted as an
+edit that yields, so text someone changed since stays. Cmd+Z takes the
+inverse of your own last typing from the editor's history, which holds only
+yours; Undo on a reply takes it from the versions saved before and after the
+turn. Either way it is the same function every edit goes through.
 
 | Component | Its one thing | Interface |
 | --- | --- | --- |
-| Core | compute on text, purely | `merge3(base, ours, theirs, { prefer, rules })`, `diffEdits`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf` |
-| Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts and history are paths and parsers over these, not interfaces of their own |
-| DocService | merge a submission into the doc and record the version | `state()`, `submit({ text, baseHash })`, `comment({ thread?, anchor?, body, resolved? })`, `undo(replyId)`, `move(to)`; events `doc`, `sidecar`, `agents`, `missing` |
-| History | keep the doc as it was after each write | `record`, `list`, `read`; read by DocService, the page asks through it |
-| Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)` |
+| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
+| Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
+| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev })` → `{ rev, ops, dropped }`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor(at)`; `move(to)`; events `ops`, `doc` (to resync), `sidecar`, `team`, `cursors`, `missing`. Cursors are never queued behind writes |
+| History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
+| Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
+| Team | who is on the project and what each may do | `can(who, action)`; for the owner `allow(id, access)`, `remove(id)`, `set(id, { access })` with `access` `read` or `edit`, `set(buddy, { resolve })`, `link()`; a request to join comes from the relay as `join({ id, name })` |
+| ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agent scripts | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
-| Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?` |
-| View | hold a buffer, submit it, and rebase typing not yet submitted onto what comes back | the calls of DocService and Config above, nothing else |
-| Shell | windows, menus, dialogs, recent docs | renaming goes through `DocService.move`; it reads no sidecar and no history |
+| Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
+| View | the doc's editor: what a person sees and types in | its contract as today (`getText`, `applyText`, `setMarks`, the selection); the page turns its text into operations and back ([plan A](markdown-view.md#many-writers)). Only if the prototype fails does a view send and take operations itself (plan B) |
+| Shell | windows, menus, dialogs, recent docs | renaming goes through `DocService.move`, the sidebar through ProjectService; it reads no sidecar and no history |
 | Agent | edit its copy, append to its sidecar, print a reply | none: it cannot call anything |
 
-The page's calls shrink from sixteen to about eleven: `reply`, `resolve`,
-`reopen` and `restoreVersion` go (a reply, a resolve and a reopen are each
-`comment`; a restore is a `submit` of an old version's text).
+The page's calls: `state`, `submit`, `comment`, `undo`, `cursor`, `history`,
+`version`, ProjectService's three, and for the owner settings, buddies,
+agent scripts and Team. `reply`, `resolve`, `reopen`, `saveDoc` and
+`restoreVersion` go: a reply, a resolve and a reopen are each `comment`; a
+restore is a `submit` of the operations back to an old version's text, so it
+needs edit, as typing it would.
 
 A **journal** of what happened (history, comments, `runs.jsonl`) is not a
 component: if it is wanted, a view joins the three by `reply` and `thread`
@@ -191,6 +240,8 @@ when read. Nothing stores it.
 - Before writing, DocService checks the file is still what it last read;
   if not, it merges the outside change first. Where it overlaps what is
   being typed, the typing wins and the outside version is saved to history.
+  (*Planned:* the outside change is submitted as an edit that yields; see
+  Interfaces.)
 - Every file is written whole: a temporary file in the same folder,
   renamed over it.
 - Above the files, a doc is its text: UTF-8, no byte order mark, lines
@@ -199,16 +250,19 @@ when read. Nothing stores it.
 
 ### Undoing changes
 
-1. **Your own edits:** Cmd+Z, which undoes only yours, as in shared docs.
-2. **A buddy's turn:** Undo on its reply. The diff between the versions
-   saved before and after the turn is its changes. Each change whose new
-   text is still in the doc, found the way an anchor is, is put back; the
-   rest are skipped: text belongs to whoever changed it last. All at once,
-   never one change; its comments stay.
+An undo takes some edits back, all at once, and keeps everything written
+since: where someone changed that text since, their text stays.
+
+1. **Your own typing:** Cmd+Z, which undoes only yours, as in shared docs.
+2. **An AI buddy's turn:** Undo on its reply: the edits between the versions
+   saved before and after the turn.
 3. **Anything else:** restore a version from history.
 
-Each of them saves a version first. Undo on a reply works only on the
-machine that ran it, where its versions are.
+Each saves a version first. Today Undo on a reply finds each change the way
+an anchor is found, skips what changed since, and works only on the machine
+that ran the turn. *Planned:* every undo is the same `transform` every edit
+goes through (see Interfaces), and works from any window, since the versions
+are on the host.
 
 ### The config folder
 
@@ -221,15 +275,17 @@ written only by the app.
 | `agents/` | agent scripts; Claude Code and Codex ship as two |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
+| `team/` | *planned:* each project's teammates, their access, and which AI buddies may resolve |
 
 ## A buddy's turn
 
-A thread waits on buddy X (by id) when a comment by this machine's user, newer than
-X's last comment there, asks X. A comment asks whom it @mentions; one that
-mentions no one asks the thread's buddies: the one that opened it, and each
-the user @mentioned there before. An empty one (resolving, reopening) asks
-no one. That is computed from the sidecar and the user's id. Buddies run
-only on docs open in a window.
+A thread waits on AI buddy X (by id) when a person's comment that may ask, newer
+than X's last comment there, asks X: today this machine's user's, *planned*
+also a teammate's who can edit. A comment asks whom it @mentions; one that
+mentions no one asks the thread's AI buddies: the one that opened it, and
+each @mentioned there before. An empty one (resolving, reopening) asks no
+one. That is computed from the sidecar and the ids of those who may ask. AI
+buddies run only on docs open in a window.
 
 ### How a turn works
 
@@ -242,8 +298,10 @@ only on docs open in a window.
 3. On exit 0, DocService saves versions before and after, merges the doc
    copy's diff into the doc, three-way from the copy as it started, adds
    the appended comments as the buddy's, and writes the reply as the
-   buddy's comment. Where the human changed the same text meanwhile, the
-   buddy's change is dropped and the reply is marked `conflict`. The reply
+   buddy's comment. Where a person changed the same text meanwhile, the
+   buddy's change is dropped and the reply is marked `conflict`.
+   (*Planned:* the copy's diff comes through the door as the buddy's edit,
+   which yields; see Interfaces.) The reply
    and comments are dated just after the last comment the turn was given,
    so a comment the user wrote meanwhile still waits on X.
 4. The private folder is deleted, and the turn gets a line in the config
@@ -253,8 +311,9 @@ only on docs open in a window.
 Resolving a thread ends its turns at once, with no answer; a turn that
 ended but is not merged yet is dropped. Deleting a buddy ends its turns too.
 
-A buddy comments as a human does: new threads, replies in any thread. It
-cannot resolve or reopen; anything but appended comments is ignored
+An AI buddy comments as a person does: new threads, replies in any thread.
+It never reopens, and resolves only with its switch on (*planned*; today it
+cannot); anything but appended comments is ignored
 ([agent config](agent-config.md#comments)). Its comments start no turns
 (principle 6).
 
@@ -266,9 +325,10 @@ how many places the turn edited, with Undo; a dropped change marks the reply
 app cannot (why, what to decide), and may be empty. The turn's edits land at
 once, shown as a revision (new text in the buddy's color, removed text
 struck through) until the user next types or another turn's edits land;
-clicking the count shows them again. The count, the revision and Undo are on
-the machine that ran it only, read from the version saved after the turn and
-the one before it.
+clicking the count shows them again. The count, the revision and Undo are
+read from the version saved after the turn and the one before it: today on
+the machine that ran it only, *planned* in every window of the team, since
+the versions are on the host.
 
 ### Failures, retries and restarts
 
@@ -277,3 +337,53 @@ with the end of the program's output. One ask, one reply; to retry, or to
 redo a `conflict`, @mention the buddy again. Which turns are working lives
 only in memory: after a restart, unanswered asks run again. Turns go on at
 the same time; their merges are applied one at a time.
+
+## Sharing
+
+*Planned.* A teammate joins the owner's project from a link, in a browser.
+The files stay on the owner's machine. Teammates are trusted: in a doc a
+teammate who can edit does what the owner does. Doc mode has no sharing.
+
+- **One host.** The owner's doc host holds the files, does every write and
+  runs the AI buddies, as always. A teammate's page is a client of it: it
+  keeps only what it shows, and a reload resyncs it from the host. While the
+  host is offline no one edits; the app keeps the computer awake while
+  teammates are in, and a page waits and reconnects by itself.
+- **A relay** (a Cloudflare Worker, one Durable Object per room) joins the
+  host's outgoing WebSocket to each teammate's, over TLS, and stores
+  nothing. There is no encryption of our own: the relay is ours, and it
+  could read what passes.
+- **One seam.** A page talks to the host through `{ call, onEvent }`: in the
+  app a message port, in a browser the relay. The host serves both the same
+  way, adding a `who` to every call. The browser build already exists in
+  `preview/`, where `doc-stub.js` plays the host; the relay replaces it.
+- **Everyone is a participant**: `{ id, name, role }`, the role `owner`,
+  `teammate` or `buddy`. The host sets `who` from the connection (a
+  teammate's id is made once in their browser; an AI buddy's is in its file)
+  and never trusts one sent in a message. Names are unique on a project,
+  people's and AI buddies' together. `can(who, action)` is the one place
+  that decides:
+  - *Owner only:* rename, move, delete and create files; settings, AI
+    buddies and agent scripts.
+  - *A teammate's access*, Read or Edit, set when the owner allows them and
+    changed in the Team panel. Edit is everything the owner does in a doc:
+    edit, comment, resolve, ask AI buddies.
+  - *An AI buddy* always edits and comments; it resolves only with its
+    switch on.
+  - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
+    it; it decides no permission.
+- **Joining.** The link is one per project, permanent until the owner makes a
+  new one, and grants nothing by itself. A first join asks the owner, with a
+  notification, and waits for Allow, where the owner picks Read or Edit;
+  Allow binds the teammate's id to that browser. A name already taken on the
+  project is refused at the door, and the teammate picks another. Remove
+  ends one teammate; a new link ends every old one.
+- **Scope is the project folder**, served by a `ProjectService` to the
+  owner's windows and teammates alike, so both see the same tree. A path is
+  resolved to its real path and must be inside the root; a link out of it,
+  or a name starting with `.`, is refused. An AI buddy's agent reads no more
+  than that, so nothing hidden reaches a doc through it.
+- **One order.** The host orders every edit to a doc, people's and AI
+  buddies' alike, and a person's typing is never dropped; see
+  [Interfaces](#interfaces). How the Markdown view takes part is
+  [its own design](markdown-view.md), to be proven by a prototype first.
