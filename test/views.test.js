@@ -153,3 +153,20 @@ test('plain view: line numbers and font size follow the settings; the status bar
   await make('plain', 'x\n', { editable: false });
   assert.equal(await run(`document.querySelectorAll('.od-statusbar').length`), 0, 'a read-only view has none');
 });
+
+test('plain view: whitespace marks and guides draw over the text without changing it', async () => {
+  const text = 'a\tb  \n    indented\n\t\ttabbed\n\n  trailing  ';
+  await make('plain', text);
+  assert.equal(await getText(), text);
+  assert.equal(await run(`document.querySelectorAll('.od-ws-space, .od-ws-tab').length`), 0, 'nothing is selected');
+  assert.ok(await run(`document.querySelectorAll('.od-guides').length`) >= 3, 'guides over the indented lines');
+  await run(`view.applySettings({ lineNumbers: true, wrap: true, fontSize: 14, whitespace: 'all', guides: false })`);
+  assert.equal(await run(`document.querySelectorAll('.od-ws-tab').length`), 3);
+  assert.equal(await run(`document.querySelectorAll('.od-guides').length`), 0);
+  await run(`view.applySettings({ lineNumbers: true, wrap: true, fontSize: 14, whitespace: 'selection', guides: true })`);
+  await select('indented', 0, 8);
+  await waitFor(async () => (await run(`document.querySelectorAll('.od-ws-space').length`)) === 0, 5_000, 'no marks inside text without space');
+  await select('a\tb', 0, 3);
+  await waitFor(async () => (await run(`document.querySelectorAll('.od-ws-tab').length`)) === 1, 5_000, 'the tab in the selection marked');
+  assert.equal(await getText(), text);
+});
