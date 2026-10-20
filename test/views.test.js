@@ -250,3 +250,10 @@ test('plain view: a text with "\\r\\n" line breaks is written back with them, an
   await make('plain', 'a\nb\r\n');
   assert.equal(await getText(), 'a\nb\r\n', 'mixed line breaks are left as they were until edited');
 });
+
+test('plain view: indent guides run on over blank lines', async () => {
+  await make('plain', 'a\n    b\n\n    c\n\nd\n');
+  assert.equal(await run(`document.querySelectorAll('.od-guides-blank').length`), 1, 'only the blank line between two indented lines');
+  assert.equal(await run(`document.querySelector('.od-guides-blank').style.getPropertyValue('--width')`), '4');
+  assert.equal(await getText(), 'a\n    b\n\n    c\n\nd\n');
+});
