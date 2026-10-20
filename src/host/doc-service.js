@@ -27,7 +27,7 @@ import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } fro
 import { Runner } from './runner.js';
 
 /** A call refused: `code` says why ('bad_input', 'not_found', 'read_only'). */
-export class DocError extends Error {
+class DocError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;

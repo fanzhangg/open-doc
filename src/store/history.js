@@ -22,10 +22,10 @@ import { diffEdits } from '../core/diff.js';
 import { newId } from '../core/comments.js';
 import { hashText, lockFile, writeAtomic } from './files.js';
 
-export const HISTORY_VERSION = 1;
+const HISTORY_VERSION = 1;
 export const COALESCE_MS = 2 * 60 * 1000;
 export const MAX_SPAN_MS = 30 * 60 * 1000;
-export const MAX_VERSIONS = 500;
+const MAX_VERSIONS = 500;
 export const VERSION_ID = /^v_[a-z0-9]{6,}$/;
 
 /** The folder holding the history of `docPath`, under the config folder `root`. */

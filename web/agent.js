@@ -16,7 +16,7 @@ import { avatar, namecardFor } from './threads.js';
 import { defaultName, tagline } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
-export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
+const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
