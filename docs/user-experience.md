@@ -98,6 +98,12 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   state wherever it appears: while it works it grows and its body rolls,
   where it cannot answer it is greyed out, and when a run fails it shakes
   and flashes red once.
+- **Cursor.** A buddy asked to work in the doc stays in it as a cursor in
+  its color, until the doc is closed or the buddy is gone. It stands at the
+  passage it was asked about, and moves to the end of its last edit when
+  its run lands. While it works it blinks and shows its name; otherwise it
+  is a plain line. It follows the text as you edit, and is hidden where its
+  text is gone. It is only drawn: never in the file, and it takes no clicks.
 - **Buddies** button (after the avatars): the Buddies list.
 
 ## Around the doc

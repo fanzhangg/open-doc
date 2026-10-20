@@ -12,6 +12,7 @@ import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
 import { diffEdits } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
+import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
 import { indentKeys, resolveIndent } from './indent.js';
 import { createStatusBar } from './status.js';
@@ -291,6 +292,10 @@ function createBubble(view, { stage, host, onComment }) {
 function decorations(marks, toDoc) {
   const ranges = [];
   for (const mark of marks) {
+    if (mark.kind === 'cursor') {
+      ranges.push(Decoration.widget({ widget: new Cursor(mark), side: 1 }).range(toDoc(mark.at)));
+      continue;
+    }
     const from = toDoc(mark.from);
     const to = toDoc(mark.to);
     if (mark.kind === 'comment') {
@@ -325,6 +330,22 @@ class Removed extends WidgetType {
     node.style.cssText = this.style;
     node.textContent = this.text;
     return node;
+  }
+}
+
+// A buddy's cursor (see cursorNode).
+class Cursor extends WidgetType {
+  constructor(mark) {
+    super();
+    this.mark = mark;
+  }
+
+  eq(other) {
+    return other.mark.by === this.mark.by && other.mark.working === this.mark.working;
+  }
+
+  toDOM() {
+    return cursorNode(this.mark);
   }
 }
 
