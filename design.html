@@ -6,8 +6,8 @@
   <title>OpenDoc Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=f7d081a">
-  <link rel="stylesheet" href="site.css?v=f7d081a">
+  <link rel="stylesheet" href="./dist/web/app.css?v=25dd063">
+  <link rel="stylesheet" href="site.css?v=25dd063">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -73,7 +73,7 @@
   <p>Each buddy has its own colour, the one in its face (see <a href="avatars.html">Avatars</a>). It is set as <code>--buddy</code> on whatever belongs to that buddy: its @chip, edits, flag and the card it is working on. A run's edits show in the text as a revision: new text in its colour, removed text grey and struck through where it was.</p>
 
   <h2>Type</h2>
-  <p>Inter for the UI. The Markdown editor's page font (sans, serif or mono, set in that plugin) and its sizes in <code>em</code> are the writer's, not the UI's. A text file that is not Markdown shows as it is, in <code>--mono</code> at 14px.</p>
+  <p>Inter for the UI. The Markdown editor's page font (sans, serif or mono, set in that plugin) and its sizes in <code>em</code> are the writer's, not the UI's. A text file that is not Markdown shows as it is, in <code>--mono</code> at 14px by default (a size from 12 to 20 in its plugin).</p>
   <div class="ds-box ds-scale">
     <div><span>24 / 600</span><span style="font-size: 24px; font-weight: 600">Display</span></div>
     <div><span>20 / 600</span><span style="font-size: 20px; font-weight: 600">Large heading</span></div>
@@ -142,6 +142,9 @@
     </ul>
   </div>
   <p>A sidebar is resized by dragging its edge: the cursor turns to <code>col-resize</code> and the edge shows a 2px <code>--text-faint</code> line; double-click the edge for the default width back.</p>
+  <h3>Status bar</h3>
+  <p>The plain view has a status bar under the page: <code>.od-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left, its settings on the right. Line numbers are <code>--text-faint</code>.</p>
+  <div class="ds-box"><div class="od-statusbar"><span>Ln 12, Col 8 · 24 selected</span></div></div>
   <h3>Text: comments, buddy edits, links</h3>
   <div class="ds-box ds-prose od-editor">
     We ship the beta to <span class="od-hl">fifty design partners</span> in March, then
@@ -164,6 +167,6 @@
   </div>
 
 </main>
-<script type="module" src="site.js?v=f7d081a"></script>
+<script type="module" src="site.js?v=25dd063"></script>
 </body>
 </html>

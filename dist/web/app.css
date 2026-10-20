@@ -336,10 +336,16 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 /* the plain view (web/plugins/plain/view.js): any other text file, as it is, in mono;
    the page scrolls it, so its scroller lets a flag over the first line show */
 .od-editor .cm-editor.cm-focused { outline: none; }
-.od-editor .cm-editor .cm-scroller { font: 14px/1.6 var(--mono); overflow: visible; }
+.od-editor .cm-editor .cm-scroller { font: var(--code-size)/1.6 var(--mono); overflow: visible; }
+.od-editor .cm-editor:not(.cm-lineWrapping) .cm-scroller { overflow-x: auto; }
+.od-editor .cm-gutters { background: none; border: 0; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.od-editor .cm-lineNumbers .cm-gutterElement { padding: 0 16px 0 0; }
 .od-editor .cm-editor .cm-content { min-height: 50vh; padding: 0; color: var(--text); caret-color: var(--text); tab-size: 4; }
 .od-editor .cm-editor .cm-line { padding: 0; }
 .od-editor .cm-content ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* the plain view's status bar, under the page */
+.od-statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; padding: 0 16px; flex: none; background: var(--bg-soft); border-top: 1px solid var(--border); font-size: 12px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 
 /* focus mode: no toolbar or outline, everything but the current block recedes */
 [data-focus] .od-toolbar, [data-focus] .od-outline, [data-no-outline] .od-outline { display: none !important; }
@@ -553,6 +559,7 @@ label.od-setting { cursor: pointer; }
 .od-segmented button[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow); }
 .od-stepper { align-items: center; }
 .od-stepper span { min-width: 56px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.od-stepper button { min-width: 28px; font-size: 14px; }
 .od-stepper button:disabled { color: var(--text-faint); }
 .od-setting-group { margin: 20px 0 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
 .od-switch { appearance: none; width: 32px; height: 18px; margin: 0; border-radius: 999px; background: var(--text-faint); position: relative; cursor: pointer; transition: background 0.15s; flex: none; }
