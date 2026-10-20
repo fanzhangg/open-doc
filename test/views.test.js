@@ -231,3 +231,10 @@ test('plain view: the status bar shows the indent and saves what its menu and to
   assert.equal(await run(`document.querySelector('[data-setting="wrap"]').getAttribute('aria-pressed')`), 'false');
   assert.equal(await run(`document.querySelector('[data-setting="whitespace"]').getAttribute('aria-pressed')`), 'true');
 });
+
+test('plain view: indent guides run on over blank lines', async () => {
+  await make('plain', 'a\n    b\n\n    c\n\nd\n');
+  assert.equal(await run(`document.querySelectorAll('.od-guides-blank').length`), 1, 'only the blank line between two indented lines');
+  assert.equal(await run(`document.querySelector('.od-guides-blank').style.getPropertyValue('--width')`), '4');
+  assert.equal(await getText(), 'a\n    b\n\n    c\n\nd\n');
+});
