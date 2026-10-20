@@ -142,7 +142,8 @@ typing; its own settings reach its view as they are.
 ### Interfaces
 
 The target: each component does one thing (principle 7) through the few
-calls below (principle 8). The code is not there yet.
+calls below (principle 8). The code is not there yet; the steps are #177,
+#178, #179 and #180.
 
 Every writer works the same way: it holds a **buffer** (the page's editor,
 or a buddy's copy), and **submits** the buffer's difference from the base it
