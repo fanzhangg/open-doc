@@ -173,7 +173,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   async function commentsView(text) {
     const { lines, bad, problem } = await readComments();
     const comments = lines.map((l) => l.comment).filter(Boolean);
-    const threads = threadsOf(comments, (await buddies()).map((b) => b.name)).map((thread) => {
+    const threads = threadsOf(comments, (await buddies()).map(({ id, name }) => ({ id, name }))).map((thread) => {
       if (!thread.anchor) return { ...thread, detached: false };
       const found = locate(text, thread.anchor);
       return { ...thread, anchor: found ? createAnchor(text, found.start, found.end) : thread.anchor, detached: !found };
@@ -223,9 +223,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const { lines, problem } = await readComments();
     if (problem) return []; // a buddy could not post its reply
     const mine = (await me()).id;
-    const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map((b) => b.name));
-    return threads.flatMap((thread) => askedOf(thread, mine).map((name) => ({
-      threadId: thread.id, thread, buddy: here.find((b) => sameName(b.name, name)), buddies: here,
+    const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
+    return threads.flatMap((thread) => askedOf(thread, mine).map((id) => ({
+      threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here,
     })).filter((ask) => ask.buddy)); // a thread's opener may be gone
   }
 
@@ -234,7 +234,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   function agentStatuses() {
     const running = runner.statuses();
     return shownBuddies.map((b) => {
-      const run = running.find((r) => sameName(r.name, b.name));
+      const run = running.find((r) => r.id === b.id);
       return { ...b, state: run ? 'running' : 'ready', threadIds: run?.threadIds ?? [] };
     });
   }
@@ -259,7 +259,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // resolved meanwhile is dropped whole. Its reply and comments come just
   // after the last comment it saw, so one written while it worked still
   // asks. Run in `serial`.
-  async function finishRun({ threadId, name, base, seen, edited, comments, body, failed }) {
+  async function finishRun({ threadId, id: buddyId, name, base, seen, edited, comments, body, failed }) {
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
     if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
     let conflict = false;
@@ -274,10 +274,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (current) {
         const merged = await mergeInto(base, current.text, edited);
         conflict = merged.dropped.length > 0;
-        await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
+        await writeChange(current, merged.text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id });
       }
     }
-    const by = { id: name, name, kind: 'ai' };
+    const by = { id: buddyId, name, kind: 'ai' };
     const at = Date.parse(seen) + 1;
     const reply = {
       id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
@@ -377,7 +377,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     await checkBuddy(fields);
     if (!fields.name) throw new DocError('bad_input', 'a buddy needs a name');
     const dir = projectDir();
-    return changeBuddies(() => writeBuddy(dir, fields));
+    return changeBuddies(() => writeBuddy(dir, { id: newId('b'), ...fields }));
   }
 
   // Change buddy `name` here: its name (renames its file) or who it is.

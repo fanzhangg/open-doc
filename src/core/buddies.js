@@ -7,6 +7,7 @@ import { NAME_PATTERN, sameName } from './mentions.js';
 
 /** Clippy as it ships: in every doc. Who it is is the user's to change (their own `Clippy.md`); its name is not. */
 export const CLIPPY = Object.freeze({
+  id: 'Clippy',
   name: 'Clippy',
   about: 'A general writing assistant that helps draft and edit docs',
   where: 'app',
@@ -34,16 +35,23 @@ export function checkBuddyPatch(patch) {
   return patch;
 }
 
-/** Buddy `name` from its file's text. */
+const FRONT = /^---\nid: (\S+)\n---\n/;
+
+/**
+ * Buddy `name` from its file's text. Its id is the one in the file's front
+ * matter (`id: b_…`); a file without one is a buddy by its name.
+ */
 export function parseBuddy(name, text) {
-  return { name, about: text.replace(/\r\n/g, '\n').trim() };
+  const body = text.replace(/\r\n/g, '\n');
+  const id = FRONT.exec(body)?.[1];
+  return { id: id ?? name, name, about: body.replace(FRONT, '').trim() };
 }
 
 /** The first line of who `buddy` is, for a name card or the @ menu. */
 export const tagline = (buddy) => buddy.about.split('\n')[0];
 
-/** A buddy's file text. */
-export const buddyText = ({ about = '' }) => `${about.trim()}\n`;
+/** A buddy's file text; its id is written unless it is its name (an old file, or Clippy). */
+export const buddyText = ({ id, name, about = '' }) => `${id && id !== name ? `---\nid: ${id}\n---\n` : ''}${about.trim()}\n`;
 
 /**
  * Each buddy's color, one of eight (spec/PROJECT.md §2), by lower-case

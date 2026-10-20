@@ -21,9 +21,10 @@ export function mentionSpans(body, names) {
   return spans;
 }
 
-/** Which of `names` `body` mentions, each once, in order of first appearance. */
-export function parseMentions(body, names) {
-  return [...new Set(mentionSpans(body, names).map((s) => s.name))];
+/** The ids of those of `people` ([{ id, name }]) that `body` mentions, each once, in order of first appearance. */
+export function parseMentions(body, people) {
+  const ids = mentionSpans(body, people.map((p) => p.name)).map((s) => people.find((p) => p.name === s.name).id);
+  return [...new Set(ids)];
 }
 
 export function sameName(a, b) {

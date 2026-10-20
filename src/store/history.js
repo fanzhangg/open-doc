@@ -39,7 +39,7 @@ export function historyDir(docPath, root) {
  * The versions of the doc, oldest first:
  *   { id, kind, author, startedAt, at, hash, added, removed, thread?, reply?, undid?, restoredFrom? }
  * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
- * 'external' (changed outside OpenDoc); `author` is { name, kind } or null
+ * 'external' (changed outside OpenDoc); `author` is { id?, name, kind } or null
  * when unknown; `added` and `removed` count the characters changed since
  * the version before. A buddy's edit has the `thread` it answered and the
  * id of its `reply`; an undo of one has the reply it `undid`.
@@ -135,7 +135,7 @@ function continues(last, change, now) {
     && now - Date.parse(last.startedAt) < MAX_SPAN_MS;
 }
 
-const sameAuthor = (a, b) => Boolean(a && b) && a.kind === b.kind && a.name.toLowerCase() === b.name.toLowerCase();
+const sameAuthor = (a, b) => Boolean(a && b) && a.kind === b.kind && (a.id ?? a.name).toLowerCase() === (b.id ?? b.name).toLowerCase();
 
 // Characters added and removed between two versions of the source.
 function countChanges(before, after) {

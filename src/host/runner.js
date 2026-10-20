@@ -15,16 +15,16 @@ const MAX_OUTPUT = 1024 * 1024;
 const TAIL_LINES = 20;
 const RUN_TIMEOUT_MS = 30 * 60 * 1000; // no one can stop a run by hand: one that hangs fails
 
-const keyOf = (threadId, name) => `${threadId}:${name.toLowerCase()}`;
+const keyOf = (threadId, id) => `${threadId}:${id}`;
 
 export class Runner {
   /**
    * `asks()` resolves to the asks waiting now: [{ threadId, thread, buddy:
-   * { name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
+   * { id, name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
    * comments }, `comments` the sidecar's text or null.
    * `script()` is the path of the agent script, `folder()` the project
    * folder or null, `human()` the user, { name, about }. `finish(result)` takes a run
-   * that ended: { threadId, name, base, seen, edited, comments, body, failed },
+   * that ended: { threadId, id, name, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
    * `comments` { before, after } the sidecar's copy at the start and end. `onChange()` runs
@@ -33,20 +33,19 @@ export class Runner {
    */
   constructor({ asks, doc, script, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
     Object.assign(this, { asks, doc, script, folder, human, finish, onChange, log, timeoutMs });
-    this.runs = new Map(); // keyOf(threadId, name) → { threadId, name, child, done, cancelled, ended }
+    this.runs = new Map(); // keyOf(threadId, id) → { threadId, id, name, child, done, cancelled, ended }
     this.stopped = false;
     this.checking = null;
     this.again = false;
   }
 
-  /** The buddies at work: [{ name, threadIds }]. */
+  /** The buddies at work: [{ id, name, threadIds }]. */
   statuses() {
-    const byName = new Map();
+    const byId = new Map();
     for (const run of this.runs.values()) {
-      const key = run.name.toLowerCase();
-      byName.set(key, { name: run.name, threadIds: [...(byName.get(key)?.threadIds ?? []), run.threadId] });
+      byId.set(run.id, { id: run.id, name: run.name, threadIds: [...(byId.get(run.id)?.threadIds ?? []), run.threadId] });
     }
-    return [...byName.values()];
+    return [...byId.values()];
   }
 
   /**
@@ -66,10 +65,10 @@ export class Runner {
         this.again = false;
         try {
           const asks = await this.asks();
-          const wanted = new Set(asks.map((ask) => keyOf(ask.threadId, ask.buddy.name)));
+          const wanted = new Set(asks.map((ask) => keyOf(ask.threadId, ask.buddy.id)));
           for (const [key, run] of this.runs) if (!wanted.has(key) && !run.ended) this.#end(run);
           for (const ask of asks) {
-            const key = keyOf(ask.threadId, ask.buddy.name);
+            const key = keyOf(ask.threadId, ask.buddy.id);
             if (!this.runs.has(key) && !this.stopped) this.#start(key, ask);
           }
         } catch (error) {
@@ -101,7 +100,7 @@ export class Runner {
   }
 
   #start(key, { threadId, thread, buddy, buddies }) {
-    const run = { threadId, name: buddy.name, child: null, done: null, cancelled: false, ended: false };
+    const run = { threadId, id: buddy.id, name: buddy.name, child: null, done: null, cancelled: false, ended: false };
     this.runs.set(key, run);
     run.done = this.#run(run, thread, buddy, buddies)
       .catch((error) => console.error(`Run of ${buddy.name} failed to finish:`, error))
@@ -140,7 +139,7 @@ export class Runner {
       run.ended = true; // its reply is on its way: its ask going away is that reply
       await this.log({ buddy: buddy.name, thread: run.threadId, at: new Date(at).toISOString(), ms: Date.now() - at, outcome, code: result.code });
       if (stopped) return; // ended by stop or cancel: no answer
-      const out = { threadId: run.threadId, name: buddy.name, base, seen: thread.comments.at(-1).at };
+      const out = { threadId: run.threadId, id: buddy.id, name: buddy.name, base, seen: thread.comments.at(-1).at };
       if (result.code === 0) {
         const bytes = await readFile(copy).catch(() => null);
         const edited = (bytes && decodeText(bytes)?.text) ?? base; // as text, like the doc
@@ -211,7 +210,7 @@ export function buildPrompt({ buddy, buddies = [], docName, sidecarName = `${doc
   const quote = thread.anchor?.exact;
   const said = thread.comments.map((c) => `${c.by.name}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
   const owner = human?.name ?? 'The owner';
-  const members = [...(human ? [{ ...human, name: `${human.name} (owner)` }] : []), ...buddies.filter((b) => b.name !== buddy.name)];
+  const members = [...(human ? [{ ...human, name: `${human.name} (owner)` }] : []), ...buddies.filter((b) => b.id !== buddy.id)];
   return [
     `You are ${buddy.name}, a member of the doc ${docName}. The members, each a person or a buddy, co-author it; ${owner} is its owner. You work on a copy of the doc, in your working folder, and you are answering a comment in it.`,
     ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
