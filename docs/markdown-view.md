@@ -142,8 +142,12 @@ block of the text it was given pairs with a block of its document,
 `applyText` parses only the blocks where the new text differs, with a kept
 block on either side that must read as before. Both projections are kept
 per block. A doc whose blocks do not pair up (a link definition has no
-block in the document) is worked out whole. The word count runs a few times
-a second at most.
+block in the document) is worked out whole. Milkdown's own walks of the
+whole doc on every change are left out (heading ids, unused) or kept to
+the changed blocks (ordered list labels; `web/markdown-schema.js`), and
+focus mode fades blocks by an attribute the chrome sets, not by the
+editor's focus class, which would restyle every block on each focus
+change. The word count runs a few times a second at most.
 
 ## Many writers
 
