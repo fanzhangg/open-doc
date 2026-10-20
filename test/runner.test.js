@@ -201,7 +201,7 @@ test('the shipped agent scripts are written when missing, then left alone; Reset
 
 test('the prompt tells a buddy who the other members are, as the app shows them', () => {
   const thread = { anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
-  const buddies = [{ name: 'Ada', about: 'Edits for tone.' }, { name: 'Bo', about: '' }, { name: 'Cy', about: 'Checks facts.' }];
+  const buddies = [{ id: 'b_ada', name: 'Ada', about: 'Edits for tone.' }, { id: 'b_bo', name: 'Bo', about: '' }, { id: 'b_cy', name: 'Cy', about: 'Checks facts.' }];
   const prompt = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread });
   assert.match(prompt, /The other members of the doc:\n\nBo\n\nCy: Checks facts\./);
   assert.doesNotMatch(prompt, /Ada: /, 'not itself');

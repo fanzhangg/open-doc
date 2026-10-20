@@ -129,7 +129,7 @@ test("a buddy's merged edit is recorded as its own", { timeout: 30_000 }, async 
     const thread = async () => (await call('state')).threads.find((t) => t.id === id);
     await until(async () => (await versions()).length === 2 && (await thread()).comments.length === 2, 'the buddy\'s edit and reply');
     const [, agentVersion] = await versions();
-    assert.deepEqual(agentVersion.author, { name: 'histbot', kind: 'agent' });
+    assert.deepEqual(agentVersion.author, { id: 'histbot', name: 'histbot', kind: 'agent' });
     const { comments } = await thread();
     assert.deepEqual([agentVersion.thread, agentVersion.reply], [id, comments[1].id], 'tagged with its reply');
   });

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLIPPY, buddiesHere, buddyText, colorSlots, parseBuddy, tagline } from '../src/core/buddies.js';
 import { readSettings } from '../src/store/settings.js';
-import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, until } from './helpers.js';
+import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const refused = (code) => (error) => error.code === code;
 const who = async (opened) => (await opened.state()).agents.map((a) => [a.name, a.about, a.where]);
@@ -34,9 +34,12 @@ async function opening(docPath, options, fn) {
 
 test('a buddy file: the name is the file name, the text who it is, its first line the tagline', () => {
   const critic = parseBuddy('Critic', 'Checks every claim.\r\n\r\nQuote the line.\nBe brief.\n');
-  assert.deepEqual(critic, { name: 'Critic', about: 'Checks every claim.\n\nQuote the line.\nBe brief.' });
+  assert.deepEqual(critic, { id: 'Critic', name: 'Critic', about: 'Checks every claim.\n\nQuote the line.\nBe brief.' });
   assert.equal(tagline(critic), 'Checks every claim.');
-  assert.deepEqual(parseBuddy('Empty', ''), { name: 'Empty', about: '' });
+  assert.deepEqual(parseBuddy('Empty', ''), { id: 'Empty', name: 'Empty', about: '' }, 'a file without an id is a buddy by its name');
+  const kept = parseBuddy('Critic', '---\nid: b_abc123\n---\nChecks every claim.\n');
+  assert.deepEqual(kept, { id: 'b_abc123', name: 'Critic', about: 'Checks every claim.' }, 'the id is not part of who it is');
+  assert.equal(buddyText(kept), '---\nid: b_abc123\n---\nChecks every claim.\n');
   assert.equal(buddyText(critic), 'Checks every claim.\n\nQuote the line.\nBe brief.\n');
   assert.deepEqual(parseBuddy('Critic', buddyText(critic)), critic);
   const here = buddiesHere([{ name: 'critic', about: 'project' }, { name: 'clippy', about: 'theirs' }, { name: 'Ada', about: 'project' }]);
@@ -118,7 +121,9 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     await assert.rejects(readdir(join(folder, '.opendoc')), { code: 'ENOENT' });
     await opened.call('createBuddy', { buddy: { name: 'Critic', about: 'Checks claims.\n\nQuote lines.' } });
-    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'utf8'), 'Checks claims.\n\nQuote lines.\n');
+    const written = await readFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'utf8');
+    const id = /^---\nid: (b_[a-z0-9]{10})\n---\nChecks claims\.\n\nQuote lines\.\n$/.exec(written)?.[1];
+    assert.ok(id, 'a new buddy gets a random id in its file');
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
 
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'critic' } }), /the name critic is taken/);
@@ -129,11 +134,44 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
     const renamed = await opened.call('updateBuddy', { name: 'critic', patch: { name: 'Reviewer' } });
     assert.deepEqual(renamed.agents.map((a) => a.name), ['Clippy', 'Ada', 'Reviewer']);
     assert.deepEqual((await readdir(join(folder, '.opendoc', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
-    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), 'Checks claims.\n\nQuote lines.\n');
+    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), written, 'a rename keeps the id');
+    assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, id);
     await opened.call('deleteBuddy', { name: 'Reviewer' });
     assert.deepEqual(await readdir(join(folder, '.opendoc', 'buddies')), ['Ada.md']);
     await assert.rejects(opened.call('deleteBuddy', { name: 'Reviewer' }), refused('not_found'));
   });
+});
+
+test('renaming a buddy whose file has no id keeps its old name as its id, so its comments stay its own', async () => {
+  const folder = await projectFolder({ Critic: 'Checks every claim.\n' });
+  await opening(join(folder, 'plan.md'), { settingsDir: await fakeConfig(), folder }, async (opened) => {
+    const renamed = await opened.call('updateBuddy', { name: 'Critic', patch: { name: 'Reviewer' } });
+    assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, 'Critic');
+    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), '---\nid: Critic\n---\nChecks every claim.\n');
+    await opened.call('updateBuddy', { name: 'Reviewer', patch: { about: 'Changed.' } });
+    assert.match(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), /^---\nid: Critic\n---\nChanged\.\n$/);
+  });
+});
+
+test('a renamed buddy keeps its comments: it answers once, is not asked again, and replies under its id', { timeout: 30_000 }, async () => {
+  const settingsDir = await fakeConfig();
+  const docPath = await tempDoc('Some text.\n');
+  const { doc, call, state } = await openTestDoc(docPath, { settingsDir, buddies: { Ada: 'Edits.\n' } });
+  try {
+    const { id } = await call('comment', { anchor: null, body: '@Ada hello' });
+    const thread = async () => (await state()).threads.find((t) => t.id === id);
+    await until(async () => (await thread()).comments.length === 2, 'its reply');
+    const adaId = (await thread()).comments[1].by.id;
+    assert.equal(adaId, 'Ada', 'an old file is a buddy by its name');
+    await call('updateBuddy', { name: 'Ada', patch: { name: 'Bea' } });
+    await call('comment', { thread: id, body: '@Bea and this' });
+    await until(async () => (await thread()).comments.length === 4, 'the reply under its new name');
+    assert.deepEqual((await thread()).comments.filter((c) => c.by.kind === 'ai').map((c) => [c.by.id, c.by.name]), [['Ada', 'Ada'], ['Ada', 'Bea']]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal((await thread()).comments.length, 4, 'nothing asks it again');
+  } finally {
+    await doc.close();
+  }
 });
 
 test('a buddy file changed outside the app, or by another window, shows at once', { timeout: 15_000 }, async () => {
@@ -163,7 +201,7 @@ test('a project cloned on another machine, or moved, has the same buddies and th
   const cloned = await opening(join(clone, 'plan.md'), { settingsDir: there, folder: clone }, (opened) => opened.state());
   assert.deepEqual(cloned.agents, seen.agents);
   // A face is drawn from the name alone: a buddy carries nothing else to draw it from.
-  assert.deepEqual(Object.keys(seen.agents[1]).sort(), ['about', 'name', 'state', 'threadIds', 'where']);
+  assert.deepEqual(Object.keys(seen.agents[1]).sort(), ['about', 'id', 'name', 'state', 'threadIds', 'where']);
 
   const moved = `${folder}-moved`;
   await rename(folder, moved);

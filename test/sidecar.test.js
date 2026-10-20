@@ -24,7 +24,7 @@ for (const c of reading) {
 
 for (const m of mentions) {
   test(`mentions: ${m.body}`, () => {
-    assert.deepEqual(parseMentions(m.body, m.names), m.mentions);
+    assert.deepEqual(parseMentions(m.body, m.names.map((name) => ({ id: name, name }))), m.mentions);
   });
 }
 
@@ -77,7 +77,7 @@ test('who is asked: whom my comment @mentions, or with no mention the thread\'s 
   const me = by('u_me000001', 'me');
   const other = by('u_other001', 'other');
   const clippy = by('Clippy', 'Clippy', 'ai');
-  const thread = (...list) => threadsOf(list.map(([who, body, extra = {}], i) => ({ id: i === 0 ? 'c_thread01' : `c_reply0${i}`, ...(i ? { thread: 'c_thread01' } : {}), by: who, at: `2026-10-01T10:0${i}:00Z`, body, ...extra })), ['Clippy', 'Ada'])[0];
+  const thread = (...list) => threadsOf(list.map(([who, body, extra = {}], i) => ({ id: i === 0 ? 'c_thread01' : `c_reply0${i}`, ...(i ? { thread: 'c_thread01' } : {}), by: who, at: `2026-10-01T10:0${i}:00Z`, body, ...extra })), [{ id: 'Clippy', name: 'Clippy' }, { id: 'Ada', name: 'Ada' }])[0];
   assert.deepEqual(askedOf(thread([me, '@Clippy look']), 'u_me000001'), ['Clippy']);
   assert.deepEqual(askedOf(thread([me, '@clippy look'], [me, 'and this too']), 'u_me000001'), ['Clippy'], 'a later comment of mine without a mention still waits');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done. @Ada?']), 'u_me000001'), [], "answered; a buddy's @mention asks no one");
@@ -97,6 +97,21 @@ test('who is asked: whom my comment @mentions, or with no mention the thread\'s 
   assert.deepEqual(askedOf(thread([ada, 'This is stale.'], [me, 'Update it']), 'u_me000001'), ['Ada'], 'the buddy that opened the thread is one of its buddies');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [other, 'and this']), 'u_me000001'), [], "another user's follow-up asks no one");
   assert.deepEqual(peopleOf([...thread([me, 'a'], [{ ...me, name: 'me2' }, 'b']).comments]), [{ id: 'u_me000001', name: 'me2' }], 'a human goes by the name in their latest comment');
+});
+
+test('a renamed buddy is still the one asked and the one who answered: ids, not names', () => {
+  const me = { id: 'u_me000001', name: 'me', kind: 'human' };
+  const ada = { id: 'b_ada00001', name: 'Ada', kind: 'ai' };
+  const at = (i) => `2026-10-01T10:0${i}:00Z`;
+  const first = { id: 'c_thread01', by: ada, at: at(0), body: 'Opened by Ada.', anchor: null };
+  const ask = { id: 'c_reply001', thread: 'c_thread01', by: me, at: at(1), body: '@Bea more' };
+  const reply = { id: 'c_reply002', thread: 'c_thread01', by: ada, at: at(2), body: 'Done.' };
+  const bea = [{ id: 'b_ada00001', name: 'Bea' }];
+  const [asked] = threadsOf([first, ask], bea);
+  assert.deepEqual(asked.comments[1].mentions, ['b_ada00001'], '@Bea is Ada\'s id under its new name');
+  assert.deepEqual(askedOf(asked, 'u_me000001'), ['b_ada00001']);
+  assert.deepEqual(askedOf(threadsOf([first, ask, reply], bea)[0], 'u_me000001'), [], 'its reply under the old name still answers');
+  assert.deepEqual(threadsOf([first, { ...ask, body: '@Ada more' }], bea)[0].comments[1].mentions, [], 'the old name is no longer a mention');
 });
 
 test('a new comment: a human may resolve with an empty body; a buddy\'s resolved is dropped and its body kept', () => {

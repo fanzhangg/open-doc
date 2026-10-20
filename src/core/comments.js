@@ -4,7 +4,7 @@
 // mentioned and who is asked are read from the comments, never stored.
 // Pure, so the doc host and the page read a sidecar the same way.
 
-import { NAME_PATTERN, parseMentions, sameName } from './mentions.js';
+import { NAME_PATTERN, parseMentions } from './mentions.js';
 import { createAnchor } from './anchor.js';
 
 export const FORMAT_VERSION = 3;
@@ -167,8 +167,8 @@ const byTime = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 
  * its first comment then its replies, ordered by `at`, then `id`; threads in
  * the order of their first comments. Only people resolve and reopen: a
  * thread is resolved when its latest human comment says so. A reply whose first comment is missing
- * is left out. `mentionable` names who an @name can mean (§6); each comment
- * gets `mentions`, the names it mentions, as spelled there.
+ * is left out. `mentionable` ([{ id, name }]) is who an @name can mean (§6); each comment
+ * gets `mentions`, the ids it mentions.
  */
 export function threadsOf(comments, mentionable = []) {
   const firsts = comments.filter((c) => c.thread === undefined).sort(byTime);
@@ -181,7 +181,7 @@ export function threadsOf(comments, mentionable = []) {
 }
 
 /**
- * The buddies the open `thread` (from threadsOf) waits on: each X that a
+ * The buddies (ids) the open `thread` (from threadsOf) waits on: each X that a
  * comment by user `me` (an id) asks, newer than X's last comment there. A
  * comment asks whom it @mentions; one that mentions no one asks the
  * thread's buddies, unless it is empty (it resolved or reopened the thread): the one that opened it and each that `me` @mentioned
@@ -190,17 +190,17 @@ export function threadsOf(comments, mentionable = []) {
  */
 export function askedOf(thread, me) {
   if (thread.resolved) return [];
-  const add = (list, name) => { if (!list.some((n) => sameName(n, name))) list.push(name); };
+  const add = (list, id) => { if (!list.includes(id)) list.push(id); };
   const theirs = thread.comments[0].by.kind === 'ai' ? [thread.comments[0].by.id] : [];
   const asked = [];
   thread.comments.forEach((c, i) => {
     if (c.by.kind === 'human' && c.resolved) asked.length = 0;
     if (c.by.kind !== 'human' || c.by.id !== me || c.body.trim() === '') return;
-    for (const name of c.mentions.length > 0 ? c.mentions : theirs) {
-      const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && sameName(r.by.id, name));
-      if (!answered) add(asked, name);
+    for (const id of c.mentions.length > 0 ? c.mentions : theirs) {
+      const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && r.by.id === id);
+      if (!answered) add(asked, id);
     }
-    for (const name of c.mentions) add(theirs, name);
+    for (const id of c.mentions) add(theirs, id);
   });
   return asked;
 }
