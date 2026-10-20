@@ -309,19 +309,25 @@ async function mergesOutside(page, doc) {
 // held back while ' B' is typed: the page ends with all three, saved.
 async function typesDuringSave(page, doc) {
   const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
-  const end = async () => {
-    for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'End', code: 'End', windowsVirtualKeyCode: 35 });
+  // The end of the first line: the caret may be anywhere after the doc was read from disk.
+  const endOfFirstLine = async () => {
+    const mac = process.platform === 'darwin';
+    const keys = [
+      { modifiers: mac ? 4 : 2, ...(mac ? { key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 } : { key: 'Home', code: 'Home', windowsVirtualKeyCode: 36 }) }, // the top of the doc
+      { modifiers: 0, key: 'End', code: 'End', windowsVirtualKeyCode: 35 },
+    ];
+    for (const key of keys) for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, ...key });
   };
   writeFileSync(doc, 'one\ntwo\nthree\n');
   await waitFor(async () => (await page.evaluate(shown)) === 'one\ntwo\nthree\n', 15_000, 'the doc from disk');
   await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
   writeFileSync(hold, '');
   try {
-    await end();
+    await endOfFirstLine();
     await page.send('Input.insertText', { text: ' A' });
     writeFileSync(doc, 'one\ntwo\nTHREE\n'); // before the typing is saved
     await waitFor(() => readFileSync(doc, 'utf8').includes(' A'), 15_000, 'the save to reach the doc');
-    await end();
+    await endOfFirstLine();
     await page.send('Input.insertText', { text: ' B' });
   } finally {
     rmSync(hold, { force: true });
