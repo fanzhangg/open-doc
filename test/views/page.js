@@ -3,18 +3,21 @@
 // for any view that edits through contenteditable.
 
 import { createMarkdownView } from '../../web/plugins/markdown/view.js';
-import { createPlainView } from '../../web/views/plain.js';
+import { pluginSettings } from '../../src/core/settings.js';
+import { plain } from '../../web/plugins/plain/index.js';
 
-const VIEWS = { markdown: createMarkdownView, plain: createPlainView };
+const VIEWS = { markdown: createMarkdownView, plain: plain.createView };
 const stage = document.querySelector('.od-stage');
 let view = null;
 
 const contract = {
   clicked: [],
+  saved: [], // the settings changes the view asked to save
   async make(name, text, options = {}) {
     await view?.destroy();
     contract.clicked = [];
-    view = await VIEWS[name]({ stage, text, ...options, onMarkClick: (id) => contract.clicked.push(id) });
+    contract.saved = [];
+    view = await VIEWS[name]({ stage, text, settings: pluginSettings({ plugins: {} }, plain), ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
     window.view = view;
   },
   // Put the selection on characters [start, end) of the first piece of text holding `quote`.

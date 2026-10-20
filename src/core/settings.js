@@ -4,7 +4,7 @@
 
 import { NAME_PATTERN } from './mentions.js';
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 /**
  * `id` is who the user is in every doc's comments, whatever their name
@@ -21,9 +21,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   name: null,
   about: '',
   theme: 'system',
-  font: 'sans',
-  width: 'normal',
-  wordCount: false,
   plugins: Object.freeze({}),
   agent: 'claude',
 });
@@ -39,12 +36,23 @@ const RULES = {
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
   about: (v) => typeof v === 'string' && !v.includes('\0'),
   theme: oneOf('system', 'light', 'dark'),
-  font: oneOf('sans', 'serif', 'mono'),
-  width: oneOf('normal', 'wide'),
-  wordCount: boolean,
   plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(scalar)),
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
+
+/**
+ * A settings file as this version reads it. Version 2 had the Markdown
+ * editor's font, width and word count at the top level; they are its
+ * plugin's now.
+ */
+export function migrateSettings(stored) {
+  if (stored.version >= SETTINGS_VERSION) return stored;
+  const { font, width, wordCount, ...rest } = stored;
+  const moved = Object.fromEntries(Object.entries({ font, width, wordCount }).filter(([, value]) => value !== undefined));
+  if (Object.keys(moved).length === 0) return { ...rest, version: SETTINGS_VERSION };
+  const plugins = objectOr(rest.plugins);
+  return { ...rest, version: SETTINGS_VERSION, plugins: { ...plugins, markdown: { ...moved, ...objectOr(plugins.markdown) } } };
+}
 
 export class SettingsError extends Error {
   constructor(message) {
@@ -101,13 +109,13 @@ const FIELD_RULES = {
 
 /**
  * The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on
- * unless switched off, and each field of its `settings` (an ordered list of
+ * unless switched off (an `always` plugin cannot be), and each field of its `settings` (an ordered list of
  * { key, type: 'switch' | 'choice' | 'number', label, default, ... }, see
  * web/plugins/index.js) as stored if valid, else its default.
  */
 export function pluginSettings(settings, plugin) {
   const stored = objectOr(settings.plugins[plugin.id]);
-  const out = { enabled: boolean(stored.enabled) ? stored.enabled : true };
+  const out = { enabled: plugin.always || (boolean(stored.enabled) ? stored.enabled : true) };
   for (const field of plugin.settings ?? []) {
     out[field.key] = FIELD_RULES[field.type](field, stored[field.key]) ? stored[field.key] : field.default;
   }

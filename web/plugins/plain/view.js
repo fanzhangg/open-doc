@@ -1,16 +1,19 @@
 // The plain view: a text file as it is, in CodeMirror, with no formatting,
-// for any text file that is not Markdown. The doc's text is the editor's,
+// for any text file no other plugin claims (index.js). The doc's text is the editor's,
 // so offsets on it are positions in the editor and marks are decorations
 // as given. A change made on disk goes in as changes to the lines that
 // differ, outside the human's undo history; a buddy's is flagged with its
 // name, any other also glows (as in the Markdown view).
 
-import { Annotation, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
-import { history, historyKeymap, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits } from '../../src/core/diff.js';
-import { buddyColor } from '../faces.js';
-import { hydrateIcons } from '../icons.js';
+import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemirror/view';
+import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
+import { diffEdits } from '../../../src/core/diff.js';
+import { buddyColor } from '../../faces.js';
+import { hydrateIcons } from '../../icons.js';
+import { indentKeys, resolveIndent } from './indent.js';
+import { createStatusBar } from './status.js';
+import { indentGuides, whitespaceMarks } from './whitespace.js';
 
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
@@ -40,39 +43,50 @@ const flashField = StateField.define({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-// Tab types a tab and Enter a bare line break: no indenting for you.
-const keys = [
-  {
-    key: 'Tab',
-    run(view) {
-      if (view.state.readOnly) return false;
-      view.dispatch({ ...view.state.replaceSelection('\t'), scrollIntoView: true, userEvent: 'input.type' });
-      return true;
-    },
-  },
-  { key: 'Enter', run: insertNewline },
-  ...historyKeymap,
-  ...standardKeymap,
-];
-
 /**
  * The same options and interface as the Markdown view (createMarkdownView in
  * web/plugins/markdown/view.js). It has no tools, so `toolbar` is not used; given
- * `onComment`, a bubble over a selection offers Comment.
+ * `onComment`, a bubble over a selection offers Comment. `settings` are the
+ * plugin's (web/plugins/plain/index.js), changed through `saveSettings`; an editable
+ * view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, settings, saveSettings = () => {}, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   let changeTimer = 0;
   let bubble = null;
+  let status = null;
+  // The settings that change what CodeMirror does; the font size is a CSS variable.
+  const numbers = new Compartment();
+  const wrapping = new Compartment();
+  const numbersFor = (own) => (own.lineNumbers ? lineNumbers() : []);
+  const wrapFor = (own) => (own.wrap ? EditorView.lineWrapping : []);
+  const marking = new Compartment();
+  const guiding = new Compartment();
+  const markingFor = (own) => (own.whitespace === 'off' ? [] : whitespaceMarks(own.whitespace));
+  const guidingFor = (own) => (own.guides ? indentGuides : []);
+  const shown = (own) => [
+    numbers.reconfigure(numbersFor(own)), wrapping.reconfigure(wrapFor(own)),
+    marking.reconfigure(markingFor(own)), guiding.reconfigure(guidingFor(own)),
+  ];
+  // The indent Tab types, from the file or the settings; seen again when the settings or the file change.
+  let own = settings;
+  let indent;
+  const reindent = (current) => {
+    indent = resolveIndent(own, current);
+    host.style.setProperty('--indent', indent.tabs ? 4 : indent.size);
+    status?.paint(own, indent);
+  };
+  reindent(text);
+  host.style.setProperty('--code-size', `${settings.fontSize}px`);
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of(keys), EditorView.lineWrapping, marksField, flashField,
+        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
@@ -82,17 +96,37 @@ export async function createPlainView({ stage, text, editable = true, onChange =
           // Lines measured as they scroll into view move what is below them.
           if ((update.heightChanged || update.geometryChanged) && !update.docChanged) onLayout();
           if (update.selectionSet || update.focusChanged || update.geometryChanged) bubble?.place();
+          if (update.selectionSet || update.docChanged) status?.update();
         }),
       ],
     }),
   });
 
   if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
+  if (editable) {
+    status = createStatusBar(view, stage.parentElement, saveSettings);
+    status.paint(own, indent);
+  }
 
   // The doc's text, read out once per version of it.
+  // CodeMirror's lines end in "\n" whatever the text's do; a text whose every line break is "\r\n" is
+  // written back so, and its offsets are moved by one for each line above them (toDoc, toText).
+  let crlf = isCrlf(text);
+  const toDoc = (offset) => {
+    if (!crlf) return offset;
+    const { doc } = view.state;
+    let low = 1;
+    for (let high = doc.lines; low < high;) {
+      const mid = (low + high + 1) >> 1;
+      if (doc.line(mid).from + mid - 1 <= offset) low = mid;
+      else high = mid - 1;
+    }
+    return Math.min(offset - (low - 1), doc.line(low).to);
+  };
+  const toText = (at) => (crlf ? at + view.state.doc.lineAt(at).number - 1 : at);
   let textOf = { doc: view.state.doc, text };
   const currentText = () => {
-    if (textOf.doc !== view.state.doc) textOf = { doc: view.state.doc, text: view.state.doc.toString() };
+    if (textOf.doc !== view.state.doc) textOf = { doc: view.state.doc, text: view.state.doc.sliceString(0, view.state.doc.length, crlf ? '\r\n' : '\n') };
     return textOf.text;
   };
 
@@ -110,8 +144,12 @@ export async function createPlainView({ stage, text, editable = true, onChange =
    * buddy's change (`buddy`) also glows.
    */
   function applyText(next, { by = null, buddy = false } = {}) {
-    const edits = diffEdits(currentText(), next);
-    if (edits.length === 0) return;
+    crlf = isCrlf(next);
+    const edits = diffEdits(view.state.doc.toString(), next.replaceAll('\r\n', '\n'));
+    if (edits.length === 0) {
+      textOf = { doc: view.state.doc, text: next };
+      return;
+    }
     const flashId = Symbol('flash');
     const flashes = [];
     if (by) {
@@ -125,6 +163,7 @@ export async function createPlainView({ stage, text, editable = true, onChange =
       annotations: [Transaction.addToHistory.of(false), fromDisk.of(true)],
     });
     textOf = { doc: view.state.doc, text: next };
+    reindent(next);
     if (flashes.length > 0) setTimeout(() => view.dispatch({ effects: dropFlash.of(flashId) }), FLASH_MS);
   }
 
@@ -136,25 +175,36 @@ export async function createPlainView({ stage, text, editable = true, onChange =
     setMarks(marks) {
       if (painted?.doc === view.state.doc && JSON.stringify(painted.marks) === JSON.stringify(marks)) return;
       painted = { doc: view.state.doc, marks };
-      view.dispatch({ effects: setMarks.of(decorations(marks)) });
+      view.dispatch({ effects: setMarks.of(decorations(marks, toDoc)) });
       onLayout();
     },
     selection() {
       const { from, to } = view.state.selection.main;
-      return { from, to };
+      return { from: toText(from), to: toText(to) };
     },
     // Lines outside the viewport are not drawn: their tops are where they would be.
-    tops: (offsets) => offsets.map((at) => view.coordsAtPos(at)?.top ?? view.documentTop + view.lineBlockAt(at).top),
+    tops: (offsets) => offsets.map((offset) => {
+      const at = toDoc(offset);
+      return view.coordsAtPos(at)?.top ?? view.documentTop + view.lineBlockAt(at).top;
+    }),
     scrollTo(at) {
-      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+      view.dispatch({ effects: EditorView.scrollIntoView(toDoc(at), { y: 'center' }) });
     },
     focus: () => view.focus(),
+    /** The plugin's settings changed. */
+    applySettings(next) {
+      own = next;
+      host.style.setProperty('--code-size', `${next.fontSize}px`);
+      reindent(currentText());
+      view.dispatch({ effects: shown(next) });
+    },
     undo: () => undo(view),
     redo: () => redo(view),
     destroy() {
       clearTimeout(changeTimer);
       host.removeEventListener('click', clickMark);
       bubble?.destroy();
+      status?.destroy();
       view.destroy();
     },
   };
@@ -225,16 +275,18 @@ function createBubble(view, { stage, host, onComment }) {
 
 // The page's marks as decorations: commented text, and a revision's new
 // text marked and the text it removed struck through before it.
-function decorations(marks) {
+function decorations(marks, toDoc) {
   const ranges = [];
   for (const mark of marks) {
+    const from = toDoc(mark.from);
+    const to = toDoc(mark.to);
     if (mark.kind === 'comment') {
-      if (mark.from < mark.to) {
-        ranges.push(Decoration.mark({ class: mark.active ? 'od-hl od-hl-active' : 'od-hl', attributes: { 'data-thread': mark.id } }).range(mark.from, mark.to));
+      if (from < to) {
+        ranges.push(Decoration.mark({ class: mark.active ? 'od-hl od-hl-active' : 'od-hl', attributes: { 'data-thread': mark.id } }).range(from, to));
       }
       continue;
     }
-    const { from, to, removed, by, replay } = mark;
+    const { removed, by, replay } = mark;
     const className = (kind) => `${by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`}${replay ? ' od-replay' : ''}`;
     const style = by ? `--buddy: ${buddyColor(by)}` : '';
     if (removed) ranges.push(Decoration.widget({ widget: new Removed(removed, className('del'), style, replay), side: -1 }).range(from));
@@ -285,3 +337,6 @@ class Flag extends WidgetType {
     return wrap;
   }
 }
+
+// Whether every line break of `text` is "\r\n".
+const isCrlf = (text) => text.includes('\r\n') && !/\r(?!\n)|(?<!\r)\n/.test(text);

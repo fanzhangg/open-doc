@@ -139,7 +139,7 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
  *           toolbar?: HTMLElement, onComment?: () => void,
- *           settings?: { outline: boolean, focus: boolean }, saveSettings?: (patch: object) => void }} options
+ *           settings?: object, saveSettings?: (patch: object) => void }} options
  */
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
 // it shows diagrams as their source, so the changes in them can be seen.
@@ -523,9 +523,25 @@ export async function createMarkdownView({
     v.dispatch(v.state.tr.setMeta(flashKey, next).setMeta('addToHistory', false));
   }
 
+  // The selection: { from, to }, or null when it is not in the text.
+  function selection() {
+    const { doc, selection } = view().state;
+    const { from, to } = selectionSpan(selection);
+    const rendered = textRange(projectionOf(doc), from, to);
+    if (!rendered) {
+      const at = offsetAt(doc, from);
+      return at === null ? null : { from: at, to: at };
+    }
+    const projection = projected(doc);
+    const found = across(projectionOf(doc), projection, rendered.start, rendered.end);
+    if (!found) return null;
+    const range = sourceRange(projection, found.start, found.end);
+    return { from: range.start, to: range.end };
+  }
+
   if (toolbar) {
     chrome = createChrome({
-      run, formatState, headings, scrollToHeading, scrollToAnchor,
+      run, formatState, getText: currentText, selection, headings, scrollToHeading, scrollToAnchor,
       selectionRect, beginLink, endLink, linkRect, caretLink,
     }, { toolbar, stage, host, onComment, settings, saveSettings });
   }
@@ -542,20 +558,7 @@ export async function createMarkdownView({
       paintMarks();
     },
     /** The selection: { from, to }, or null when it is not in the text. */
-    selection() {
-      const { doc, selection } = view().state;
-      const { from, to } = selectionSpan(selection);
-      const rendered = textRange(projectionOf(doc), from, to);
-      if (!rendered) {
-        const at = offsetAt(doc, from);
-        return at === null ? null : { from: at, to: at };
-      }
-      const projection = projected(doc);
-      const found = across(projectionOf(doc), projection, rendered.start, rendered.end);
-      if (!found) return null;
-      const range = sourceRange(projection, found.start, found.end);
-      return { from: range.start, to: range.end };
-    },
+    selection,
     /** The viewport top of each text offset in `offsets`, or null where it is not drawn. */
     tops(offsets) {
       const v = view();

@@ -112,6 +112,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-status-text { overflow: hidden; text-overflow: ellipsis; }
 .od-status[data-state="error"], .od-status[data-state="conflict"] { color: var(--red); }
 .od-status[data-state="offline"] { color: var(--text-soft); }
+/* the Markdown editor's word count, in its toolbar */
 .od-count { color: var(--text-faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .od-people { display: flex; align-items: center; gap: 8px; }
@@ -234,6 +235,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-toolbar button, .od-bubble button { border: 0; background: none; border-radius: 6px; height: 28px; min-width: 28px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--text); flex: none; }
 .od-toolbar button:hover:not(:disabled), .od-bubble button:hover:not(:disabled) { background: var(--hover); }
 .od-toolbar button[aria-pressed="true"], .od-bubble button[aria-pressed="true"] { background: var(--active); color: var(--text); }
+.od-toolbar .od-count { padding: 0 8px; }
 .od-toolbar .od-pill { border-radius: 6px; padding: 0 8px; font-weight: 500; }
 .od-toolbar .od-tool-comment { color: var(--text-soft); }
 .od-comment-count { min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--hover); font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums; }
@@ -331,13 +333,31 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-editor .ProseMirror-focused .ProseMirror-gapcursor { display: block; }
 @keyframes od-gapcursor-blink { to { visibility: hidden; } }
 
-/* the plain view (web/views/plain.js): any other text file, as it is, in mono;
+/* the plain view (web/plugins/plain/view.js): any other text file, as it is, in mono;
    the page scrolls it, so its scroller lets a flag over the first line show */
 .od-editor .cm-editor.cm-focused { outline: none; }
-.od-editor .cm-editor .cm-scroller { font: 14px/1.6 var(--mono); overflow: visible; }
+.od-editor .cm-editor .cm-scroller { font: var(--code-size)/1.6 var(--mono); overflow: visible; }
+.od-editor .cm-editor:not(.cm-lineWrapping) .cm-scroller { overflow-x: auto; }
+.od-editor .cm-gutters { background: none; border: 0; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.od-editor .cm-lineNumbers .cm-gutterElement { padding: 0 16px 0 0; }
 .od-editor .cm-editor .cm-content { min-height: 50vh; padding: 0; color: var(--text); caret-color: var(--text); tab-size: 4; }
 .od-editor .cm-editor .cm-line { padding: 0; }
 .od-editor .cm-content ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* the plain view's whitespace: dots for spaces, arrows for tabs, a guide per indent step (--indent characters) */
+.od-ws-space { background: radial-gradient(circle at 50% 55%, var(--text-faint) 1px, transparent 1.5px) 0 0 / 1ch 100% repeat-x; }
+.od-ws-tab { position: relative; }
+.od-ws-tab::before { content: '→'; position: absolute; left: 0; color: var(--text-faint); }
+.od-guides { background: repeating-linear-gradient(to right, var(--border-strong) 0 1px, transparent 1px calc(var(--indent) * 1ch)); }
+.od-guides-blank { background: repeating-linear-gradient(to right, var(--border-strong) 0 1px, transparent 1px calc(var(--indent) * 1ch)) 0 0 / calc(var(--width) * 1ch) 100% no-repeat; }
+
+/* the plain view's status bar, under the page */
+.od-statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; padding: 0 16px; flex: none; background: var(--bg-soft); border-top: 1px solid var(--border); font-size: 12px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.od-statusbar .od-block-menu { color: var(--text); }
+.od-status-actions { display: flex; align-items: center; gap: 2px; }
+.od-statusbar button { height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: none; font-size: 12px; color: var(--text-soft); }
+.od-statusbar button:hover, .od-statusbar button[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+.od-statusbar button[aria-pressed="true"] { background: var(--active); color: var(--text); }
 
 /* focus mode: no toolbar or outline, everything but the current block recedes */
 [data-focus] .od-toolbar, [data-focus] .od-outline, [data-no-outline] .od-outline { display: none !important; }
@@ -546,19 +566,12 @@ label.od-setting { cursor: pointer; }
 [data-kind="claude"] [data-for]:not([data-for~="claude"]),
 [data-kind="codex"] [data-for]:not([data-for~="codex"]),
 [data-kind="custom"] [data-for]:not([data-for~="custom"]) { display: none; }
-.od-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.od-fonts button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text-soft); font-size: 12px; }
-.od-fonts button:hover { background: var(--hover); }
-.od-fonts button[aria-checked="true"] { border-color: var(--text); color: var(--text); background: var(--hover); }
-.od-font-sample { font-size: 24px; line-height: 1.2; color: var(--text); }
-[data-font="sans"] > .od-font-sample { font-family: var(--ui-font); }
-[data-font="serif"] > .od-font-sample { font-family: var(--serif); }
-[data-font="mono"] > .od-font-sample { font-family: var(--mono); font-size: 20px; }
 .od-segmented { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--bg-soft); flex: none; }
 .od-segmented button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; font-size: 12px; color: var(--text-soft); }
 .od-segmented button[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow); }
 .od-stepper { align-items: center; }
 .od-stepper span { min-width: 56px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.od-stepper button { min-width: 28px; font-size: 14px; }
 .od-stepper button:disabled { color: var(--text-faint); }
 .od-setting-group { margin: 20px 0 4px; font-size: 12px; font-weight: 600; color: var(--text-faint); }
 .od-switch { appearance: none; width: 32px; height: 18px; margin: 0; border-radius: 999px; background: var(--text-faint); position: relative; cursor: pointer; transition: background 0.15s; flex: none; }

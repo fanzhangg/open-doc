@@ -60,7 +60,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   }
 
   // The view, made again when the doc opens in another one (a plugin was
-  // switched); one at a time.
+  // switched), or given the plugin's settings again; one at a time.
   let making = Promise.resolve();
   function makeView() {
     making = making.catch(() => {}).then(remakeView);
@@ -69,7 +69,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
 
   async function remakeView() {
     const chosen = chooseView();
-    if (view && chosen.id === viewId) return;
+    if (view && chosen.id === viewId) return view.applySettings?.(chosen.settings);
     const old = view;
     view = await chosen.createView({ stage, text: '', editable: false, settings: chosen.settings });
     viewId = chosen.id;
