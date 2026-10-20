@@ -315,10 +315,10 @@ function pluginRowAndPage(plugin, save) {
     ? alwaysOn()
     : fieldRow(
       { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.` },
+      plugin.id,
       change,
     );
-  Object.assign(enabled.node.querySelector('input')?.dataset ?? {}, { plugin: plugin.id, key: 'enabled' });
-  const fields = (plugin.settings ?? []).map((field) => fieldRow(field, change));
+  const fields = (plugin.settings ?? []).map((field) => fieldRow(field, plugin.id, change));
   const page = el('div');
   page.dataset.pluginPage = plugin.id;
   page.hidden = true;
@@ -352,10 +352,10 @@ function matches(when = {}, own) {
   return Object.entries(when).every(([key, want]) => (want && typeof want === 'object' && !Array.isArray(want) ? own[key] !== want.not : [want].flat().includes(own[key])));
 }
 
-// One setting of a plugin as a row: its label and hint, and a control by type,
-// under a heading if it starts a `group`. `change(key, value)` saves a change;
-// `paint(own)` shows the current value.
-function fieldRow(field, change) {
+// One setting of plugin `id` as a row: its label and hint, and a control by
+// type (marked with the plugin and the key), under a heading if it starts a
+// `group`. `change(key, value)` saves a change; `paint(own)` shows the current value.
+function fieldRow(field, id, change) {
   const text = el('span', 'od-setting-text');
   text.append(el('span', 'od-setting-label', field.label));
   if (field.hint) text.append(el('span', 'od-setting-hint', field.hint));
@@ -402,6 +402,7 @@ function fieldRow(field, change) {
       more.disabled = now + step > field.max;
     };
   }
+  Object.assign(control.dataset, { plugin: id, key: field.key });
   line.append(text, control);
   const node = el('div');
   if (field.group) node.append(el('h3', 'od-setting-group', field.group));
