@@ -1,5 +1,5 @@
 // Which top-level blocks differ between two docs, so a change from disk
-// replaces only those (web/plugins/markdown/view.js) and the caret stays put.
+// replaces only those (web/views/markdown/view.js) and the caret stays put.
 
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 

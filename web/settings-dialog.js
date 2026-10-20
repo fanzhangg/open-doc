@@ -1,14 +1,14 @@
-// The Settings dialog (General, Plugins, Shortcuts, Agent), tooltips that show shortcuts, and how shortcuts are written: shared
+// The Settings dialog (General, Views, Rules, Shortcuts, Agent), tooltips that show shortcuts, and how shortcuts are written: shared
 // by the editor (web/ui.js) and the desktop start window (desktop/start.js),
 // so both look and behave the same. Settings are saved for every doc and
 // window (see settings.js); a change made in another window shows up here
 // too. Every window shows the same sections, Agent among them (the agent
-// script that runs every buddy), except Plugins, which only a doc's window
-// has: the plugins come with the views (web/plugins/). Buddies are not here:
+// script that runs every buddy), except Views and Rules, which only a doc's
+// window has. Buddies are not here:
 // they belong to a doc's People.
 
 import { hydrateIcons, icon } from './icons.js';
-import { pluginSettings } from '../src/core/settings.js';
+import { ruleSettings, viewSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
@@ -21,7 +21,8 @@ const DIALOG = `
   <nav class="od-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
     <div class="od-settings-title">Settings</div>
     <button type="button" role="tab" data-section="general" data-icon="user">General</button>
-    <button type="button" role="tab" data-section="plugins" data-icon="plugin">Plugins</button>
+    <button type="button" role="tab" data-section="views" data-icon="pencil">Views</button>
+    <button type="button" role="tab" data-section="rules" data-icon="check">Rules</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
   </nav>
@@ -51,10 +52,18 @@ const DIALOG = `
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="plugins" hidden>
-      <div class="od-plugin-list">
-        <h2>Plugins</h2>
-        <p class="od-settings-intro">Each gives one kind of file its own editor, or its own rules for merging changes. Off, those files are plain text.</p>
+    <section class="od-settings-section" role="tabpanel" data-section="views" hidden>
+      <div class="od-page-list">
+        <h2>Views</h2>
+        <p class="od-settings-intro">How a file is edited. Each gives one kind of file its own editor. Off, those files open as plain text.</p>
+        <ul class="od-setting-pages"></ul>
+      </div>
+    </section>
+
+    <section class="od-settings-section" role="tabpanel" data-section="rules" hidden>
+      <div class="od-page-list">
+        <h2>Rules</h2>
+        <p class="od-settings-intro">How changes to a file are merged, whatever its view. Each gives one kind of file its own rules. Off, those files merge as plain text.</p>
         <ul class="od-setting-pages"></ul>
       </div>
     </section>
@@ -94,23 +103,28 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. `plugins` (web/plugins/index.js) fill Plugins, which shows
- * only when there are some: a list of them, each opening its own page.
+ * one page shows. `views` (web/views/index.js) and `rules` (src/rules/index.js)
+ * fill Views and Rules, which show only when there are some: a list of them,
+ * each opening its own page.
  * `scripts` ({ list() → { agents, shipped, folder }, reset(name),
  * showFolder? }) backs Agent, which picks the agent script.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, plugins?: object[],
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, views?: object[], rules?: object[],
  *           scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, plugins = [], scripts }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], rules = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
-  const pluginList = dialog.querySelector('.od-plugin-list');
-  const pluginParts = plugins.map((plugin) => pluginRowAndPage(plugin, (patch) => store.set(patch)));
-  pluginList.querySelector('ul').append(...pluginParts.map((part) => part.row));
-  pluginList.after(...pluginParts.map((part) => part.page));
+  // Views and Rules are lists of pages alike: `read(settings, item)` gives an item's settings.
+  const lists = [['views', 'Views', views, viewSettings], ['rules', 'Rules', rules, ruleSettings]].map(([kind, title, items, read]) => {
+    const list = dialog.querySelector(`[data-section="${kind}"] .od-page-list`);
+    const parts = items.map((item) => itemRowAndPage(kind, title, item, (patch) => store.set(patch)));
+    list.querySelector('ul').append(...parts.map((part) => part.row));
+    list.after(...parts.map((part) => part.page));
+    if (items.length === 0) dialog.querySelector(`[role="tab"][data-section="${kind}"]`).remove();
+    return { list, items, parts, read };
+  });
   hydrateIcons(dialog);
-  if (plugins.length === 0) dialog.querySelector('[role="tab"][data-section="plugins"]').remove();
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
   const nameInput = dialog.querySelector('#od-name-input');
@@ -147,28 +161,31 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
     if (settings.theme === 'system') delete root.dataset.theme;
     else root.dataset.theme = settings.theme;
     for (const button of dialog.querySelectorAll('[data-theme-choice]')) button.setAttribute('aria-checked', String(button.dataset.themeChoice === settings.theme));
-    for (const [i, plugin] of plugins.entries()) {
-      const own = pluginSettings(settings, plugin);
-      pluginParts[i].state.textContent = plugin.always ? 'Always on' : own.enabled ? 'On' : 'Off';
-      pluginParts[i].paint(own);
+    for (const { items, parts, read } of lists) {
+      for (const [i, item] of items.entries()) {
+        const own = read(settings, item);
+        parts[i].state.textContent = item.always ? 'Always on' : own.enabled ? 'On' : 'Off';
+        parts[i].paint(own);
+      }
     }
     if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
   }
   store.subscribe(apply);
   const set = (patch) => store.set(patch);
+  const listOf = (button) => lists.find(({ list }) => list.parentElement === button.closest('.od-settings-section'));
 
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
     for (const panel of sections) panel.hidden = panel.dataset.section !== section;
     if (section === 'agent') paintScripts();
-    showPlugin(null);
+    for (const list of lists) showPage(list, null);
   }
 
-  // Plugins shows the list, or the page of plugin `id`.
-  function showPlugin(id) {
-    pluginList.hidden = id !== null;
-    for (const { page } of pluginParts) page.hidden = page.dataset.pluginPage !== id;
+  // A list shows its rows, or the page of the item `id`.
+  function showPage({ list, parts }, id) {
+    list.hidden = id !== null;
+    for (const { page } of parts) page.hidden = page.dataset.page !== id;
   }
 
   function open(section = 'general') {
@@ -199,13 +216,13 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
       const name = scriptSelect.value;
       if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
     } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
-    else if (button.dataset.openPlugin) {
-      showPlugin(button.dataset.openPlugin);
-      dialog.querySelector(`[data-plugin-page="${button.dataset.openPlugin}"] .od-back`).focus();
-    } else if (button.dataset.action === 'plugins') {
-      const id = button.closest('[data-plugin-page]').dataset.pluginPage;
-      showPlugin(null);
-      dialog.querySelector(`[data-open-plugin="${id}"]`).focus();
+    else if (button.dataset.openPage) {
+      showPage(listOf(button), button.dataset.openPage);
+      dialog.querySelector(`[data-page="${button.dataset.openPage}"] .od-back`).focus();
+    } else if (button.dataset.action === 'back') {
+      const id = button.closest('[data-page]').dataset.page;
+      showPage(listOf(button), null);
+      dialog.querySelector(`[data-open-page="${id}"]`).focus();
     }
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
   });
@@ -240,57 +257,58 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
   return { get: () => store.get(), set, open, toggle };
 }
 
-// A plugin's row in the list (its name and extensions, what it does, on or
-// off) and its page: its switch, then the fields it declares (shown while it
-// is on, and while their `when` holds). `state` says on or off in the row;
-// `paint(own)` shows the plugin's settings `own`; `save(patch)` saves a change.
-function pluginRowAndPage(plugin, save) {
-  const extensions = (plugin.extensions ?? []).map((extension) => `.${extension}`);
-  const name = el('span', 'od-setting-label', plugin.name);
+// The row of a view or a rule (of `kind`) in its list (its name and
+// extensions, what it does, on or off) and its page: its switch, then the
+// fields it declares (shown while it is on, and while their `when` holds).
+// `state` says on or off in the row; `paint(own)` shows the item's settings
+// `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
+function itemRowAndPage(kind, title, item, save) {
+  const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
+  const name = el('span', 'od-setting-label', item.name);
   if (extensions.length > 0) name.append(el('span', 'od-setting-ext', extensions.join(' ')));
   const summary = el('span', 'od-setting-text');
-  summary.append(name, el('span', 'od-setting-hint', plugin.about));
+  summary.append(name, el('span', 'od-setting-hint', item.about));
   const state = el('span');
   const stateBox = el('span', 'od-setting-state');
   stateBox.append(state, icon('chevron'));
   const open = el('button');
   open.type = 'button';
-  open.dataset.openPlugin = plugin.id;
+  open.dataset.openPage = item.id;
   open.append(summary, stateBox);
   const row = el('li');
   row.append(open);
 
-  const change = (key, value) => save({ plugins: { [plugin.id]: { [key]: value } } });
-  const enabled = plugin.always
+  const change = (key, value) => save({ [kind]: { [item.id]: { [key]: value } } });
+  const enabled = item.always
     ? alwaysOn()
     : fieldRow(
-      { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.` },
-      plugin.id,
+      { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${kind === 'views' ? 'open' : 'merge'} as plain text.` },
+      item.id,
       change,
     );
-  const fields = (plugin.settings ?? []).map((field) => fieldRow(field, plugin.id, change));
+  const fields = (item.settings ?? []).map((field) => fieldRow(field, item.id, change));
   const page = el('div');
-  page.dataset.pluginPage = plugin.id;
+  page.dataset.page = item.id;
   page.hidden = true;
-  const back = el('button', 'od-back', 'Plugins');
+  const back = el('button', 'od-back', title);
   back.type = 'button';
-  Object.assign(back.dataset, { action: 'plugins', icon: 'back' });
-  page.append(back, el('h2', null, plugin.name), el('p', 'od-settings-intro', plugin.about), enabled.node, ...fields.map((field) => field.node));
+  Object.assign(back.dataset, { action: 'back', icon: 'back' });
+  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), enabled.node, ...fields.map((field) => field.node));
   const paint = (own) => {
     enabled.paint(own);
     fields.forEach((field, i) => {
-      field.node.hidden = !own.enabled || !matches(plugin.settings[i].when, own);
+      field.node.hidden = !own.enabled || !matches(item.settings[i].when, own);
       field.paint(own);
     });
   };
   return { row, page, state, paint };
 }
 
-// The Enabled row of a plugin that cannot be switched off: no switch.
+// The Enabled row of a view that cannot be switched off: no switch.
 function alwaysOn() {
   const line = el('div', 'od-setting');
   const text = el('span', 'od-setting-text');
-  text.append(el('span', 'od-setting-label', 'Enabled'), el('span', 'od-setting-hint', 'The fallback for files no other plugin claims.'));
+  text.append(el('span', 'od-setting-label', 'Enabled'), el('span', 'od-setting-hint', 'The fallback for files no other view claims.'));
   line.append(text, el('span', 'od-setting-state', 'Always on'));
   const node = el('div');
   node.append(line);
@@ -302,8 +320,8 @@ function matches(when = {}, own) {
   return Object.entries(when).every(([key, want]) => (want && typeof want === 'object' && !Array.isArray(want) ? own[key] !== want.not : [want].flat().includes(own[key])));
 }
 
-// One setting of plugin `id` as a row: its label and hint, and a control by
-// type (marked with the plugin and the key), under a heading if it starts a
+// One setting of the view or rule `id` as a row: its label and hint, and a control by
+// type (marked with its owner and the key), under a heading if it starts a
 // `group`. `change(key, value)` saves a change; `paint(own)` shows the current value.
 function fieldRow(field, id, change) {
   const text = el('span', 'od-setting-text');
@@ -352,7 +370,7 @@ function fieldRow(field, id, change) {
       more.disabled = now + step > field.max;
     };
   }
-  Object.assign(control.dataset, { plugin: id, key: field.key });
+  Object.assign(control.dataset, { owner: id, key: field.key });
   line.append(text, control);
   const node = el('div');
   if (field.group) node.append(el('h3', 'od-setting-group', field.group));

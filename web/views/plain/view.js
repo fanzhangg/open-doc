@@ -1,5 +1,5 @@
 // The plain view: a text file as it is, in CodeMirror, with no formatting,
-// for any text file no other plugin claims (index.js). The doc's text is the editor's,
+// for any text file no other view claims (index.js). The doc's text is the editor's,
 // so offsets on it are positions in the editor and marks are decorations
 // as given. A change made on disk goes in as changes to the lines that
 // differ, outside the human's undo history; a buddy's is flagged with its
@@ -47,9 +47,9 @@ const flashField = StateField.define({
 
 /**
  * The same options and interface as the Markdown view (createMarkdownView in
- * web/plugins/markdown/view.js). It has no tools, so `toolbar` is not used; given
+ * web/views/markdown/view.js). It has no tools, so `toolbar` is not used; given
  * `onComment`, a bubble over a selection offers Comment. `settings` are the
- * plugin's (web/plugins/plain/index.js), changed through `saveSettings`; an editable
+ * view's (web/views/plain/index.js), changed through `saveSettings`; an editable
  * view also has a status bar.
  *
  * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
@@ -179,7 +179,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   }
 
   return {
-    // ---- the view interface (see web/plugins/markdown/view.js) ----
+    // ---- the view interface (see web/views/markdown/view.js) ----
 
     getText: currentText,
     applyText,
@@ -202,7 +202,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
       view.dispatch({ effects: EditorView.scrollIntoView(toDoc(at), { y: 'center' }) });
     },
     focus: () => view.focus(),
-    /** The plugin's settings changed. */
+    /** The view's settings changed. */
     applySettings(next) {
       own = next;
       host.style.setProperty('--code-size', `${next.fontSize}px`);

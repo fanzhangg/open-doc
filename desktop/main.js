@@ -342,9 +342,9 @@ function saveState() {
 // The page handles its own shortcuts (Ctrl+, settings, Ctrl+/ shortcuts) on
 // Windows and Linux, where a menu accelerator would take the key away from
 // it, so there the menu only shows them. On macOS a menu key equivalent
-// comes first, so the menu does the work. A plugin's settings and shortcuts
-// (focus mode, the outline) are its view's, in the page: the menu knows no
-// plugin.
+// comes first, so the menu does the work. A view's settings and shortcuts
+// (focus mode, the outline) are its own, in the page: the menu knows no
+// view.
 const PAGE_KEY = { registerAccelerator: isMac };
 
 function buildMenu() {
@@ -481,7 +481,7 @@ function recentMenu() {
 // ---- the start window's settings ----
 
 // The settings the start window shows and changes (its Settings dialog, a
-// doc's but Plugins): your name, how things look and the agent, never buddies.
+// doc's but Views and Rules): your name, how things look and the agent, never buddies.
 const PAGE_SETTING_KEYS = ['name', 'theme', 'agent'];
 
 // Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.

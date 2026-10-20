@@ -1,4 +1,4 @@
-// A revision as marks a view draws (see web/plugins/markdown/view.js): recorded edits
+// A revision as marks a view draws (see web/views/markdown/view.js): recorded edits
 // found in the doc's text as it is now. An edit changed since is left out.
 
 import { findEdit } from '../src/core/diff.js';

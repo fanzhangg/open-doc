@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { followLines, merge3 } from '../src/core/merge.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
-import { harnessOf } from '../src/plugins/index.js';
+import { rulesOf } from '../src/rules/index.js';
 
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
@@ -76,21 +76,27 @@ test('preferring ours keeps our side of a conflict and reports theirs as dropped
   });
 });
 
-test('with the Markdown harness on, a character merge that would change how the line renders conflicts; off, or in plain text, it merges', () => {
+test('with the Markdown rule on, a character merge that would change how the line renders conflicts; off, or in plain text, it merges', () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-  const off = { ...DEFAULT_SETTINGS, plugins: { 'markdown-harness': { enabled: false } } };
-  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { harness: harnessOf('plan.md', DEFAULT_SETTINGS) }), { text: null, conflict: true });
-  for (const harness of [harnessOf('plan.md', off), harnessOf('notes.txt', DEFAULT_SETTINGS)]) {
-    assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { harness }), { text: '1 *2 3 4*', conflict: false, dropped: [] });
+  const off = { ...DEFAULT_SETTINGS, rules: { 'markdown-rule': { enabled: false } } };
+  assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { rules: rulesOf('plan.md', DEFAULT_SETTINGS) }), { text: null, conflict: true });
+  for (const rules of [rulesOf('plan.md', off), rulesOf('notes.txt', DEFAULT_SETTINGS)]) {
+    assert.deepEqual(merge3('1 *2* 3', '1 *2 3', '1 *2* 3 4*', { rules }), { text: '1 *2 3 4*', conflict: false, dropped: [] });
   }
 });
 
-test('a doc\'s harness is found by its extension, any case, and only while it is on', () => {
-  assert.equal(harnessOf('a/README.MD', DEFAULT_SETTINGS), harnessOf('b.markdown', DEFAULT_SETTINGS));
-  assert.ok(harnessOf('b.markdown', DEFAULT_SETTINGS));
-  assert.equal(harnessOf('b.markdown', { ...DEFAULT_SETTINGS, plugins: { markdown: { enabled: false } } }), harnessOf('b.markdown', DEFAULT_SETTINGS), 'the editor plugin is another switch');
-  assert.equal(harnessOf('main.js', DEFAULT_SETTINGS), undefined);
-  assert.equal(harnessOf('Makefile', DEFAULT_SETTINGS), undefined);
+test('a doc\'s rules are found by extension, any case, and only while they are on', () => {
+  assert.deepEqual(rulesOf('a/README.MD', DEFAULT_SETTINGS), rulesOf('b.markdown', DEFAULT_SETTINGS));
+  assert.equal(rulesOf('b.markdown', DEFAULT_SETTINGS).length, 1);
+  assert.deepEqual(rulesOf('b.markdown', { ...DEFAULT_SETTINGS, views: { markdown: { enabled: false } } }), rulesOf('b.markdown', DEFAULT_SETTINGS), 'the view is another switch');
+  assert.deepEqual(rulesOf('main.js', DEFAULT_SETTINGS), []);
+  assert.deepEqual(rulesOf('Makefile', DEFAULT_SETTINGS), []);
+});
+
+test('a doc\'s rules all get to refuse a character merge', () => {
+  const rules = [{ mergeLine: () => true }, { mergeLine: () => false }];
+  assert.deepEqual(merge3('a b', 'x b', 'a y', { rules }), { text: null, conflict: true });
+  assert.deepEqual(merge3('a b', 'x b', 'a y', { rules: [rules[0]] }).text, 'x y');
 });
 
 test('following lines into a later version takes in what changed around them', () => {

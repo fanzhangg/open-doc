@@ -12,16 +12,17 @@ export const SETTINGS_VERSION = 3;
  * "not chosen yet": the doc host suggests one. `about` is who the user is, as a
  * buddy's is, and goes to every buddy that answers them. `agent` names the agent
  * script that runs every buddy (src/store/agents.js). Buddies are files
- * (src/store/buddies.js), never settings. `plugins` holds each plugin's
- * switches by its id (`{ <id>: { enabled: false } }`); a switch not
- * there takes the default the plugin declares (pluginSettings).
+ * (src/store/buddies.js), never settings. `views` and `rules` hold the
+ * settings of each view and each rule by its id (`{ <id>: { enabled: false } }`);
+ * one not there takes the default its declaration gives (viewSettings, ruleSettings).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
   name: null,
   about: '',
   theme: 'system',
-  plugins: Object.freeze({}),
+  views: Object.freeze({}),
+  rules: Object.freeze({}),
   agent: 'claude',
 });
 
@@ -31,28 +32,15 @@ const scalar = (v) => boolean(v) || typeof v === 'string' || typeof v === 'numbe
 
 export const USER_ID = /^u_[A-Za-z0-9_-]{6,40}$/;
 
-const RULES = {
+const VALID = {
   id: (v) => v === null || (typeof v === 'string' && USER_ID.test(v)),
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
   about: (v) => typeof v === 'string' && !v.includes('\0'),
   theme: oneOf('system', 'light', 'dark'),
-  plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(scalar)),
+  views: perId,
+  rules: perId,
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
-
-/**
- * A settings file as this version reads it. Version 2 had the Markdown
- * editor's font, width and word count at the top level; they are its
- * plugin's now.
- */
-export function migrateSettings(stored) {
-  if (stored.version >= SETTINGS_VERSION) return stored;
-  const { font, width, wordCount, ...rest } = stored;
-  const moved = Object.fromEntries(Object.entries({ font, width, wordCount }).filter(([, value]) => value !== undefined));
-  if (Object.keys(moved).length === 0) return { ...rest, version: SETTINGS_VERSION };
-  const plugins = objectOr(rest.plugins);
-  return { ...rest, version: SETTINGS_VERSION, plugins: { ...plugins, markdown: { ...moved, ...objectOr(plugins.markdown) } } };
-}
 
 export class SettingsError extends Error {
   constructor(message) {
@@ -65,18 +53,19 @@ export class SettingsError extends Error {
 export function checkSettingsPatch(patch) {
   if (!isObject(patch)) throw new SettingsError('settings must be an object');
   for (const [key, value] of Object.entries(patch)) {
-    if (!Object.hasOwn(RULES, key)) throw new SettingsError(`unknown setting: ${key}`);
-    if (!RULES[key](value)) throw new SettingsError(`invalid value for ${key}`);
+    if (!Object.hasOwn(VALID, key)) throw new SettingsError(`unknown setting: ${key}`);
+    if (!VALID[key](value)) throw new SettingsError(`invalid value for ${key}`);
   }
   return patch;
 }
 
-/** `stored` with `patch` applied: top-level keys replace, but a plugin's switches merge into its others. */
+/** `stored` with `patch` applied: top-level keys replace, but a view's or rule's settings merge into its others. */
 export function mergeSettings(stored, patch) {
   const next = { ...stored, ...patch };
-  if (patch.plugins) {
-    next.plugins = { ...objectOr(stored.plugins) };
-    for (const [id, switches] of Object.entries(patch.plugins)) next.plugins[id] = { ...objectOr(next.plugins[id]), ...switches };
+  for (const kind of KINDS) {
+    if (!patch[kind]) continue;
+    next[kind] = { ...objectOr(stored[kind]) };
+    for (const [id, own] of Object.entries(patch[kind])) next[kind][id] = { ...objectOr(next[kind][id]), ...own };
   }
   return next;
 }
@@ -89,12 +78,13 @@ export function mergeSettings(stored, patch) {
 export function resolveSettings(stored) {
   const out = { ...DEFAULT_SETTINGS };
   if (!isObject(stored)) return out;
-  for (const key of Object.keys(RULES)) {
-    if (Object.hasOwn(stored, key) && RULES[key](stored[key])) out[key] = stored[key];
+  for (const key of Object.keys(VALID)) {
+    if (Object.hasOwn(stored, key) && VALID[key](stored[key])) out[key] = stored[key];
   }
-  // A plugin's bad value falls back alone (pluginSettings checks it); plugins this version does not know are kept.
-  if (isObject(stored.plugins)) {
-    out.plugins = Object.fromEntries(Object.entries(stored.plugins).filter(([, one]) => isObject(one))
+  // A bad value falls back alone (viewSettings checks it); ids this version does not know are kept.
+  for (const kind of KINDS) {
+    if (!isObject(stored[kind])) continue;
+    out[kind] = Object.fromEntries(Object.entries(stored[kind]).filter(([, one]) => isObject(one))
       .map(([id, one]) => [id, Object.fromEntries(Object.entries(one).filter(([, value]) => scalar(value)))]));
   }
   return out;
@@ -108,21 +98,35 @@ const FIELD_RULES = {
 };
 
 /**
- * The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on
- * unless switched off (an `always` plugin cannot be), and each field of its `settings` (an ordered list of
- * { key, type: 'switch' | 'choice' | 'number', label, default, ... }, see
- * web/plugins/index.js) as stored if valid, else its default.
+ * The settings of `view` (a declaration, web/views/): on unless switched off
+ * (an `always` view cannot be), and each field of its `settings` (an ordered
+ * list of { key, type: 'switch' | 'choice' | 'number', label, default, ... },
+ * see web/views/index.js) as stored if valid, else its default.
  */
-export function pluginSettings(settings, plugin) {
-  const stored = objectOr(settings.plugins[plugin.id]);
-  const out = { enabled: plugin.always || (boolean(stored.enabled) ? stored.enabled : true) };
-  for (const field of plugin.settings ?? []) {
+export const viewSettings = (settings, view) => declared(settings.views[view.id], view);
+
+/** The settings of `rule` (a declaration, src/rules/): `{ enabled }`, on unless switched off. */
+export const ruleSettings = (settings, rule) => declared(settings.rules[rule.id], rule);
+
+/** Whether `declaration` (a view or a rule) claims the file named `name`, by its extension in any case. */
+export const claims = (declaration, name) => declaration.extensions.includes(/\.([^./\\]+)$/.exec(name)?.[1].toLowerCase());
+
+function declared(own, declaration) {
+  const stored = objectOr(own);
+  const out = { enabled: declaration.always || (boolean(stored.enabled) ? stored.enabled : true) };
+  for (const field of declaration.settings ?? []) {
     out[field.key] = FIELD_RULES[field.type](field, stored[field.key]) ? stored[field.key] : field.default;
   }
   return out;
 }
 
+const KINDS = ['views', 'rules'];
 const objectOr = (value) => (isObject(value) ? value : {});
+
+// `{ <id>: { <key>: boolean | string | number } }`, the shape of `views` and `rules`.
+function perId(value) {
+  return isObject(value) && Object.values(value).every((one) => isObject(one) && Object.values(one).every(scalar));
+}
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);

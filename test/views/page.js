@@ -2,9 +2,9 @@
 // made on demand in a stage like the doc window's, and DOM helpers that work
 // for any view that edits through contenteditable.
 
-import { createMarkdownView } from '../../web/plugins/markdown/view.js';
-import { pluginSettings } from '../../src/core/settings.js';
-import { plain } from '../../web/plugins/plain/index.js';
+import { createMarkdownView } from '../../web/views/markdown/view.js';
+import { viewSettings } from '../../src/core/settings.js';
+import { plain } from '../../web/views/plain/index.js';
 
 const VIEWS = { markdown: createMarkdownView, plain: plain.createView };
 const stage = document.querySelector('.od-stage');
@@ -17,7 +17,7 @@ const contract = {
     await view?.destroy();
     contract.clicked = [];
     contract.saved = [];
-    view = await VIEWS[name]({ stage, text, settings: pluginSettings({ plugins: {} }, plain), ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
+    view = await VIEWS[name]({ stage, text, settings: viewSettings({ views: {} }, plain), ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
     window.view = view;
   },
   // Put the selection on characters [start, end) of the first piece of text holding `quote`.

@@ -37,7 +37,7 @@ People and buddies work on the same doc at the same time, discussing in comments
 
 - **Cloud documents**: Docs live only on your machine; no cloud storage
 - **Real-time collaboration between people**: We focus on human–AI collaboration, not real-time collaboration between people
-- **Proprietary document formats**: Plain text files only. Format plugins (Markdown is the first, built in) improve co-authoring for a format; they never replace the file
+- **Proprietary document formats**: Plain text files only. Views and rules (Markdown is the first, built in) improve co-authoring for a format; they never replace the file
 - **Knowledge base**: We work on a doc or a project folder, not note management
 - **Chat interface**: All communication happens in comments; no chat window
 

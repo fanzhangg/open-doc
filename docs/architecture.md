@@ -73,14 +73,66 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | --- | --- |
 | Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
 | Model (`src/core`) | anchors, diff and three-way merge on text, reading the sidecar, the inbox. No I/O, and no file format. |
-| Markdown library (`src/markdown`) | not a plugin; what both Markdown plugins use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
+| Markdown library (`src/markdown`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner | which turns should start (the inbox), runs them, their status in memory |
-| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision); every view passes one contract (`test/views.test.js`). A view plugin (`web/plugins/`) gives files a view of its own with its UI and settings; `viewFor` in `web/plugins/index.js` picks a doc's view: an enabled plugin's that claims its extension, else the Plain text plugin's (`web/plugins/plain/`: CodeMirror, the text as it is, for any UTF-8 text file up to 1 MB; line numbers, wrapping, font size, whitespace marks, indent guides and indentation (`indent.js`) are its settings, and an editable view has a status bar under the page, `status.js`, whose indent menu and toggles save the same settings). The page knows no format |
-| Plugins | built in, each a declaration with no lifecycle, of two kinds; each switches on and off alone, and neither Markdown plugin imports the other. A view plugin (`web/plugins/`) is `{ id, name, about, extensions, always?, createView, settings }`; `settings` is an ordered list of fields `{ key, type: 'switch' | 'choice' | 'number', label, hint?, default, group?, when? }` that Settings renders as the plugin's page, and `pluginSettings` validates each stored value against its field, else the default. Plain text (`web/plugins/plain/`) is the same kind with `extensions: null` (any file no other plugin claims) and `always: true` (no switch): the view a doc falls back to. The Markdown editor (`web/plugins/markdown/`) is a WYSIWYG view with its toolbar (the only formatting entry), outline and focus mode; it maps the doc's text to its own document through the rendered text, and saves each block the user did not change as it was written. A harness plugin (`src/plugins/`) is `{ id, name, about, extensions, ...hooks }`: what a format adds to plain text where edits merge, whatever the view. `harnessOf(path, settings)` gives the one that is on for the doc's extension, which the doc host (merging a buddy's edit) and the page (merging a change from outside) hand to the merge. Harnesses live in `src/` because the doc host loads only `src/`, never `web/`. The one hook, `mergeLine`, may only refuse: the Markdown harness (`src/plugins/markdown.js`) refuses a character merge inside a line that would change how it renders; off, a `.md` merges as plain text. Settings keep `plugins: { <id>: { enabled, ...values } }`; the core checks only that shape (values boolean, string or number) and keeps ids it does not know. Switching a view plugin makes the affected views again from the same text in every window, the history's too, after saving pending typing; its own settings reach its view as they are. A harness's switch applies from the next merge |
+| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision). The page knows no format |
+| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules |
+| Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |
 
 DocService and Runner run in the doc host, the app's utility process.
 Windows reach it over Electron message ports.
+
+### Views and rules
+
+A doc has one **view** and any number of **rules**. They share only the
+doc's text: no view imports a rule, no rule a view, and each is switched on
+or off alone (`settings.json`: `views` and `rules`, each by id).
+
+| | View (`web/views/`) | Rule (`src/rules/`) |
+| --- | --- | --- |
+| Is | the doc's editor | how a format's edits merge, whoever made them: a buddy, another program |
+| Shape | has state (caret, undo, marks), so it is built in and not an extension point | a declaration of pure hooks: text in, verdict out; no state, no lifecycle, no I/O, no handle to the app |
+| Declared | `{ id, name, about, extensions, always?, createView, settings }` | `{ id, name, about, extensions, ...hooks }` |
+| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 1 MB) | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
+| Runs in | the page | the doc host (a buddy's edit) and the page (a change from outside), whatever the view |
+| Its settings | an ordered list of fields `{ key, type: 'switch' \| 'choice' \| 'number', label, hint?, default, group?, when? }`, rendered as its page in Settings > Views; `viewSettings` keeps a stored value only if its field allows it | the switch only: Settings > Rules; `ruleSettings` |
+| Must satisfy | the view contract, `test/views.test.js` | each hook's contract, below |
+
+The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
+is; line numbers, wrapping, font size, whitespace marks, indent guides and
+indentation are its settings, with a status bar (`status.js`) whose menu and
+toggles save the same settings. The Markdown view (`web/views/markdown/`) is
+WYSIWYG; its toolbar (the only formatting entry), outline, focus mode and
+word count are parts of it, switched by its settings, not separate extensions.
+It maps the doc's text to its own document through the rendered text, and
+saves each block the user did not change as it was written.
+
+**Hooks.** A hook is optional and may only refuse; the host applies the
+result. One exists: `mergeLine(base, ours, theirs, merged)`, whether a line
+both sides changed may be merged by character into `merged`. If any rule of
+the doc refuses, the line conflicts, and the human's text stays. The Markdown
+rule (`src/rules/markdown.js`) refuses a merge that would change how the line
+renders. Off, a `.md` merges as plain text. A switch applies from the next merge.
+
+**To add a view**: a folder in `web/views/` with its declaration, listed in
+`VIEWS`, passing the contract test. Its features are its own settings. Views
+are not a third-party extension point: a view owns state no hook can.
+
+**To add a rule**: a file in `src/rules/` exporting a declaration, listed in
+`RULES`. One concern per rule; a format gets several rather than a bigger one.
+A rule may use the libraries in `src/` (`src/markdown` for rendered text) and
+nothing in `web/`, since the doc host loads only `src/`.
+
+**To add a hook**: have the host call it at one place, with plain values in
+and a verdict out, and say what it may refuse in `src/rules/index.js`. Add one
+only when a rule needs it.
+
+Settings keep `views: { <id>: { enabled, ...values } }` and `rules: { <id>: { enabled } }`;
+the core checks only that shape (values boolean, string or number) and keeps
+ids it does not know. Switching a view makes the affected views again from
+the same text in every window, the history's too, after saving pending
+typing; its own settings reach its view as they are.
 
 ### How files are read and written
 
@@ -118,7 +170,7 @@ written only by the app.
 
 | File | Holds |
 | --- | --- |
-| `settings.json` | the user's id and name; editor preferences; plugins' switches; which agent runs buddies |
+| `settings.json` | the user's id and name; editor preferences; views' and rules' settings; which agent runs buddies |
 | `agents/` | agent scripts; Claude Code and Codex ship as two |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |

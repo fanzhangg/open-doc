@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectIndent } from '../web/plugins/plain/indent.js';
+import { detectIndent } from '../web/views/plain/indent.js';
 
 test('detectIndent: tabs, the usual step of spaces, or nothing', () => {
   assert.deepEqual(detectIndent('a\n\tb\n\t\tc\n'), { tabs: true });

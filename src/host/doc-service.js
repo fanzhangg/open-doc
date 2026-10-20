@@ -16,7 +16,7 @@ import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { SettingsError } from '../core/settings.js';
 import { merge3 } from '../core/merge.js';
-import { harnessOf } from '../plugins/index.js';
+import { rulesOf } from '../rules/index.js';
 import { revertEdits } from '../core/diff.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeAtomic, writeDoc } from '../store/files.js';
 import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
@@ -258,7 +258,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       }
       if (current) {
         const { settings } = await readSettings(settingsDir);
-        const merged = merge3(base, current.text, edited, { prefer: 'ours', harness: harnessOf(docPath, settings) });
+        const merged = merge3(base, current.text, edited, { prefer: 'ours', rules: rulesOf(docPath, settings) });
         conflict = merged.dropped.length > 0;
         await writeChange(current, merged.text, { kind: 'edit', author: { name, kind: 'agent' }, thread: threadId, reply: id });
       }

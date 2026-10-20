@@ -4,10 +4,10 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, pluginSettings, resolveSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, resolveSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
 import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
-import { markdown } from '../web/plugins/markdown/index.js';
-import { markdownHarness } from '../src/plugins/markdown.js';
+import { markdown } from '../web/views/markdown/index.js';
+import { markdownRule } from '../src/rules/markdown.js';
 
 const MARKDOWN_DEFAULTS = { font: 'sans', width: 'normal', outline: true, focus: false, wordCount: false };
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
@@ -79,13 +79,13 @@ test('a corrupt file is set aside and defaults are used', async () => {
   assert.equal((await readSettings(dir)).settings.theme, 'dark');
 });
 
-test('concurrent writers of different plugin switches all keep their change', async () => {
+test('concurrent writers of different view switches all keep their change', async () => {
   const dir = await tempDir();
   const script = join(dir, 'writer.mjs');
   const store = new URL('../src/store/settings.js', import.meta.url).href;
   await writeFile(script, `import { updateSettings } from ${JSON.stringify(store)};
 const [key, value] = process.argv.slice(2);
-const set = (on) => updateSettings({ plugins: { markdown: { [key]: on } } }, process.env.DIR);
+const set = (on) => updateSettings({ views: { markdown: { [key]: on } } }, process.env.DIR);
 for (let i = 0; i < 20; i++) await set(i % 2 === 0 ? value === 'true' : value !== 'true');
 await set(value === 'true');`);
   const run = (key, value) => new Promise((resolve, reject) => {
@@ -93,7 +93,7 @@ await set(value === 'true');`);
   });
   await Promise.all([run('focus', 'true'), run('enabled', 'false'), run('outline', 'false')]);
   const { settings } = await readSettings(dir);
-  assert.deepEqual(settings.plugins.markdown, { focus: true, enabled: false, outline: false });
+  assert.deepEqual(settings.views.markdown, { focus: true, enabled: false, outline: false });
 });
 
 test('watchSettings sees the file appear and change', async () => {
@@ -120,44 +120,44 @@ test('agent: which agent script runs every buddy, Claude Code unless changed', (
   assert.throws(() => checkSettingsPatch({ claudeBin: '/opt/claude' }), /unknown setting: claudeBin/);
 });
 
-test('plugins: defaults come from the declaration; the old top-level outline and focus are gone', () => {
-  assert.deepEqual(DEFAULT_SETTINGS.plugins, {});
-  assert.deepEqual(pluginSettings(resolveSettings(null), markdown), { enabled: true, ...MARKDOWN_DEFAULTS });
+test('views: defaults come from the declaration; the old top-level outline and focus are gone', () => {
+  assert.deepEqual([DEFAULT_SETTINGS.views, DEFAULT_SETTINGS.rules], [{}, {}]);
+  assert.deepEqual(viewSettings(resolveSettings(null), markdown), { enabled: true, ...MARKDOWN_DEFAULTS });
   assert.deepEqual(resolveSettings({ outline: false, focus: true }), DEFAULT_SETTINGS);
   assert.throws(() => checkSettingsPatch({ focus: true }), /unknown setting: focus/);
 });
 
-test('plugins: a switch changed is saved alone and survives a fresh read', async () => {
+test('views: a switch changed is saved alone and survives a fresh read', async () => {
   const dir = await tempDir();
-  await updateSettings({ plugins: { markdown: { enabled: false } } }, dir);
-  await updateSettings({ plugins: { markdown: { focus: true } } }, dir);
+  await updateSettings({ views: { markdown: { enabled: false } } }, dir);
+  await updateSettings({ views: { markdown: { focus: true } } }, dir);
   const { settings } = await readSettings(dir);
-  assert.deepEqual(settings.plugins, { markdown: { enabled: false, focus: true } });
-  assert.deepEqual(pluginSettings(settings, markdown), { enabled: false, ...MARKDOWN_DEFAULTS, focus: true });
+  assert.deepEqual(settings.views, { markdown: { enabled: false, focus: true } });
+  assert.deepEqual(viewSettings(settings, markdown), { enabled: false, ...MARKDOWN_DEFAULTS, focus: true });
 });
 
-test('plugins: only booleans, strings and numbers by plugin id; a bad value falls back alone', () => {
-  assert.doesNotThrow(() => checkSettingsPatch({ plugins: { markdown: { outline: false }, csv: {} } }));
-  for (const plugins of [[], null, { markdown: true }, { markdown: { focus: null } }, { markdown: { focus: {} } }, { markdown: [] }]) {
-    assert.throws(() => checkSettingsPatch({ plugins }), SettingsError, JSON.stringify(plugins));
+test('views and rules: only booleans, strings and numbers by id; a bad value falls back alone', () => {
+  assert.doesNotThrow(() => checkSettingsPatch({ views: { markdown: { outline: false }, csv: {} }, rules: { 'markdown-rule': { enabled: false } } }));
+  for (const bad of [[], null, { markdown: true }, { markdown: { focus: null } }, { markdown: { focus: {} } }, { markdown: [] }]) {
+    for (const kind of ['views', 'rules']) assert.throws(() => checkSettingsPatch({ [kind]: bad }), SettingsError, JSON.stringify(bad));
   }
-  assert.deepEqual(resolveSettings({ plugins: 'on' }).plugins, {});
-  const resolved = resolveSettings({ plugins: { markdown: { enabled: 'no', outline: false }, broken: 3 } });
-  assert.deepEqual(resolved.plugins, { markdown: { enabled: 'no', outline: false } });
-  assert.deepEqual(pluginSettings(resolved, markdown), { enabled: true, ...MARKDOWN_DEFAULTS, outline: false });
+  assert.deepEqual(resolveSettings({ views: 'on' }).views, {});
+  const resolved = resolveSettings({ views: { markdown: { enabled: 'no', outline: false }, broken: 3 } });
+  assert.deepEqual(resolved.views, { markdown: { enabled: 'no', outline: false } });
+  assert.deepEqual(viewSettings(resolved, markdown), { enabled: true, ...MARKDOWN_DEFAULTS, outline: false });
 });
 
-test('plugins: ids this version does not know are kept', async () => {
+test('views and rules: ids this version does not know are kept', async () => {
   const dir = await tempDir();
-  await writeFile(settingsPath(dir), JSON.stringify({ version: 2, plugins: { csv: { enabled: false, header: true } } }));
-  assert.deepEqual((await readSettings(dir)).settings.plugins, { csv: { enabled: false, header: true } });
-  await updateSettings({ plugins: { markdown: { outline: false } } }, dir);
+  await writeFile(settingsPath(dir), JSON.stringify({ version: 3, views: { csv: { enabled: false, header: true } } }));
+  assert.deepEqual((await readSettings(dir)).settings.views, { csv: { enabled: false, header: true } });
+  await updateSettings({ views: { markdown: { outline: false } } }, dir);
   const raw = JSON.parse(await readFile(settingsPath(dir), 'utf8'));
-  assert.deepEqual(raw.plugins, { csv: { enabled: false, header: true }, markdown: { outline: false } });
+  assert.deepEqual(raw.views, { csv: { enabled: false, header: true }, markdown: { outline: false } });
 });
 
-test('plugins: a value is kept only if its field allows it, else the default', () => {
-  const plugin = {
+test('views: a value is kept only if its field allows it, else the default', () => {
+  const view = {
     id: 'demo',
     settings: [
       { key: 'on', type: 'switch', default: true },
@@ -165,38 +165,32 @@ test('plugins: a value is kept only if its field allows it, else the default', (
       { key: 'size', type: 'number', min: 12, max: 20, default: 14 },
     ],
   };
-  const own = (demo) => pluginSettings(resolveSettings({ plugins: { demo } }), plugin);
+  const own = (demo) => viewSettings(resolveSettings({ views: { demo } }), view);
   assert.deepEqual(own({}), { enabled: true, on: true, mode: 'a', size: 14 });
   assert.deepEqual(own({ on: false, mode: 4, size: 20, enabled: false }), { enabled: false, on: false, mode: 4, size: 20 });
   assert.deepEqual(own({ on: 'x', mode: 'b', size: 21 }), { enabled: true, on: true, mode: 'a', size: 14 });
   assert.deepEqual(own({ mode: '4', size: 13.5 }), { enabled: true, on: true, mode: 'a', size: 14 });
-  assert.doesNotThrow(() => checkSettingsPatch({ plugins: { demo: { mode: 'a', size: 16 } } }));
+  assert.doesNotThrow(() => checkSettingsPatch({ views: { demo: { mode: 'a', size: 16 } } }));
 });
 
-test('plugins: on by default, the Markdown editor and its harness included', () => {
-  assert.equal(pluginSettings(resolveSettings(null), markdown).enabled, true);
-  assert.equal(pluginSettings(resolveSettings(null), markdownHarness).enabled, true);
+test('views and rules: on by default, the Markdown view and its rule included, and switched apart', () => {
+  const fresh = resolveSettings(null);
+  assert.equal(viewSettings(fresh, markdown).enabled, true);
+  assert.equal(ruleSettings(fresh, markdownRule).enabled, true);
+  const viewOff = resolveSettings({ views: { markdown: { enabled: false } } });
+  assert.equal(viewSettings(viewOff, markdown).enabled, false);
+  assert.equal(ruleSettings(viewOff, markdownRule).enabled, true, 'the rule is another switch');
+  const ruleOff = resolveSettings({ rules: { 'markdown-rule': { enabled: false } } });
+  assert.equal(ruleSettings(ruleOff, markdownRule).enabled, false);
+  assert.equal(viewSettings(ruleOff, markdown).enabled, true, 'the view is another switch');
 });
 
-test('plugins: an always-on plugin stays enabled whatever is stored', () => {
+test('views: an always-on view stays enabled whatever is stored', () => {
   const plain = { id: 'plain', always: true, settings: [] };
-  assert.equal(pluginSettings(resolveSettings({ plugins: { plain: { enabled: false } } }), plain).enabled, true);
+  assert.equal(viewSettings(resolveSettings({ views: { plain: { enabled: false } } }), plain).enabled, true);
 });
 
-test('version 2 files: font, width and word count move to the Markdown plugin', async () => {
-  const dir = await tempDir();
-  await writeFile(settingsPath(dir), JSON.stringify({ version: 2, id: 'u_old00001', theme: 'dark', font: 'serif', width: 'wide', wordCount: true, plugins: { markdown: { focus: true } } }));
-  const { settings, saved } = await readSettings(dir);
-  assert.equal(saved, true);
-  assert.deepEqual(settings, { ...DEFAULT_SETTINGS, id: 'u_old00001', theme: 'dark', plugins: { markdown: { font: 'serif', width: 'wide', wordCount: true, focus: true } } });
-  assert.deepEqual(pluginSettings(settings, markdown), { enabled: true, ...MARKDOWN_DEFAULTS, font: 'serif', width: 'wide', wordCount: true, focus: true });
-  await updateSettings({ name: 'ada' }, dir);
-  const raw = JSON.parse(await readFile(settingsPath(dir), 'utf8'));
-  assert.deepEqual(Object.keys(raw).sort(), ['id', 'name', 'plugins', 'theme', 'version']);
-  assert.equal(raw.version, 3);
-});
-
-test('version 2 files with none of them set stay unchanged', async () => {
+test('a version 2 file is read as it is', async () => {
   const dir = await tempDir();
   await writeFile(settingsPath(dir), JSON.stringify({ version: 2, id: 'u_old00001' }));
   assert.deepEqual(await readSettings(dir), { settings: { ...DEFAULT_SETTINGS, id: 'u_old00001' }, saved: false });

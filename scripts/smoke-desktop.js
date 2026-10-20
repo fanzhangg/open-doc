@@ -3,9 +3,9 @@
 // an @mention in each (the agent is a fake script), that comments and a
 // buddy's revision show in the .js file's plain view, that Cmd+Z undoes only
 // your typing and Undo on a reply the buddy's edit, that switching the
-// Markdown plugin off and on turns the Markdown docs to the plain view and
+// Markdown view off and on turns the Markdown docs to the plain view and
 // back without writing them, that its own settings apply at once, that the
-// Markdown harness, apart from it, refuses a page's merge of an outside
+// Markdown rule, apart from the view, refuses a page's merge of an outside
 // change that would change how a line renders until it is switched off, that
 // the app listens on no port, that a doc host that stops is started again, and
 // that a setting survives a relaunch.
@@ -98,10 +98,10 @@ check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
 check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
 check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
-const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { plugins: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
+const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { views: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
 
-step('the Markdown plugin, off and on');
+step('the Markdown view, off and on');
 const commented = await commentShows(first, readFileSync(docs[0], 'utf8'), 'gather feedback');
 check(Boolean(commented), 'a comment on plan.md is drawn over its text');
 const unswitched = { text: readFileSync(docs[0], 'utf8'), versions: await versionCount(first) };
@@ -112,15 +112,15 @@ await first.evaluate(`document.querySelector('.od-history-bar [data-action="clos
 check(await ownSettingsApply(first), 'its Outline switch and the focus mode shortcut take effect at once');
 check(readFileSync(docs[0], 'utf8') === unswitched.text && (await versionCount(first)) === unswitched.versions, 'switching wrote no file and recorded no version');
 
-step('the Markdown harness, apart from the editor');
-await notes.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="enabled"]').click()`);
+step('the Markdown rule, apart from the view');
+await notes.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="enabled"]').click()`);
 await waitFor(() => notes.evaluate(`Boolean(document.querySelector('.od-stage .cm-content'))`), 15_000, 'the plain view');
 // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-const harnessOn = await mergesOutside(notes, docs[1]);
-check(harnessOn === '1 *2* 3 4*\n', `on, with the editor off: the line conflicts and your typing stays (${JSON.stringify(harnessOn)})`);
-await notes.evaluate(`document.querySelector('.od-settings [data-plugin="markdown-harness"][data-key="enabled"]').click()`);
-const harnessOff = await mergesOutside(notes, docs[1]);
-check(harnessOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(harnessOff)})`);
+const ruleOn = await mergesOutside(notes, docs[1]);
+check(ruleOn === '1 *2* 3 4*\n', `on, with the view off: the line conflicts and your typing stays (${JSON.stringify(ruleOn)})`);
+await notes.evaluate(`document.querySelector('.od-settings [data-owner="markdown-rule"][data-key="enabled"]').click()`);
+const ruleOff = await mergesOutside(notes, docs[1]);
+check(ruleOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(ruleOff)})`);
 
 if (process.platform === 'linux') {
   const all = listening(app.pid);
@@ -142,7 +142,7 @@ step('relaunch');
 app = await launch([docs[0]]);
 const relaunched = await app.page('plan.md');
 // From the settings the page got, not from how the editor shows them: the editor is off by now.
-const second = await waitFor(() => relaunched.evaluate(`window.opendocHost.call('state').then((r) => r.result.settings.plugins.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
+const second = await waitFor(() => relaunched.evaluate(`window.opendocHost.call('state').then((r) => r.result.settings.views.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
 check(second === 'serif', `the setting survived the relaunch (font: ${second})`);
 await app.quit();
 
@@ -177,12 +177,12 @@ async function commentShows(page, text, quote) {
     .then(() => id, () => false);
 }
 
-// Switch the Markdown plugin `on` or off in Settings in `page`, which shows
+// Switch the Markdown view `on` or off in Settings in `page`, which shows
 // its history and comment `id`: true once every page in `pages` shows its
 // doc in the view that goes with that (Markdown's, with its outline, or the
 // plain one), and `page` its history too, with the comment drawn as before.
 async function switchesView(page, on, pages, id) {
-  await page.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="enabled"]').click()`);
+  await page.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="enabled"]').click()`);
   const [shown, gone] = on ? ['.ProseMirror', '.cm-content'] : ['.cm-content', '.ProseMirror'];
   const inView = (stage) => `Boolean(document.querySelector('${stage} ${shown}')) && !document.querySelector('${stage} ${gone}')`;
   const doc = `${inView('.od-stage:not(.od-history-stage)')} && Boolean(document.querySelector('.od-outline')) === ${on}`;
@@ -195,12 +195,12 @@ async function switchesView(page, on, pages, id) {
   return true;
 }
 
-// In `page`, a Markdown doc: true when the Markdown plugin's Outline switch
+// In `page`, a Markdown doc: true when the Markdown view's Outline switch
 // hides the outline and Mod+Shift+F turns focus mode on, each at once and
 // back again.
 async function ownSettingsApply(page) {
   const has = (attr) => page.evaluate(`document.documentElement.hasAttribute('${attr}')`);
-  const outline = () => page.evaluate(`document.querySelector('.od-settings [data-plugin="markdown"][data-key="outline"]').click()`);
+  const outline = () => page.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="outline"]').click()`);
   const modifiers = (process.platform === 'darwin' ? 4 : 2) | 8; // Meta or Ctrl, and Shift
   const focusKey = async () => {
     for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'F', code: 'KeyF', windowsVirtualKeyCode: 70 });
