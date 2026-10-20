@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 const oneOf = (...values) => (v) => values.includes(v);
 const boolean = (v) => typeof v === 'boolean';
+const scalar = (v) => boolean(v) || typeof v === 'string' || typeof v === 'number';
 
 export const USER_ID = /^u_[A-Za-z0-9_-]{6,40}$/;
 
@@ -38,7 +39,7 @@ const RULES = {
   font: oneOf('sans', 'serif', 'mono'),
   width: oneOf('normal', 'wide'),
   wordCount: boolean,
-  plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(boolean)),
+  plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(scalar)),
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
 
@@ -80,17 +81,34 @@ export function resolveSettings(stored) {
   for (const key of Object.keys(RULES)) {
     if (Object.hasOwn(stored, key) && RULES[key](stored[key])) out[key] = stored[key];
   }
-  // A plugin's bad switch falls back alone; plugins this version does not know are kept.
+  // A plugin's bad value falls back alone (pluginSettings checks it); plugins this version does not know are kept.
   if (isObject(stored.plugins)) {
     out.plugins = Object.fromEntries(Object.entries(stored.plugins).filter(([, one]) => isObject(one))
-      .map(([id, one]) => [id, Object.fromEntries(Object.entries(one).filter(([, value]) => boolean(value)))]));
+      .map(([id, one]) => [id, Object.fromEntries(Object.entries(one).filter(([, value]) => scalar(value)))]));
   }
   return out;
 }
 
-/** The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on unless switched off, its own defaults for the rest. */
+// Whether `value` is allowed for a declared field.
+const FIELD_RULES = {
+  switch: (field, value) => boolean(value),
+  choice: (field, value) => field.options.some(([option]) => option === value),
+  number: (field, value) => Number.isInteger(value) && value >= field.min && value <= field.max,
+};
+
+/**
+ * The settings of `plugin` (a declaration, web/plugins/ or src/plugins/): on
+ * unless switched off, and each field of its `settings` (an ordered list of
+ * { key, type: 'switch' | 'choice' | 'number', label, default, ... }, see
+ * web/plugins/index.js) as stored if valid, else its default.
+ */
 export function pluginSettings(settings, plugin) {
-  return { enabled: true, ...plugin.settings, ...settings.plugins[plugin.id] };
+  const stored = objectOr(settings.plugins[plugin.id]);
+  const out = { enabled: boolean(stored.enabled) ? stored.enabled : true };
+  for (const field of plugin.settings ?? []) {
+    out[field.key] = FIELD_RULES[field.type](field, stored[field.key]) ? stored[field.key] : field.default;
+  }
+  return out;
 }
 
 const objectOr = (value) => (isObject(value) ? value : {});

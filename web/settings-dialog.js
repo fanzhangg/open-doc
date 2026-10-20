@@ -142,7 +142,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
   const pluginList = dialog.querySelector('.od-plugin-list');
-  const pluginParts = plugins.map(pluginRowAndPage);
+  const pluginParts = plugins.map((plugin) => pluginRowAndPage(plugin, (patch) => store.set(patch)));
   pluginList.querySelector('ul').append(...pluginParts.map((part) => part.row));
   pluginList.after(...pluginParts.map((part) => part.page));
   hydrateIcons(dialog);
@@ -194,10 +194,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
     for (const [i, plugin] of plugins.entries()) {
       const own = pluginSettings(settings, plugin);
       pluginParts[i].state.textContent = own.enabled ? 'On' : 'Off';
-      for (const box of dialog.querySelectorAll(`[data-plugin="${plugin.id}"]`)) {
-        box.checked = own[box.dataset.key];
-        if (box.dataset.key !== 'enabled') box.closest('.od-setting').hidden = !own.enabled;
-      }
+      pluginParts[i].paint(own);
     }
     if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
@@ -259,9 +256,8 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
     else if (button.dataset.width) set({ width: button.dataset.width });
   });
   dialog.addEventListener('change', (event) => {
-    const { setting, plugin, key } = event.target.dataset ?? {};
+    const { setting } = event.target.dataset ?? {};
     if (setting) set({ [setting]: event.target.checked });
-    else if (plugin) set({ plugins: { [plugin]: { [key]: event.target.checked } } });
   });
   // Up and down move between sections, as in a vertical tab list.
   dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {
@@ -295,9 +291,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
 }
 
 // A plugin's row in the list (its name and extensions, what it does, on or
-// off) and its page: its switch, then its own settings (shown while it is on).
-// `state` says on or off in the row.
-function pluginRowAndPage(plugin) {
+// off) and its page: its switch, then the fields it declares (shown while it
+// is on, and while their `when` holds). `state` says on or off in the row;
+// `paint(own)` shows the plugin's settings `own`; `save(patch)` saves a change.
+function pluginRowAndPage(plugin, save) {
   const extensions = plugin.extensions.map((extension) => `.${extension}`);
   const name = el('span', 'od-setting-label', plugin.name);
   name.append(el('span', 'od-setting-ext', extensions.join(' ')));
@@ -313,29 +310,91 @@ function pluginRowAndPage(plugin) {
   const row = el('li');
   row.append(open);
 
-  const switchRow = (label, hint, key) => {
-    const line = el('label', 'od-setting');
-    const text = el('span', 'od-setting-text');
-    text.append(el('span', 'od-setting-label', label));
-    if (hint) text.append(el('span', 'od-setting-hint', hint));
-    const box = el('input', 'od-switch');
-    box.type = 'checkbox';
-    Object.assign(box.dataset, { plugin: plugin.id, key });
-    line.append(text, box);
-    return line;
-  };
+  const change = (key, value) => save({ plugins: { [plugin.id]: { [key]: value } } });
+  const enabled = fieldRow(
+    { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.` },
+    change,
+  );
+  enabled.node.querySelector('input').dataset.plugin = plugin.id;
+  enabled.node.querySelector('input').dataset.key = 'enabled';
+  const fields = (plugin.settings ?? []).map((field) => fieldRow(field, change));
   const page = el('div');
   page.dataset.pluginPage = plugin.id;
   page.hidden = true;
   const back = el('button', 'od-back', 'Plugins');
   back.type = 'button';
   Object.assign(back.dataset, { action: 'plugins', icon: 'back' });
-  page.append(
-    back, el('h2', null, plugin.name), el('p', 'od-settings-intro', plugin.about),
-    switchRow('On', `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.`, 'enabled'),
-    ...Object.keys(plugin.settings ?? {}).map((key) => switchRow(plugin.labels[key], null, key)),
-  );
-  return { row, page, state };
+  page.append(back, el('h2', null, plugin.name), el('p', 'od-settings-intro', plugin.about), enabled.node, ...fields.map((field) => field.node));
+  const paint = (own) => {
+    enabled.paint(own);
+    fields.forEach((field, i) => {
+      field.node.hidden = !own.enabled || !matches(plugin.settings[i].when, own);
+      field.paint(own);
+    });
+  };
+  return { row, page, state, paint };
+}
+
+// Whether `when` ({ key: value | [values] } or { key: { not: value } }) holds for the settings `own`; no `when` always does.
+function matches(when = {}, own) {
+  return Object.entries(when).every(([key, want]) => (want && typeof want === 'object' && !Array.isArray(want) ? own[key] !== want.not : [want].flat().includes(own[key])));
+}
+
+// One setting of a plugin as a row: its label and hint, and a control by type,
+// under a heading if it starts a `group`. `change(key, value)` saves a change;
+// `paint(own)` shows the current value.
+function fieldRow(field, change) {
+  const text = el('span', 'od-setting-text');
+  text.append(el('span', 'od-setting-label', field.label));
+  if (field.hint) text.append(el('span', 'od-setting-hint', field.hint));
+  const line = el(field.type === 'switch' ? 'label' : 'div', 'od-setting');
+  let control;
+  let paint;
+  if (field.type === 'switch') {
+    control = el('input', 'od-switch');
+    control.type = 'checkbox';
+    control.addEventListener('change', () => change(field.key, control.checked));
+    paint = (own) => { control.checked = own[field.key]; };
+  } else if (field.type === 'choice') {
+    control = el('div', 'od-segmented');
+    control.setAttribute('role', 'radiogroup');
+    control.ariaLabel = field.label;
+    const buttons = field.options.map(([value, label]) => {
+      const button = el('button', null, label);
+      button.type = 'button';
+      button.setAttribute('role', 'radio');
+      button.addEventListener('click', () => change(field.key, value));
+      return button;
+    });
+    control.append(...buttons);
+    paint = (own) => buttons.forEach((button, i) => button.setAttribute('aria-checked', String(field.options[i][0] === own[field.key])));
+  } else {
+    const step = field.step ?? 1;
+    let now;
+    const [less, more] = [-step, step].map((by) => {
+      const button = el('button', null, by < 0 ? '−' : '+');
+      button.type = 'button';
+      button.ariaLabel = `${by < 0 ? 'Decrease' : 'Increase'} ${field.label}`;
+      button.addEventListener('click', () => change(field.key, now + by));
+      return button;
+    });
+    const value = el('span');
+    control = el('div', 'od-segmented od-stepper');
+    control.setAttribute('role', 'group');
+    control.ariaLabel = field.label;
+    control.append(less, value, more);
+    paint = (own) => {
+      now = own[field.key];
+      value.textContent = field.unit ? `${now} ${field.unit}` : String(now);
+      less.disabled = now - step < field.min;
+      more.disabled = now + step > field.max;
+    };
+  }
+  line.append(text, control);
+  const node = el('div');
+  if (field.group) node.append(el('h3', 'od-setting-group', field.group));
+  node.append(line);
+  return { node, paint };
 }
 
 function el(tag, className, text) {

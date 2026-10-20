@@ -2,7 +2,13 @@
 // one format a view of its own, with its UI and settings, and can be
 // switched off. It is a declaration: { id, name, about (one line),
 // extensions, createView (options → a view, see web/views/plain.js),
-// settings: { key: default boolean }, labels: { key: its name in Settings } }.
+// settings: [field, ...] }, a field being { key, type, label, hint?, default,
+// group?, when? } and shown in this order on the plugin's page in Settings:
+// - type 'switch' (a boolean), 'choice' (one of `options`: [[value, label], ...])
+//   or 'number' (an integer from `min` to `max`, by `step`, with a `unit`?);
+// - `group`, on the first field of a group, is the group's heading;
+// - `when`, { key: value | [values] } or { key: { not: value } } on the plugin's
+//   other fields, shows the field only then.
 // A doc opens in the view of a view plugin that is on and claims its
 // extension, else in the plain view, the app's own, for any text file. The
 // harness plugins (src/plugins/) are listed in Settings with them.

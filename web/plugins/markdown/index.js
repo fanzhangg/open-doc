@@ -10,6 +10,8 @@ export const markdown = {
   extensions: ['md', 'markdown'],
   // Loaded with the first Markdown doc.
   createView: (options) => import('./view.js').then((view) => view.createMarkdownView(options)),
-  settings: { outline: true, focus: false },
-  labels: { outline: 'Outline', focus: 'Focus mode' },
+  settings: [
+    { key: 'outline', type: 'switch', label: 'Outline', default: true },
+    { key: 'focus', type: 'switch', label: 'Focus mode', default: false },
+  ],
 };
