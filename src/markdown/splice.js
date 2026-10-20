@@ -3,10 +3,7 @@
 // wraps, list markers). Keep the original bytes of every top-level block whose
 // meaning did not change, so `git diff` shows only real edits.
 
-import { fromMarkdown } from 'mdast-util-from-markdown';
-import { gfm } from 'micromark-extension-gfm';
-import { cjkFriendlyExtension } from 'micromark-extension-cjk-friendly';
-import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { parseMarkdown } from './project.js';
 
 const MAX_DIFF_CELLS = 4_000_000;
 
@@ -44,8 +41,7 @@ export function splice(oldSource, newSource) {
 }
 
 function blocksOf(source) {
-  const tree = fromMarkdown(source, { extensions: [gfm(), cjkFriendlyExtension()], mdastExtensions: [gfmFromMarkdown()] });
-  return tree.children
+  return parseMarkdown(source).children
     .filter((node) => node.position)
     .map((node) => ({ start: node.position.start.offset, end: node.position.end.offset, key: keyOf(node) }));
 }

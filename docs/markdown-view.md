@@ -135,9 +135,14 @@ and files.
 
 ### Cost
 
-A parse or a serialize of a long doc takes tens of milliseconds, so each
-document is serialized once and the last few parses are kept; the
-projection is worked out once per document; the word count runs a few times
+A parse or a serialize of a long doc takes hundreds of milliseconds, so the
+view works a few top-level blocks at a time (`web/blocks.js`): while each
+block of the text it was given pairs with a block of its document,
+`getText` writes only the blocks changed since and splices them in, and
+`applyText` parses only the blocks where the new text differs, with a kept
+block on either side that must read as before. Both projections are kept
+per block. A doc whose blocks do not pair up (a link definition has no
+block in the document) is worked out whole. The word count runs a few times
 a second at most.
 
 ## Many writers

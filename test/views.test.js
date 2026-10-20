@@ -158,6 +158,13 @@ test('markdown view: typed Markdown stays text and saves escaped', async () => {
   assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
 });
 
+test('markdown view: a change applied with who made it glows, with their name', async () => {
+  await make('markdown', 'Alpha.\n\nBeta.\n');
+  await run(`view.applyText('Alpha.\\n\\nBeta two.\\n', { by: 'Ana' })`);
+  assert.equal(await run(`contract.drawn('.od-flash')`), ' two');
+  assert.equal(await run(`contract.drawn('.od-flag')`), 'Ana');
+});
+
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);

@@ -5,10 +5,36 @@
 
 const WHITESPACE = /\s/;
 
-/** @returns {{ text: string, positions: number[] }} positions[i] is the doc position of text[i] */
+// A top-level node never changes, so its lines are worked out once, with
+// positions from the node's start, however often the doc around it changes.
+const nodeLines = new WeakMap();
+
+/** @returns {{ text: string, positions: Int32Array }} positions[i] is the doc position of text[i] */
 export function projectDoc(doc) {
   const lines = [];
-  doc.descendants((node, pos) => {
+  const at = [];
+  doc.forEach((node, offset) => {
+    let own = nodeLines.get(node);
+    if (!own) nodeLines.set(node, (own = linesOf(node)));
+    for (const line of own) {
+      lines.push(line);
+      at.push(offset);
+    }
+  });
+  const text = lines.map((line) => line.text).join('\n');
+  const positions = new Int32Array(text.length);
+  let i = 0;
+  lines.forEach((line, k) => {
+    if (k > 0) positions[i++] = line.positions[0] + at[k]; // the break sits at the next line's start
+    for (const pos of line.positions) positions[i++] = pos + at[k];
+  });
+  return { text, positions };
+}
+
+// The lines of top-level node `top`: { text, positions }, positions from its start.
+function linesOf(top) {
+  const lines = [];
+  const add = (node, pos) => {
     if (!node.isTextblock) return true;
     const chars = [];
     node.forEach((child, offset) => {
@@ -24,23 +50,11 @@ export function projectDoc(doc) {
       }
     });
     const line = node.type.spec.code ? chars : collapse(chars);
-    if (line.length > 0) lines.push(line);
+    if (line.length > 0) lines.push({ text: line.map(([ch]) => ch).join(''), positions: line.map(([, p]) => p) });
     return false;
-  });
-
-  let text = '';
-  const positions = [];
-  for (const line of lines) {
-    if (text.length > 0) {
-      text += '\n';
-      positions.push(line[0][1]);
-    }
-    for (const [ch, pos] of line) {
-      text += ch;
-      positions.push(pos);
-    }
-  }
-  return { text, positions };
+  };
+  if (add(top, 0)) top.descendants((node, pos) => add(node, pos + 1));
+  return lines;
 }
 
 /**

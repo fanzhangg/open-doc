@@ -33,7 +33,7 @@ function createClient(view) {
     view, last: '', rev: 0, pending: [], // pending[0] is at the host or on its way
     errors: [],
     drifts: [], // where getText after applyText was not the text given
-    batches: [], // per batch from the host: ms in the getText before it, in applyText, and in the getText after
+    batches: [], // per batch from the host: ms in the getText before it, in applyText and setMarks, and in the getText after
     flush() {
       const text = view.getText();
       if (text === client.last) return;
@@ -64,6 +64,14 @@ function createClient(view) {
         });
         client.last = apply(client.last, ops);
         view.applyText(client.last, { by: 'other' });
+        // The other's cursor, after what they typed, is a mark (plan A, 3).
+        let at = 0;
+        let shift = 0;
+        for (const op of ops) {
+          at = op.from + shift + op.insert.length;
+          shift += op.insert.length - (op.to - op.from);
+        }
+        view.setMarks([{ kind: 'cursor', at, by: 'other', working: false }]);
         const applied = performance.now();
         const shown = view.getText();
         client.batches.push({ before: flushed - start, applyText: applied - flushed, after: performance.now() - applied });
