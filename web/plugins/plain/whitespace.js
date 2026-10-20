@@ -37,7 +37,14 @@ export const whitespaceMarks = (mode) => ViewPlugin.fromClass(class {
   }
 }, { decorations: (plugin) => plugin.decorations });
 
-/** A guide at each indent step (CSS `--indent`, in characters) over the leading whitespace of every visible line. */
+// The width in characters of a line's leading whitespace, a tab being 4 (as in app.css), or null for a blank line.
+const indentWidth = (text) => (text.trim() === '' ? null : [...(/^[ \t]*/.exec(text)[0])].reduce((width, char) => width + (char === '\t' ? 4 : 1), 0));
+
+/**
+ * A guide at each indent step (CSS `--indent`, in characters) over the leading
+ * whitespace of every visible line, and over a blank line as far as the
+ * shallower of the lines around it is indented, so the guides run on.
+ */
 export const indentGuides = ViewPlugin.fromClass(class {
   constructor(view) {
     this.decorations = this.build(view);
@@ -48,12 +55,23 @@ export const indentGuides = ViewPlugin.fromClass(class {
   }
 
   build(view) {
+    const { doc } = view.state;
     const ranges = [];
+    // The width of the nearest line with text before `line` (0 at the start) and after it (0 at the end).
+    const nearest = (line, step) => {
+      for (let n = line.number + step; n >= 1 && n <= doc.lines; n += step) {
+        const width = indentWidth(doc.line(n).text);
+        if (width !== null) return width;
+      }
+      return 0;
+    };
     for (const [from, to] of visible(view, false)) {
       for (let at = from; at <= to;) {
-        const line = view.state.doc.lineAt(at);
+        const line = doc.lineAt(at);
         const lead = /^[ \t]+/.exec(line.text);
-        if (lead) ranges.push(guides.range(line.from, line.from + lead[0].length));
+        const width = line.text === '' ? Math.min(nearest(line, -1), nearest(line, 1)) : 0;
+        if (width > 0) ranges.push(Decoration.line({ class: 'od-guides-blank', attributes: { style: `--width: ${width}` } }).range(line.from));
+        else if (lead) ranges.push(guides.range(line.from, line.from + lead[0].length));
         at = line.to + 1;
       }
     }
