@@ -205,7 +205,7 @@ export function buildPrompt({ buddy, buddies = [], docName, sidecarName = `${doc
   const owner = human?.name ?? 'The owner';
   const members = [...(human ? [{ ...human, name: `${human.name} (owner)` }] : []), ...buddies.filter((b) => b.name !== buddy.name)];
   return [
-    `You are ${buddy.name}, a member of the doc ${docName}. The members, each a person or a buddy, co-author it; ${owner} is its owner and driver. You work on a copy of the doc, in your working folder, and you are answering a comment in it.`,
+    `You are ${buddy.name}, a member of the doc ${docName}. The members, each a person or a buddy, co-author it; ${owner} is its owner. You work on a copy of the doc, in your working folder, and you are answering a comment in it.`,
     ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
     ...(members.length ? [`The other members of the doc:\n\n${members.map((b) => `${b.name}${b.about.trim() ? `: ${b.about.trim()}` : ''}`).join('\n\n')}`] : []),
     `The comment thread, oldest first, ${quote ? `on the text "${quote}"` : 'on the whole doc'}:\n\n<thread>\n${said}\n</thread>`,
