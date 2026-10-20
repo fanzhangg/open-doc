@@ -344,6 +344,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-editor .cm-editor .cm-line { padding: 0; }
 .od-editor .cm-content ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
+/* the plain view's whitespace: dots for spaces, arrows for tabs, a guide per indent step (--indent characters) */
+.od-ws-space { background: radial-gradient(circle at 50% 55%, var(--text-faint) 1px, transparent 1.5px) 0 0 / 1ch 100% repeat-x; }
+.od-ws-tab { position: relative; }
+.od-ws-tab::before { content: '→'; position: absolute; left: 0; color: var(--text-faint); }
+.od-guides { background: repeating-linear-gradient(to right, var(--border-strong) 0 1px, transparent 1px calc(var(--indent) * 1ch)); }
+
 /* the plain view's status bar, under the page */
 .od-statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; padding: 0 16px; flex: none; background: var(--bg-soft); border-top: 1px solid var(--border); font-size: 12px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
 
