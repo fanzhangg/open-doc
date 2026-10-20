@@ -193,7 +193,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
     for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
     for (const [i, plugin] of plugins.entries()) {
       const own = pluginSettings(settings, plugin);
-      pluginParts[i].state.textContent = own.enabled ? 'On' : 'Off';
+      pluginParts[i].state.textContent = plugin.always ? 'Always on' : own.enabled ? 'On' : 'Off';
       pluginParts[i].paint(own);
     }
     if (document.activeElement !== nameInput) nameInput.value = getName();
@@ -295,9 +295,9 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
 // is on, and while their `when` holds). `state` says on or off in the row;
 // `paint(own)` shows the plugin's settings `own`; `save(patch)` saves a change.
 function pluginRowAndPage(plugin, save) {
-  const extensions = plugin.extensions.map((extension) => `.${extension}`);
+  const extensions = (plugin.extensions ?? []).map((extension) => `.${extension}`);
   const name = el('span', 'od-setting-label', plugin.name);
-  name.append(el('span', 'od-setting-ext', extensions.join(' ')));
+  if (extensions.length > 0) name.append(el('span', 'od-setting-ext', extensions.join(' ')));
   const summary = el('span', 'od-setting-text');
   summary.append(name, el('span', 'od-setting-hint', plugin.about));
   const state = el('span');
@@ -311,12 +311,13 @@ function pluginRowAndPage(plugin, save) {
   row.append(open);
 
   const change = (key, value) => save({ plugins: { [plugin.id]: { [key]: value } } });
-  const enabled = fieldRow(
-    { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.` },
-    change,
-  );
-  enabled.node.querySelector('input').dataset.plugin = plugin.id;
-  enabled.node.querySelector('input').dataset.key = 'enabled';
+  const enabled = plugin.always
+    ? alwaysOn()
+    : fieldRow(
+      { key: 'enabled', type: 'switch', label: 'On', hint: `Off, ${new Intl.ListFormat('en').format(extensions)} files ${plugin.createView ? 'open' : 'merge'} as plain text.` },
+      change,
+    );
+  Object.assign(enabled.node.querySelector('input')?.dataset ?? {}, { plugin: plugin.id, key: 'enabled' });
   const fields = (plugin.settings ?? []).map((field) => fieldRow(field, change));
   const page = el('div');
   page.dataset.pluginPage = plugin.id;
@@ -333,6 +334,17 @@ function pluginRowAndPage(plugin, save) {
     });
   };
   return { row, page, state, paint };
+}
+
+// The Enabled row of a plugin that cannot be switched off: no switch.
+function alwaysOn() {
+  const line = el('div', 'od-setting');
+  const text = el('span', 'od-setting-text');
+  text.append(el('span', 'od-setting-label', 'Enabled'), el('span', 'od-setting-hint', 'The fallback for files no other plugin claims.'));
+  line.append(text, el('span', 'od-setting-state', 'Always on'));
+  const node = el('div');
+  node.append(line);
+  return { node, paint() {} };
 }
 
 // Whether `when` ({ key: value | [values] } or { key: { not: value } }) holds for the settings `own`; no `when` always does.
