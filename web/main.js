@@ -138,9 +138,9 @@ async function start() {
       paintEmpty();
       paintMarks();
     },
-    onReply: (thread, body) => send(api.reply(thread, body)),
-    onResolve: (thread) => send(api.resolve(thread)),
-    onReopen: (thread) => send(api.reopen(thread)),
+    onReply: (thread, body) => send(api.comment({ thread, body })),
+    onResolve: (thread) => send(api.comment({ thread, body: '', resolved: true })),
+    onReopen: (thread) => send(api.comment({ thread, body: '' })),
     onUndo: undoReply,
     onShowEdits: (id) => (id ? showRun(id) : hideRun()),
     onSelect: (id) => {
@@ -670,7 +670,7 @@ async function createThread(body) {
   // comment is on the whole doc.
   const text = editor.getText();
   const found = locate(text, pendingSelection);
-  const { id } = await send(api.comment(found && createAnchor(text, found.start, found.end), body));
+  const { id } = await send(api.comment({ anchor: found && createAnchor(text, found.start, found.end), body }));
   pendingSelection = null;
   paintEmpty();
   paintMarks();

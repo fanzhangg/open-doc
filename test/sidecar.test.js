@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { askedOf, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
+import { askedOf, newComment, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
 import { parseMentions } from '../src/core/mentions.js';
 
 const { reading, mentions } = JSON.parse(readFileSync(new URL('../spec/conformance/sidecar.json', import.meta.url), 'utf8'));
@@ -97,4 +97,17 @@ test('who is asked: whom my comment @mentions, or with no mention the thread\'s 
   assert.deepEqual(askedOf(thread([ada, 'This is stale.'], [me, 'Update it']), 'u_me000001'), ['Ada'], 'the buddy that opened the thread is one of its buddies');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [other, 'and this']), 'u_me000001'), [], "another user's follow-up asks no one");
   assert.deepEqual(peopleOf([...thread([me, 'a'], [{ ...me, name: 'me2' }, 'b']).comments]), [{ id: 'u_me000001', name: 'me2' }], 'a human goes by the name in their latest comment');
+});
+
+test('a new comment: a human may resolve with an empty body; a buddy\'s resolved is dropped and its body kept', () => {
+  const at = '2026-01-01T00:00:00.000Z';
+  const human = { id: 'u_me000001', name: 'Me', kind: 'human' };
+  const buddy = { id: 'Clippy', name: 'Clippy', kind: 'ai' };
+  const { id, ...resolving } = newComment({ thread: 'c_first01', body: 'ignored', resolved: true }, { by: human, at });
+  assert.match(id, /^c_/);
+  assert.deepEqual(resolving, { thread: 'c_first01', by: human, at, body: '', resolved: true });
+  assert.deepEqual(newComment({ thread: 'c_first01', body: '' }, { by: human, at }).body, '', 'an empty reply reopens');
+  const { id: _, ...asked } = newComment({ thread: 'c_first01', body: 'Done.', resolved: true }, { by: buddy, at });
+  assert.deepEqual(asked, { thread: 'c_first01', by: buddy, at, body: 'Done.' });
+  assert.equal(newComment({ body: 'On the doc' }, { by: human, at }).anchor, null, 'a first comment without an anchor is on the whole doc');
 });

@@ -84,6 +84,24 @@ function invalid(c) {
 }
 
 /**
+ * A new comment as the sidecar holds it (§2), whoever writes it: a first
+ * comment on `anchor` (null for the whole doc) or a reply in `thread`, by
+ * `by` at `at`. Only a human's `resolved` is kept, and then the body is
+ * empty; the id is made here.
+ */
+export function newComment({ thread, anchor = null, body, resolved }, { by, at }) {
+  const resolves = resolved === true && by.kind === 'human';
+  return {
+    id: newId('c'),
+    ...(thread !== undefined ? { thread } : { anchor }),
+    by,
+    at,
+    body: resolves ? '' : body,
+    ...(resolves ? { resolved: true } : {}),
+  };
+}
+
+/**
  * The comments a buddy's run appended to its copy of the sidecar
  * (docs/agent-config.md, Comments): lines in `after` that were not in
  * `before` and have no `id` (a changed comment has one), each `{ anchor: { exact }, body }`, `{ body }` or `{ thread,
@@ -103,14 +121,13 @@ export function appendedComments(before, after, { text, by, at, threads }) {
       continue;
     }
     if (!isObject(line) || line.id !== undefined || typeof line.body !== 'string' || !line.body.trim()) continue;
-    const comment = { id: newId('c'), by, at, body: line.body.trim() };
-    if (line.thread !== undefined) {
-      if (!threads.has(line.thread)) continue;
-      comment.thread = line.thread;
-    } else {
-      comment.anchor = quoted(text, line.anchor?.exact);
-    }
-    added.push(comment);
+    if (line.thread !== undefined && !threads.has(line.thread)) continue;
+    added.push(newComment({
+      thread: line.thread,
+      anchor: line.thread === undefined ? quoted(text, line.anchor?.exact) : undefined,
+      body: line.body.trim(),
+      resolved: line.resolved,
+    }, { by, at }));
   }
   return added;
 }
