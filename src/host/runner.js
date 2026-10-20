@@ -1,5 +1,5 @@
-// The Runner (docs/architecture.md, A run): starts a run for each ask
-// waiting on a buddy, one run per ask. A run copies the doc and its sidecar
+// The Runner (docs/architecture.md, A run): keeps one run for each ask
+// waiting on a buddy, and none for an ask that is gone. A run copies the doc and its sidecar
 // into a new private folder, runs the agent script there with the prompt on
 // stdin, and hands back the copies and the script's stdout when it exits. The agent knows
 // nothing of OpenDoc. Which runs are working lives only here, in memory.
@@ -14,6 +14,8 @@ import { SIDECAR_SUFFIX, decodeText } from '../store/files.js';
 const MAX_OUTPUT = 1024 * 1024;
 const TAIL_LINES = 20;
 const RUN_TIMEOUT_MS = 30 * 60 * 1000; // no one can stop a run by hand: one that hangs fails
+
+const keyOf = (threadId, name) => `${threadId}:${name.toLowerCase()}`;
 
 export class Runner {
   /**
@@ -31,7 +33,7 @@ export class Runner {
    */
   constructor({ asks, doc, script, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
     Object.assign(this, { asks, doc, script, folder, human, finish, onChange, log, timeoutMs });
-    this.runs = new Map(); // `${threadId}:${name}` (name in lower case) → { threadId, name, child, done }
+    this.runs = new Map(); // keyOf(threadId, name) → { threadId, name, child, done, cancelled, ended }
     this.stopped = false;
     this.checking = null;
     this.again = false;
@@ -47,8 +49,13 @@ export class Runner {
     return [...byName.values()];
   }
 
-  /** Look for asks to start; call on every change of the sidecar or the buddies. */
-  notify() {
+  /**
+   * Make the runs the asks the files hold: start a run for each ask without
+   * one, end (without an answer) each run whose ask is gone, such as a
+   * resolved thread or a deleted buddy. Call on any change of the sidecar,
+   * the buddies or the settings.
+   */
+  reconcile() {
     if (this.stopped) return Promise.resolve();
     if (this.checking) {
       this.again = true;
@@ -58,8 +65,11 @@ export class Runner {
       do {
         this.again = false;
         try {
-          for (const ask of await this.asks()) {
-            const key = `${ask.threadId}:${ask.buddy.name.toLowerCase()}`;
+          const asks = await this.asks();
+          const wanted = new Set(asks.map((ask) => keyOf(ask.threadId, ask.buddy.name)));
+          for (const [key, run] of this.runs) if (!wanted.has(key) && !run.ended) this.#end(run);
+          for (const ask of asks) {
+            const key = keyOf(ask.threadId, ask.buddy.name);
             if (!this.runs.has(key) && !this.stopped) this.#start(key, ask);
           }
         } catch (error) {
@@ -70,13 +80,10 @@ export class Runner {
     return this.checking;
   }
 
-  /** End the runs `which({ threadId, name })` picks, without an answer. */
-  cancel(which) {
-    for (const run of this.runs.values()) {
-      if (!which(run)) continue;
-      run.cancelled = true;
-      killTree(run.child);
-    }
+  // End a run without an answer.
+  #end(run) {
+    run.cancelled = true;
+    killTree(run.child);
   }
 
   /** End every run without an answer (an unanswered ask runs again next time) and start no more. */
@@ -88,20 +95,20 @@ export class Runner {
     await Promise.all(runs.map((r) => r.done));
   }
 
-  /** Let runs start again after `stop` (at the next `notify`). */
+  /** Let runs start again after `stop` (at the next `reconcile`). */
   resume() {
     this.stopped = false;
   }
 
   #start(key, { threadId, thread, buddy, buddies }) {
-    const run = { threadId, name: buddy.name, child: null, done: null, cancelled: false };
+    const run = { threadId, name: buddy.name, child: null, done: null, cancelled: false, ended: false };
     this.runs.set(key, run);
     run.done = this.#run(run, thread, buddy, buddies)
       .catch((error) => console.error(`Run of ${buddy.name} failed to finish:`, error))
       .finally(() => {
         this.runs.delete(key);
         this.onChange();
-        this.notify(); // asked again meanwhile, or another ask waits
+        this.reconcile(); // asked again meanwhile, or another ask waits
       });
     this.onChange();
   }
@@ -130,6 +137,7 @@ export class Runner {
       } });
       const stopped = this.stopped || run.cancelled;
       const outcome = stopped ? 'stopped' : result.timedOut ? 'timedOut' : result.code === 0 ? 'ok' : 'failed';
+      run.ended = true; // its reply is on its way: its ask going away is that reply
       await this.log({ buddy: buddy.name, thread: run.threadId, at: new Date(at).toISOString(), ms: Date.now() - at, outcome, code: result.code });
       if (stopped) return; // ended by stop or cancel: no answer
       const out = { threadId: run.threadId, name: buddy.name, base, seen: thread.comments.at(-1).at };
