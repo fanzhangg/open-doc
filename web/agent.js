@@ -20,9 +20,9 @@ export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting wit
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, project?: () => boolean, onResult: (result: { agents? }) => void }} options
+ *           setName: (name: string) => boolean, getAbout: () => string, setAbout: (about: string) => void, project?: () => boolean, onResult: (result: { agents? }) => void }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, project = () => false, onResult }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, project = () => false, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
   let showing = null; // 'me' | 'buddies' | 'agent:<name>' | 'person:<name>' | null
@@ -212,7 +212,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const who = el('div', 'od-profile-who');
     who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
     head.append(pic, who);
-    return [head];
+    const about = el('textarea', 'od-input od-profile-about');
+    about.value = getAbout();
+    about.placeholder = 'Who you are, what you write, how you like to work. Every buddy that answers you reads it.';
+    about.spellcheck = true;
+    about.setAttribute('aria-label', 'Who you are');
+    about.addEventListener('change', () => setAbout(about.value));
+    return [head, about];
   }
 
   function personCard(name) {

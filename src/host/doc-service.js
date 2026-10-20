@@ -55,7 +55,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     doc: async () => ({ name: basename(docPath), text: (await readDoc(docPath)).text, comments: await readSidecarText(docPath) }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
-    human: async () => (await me()).name,
+    human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
     log: (entry) => logRun(settingsDir, { doc: docPath, ...entry }),
@@ -210,7 +210,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const mine = (await me()).id;
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map((b) => b.name));
     return threads.flatMap((thread) => askedOf(thread, mine).map((name) => ({
-      threadId: thread.id, thread, buddy: here.find((b) => sameName(b.name, name)),
+      threadId: thread.id, thread, buddy: here.find((b) => sameName(b.name, name)), buddies: here,
     })).filter((ask) => ask.buddy)); // a thread's opener may be gone
   }
 

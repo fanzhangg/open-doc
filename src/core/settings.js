@@ -9,7 +9,8 @@ export const SETTINGS_VERSION = 3;
 /**
  * `id` is who the user is in every doc's comments, whatever their name
  * (`u_…`, made once by the doc host; null until then). `name: null` means
- * "not chosen yet": the doc host suggests one. `agent` names the agent
+ * "not chosen yet": the doc host suggests one. `about` is who the user is, as a
+ * buddy's is, and goes to every buddy that answers them. `agent` names the agent
  * script that runs every buddy (src/store/agents.js). Buddies are files
  * (src/store/buddies.js), never settings. `plugins` holds each plugin's
  * switches by its id (`{ <id>: { enabled: false } }`); a switch not
@@ -18,6 +19,7 @@ export const SETTINGS_VERSION = 3;
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
   name: null,
+  about: '',
   theme: 'system',
   plugins: Object.freeze({}),
   agent: 'claude',
@@ -32,6 +34,7 @@ export const USER_ID = /^u_[A-Za-z0-9_-]{6,40}$/;
 const RULES = {
   id: (v) => v === null || (typeof v === 'string' && USER_ID.test(v)),
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
+  about: (v) => typeof v === 'string' && !v.includes('\0'),
   theme: oneOf('system', 'light', 'dark'),
   plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(scalar)),
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),

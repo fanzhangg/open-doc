@@ -22,11 +22,12 @@ test('configDir follows each OS convention and the override', () => {
 });
 
 test('patches are checked key by key', () => {
-  assert.doesNotThrow(() => checkSettingsPatch({ theme: 'dark', name: 'fzhan' }));
+  assert.doesNotThrow(() => checkSettingsPatch({ theme: 'dark', name: 'fzhan', about: 'I write novels.' }));
   assert.doesNotThrow(() => checkSettingsPatch({ name: null }));
   assert.throws(() => checkSettingsPatch({ theme: 'comic' }), SettingsError);
   assert.throws(() => checkSettingsPatch({ colour: 'red' }), /unknown setting/);
   assert.throws(() => checkSettingsPatch({ font: 'serif' }), /unknown setting: font/);
+  assert.throws(() => checkSettingsPatch({ about: 5 }), SettingsError);
   assert.throws(() => checkSettingsPatch({ name: 'two words' }), SettingsError);
   assert.throws(() => checkSettingsPatch([]), SettingsError);
 });

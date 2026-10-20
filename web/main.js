@@ -165,6 +165,8 @@ async function start() {
     getName: () => me,
     getId: () => settings.get().id,
     setName,
+    getAbout: () => settings.get().about,
+    setAbout: (about) => settings.set({ about }),
     project: () => inProject,
     onResult: takeAgentResult,
   });
