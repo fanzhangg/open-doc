@@ -236,10 +236,10 @@ test('a doc renamed while open is found at its new path, with its comments', asy
 
 test('settings: saved for every window; a bad patch is refused; another window\'s change arrives as an event', { timeout: 15_000 }, async () => {
   await withDoc(async ({ call, events, settingsDir }) => {
-    const saved = await call('saveSettings', { font: 'serif' });
-    assert.equal(saved.settings.font, 'serif');
-    assert.equal(JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).font, 'serif');
-    for (const patch of [{ font: 'comic' }, { colour: 'red' }, { id: 'u_someone' }, { agents: [] }, { face: 'x' }]) {
+    const saved = await call('saveSettings', { theme: 'dark' });
+    assert.equal(saved.settings.theme, 'dark');
+    assert.equal(JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8')).theme, 'dark');
+    for (const patch of [{ theme: 'comic' }, { colour: 'red' }, { id: 'u_someone' }, { agents: [] }, { face: 'x' }]) {
       await assert.rejects(call('saveSettings', patch), refused('bad_input'), JSON.stringify(patch));
     }
     const other = await openTestDoc(await tempDoc(), { settingsDir });

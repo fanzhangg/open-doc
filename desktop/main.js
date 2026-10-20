@@ -406,11 +406,7 @@ function buildMenu() {
     {
       label: isMac ? 'View' : '&View',
       submenu: [
-        { label: 'Word Count', type: 'checkbox', checked: settings.wordCount, click: () => setSettings({ wordCount: !settings.wordCount }) },
-        { type: 'separator' },
         { label: 'Theme', submenu: choices('theme', [['system', 'Match System'], ['light', 'Light'], ['dark', 'Dark']]) },
-        { label: 'Font', submenu: choices('font', [['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']]) },
-        { label: 'Page Width', submenu: choices('width', [['normal', 'Normal'], ['wide', 'Wide']]) },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -486,7 +482,7 @@ function recentMenu() {
 
 // The settings the start window shows and changes (its Settings dialog, a
 // doc's but Plugins): your name, how things look and the agent, never buddies.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'font', 'width', 'wordCount', 'agent'];
+const PAGE_SETTING_KEYS = ['name', 'theme', 'agent'];
 
 // Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
 const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });

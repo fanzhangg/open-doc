@@ -275,7 +275,6 @@ function makeView(chosen, text) {
     onChange: () => {
       hideRun();
       paintMarks();
-      chrome.recount();
       dirty = true;
       version++;
       setStatus('Saving…', 'saving');
@@ -321,7 +320,6 @@ async function remakeView(chosen) {
   editor = next;
   await old.destroy();
   paintMarks();
-  chrome.recount();
   margin.layout();
   await history.viewChanged();
 }
@@ -444,7 +442,6 @@ async function doSync(by) {
   // A buddy's changes show as its revision; anything else glows.
   editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
   paintMarks();
-  chrome.recount();
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
@@ -753,7 +750,6 @@ async function restoreVersion(id) {
   const { text, docHash } = result.data;
   editor.applyText(text, { by: 'Restore' });
   paintMarks();
-  chrome.recount();
   synced = text;
   baseHash = docHash;
   dirty = false;

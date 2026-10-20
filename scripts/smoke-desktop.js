@@ -98,7 +98,7 @@ check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
 check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
 check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
-const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { font: 'serif' }).then((r) => Boolean(r.result))`);
+const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { plugins: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
 
 step('the Markdown plugin, off and on');
@@ -141,7 +141,8 @@ await app.quit();
 step('relaunch');
 app = await launch([docs[0]]);
 const relaunched = await app.page('plan.md');
-const second = await waitFor(() => relaunched.evaluate('document.documentElement.dataset.font'), 15_000, 'the settings').catch(() => undefined);
+// From the settings the page got, not from how the editor shows them: the editor is off by now.
+const second = await waitFor(() => relaunched.evaluate(`window.opendocHost.call('state').then((r) => r.result.settings.plugins.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
 check(second === 'serif', `the setting survived the relaunch (font: ${second})`);
 await app.quit();
 

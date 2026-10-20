@@ -4,7 +4,7 @@
 
 import { NAME_PATTERN } from './mentions.js';
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 /**
  * `id` is who the user is in every doc's comments, whatever their name
@@ -19,9 +19,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
   name: null,
   theme: 'system',
-  font: 'sans',
-  width: 'normal',
-  wordCount: false,
   plugins: Object.freeze({}),
   agent: 'claude',
 });
@@ -36,12 +33,23 @@ const RULES = {
   id: (v) => v === null || (typeof v === 'string' && USER_ID.test(v)),
   name: (v) => v === null || (typeof v === 'string' && NAME_PATTERN.test(v)),
   theme: oneOf('system', 'light', 'dark'),
-  font: oneOf('sans', 'serif', 'mono'),
-  width: oneOf('normal', 'wide'),
-  wordCount: boolean,
   plugins: (v) => isObject(v) && Object.values(v).every((one) => isObject(one) && Object.values(one).every(scalar)),
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
+
+/**
+ * A settings file as this version reads it. Version 2 had the Markdown
+ * editor's font, width and word count at the top level; they are its
+ * plugin's now.
+ */
+export function migrateSettings(stored) {
+  if (stored.version >= SETTINGS_VERSION) return stored;
+  const { font, width, wordCount, ...rest } = stored;
+  const moved = Object.fromEntries(Object.entries({ font, width, wordCount }).filter(([, value]) => value !== undefined));
+  if (Object.keys(moved).length === 0) return { ...rest, version: SETTINGS_VERSION };
+  const plugins = objectOr(rest.plugins);
+  return { ...rest, version: SETTINGS_VERSION, plugins: { ...plugins, markdown: { ...moved, ...objectOr(plugins.markdown) } } };
+}
 
 export class SettingsError extends Error {
   constructor(message) {

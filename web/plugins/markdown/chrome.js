@@ -84,23 +84,25 @@ function elements(markup) {
  * `editor`: the Markdown view's own commands and queries. The tools go first
  * in `toolbar`, the bubble in `stage`, the outline before it.
  * `onComment` is the bubble's Comment button. `settings` are the plugin's:
- * whether the outline shows and focus mode is on; Mod+Shift+F changes focus
- * mode through `saveSettings`.
+ * the page's font and width, whether the outline and the word count show and
+ * focus mode is on; Mod+Shift+F changes focus mode through `saveSettings`.
  *
  * @param {object} editor
  * @param {{ toolbar: HTMLElement, stage: HTMLElement, host: HTMLElement, onComment: () => void,
- *           settings: { outline: boolean, focus: boolean }, saveSettings: (patch: object) => void }} options
+ *           settings: object, saveSettings: (patch: object) => void }} options
  */
 export function createChrome(editor, { toolbar, stage, host, onComment, settings, saveSettings }) {
   const tools = elements(TOOLS);
   const [bubble] = elements(BUBBLE);
   const [outlineNav] = elements(OUTLINE);
   const [card, popover] = elements(LINK);
+  const count = Object.assign(document.createElement('span'), { className: 'od-count', title: 'Word count' });
   toolbar.prepend(...tools);
+  toolbar.querySelector('.od-spacer').after(count);
   stage.append(bubble);
   stage.before(outlineNav);
   document.body.append(card, popover);
-  const made = [...tools, bubble, outlineNav, card, popover];
+  const made = [...tools, count, bubble, outlineNav, card, popover];
 
   const canvas = stage.parentElement; // scrolls the page
   const page = host.closest('.od-page');
@@ -149,6 +151,24 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     placeBubble();
     link.refresh(pointerDown);
     outline.refresh();
+    if (settings.wordCount) recount();
+  }
+
+  // Counting words reads the whole doc, so it runs a few times a second at
+  // most, not on every keystroke or every frame of an agent's replay.
+  const COUNT_MS = 300;
+  let countTimer = 0;
+  let countedAt = -Infinity;
+  function recount() {
+    if (!countTimer) countTimer = setTimeout(refreshCount, Math.max(0, COUNT_MS - (performance.now() - countedAt)));
+  }
+  function refreshCount() {
+    countTimer = 0;
+    countedAt = performance.now();
+    const text = editor.getText();
+    const selection = editor.selection();
+    const selected = selection ? words(text.slice(selection.from, selection.to)) : 0;
+    count.textContent = selected ? `${selected.toLocaleString()} of ${plural(words(text), 'word')}` : plural(words(text), 'word');
   }
 
   // ---- selection bubble ----
@@ -190,11 +210,15 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     if (!bubble.hidden) placeBubble();
   }, { passive: true, signal });
 
-  // ---- the plugin's settings: the outline, and focus mode (app.css) ----
+  // ---- the plugin's settings: the page's font and width, the outline, the word count and focus mode (app.css) ----
 
   const root = document.documentElement;
   function applySettings(next) {
     settings = next;
+    root.dataset.font = next.font;
+    root.dataset.width = next.width;
+    count.hidden = !next.wordCount;
+    if (next.wordCount) recount();
     root.toggleAttribute('data-focus', next.focus);
     root.toggleAttribute('data-no-outline', !next.outline);
   }
@@ -215,7 +239,10 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     destroy() {
       done.abort();
       cancelAnimationFrame(frame);
+      clearTimeout(countTimer);
       for (const el of made) el.remove();
+      delete root.dataset.font;
+      delete root.dataset.width;
       root.removeAttribute('data-focus');
       root.removeAttribute('data-no-outline');
     },
@@ -453,4 +480,12 @@ function decoded(text) {
   } catch {
     return text;
   }
+}
+
+function words(text) {
+  return (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
+}
+
+function plural(n, word) {
+  return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 }
