@@ -13,6 +13,7 @@ import { icon } from './icons.js';
 const DRAG_SLOP_PX = 4;
 const OPEN_ON_HOVER_MS = 700;
 const SCROLL_EDGE_PX = 28; // a drag this close to the tree's top or bottom scrolls it
+const FILTER_KEY = 'opendoc.filesFilter:'; // + the folder's name: what was typed in its filter
 const WIDTH_KEY = 'opendoc.filesWidth'; // the sidebar width the human dragged to, in px
 const MIN_WIDTH_PX = 180;
 const MAX_WIDTH_PX = 480;
@@ -33,6 +34,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   const aside = document.querySelector('.od-files');
   const head = aside.querySelector('.od-files-head');
   const tree = aside.querySelector('.od-files-tree');
+  const filter = aside.querySelector('.od-files-filter');
   const toggle = document.querySelector('.od-files-toggle');
   const preview = document.querySelector('.od-preview');
   const previewName = document.querySelector('.od-preview-name');
@@ -54,6 +56,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   let previewing = null; // the file shown read only, if any
   let drag = null;
   let justDragged = false;
+  let everything = null; // every file's path, read once a filter is typed, dropped when the folder changes
 
   async function refresh() {
     if (field) {
@@ -63,6 +66,8 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     try {
       view = await desktop.folder();
       if (view) lists = await load(new Set(view.expanded));
+      everything = null;
+      if (view && filter.value) everything = await allFiles();
     } catch {
       view = null;
     }
@@ -72,11 +77,19 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
       document.documentElement.removeAttribute('data-files');
       return;
     }
+    if (first) {
+      try {
+        filter.value = localStorage.getItem(FILTER_KEY + view.name) ?? '';
+      } catch {
+        // no storage: an empty filter
+      }
+      if (filter.value) everything = await allFiles();
+    }
     aside.querySelector('.od-files-name').textContent = view.name;
     aside.querySelector('.od-files-name').title = view.name;
     if (previewing && lists.get(parentOf(previewing))?.some(({ name }) => name === nameOf(previewing)) === false) closePreview();
     const focused = tree.contains(document.activeElement) ? document.activeElement.closest('[role="treeitem"]')?.dataset.path : null;
-    tree.replaceChildren(...items('', 1));
+    tree.replaceChildren(...(filter.value ? matches() : items('', 1)));
     const wanted = focusNext ?? focused;
     focusNext = null;
     const target = (wanted !== null && wanted !== undefined && visibleRow(wanted)) || null;
@@ -107,6 +120,98 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     await read('');
     return loaded;
   }
+
+  // ---- filtering: grep the files' paths with a regular expression ----
+
+  async function allFiles() {
+    const paths = [];
+    async function read(path) {
+      const entries = await desktop.folderList(path).catch(() => []);
+      await Promise.all(entries.map(({ name, folder }) => (folder ? read(join(path, name)) : paths.push(join(path, name)))));
+    }
+    await read('');
+    return paths.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }
+
+  // The files whose path matches the filter, in their folders, all open, the
+  // match marked. Case is ignored until the pattern has a capital letter. A
+  // pattern that is not a regular expression is marked and shows what the
+  // last one did.
+  function matches() {
+    let pattern;
+    try {
+      pattern = new RegExp(filter.value, /[A-Z]/.test(filter.value) ? 'g' : 'gi');
+    } catch {
+      filter.setAttribute('aria-invalid', 'true');
+      return [...tree.children];
+    }
+    filter.removeAttribute('aria-invalid');
+    const found = everything.filter((path) => {
+      pattern.lastIndex = 0;
+      return pattern.test(path);
+    });
+    if (!found.length) return [el('li', 'od-files-none', 'No files match')];
+    function branch(paths, base, level) {
+      const names = [...new Set(paths.map((path) => path.slice(base.length).split('/')[0]))];
+      return names.map((name) => {
+        const at = join(base.replace(/\/$/, ''), name);
+        const inside = paths.filter((path) => path.startsWith(`${at}/`));
+        const item = el('li');
+        item.setAttribute('role', 'none');
+        const node = row(inside.length ? 'folder' : 'file', at, inside.length ? name : '', level);
+        item.append(node);
+        if (inside.length) {
+          node.setAttribute('aria-expanded', 'true');
+          const children = el('ul');
+          children.setAttribute('role', 'group');
+          children.append(...branch(inside, `${at}/`, level + 1));
+          item.append(children);
+        } else {
+          const label = node.querySelector('.od-files-label');
+          let from = 0;
+          pattern.lastIndex = 0;
+          const hits = [...at.matchAll(pattern)].filter(({ 0: hit }) => hit);
+          for (const { 0: hit, index } of hits) {
+            const start = index - (at.length - name.length);
+            if (start + hit.length <= 0 || start < from) continue;
+            const begin = Math.max(start, 0);
+            label.append(name.slice(from, begin), el('mark', '', name.slice(begin, start + hit.length)));
+            from = start + hit.length;
+          }
+          label.append(name.slice(from));
+          if (at === shown()) node.setAttribute('aria-current', 'page');
+        }
+        return item;
+      });
+    }
+    return branch(found, '', 1);
+  }
+
+  async function applyFilter() {
+    if (filter.value && !everything) everything = await allFiles();
+    tree.replaceChildren(...(filter.value ? matches() : items('', 1)));
+    rove(visibleRow(shown() ?? '') ?? rows()[0] ?? null);
+  }
+  filter.addEventListener('input', () => {
+    try {
+      localStorage.setItem(FILTER_KEY + view.name, filter.value);
+    } catch {
+      // no storage: the filter lasts for this page
+    }
+    applyFilter();
+  });
+  filter.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      filter.value = '';
+      filter.dispatchEvent(new Event('input'));
+      focusRow(rows()[0]);
+    } else if (event.key === 'ArrowDown' || (event.key === 'Enter' && !event.isComposing)) {
+      event.preventDefault();
+      focusRow(rows()[0]);
+    }
+  });
 
   function show(open) {
     docked = open;
@@ -196,7 +301,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   // Open or close a folder; one not read since it was last open is read first.
   async function setOpen(node, open) {
     const { path } = node.dataset;
-    if (node.getAttribute('aria-expanded') === String(open)) return;
+    if (filter.value || node.getAttribute('aria-expanded') === String(open)) return; // a filter keeps every folder open
     desktop.folderExpand(path, open).catch(() => {});
     if (open && !lists.has(path)) {
       lists.set(path, await desktop.folderList(path).catch(() => []));
