@@ -331,7 +331,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-editor .ProseMirror-focused .ProseMirror-gapcursor { display: block; }
 @keyframes od-gapcursor-blink { to { visibility: hidden; } }
 
-/* the plain view (web/views/plain.js): any other text file, as it is, in mono;
+/* the plain view (web/plugins/plain/view.js): any other text file, as it is, in mono;
    the page scrolls it, so its scroller lets a flag over the first line show */
 .od-editor .cm-editor.cm-focused { outline: none; }
 .od-editor .cm-editor .cm-scroller { font: 14px/1.6 var(--mono); overflow: visible; }
