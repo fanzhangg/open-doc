@@ -661,6 +661,14 @@ label.od-setting { cursor: pointer; }
 .od-files-head { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 16px; flex: none; font-size: 13px; font-weight: 600; }
 .od-files-icon { display: flex; color: var(--text-soft); }
 .od-files-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.od-files-find { display: flex; align-items: center; gap: 6px; flex: none; padding: 8px 16px; border-top: 1px solid var(--border); color: var(--text-faint); font: 13px var(--mono); }
+.od-files-find:focus-within { color: var(--text-soft); }
+.od-files-filter { flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }
+.od-files-filter::placeholder { color: var(--text-faint); }
+.od-files-find:has([aria-invalid="true"]) { color: var(--red); }
+.od-files-filter[aria-invalid="true"] { color: var(--red); }
+.od-files-label mark { background: var(--accent-soft); color: var(--text); border-radius: 2px; }
+.od-files-none { padding: 6px 8px; color: var(--text-faint); font-size: 13px; list-style: none; }
 .od-files-tree, .od-files-tree ul { list-style: none; margin: 0; padding: 0; }
 .od-files-tree { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 16px; }
 .od-files-tree ul { padding-left: 16px; }
