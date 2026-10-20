@@ -288,16 +288,9 @@ async function mergesOutside(page, doc) {
   const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
   writeFileSync(doc, '1 *2* 3\n');
   await waitFor(async () => (await page.evaluate(shown)) === '1 *2* 3\n', 15_000, 'the doc from disk');
-  await page.evaluate(`(async () => {
-    const editor = document.querySelector('.od-stage [contenteditable="true"]');
-    editor.focus();
-    const range = document.createRange();
-    range.selectNodeContents(editor.querySelector('.cm-line'));
-    range.collapse(false);
-    getSelection().removeAllRanges();
-    getSelection().addRange(range);
-    await new Promise((r) => setTimeout(r, 100)); // the editor takes in the selection
-  })()`);
+  await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
+  // The End key, not a DOM selection: the editor's own caret is where typing goes.
+  for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'End', code: 'End', windowsVirtualKeyCode: 35 });
   await page.send('Input.insertText', { text: ' 4*' });
   writeFileSync(doc, '1 *2 3\n'); // before the typing is saved
   return waitFor(async () => {
