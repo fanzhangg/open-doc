@@ -8,6 +8,8 @@
 //
 // - mergeLine(base, ours, theirs, merged): whether a line both sides changed
 //   may be merged by character into `merged`; if not, the line conflicts.
+// - mergeDoc(base, ours, theirs, merged): whether the whole merged text may
+//   stand, checked once at the end of a merge; if not, the merge conflicts.
 
 import { pluginSettings } from '../core/settings.js';
 import { markdownHarness } from './markdown.js';

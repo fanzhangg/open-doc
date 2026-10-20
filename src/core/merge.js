@@ -13,7 +13,7 @@ import { lineMatches as matches } from './diff.js';
  * @param {string} base the text both sides started from
  * @param {string} ours
  * @param {string} theirs
- * @param {{ prefer?: 'ours', harness?: { mergeLine?: Function } }} [options] `harness` from harnessOf
+ * @param {{ prefer?: 'ours', harness?: { mergeLine?: Function, mergeDoc?: Function } }} [options] `harness` from harnessOf
  * @returns {{ text: string, conflict: false, dropped: { at: number, count: number, base: string, ours: string, theirs: string }[] } | { text: null, conflict: true }}
  */
 export function merge3(base, ours, theirs, { prefer, harness } = {}) {
@@ -65,7 +65,11 @@ export function merge3(base, ours, theirs, { prefer, harness } = {}) {
     oi = oEnd;
     ti = tEnd;
   }
-  return { text: out.join('\n'), conflict: false, dropped };
+  const text = out.join('\n');
+  if (harness?.mergeDoc?.(base, ours, theirs, text) === false) {
+    return prefer === 'ours' ? { text: ours, conflict: false, dropped: [{ at: 0, count: o.length, base, ours, theirs }] } : { text: null, conflict: true };
+  }
+  return { text, conflict: false, dropped };
 }
 
 // A character merge of one line, unless the harness refuses it.
