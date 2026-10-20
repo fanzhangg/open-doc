@@ -170,3 +170,42 @@ test('plain view: whitespace marks and guides draw over the text without changin
   await waitFor(async () => (await run(`document.querySelectorAll('.od-ws-tab').length`)) === 1, 5_000, 'the tab in the selection marked');
   assert.equal(await getText(), text);
 });
+
+// A key press, as typing is: keyDown (with the character it types, if any), then keyUp.
+async function press(key, { modifiers = 0, text } = {}) {
+  const codes = { Tab: 9, Enter: 13, ArrowDown: 40 };
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: codes[key], modifiers, ...(text ? { text } : {}) });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: codes[key], modifiers });
+}
+const SETTINGS = { lineNumbers: true, wrap: true, fontSize: 14, whitespace: 'selection', guides: true, indent: 'auto', tabWidth: 4, keepIndent: true };
+
+test('plain view: Enter keeps the indent, Tab types the file\'s indent', async () => {
+  await make('plain', 'a\n  b\n    c');
+  await select('c', 1, 1);
+  await press('Enter', { text: '\r' });
+  await type('d');
+  assert.equal(await getText(), 'a\n  b\n    c\n    d', 'Enter keeps the indent');
+  await press('Tab');
+  await type('e');
+  assert.equal(await getText(), 'a\n  b\n    c\n    d  e', 'the file steps by 2');
+  await run(`view.applySettings(${JSON.stringify({ ...SETTINGS, keepIndent: false, indent: 'tabs' })})`);
+  await press('Enter', { text: '\r' });
+  await type('f');
+  await press('Tab');
+  await type('g');
+  assert.equal(await getText(), 'a\n  b\n    c\n    d  e\nf\tg', 'no kept indent; Tab types a tab');
+});
+
+test('plain view: Tab indents and Shift+Tab outdents the lines of a selection', async () => {
+  await make('plain', 'x\n    one\n    two\n');
+  await run(`view.applySettings(${JSON.stringify({ ...SETTINGS, indent: 'spaces', tabWidth: 2 })})`);
+  await select('one', 0, 0);
+  await press('ArrowDown', { modifiers: 8 });
+  await press('Tab');
+  assert.equal(await getText(), 'x\n      one\n      two\n');
+  await press('Tab', { modifiers: 8 });
+  await press('Tab', { modifiers: 8 });
+  assert.equal(await getText(), 'x\n  one\n  two\n');
+  for (let i = 0; i < 2; i++) await press('Tab', { modifiers: 8 });
+  assert.equal(await getText(), 'x\none\ntwo\n');
+});
