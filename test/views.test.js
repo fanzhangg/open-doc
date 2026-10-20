@@ -137,3 +137,19 @@ test('markdown view: typed Markdown stays text and saves escaped', async () => {
   assert.equal(await getText(), 'Start.\n\n\\## x\n\n\\*\\*x\\*\\*\n\n\\- x\n');
   assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
 });
+
+test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
+  await make('plain', 'ab\ncd\n');
+  assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);
+  await select('cd', 1, 1);
+  await waitFor(async () => (await run(`document.querySelector('.od-statusbar').textContent`)) === 'Ln 2, Col 2', 5_000, 'the caret place');
+  await select('cd', 0, 2);
+  await waitFor(async () => (await run(`document.querySelector('.od-statusbar').textContent`)).endsWith('2 selected'), 5_000, 'the selection size');
+  await run(`view.applySettings({ lineNumbers: false, wrap: false, fontSize: 18 })`);
+  assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 0);
+  assert.equal(await run(`getComputedStyle(document.querySelector('.cm-scroller')).fontSize`), '18px');
+  await make('plain', 'x\n');
+  assert.equal(await run(`document.querySelectorAll('.od-statusbar').length`), 1, 'destroy takes the status bar away');
+  await make('plain', 'x\n', { editable: false });
+  assert.equal(await run(`document.querySelectorAll('.od-statusbar').length`), 0, 'a read-only view has none');
+});

@@ -5,12 +5,13 @@
 // differ, outside the human's undo history; a buddy's is flagged with its
 // name, any other also glows (as in the Markdown view).
 
-import { Annotation, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, keymap } from '@codemirror/view';
+import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
+import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemirror/view';
 import { history, historyKeymap, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands';
 import { diffEdits } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
 import { hydrateIcons } from '../../icons.js';
+import { createStatusBar } from './status.js';
 
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
@@ -58,21 +59,29 @@ const keys = [
 /**
  * The same options and interface as the Markdown view (createMarkdownView in
  * web/plugins/markdown/view.js). It has no tools, so `toolbar` is not used; given
- * `onComment`, a bubble over a selection offers Comment.
+ * `onComment`, a bubble over a selection offers Comment. `settings` are the
+ * plugin's (web/plugins/plain/index.js); an editable view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, settings: object, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, settings, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   let changeTimer = 0;
   let bubble = null;
+  let status = null;
+  // The settings that change what CodeMirror does; the font size is a CSS variable.
+  const numbers = new Compartment();
+  const wrapping = new Compartment();
+  const numbersFor = (own) => (own.lineNumbers ? lineNumbers() : []);
+  const wrapFor = (own) => (own.wrap ? EditorView.lineWrapping : []);
+  host.style.setProperty('--code-size', `${settings.fontSize}px`);
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of(keys), EditorView.lineWrapping, marksField, flashField,
+        history(), keymap.of(keys), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), marksField, flashField,
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
@@ -82,12 +91,14 @@ export async function createPlainView({ stage, text, editable = true, onChange =
           // Lines measured as they scroll into view move what is below them.
           if ((update.heightChanged || update.geometryChanged) && !update.docChanged) onLayout();
           if (update.selectionSet || update.focusChanged || update.geometryChanged) bubble?.place();
+          if (update.selectionSet || update.docChanged) status?.update();
         }),
       ],
     }),
   });
 
   if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
+  if (editable) status = createStatusBar(view, stage.parentElement);
 
   // The doc's text, read out once per version of it.
   let textOf = { doc: view.state.doc, text };
@@ -149,12 +160,18 @@ export async function createPlainView({ stage, text, editable = true, onChange =
       view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'center' }) });
     },
     focus: () => view.focus(),
+    /** The plugin's settings changed. */
+    applySettings(next) {
+      host.style.setProperty('--code-size', `${next.fontSize}px`);
+      view.dispatch({ effects: [numbers.reconfigure(numbersFor(next)), wrapping.reconfigure(wrapFor(next))] });
+    },
     undo: () => undo(view),
     redo: () => redo(view),
     destroy() {
       clearTimeout(changeTimer);
       host.removeEventListener('click', clickMark);
       bubble?.destroy();
+      status?.destroy();
       view.destroy();
     },
   };
