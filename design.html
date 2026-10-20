@@ -6,8 +6,8 @@
   <title>OpenDoc Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=05cd9e5">
-  <link rel="stylesheet" href="site.css?v=05cd9e5">
+  <link rel="stylesheet" href="./dist/web/app.css?v=222e42b">
+  <link rel="stylesheet" href="site.css?v=222e42b">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -122,7 +122,9 @@
     <div class="od-segmented" role="radiogroup"><button type="button" role="radio" aria-checked="true">Normal</button><button type="button" role="radio" aria-checked="false">Wide</button></div>
     <input class="od-switch" type="checkbox" checked aria-label="On">
     <input class="od-switch" type="checkbox" aria-label="Off">
+    <div class="od-segmented od-stepper" role="group" aria-label="Font size"><button type="button" aria-label="Decrease">−</button><span>14 px</span><button type="button" aria-label="Increase">+</button></div>
   </div>
+  <p>A stepper is a <code>.od-segmented</code> with <code>.od-stepper</code>: − value +, for a whole number in a range. A plugin's settings are rows of a switch, a segmented choice or a stepper; the first row of a group has a heading, <code>.od-setting-group</code>: 12px, semibold, faint.</p>
   <h3>Settings with a page of their own</h3>
   <p>A group of settings with its own page, such as a plugin, is a row in a list: its name, what it is and whether it is on, the whole row one button with a chevron. Its page starts with <code>.od-back</code>, the same Back as the history's.</p>
   <div class="ds-box ds-setting-pages">
@@ -162,6 +164,6 @@
   </div>
 
 </main>
-<script type="module" src="site.js?v=05cd9e5"></script>
+<script type="module" src="site.js?v=222e42b"></script>
 </body>
 </html>
