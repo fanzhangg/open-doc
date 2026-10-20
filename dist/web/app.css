@@ -286,6 +286,13 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
   [data-hide-comments] .od-hl { background: none; animation: none; transition: none; }
 }
 
+/* the plain view runs edge to edge, the margin (when shown) beside it */
+.od-stage[data-plain] { grid-template-columns: minmax(0, 1fr) var(--margin-w); padding: 0 0 160px; }
+.od-stage[data-plain] .od-page { --page-pad: 12px; padding-top: 8px; }
+@media (max-width: 900px) {
+  .od-stage[data-plain] { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ---- document typography ---- */
 
 .od-editor .ProseMirror { outline: none; white-space: pre-wrap; word-wrap: break-word; min-height: 50vh; font-family: var(--doc-font); font-size: var(--doc-size); line-height: var(--doc-leading); letter-spacing: var(--doc-tracking); color: var(--text); caret-color: var(--text); font-kerning: normal; text-rendering: optimizeLegibility; }
