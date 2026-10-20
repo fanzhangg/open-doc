@@ -4,7 +4,7 @@
 
 import { locate } from './anchor.js';
 
-export const EDIT_CONTEXT = 32;
+const EDIT_CONTEXT = 32;
 const MAX_DIFF_CELLS = 4_000_000;
 const WORD = /[\p{L}\p{N}_]/u;
 
