@@ -270,6 +270,7 @@ function makeView(chosen, text) {
   return chosen.createView({
     stage: document.querySelector('.od-stage'),
     text,
+    name: docName,
     toolbar: document.querySelector('.od-toolbar'),
     onComment: requestComment,
     onChange: () => {
