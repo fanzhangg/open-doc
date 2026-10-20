@@ -9,7 +9,7 @@
 import { api } from './api.js';
 import { viewFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
-import { createPeople } from './agent.js';
+import { createPeople, modeOf } from './agent.js';
 import { setBuddies } from './faces.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
@@ -18,7 +18,7 @@ import { icon } from './icons.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
 import { rulesOf } from '../src/rules/index.js';
-import { diffEdits } from '../src/core/diff.js';
+import { diffEdits, findEdit } from '../src/core/diff.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
@@ -454,7 +454,10 @@ async function doSync(by) {
   synced = theirs;
   baseHash = fresh.docHash;
   applyComments(fresh);
-  if (run) showRun(reply, { scroll: false });
+  if (run) {
+    standAtLastEdit(run.by, synced, theirs);
+    showRun(reply, { scroll: false });
+  }
   if (merged.text === theirs) {
     dirty = false;
     setStatus('Saved');
@@ -472,9 +475,11 @@ function showAgents(next) {
   const json = JSON.stringify(next);
   if (json === shownAgents) return;
   shownAgents = json;
+  standAtWork(next);
   setBuddies(next.map((a) => a.name));
   people.render({ agents: next });
   margin.setAgents(next);
+  paintMarks();
 }
 
 // What a request about buddies answers with.
@@ -706,6 +711,33 @@ async function undoReply(id) {
   await syncFromDisk('Undo');
 }
 
+// ---- where each buddy stands in the text ----
+
+// A buddy asked to work in this window stays in the doc with its cursor, at
+// the end of its last edit, or at the passage it was asked about until it
+// edits. The place is an anchor, so it follows the text; the cursor goes with
+// the page, and with the buddy once it is no longer here.
+const cursors = new Map(); // buddy name -> anchor of the character before its cursor
+let working = new Set();
+
+function standAtWork(statuses) {
+  const names = new Set(statuses.map((a) => a.name));
+  for (const name of cursors.keys()) if (!names.has(name)) cursors.delete(name);
+  const now = new Set(statuses.filter((a) => modeOf(a) === 'working').map((a) => a.name));
+  for (const a of statuses) {
+    const thread = !working.has(a.name) && now.has(a.name) && comments?.threads.find((t) => a.threadIds.includes(t.id) && t.anchor && !t.detached);
+    if (thread) cursors.set(a.name, thread.anchor);
+  }
+  working = now;
+}
+
+function standAtLastEdit(by, before, after) {
+  const last = diffEdits(before, after).at(-1);
+  const text = editor.getText();
+  const range = last && findEdit(text, last.edit);
+  if (range && text) cursors.set(by, createAnchor(text, Math.max(range.end, 1) - 1, Math.max(range.end, 1)));
+}
+
 // ---- a buddy's run as a revision in the text ----
 
 // The edits of the run that wrote reply `id`, marked in the text until the
@@ -805,6 +837,10 @@ function paintMarks() {
   }
   if (pendingSelection) comment('draft', pendingSelection, true);
   if (preview) marks.push(...revisionMarks(text, preview.edits, preview));
+  for (const [by, anchor] of cursors) {
+    const found = where(text, anchor);
+    if (found) marks.push({ kind: 'cursor', at: found.end, by, working: working.has(by) });
+  }
   editor.setMarks(marks);
   return marks;
 }

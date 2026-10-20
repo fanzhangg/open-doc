@@ -397,6 +397,14 @@ del.od-mark-del { margin-right: 0.15em; }
 .od-flag::before { content: ''; position: absolute; top: -0.1em; bottom: -0.1em; left: -1px; border-left: 2px solid var(--buddy, var(--text)); animation: od-fade 6s ease-out forwards; }
 @keyframes od-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 
+/* a buddy in the doc: its cursor stays where it last wrote; its name shows while it works */
+.od-cursor { position: relative; display: inline-block; width: 0; height: 1.1em; vertical-align: text-bottom; pointer-events: none; }
+.od-cursor::before { content: ''; position: absolute; top: 0; bottom: 0; left: -1px; border-left: 2px solid var(--buddy); }
+.od-cursor-working::before { animation: od-gapcursor-blink 1s steps(1) infinite; }
+.od-cursor-name { display: none; position: absolute; bottom: 100%; left: -1px; z-index: 4; padding: 0 6px; border-radius: 4px 4px 4px 0; background: var(--buddy); color: var(--buddy-ink); font: 600 11px/1.6 var(--ui-font); white-space: nowrap; }
+.od-cursor-working .od-cursor-name { display: block; }
+@media (prefers-reduced-motion: reduce) { .od-cursor-working::before { animation: none; } }
+
 /* a buddy's run as a revision: new text in its colour, removed text grey and struck through */
 .od-buddy-edit { background: color-mix(in oklch, var(--buddy) 16%, transparent); box-shadow: inset 0 -2px 0 var(--buddy); border-radius: 0; }
 .od-buddy-del { color: var(--text-faint); text-decoration: line-through; }

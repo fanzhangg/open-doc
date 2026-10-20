@@ -41,6 +41,7 @@ import { markdownPlugins } from '../../markdown-schema.js';
 import { diagrams } from '../../diagrams.js';
 import { childPos, diffBlocks, replaceBlocks } from '../../blocks.js';
 import { buddyColor } from '../../faces.js';
+import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
 
 const FLASH_MS = 6000;
@@ -135,6 +136,8 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *   [from, to) new text and `removed` the text it replaced, shown struck
  *   through before it; `by` shows it as that buddy's, and a new `replay`
  *   number (0: none) animates it once.
+ * - { kind: 'cursor', at, by, working }: buddy `by`'s cursor after the
+ *   character before text offset `at`; `working` shows its name.
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
@@ -292,6 +295,12 @@ export async function createMarkdownView({
         decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': mark.id }, { thread: mark.id, active: mark.active }));
         drawn.push(range.from, range.to, mark.id, classes);
       }
+    }
+    for (const mark of marks) {
+      const range = mark.kind === 'cursor' && charAt(doc, mark.at - 1);
+      if (!range) continue;
+      decorations.push(Decoration.widget(range.to, () => cursorNode(mark), { side: 1, key: `cursor-${mark.by}-${mark.working}` }));
+      drawn.push('cursor', mark.by, range.to, mark.working);
     }
     // A revision shows as a suggestion: removed text struck through, new
     // text marked. Decorations only; the doc does not change. A new `replay`

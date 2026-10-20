@@ -90,6 +90,26 @@ for (const name of VIEWS) {
     assert.equal(await drawn('[data-thread], .od-mark-ins, del'), '');
   });
 
+  test(`${name} view: setMarks draws a buddy's cursor after the text it stands at; its name shows while it works`, async () => {
+    const text = 'Some **bold** words here.\n';
+    await make(name, text);
+    const mark = (working) => JSON.stringify([{ kind: 'cursor', at: text.indexOf(' here'), by: 'Clippy', working }]);
+    const before = () => run(`(() => {
+      const cursor = document.querySelector('.od-cursor');
+      const range = document.createRange();
+      range.setStart(cursor.parentElement.closest('[contenteditable]'), 0);
+      range.setEndBefore(cursor);
+      return range.toString().replaceAll('**', '');
+    })()`);
+    await run(`view.setMarks(${mark(false)})`);
+    assert.equal(await before(), 'Some bold words');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.od-cursor-name')).display`), 'none');
+    await run(`view.setMarks(${mark(true)})`);
+    assert.equal(await run(`getComputedStyle(document.querySelector('.od-cursor-name')).display`), 'block');
+    await run('view.setMarks([])');
+    assert.equal(await run(`document.querySelectorAll('.od-cursor').length`), 0);
+  });
+
   test(`${name} view: selection is in offsets on the text`, async () => {
     const text = 'Some **bold** words.\n';
     await make(name, text);
