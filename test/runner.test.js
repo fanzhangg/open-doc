@@ -38,7 +38,7 @@ async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE, se
 
 const runLog = async (settingsDir) => (await readFile(join(settingsDir, 'logs', 'runs.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
 const comment = (call, body, anchor = null) => call('comment', { anchor, body }).then((r) => r.id);
-const reply = (call, thread, body) => call('reply', { thread, body });
+const reply = (call, thread, body) => call('comment', { thread, body });
 const threadOf = async (state, id) => (await state()).threads.find((t) => t.id === id);
 const repliesIn = async (state, id) => (await threadOf(state, id)).comments.filter((c) => c.by.kind === 'ai');
 

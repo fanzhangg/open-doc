@@ -11,7 +11,7 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { appendedComments, askedOf, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { SettingsError } from '../core/settings.js';
@@ -175,15 +175,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // A comment by this user: a first comment (`anchor` on the doc's text, or
-  // null for the whole doc), or a reply in `thread`. Resolving and
-  // reopening are empty replies, which ask no one.
-  async function comment({ thread, anchor = null, body, resolved = false, reopen = false } = {}) {
-    if (typeof body !== 'string' || (body.trim() === '' && !resolved && !reopen)) throw new DocError('bad_input', 'a comment needs text');
+  // null for the whole doc), or a reply in `thread`. Resolving is an empty
+  // reply with `resolved`, reopening an empty reply; neither asks anyone.
+  async function comment({ thread, anchor = null, body, resolved } = {}) {
+    if (typeof body !== 'string' || (body.trim() === '' && thread === undefined)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
-    const added = {
-      id: newId('c'), ...(thread !== undefined ? { thread } : {}), ...(thread === undefined ? { anchor } : {}),
-      by: await me(), at: new Date().toISOString(), body: resolved || reopen ? '' : body, ...(resolved ? { resolved: true } : {}),
-    };
+    if (resolved === true && thread === undefined) throw new DocError('bad_input', 'only a reply can resolve');
+    const added = newComment({ thread, anchor, body, resolved }, { by: await me(), at: new Date().toISOString() });
     await serial(() => changeComments((lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
       return [...lines, { comment: added }];
@@ -495,15 +493,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const calls = {
     state,
     saveDoc: (body) => serial(() => saveDoc(body ?? {})),
-    comment: (body) => comment({ anchor: body?.anchor ?? null, body: body?.body }),
-    reply: (body) => comment({ thread: body?.thread, body: body?.body }),
     // Resolving a thread stops the runs on it, with no answer.
-    async resolve(body) {
-      const result = await comment({ thread: body?.thread, body: '', resolved: true });
-      runner.cancel((run) => run.threadId === body.thread);
+    async comment(body) {
+      const result = await comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved });
+      if (body?.resolved === true) runner.cancel((run) => run.threadId === body.thread);
       return result;
     },
-    reopen: (body) => comment({ thread: body?.thread, body: '', reopen: true }),
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
       // Your name is no buddy's here, as no buddy's is yours.

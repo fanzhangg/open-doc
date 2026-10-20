@@ -79,7 +79,7 @@ test('comments: written as the user, one line each; the anchor is never rewritte
     assert.match(id, /^c_/);
     const [first] = threads[0].comments;
     assert.equal(first.by.id, (await state()).me.id, 'the page cannot post as someone else');
-    await call('reply', { thread: id, body: 'More.' });
+    await call('comment', { thread: id, body: 'More.' });
     const lines = (await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n');
     assert.equal(lines[0], '{"opendoc":3}');
     assert.deepEqual(lines.slice(1).map((l) => JSON.parse(l).body), ['Is this right?', 'More.']);
@@ -92,8 +92,8 @@ test('comments: written as the user, one line each; the anchor is never rewritte
     await call('saveDoc', { text: SAMPLE.replace('The main risk is that the `sync` service cannot handle the extra load.\n', ''), baseHash: (await state()).docHash });
     assert.equal((await threadOf(state, id)).detached, true);
 
-    for (const bad of [{ body: '' }, { anchor: { exact: '' }, body: 'x' }]) await assert.rejects(call('comment', bad), refused('bad_input'));
-    await assert.rejects(call('reply', { thread: 'c_nothere1', body: 'x' }), refused('not_found'));
+    for (const bad of [{ body: '' }, { anchor: { exact: '' }, body: 'x' }, { body: 'x', resolved: true }]) await assert.rejects(call('comment', bad), refused('bad_input'));
+    await assert.rejects(call('comment', { thread: 'c_nothere1', body: 'x' }), refused('not_found'));
     await assert.rejects(call('nope'), refused('bad_input'));
   });
 });
@@ -101,14 +101,14 @@ test('comments: written as the user, one line each; the anchor is never rewritte
 test('resolving is a comment with resolved; any later comment reopens', async () => {
   await withDoc(async ({ call, state, docPath }) => {
     const { id } = await call('comment', { anchor: null, body: 'Fix this' });
-    assert.equal((await call('resolve', { thread: id })).threads[0].resolved, true);
+    assert.equal((await call('comment', { thread: id, body: '', resolved: true })).threads[0].resolved, true);
     const resolving = JSON.parse((await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n').at(-1));
     assert.deepEqual([resolving.thread, resolving.body, resolving.resolved], [id, '', true]);
     await pause(2); // comments are ordered by their time, to the millisecond
-    assert.equal((await call('reply', { thread: id, body: 'Not yet' })).threads[0].resolved, false);
-    await call('resolve', { thread: id });
+    assert.equal((await call('comment', { thread: id, body: 'Not yet' })).threads[0].resolved, false);
+    await call('comment', { thread: id, body: '', resolved: true });
     await pause(2);
-    assert.equal((await call('reopen', { thread: id })).threads[0].resolved, false);
+    assert.equal((await call('comment', { thread: id, body: '' })).threads[0].resolved, false);
     assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['Fix this', '', 'Not yet', '', ''], 'reopening is an empty reply');
   });
 });
@@ -117,7 +117,7 @@ test('a comment written while a buddy works asks it again once it replies', { ti
   await withDoc(async ({ call, state, settingsDir }) => {
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold' });
     await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
-    await call('reply', { thread: id, body: '@Pilot say again' });
+    await call('comment', { thread: id, body: '@Pilot say again' });
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await until(async () => (await threadOf(state, id)).comments.at(-1).body === 'again', 'the second reply');
     assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['@Pilot hold', 'Nothing to change.', '@Pilot say again', 'again']);
@@ -128,14 +128,14 @@ test('resolving stops the thread\'s buddy, with nothing it did landing; reopenin
   await withDoc(async ({ call, state, settingsDir }) => {
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
     await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
-    await call('resolve', { thread: id });
+    await call('comment', { thread: id, body: '', resolved: true });
     await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await pause(500);
     assert.equal((await threadOf(state, id)).resolved, true);
     assert.equal((await threadOf(state, id)).comments.length, 2);
     assert.match((await state()).text, /extra load/);
-    await call('reopen', { thread: id });
+    await call('comment', { thread: id, body: '' });
     await pause(1000);
     assert.equal((await fakeRuns(settingsDir)).length, 1);
     assert.equal((await threadOf(state, id)).resolved, false);
@@ -159,7 +159,7 @@ test('a comment by another user that @mentions a buddy runs nothing; one by you 
   await withDoc(async ({ call, state, settingsDir }) => {
     await pause(1000);
     assert.deepEqual(await fakeRuns(settingsDir), []);
-    await call('reply', { thread: theirs.id, body: '@Pilot replace "extra load" with "peak load"' });
+    await call('comment', { thread: theirs.id, body: '@Pilot replace "extra load" with "peak load"' });
     await until(async () => (await threadOf(state, theirs.id)).comments.length === 3, 'Pilot\'s reply');
     assert.equal((await fakeRuns(settingsDir)).length, 1);
   }, { sidecar: `{"opendoc":3}\n${line(theirs)}\n` });

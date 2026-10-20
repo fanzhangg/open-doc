@@ -14,11 +14,12 @@ const saved = (result) => ({ status: result.conflict ? 409 : 200, data: result }
 export const api = {
   state: () => call('state'),
   saveDoc: async (text, baseHash, { recreate = false } = {}) => saved(await call('saveDoc', { text, baseHash, ...(recreate ? { recreate } : {}) })),
-  /** A comment on `anchor` (or the whole doc, for null): the comments now, and its `id`. */
-  comment: (anchor, body) => call('comment', { anchor, body }),
-  reply: (thread, body) => call('reply', { thread, body }),
-  resolve: (thread) => call('resolve', { thread }),
-  reopen: (thread) => call('reopen', { thread }),
+  /**
+   * A comment: on `anchor` (or the whole doc, for null), or a reply in `thread`.
+   * Resolving a thread is an empty reply with `resolved: true`, reopening an
+   * empty reply. The comments now, and its `id`.
+   */
+  comment: ({ thread, anchor, body, resolved }) => call('comment', { thread, anchor, body, resolved }),
   /** The doc's events: `on(name, fn)`, fn getting the event's data. */
   events() {
     const handlers = new Map();

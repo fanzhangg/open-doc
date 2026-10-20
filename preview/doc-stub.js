@@ -8,7 +8,7 @@
 // No history, no undo, no menus.
 
 import { createAnchor, locate } from '../src/core/anchor.js';
-import { askedOf, newId, peopleOf, threadsOf } from '../src/core/comments.js';
+import { askedOf, newComment, newId, peopleOf, threadsOf } from '../src/core/comments.js';
 import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
 import { DEFAULT_SETTINGS, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
@@ -155,7 +155,7 @@ function answer() {
 }
 
 function add(comment) {
-  comments().push({ id: newId('c'), by: me(), at: new Date().toISOString(), ...comment });
+  comments().push(newComment(comment, { by: me(), at: new Date().toISOString() }));
   save();
   setTimeout(answer);
   return { ...view(), id: comments().at(-1).id };
@@ -185,10 +185,7 @@ const calls = {
     save();
     return { docHash: hash(text), text };
   },
-  comment: ({ anchor, body }) => add({ anchor, body }),
-  reply: ({ thread, body }) => add({ thread, body }),
-  resolve: ({ thread }) => add({ thread, body: '', resolved: true }),
-  reopen: ({ thread }) => add({ thread, body: '' }),
+  comment: ({ thread, anchor, body, resolved }) => add({ thread, anchor, body, resolved }),
   saveSettings(patch) {
     checkSettingsPatch(patch);
     s.settings = mergeSettings(s.settings, patch);
