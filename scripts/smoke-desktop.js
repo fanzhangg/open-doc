@@ -141,7 +141,8 @@ await app.quit();
 step('relaunch');
 app = await launch([docs[0]]);
 const relaunched = await app.page('plan.md');
-const second = await waitFor(() => relaunched.evaluate('document.documentElement.dataset.font'), 15_000, 'the settings').catch(() => undefined);
+// From the settings the page got, not from how the editor shows them: the editor is off by now.
+const second = await waitFor(() => relaunched.evaluate(`window.opendocHost.call('state').then((r) => r.result.settings.plugins.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
 check(second === 'serif', `the setting survived the relaunch (font: ${second})`);
 await app.quit();
 
