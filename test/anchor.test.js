@@ -64,6 +64,12 @@ test('words inserted into the quote are included (context bracket)', () => {
   );
 });
 
+test('text typed after an edited quote stays out of it (context bracket)', () => {
+  const quote = 'then gather feedback from the\nbeta cohort';
+  const after = BASE.replace(quote, 'then quickly gather feedback from the\nbeta cohort').replace('cohort before', 'cohortss before');
+  assert.deepEqual(follow(BASE, quote, after), { text: 'then quickly gather feedback from the\nbeta cohort', method: 'bracket' });
+});
+
 test('a typo fix inside the quote is followed', () => {
   const before = BASE.replace('gather feedback', 'gahter feedback');
   const found = follow(before, 'then gahter feedback from the', BASE);
