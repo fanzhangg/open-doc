@@ -43,9 +43,9 @@ says who it is, and the first line shows next to its name.
 A card is who someone is; the Buddies list is who is here. Click a face for
 its card: a buddy's name edits in place (not Clippy's), and who it is is a
 field right under it, saved when you leave it. Your own card edits your name,
-which can be no buddy's here. The **Buddies** list (the button after the
+which can be no buddy's here. A renamed buddy keeps its comments, face and color. The **Buddies** list (the button after the
 faces) has every buddy here, each opening its card; in a project, a
-buddy's trash icon deletes it, and **New buddy** is a name to type: Enter
+buddy's trash icon deletes it, and **New buddy** starts with a random first name, which you can type over: Enter
 makes it and opens its card.
 Editing the files by hand works too: the app picks up changes at once.
 

@@ -1,4 +1,4 @@
-// Avatars: a face drawn from the name, from one set of parts, each body a
+// Avatars: a face drawn from the id (a person's, the name), from one set of parts, each body a
 // little uneven as if drawn by hand. People are round and keep their face
 // everywhere. Clippy's is fixed. The other buddies
 // in a doc take parts as unlike each other's as can be (setBuddies), and a
@@ -19,15 +19,21 @@ const COLORS = [[0.84, 0.17, 85], ...[135, 180, 225, 270, 315, 0, 45].map((hue) 
 let slots = colorSlots([]);
 let looks = new Map();
 
-/** The buddies in this doc, so their faces and colours differ. */
-export function setBuddies(names) {
-  slots = colorSlots(names);
+let names = new Map(); // buddy id → its name now
+
+/** The buddies in this doc ([{ id, name }]), so their faces and colours differ. */
+export function setBuddies(buddies) {
+  names = new Map(buddies.map((b) => [b.id, b.name]));
+  slots = colorSlots(buddies.map((b) => b.id));
   looks = spread([...slots.keys()]);
 }
 
-/** Buddy `name`'s colour, a little lighter (`lift` > 0) or darker. */
-export function buddyColor(name, lift = 0) {
-  const [lightness, chroma, hue] = colorOf(name);
+/** Buddy `id`'s name now; `fallback` (the name in a comment) when it is not here. */
+export const nameOf = (id, fallback = id) => names.get(id) ?? fallback;
+
+/** Buddy `id`'s colour (a person's: the name), a little lighter (`lift` > 0) or darker. */
+export function buddyColor(id, lift = 0) {
+  const [lightness, chroma, hue] = colorOf(id);
   return `oklch(${(lightness + lift).toFixed(2)} ${chroma} ${hue})`;
 }
 
@@ -81,8 +87,8 @@ export function documentIcon() {
   return svg;
 }
 
-/** @param {string} name */
-export const agentFace = (name) => face(name, looks.get(name.toLowerCase()) ?? drawn(name));
+/** @param {string} id */
+export const agentFace = (id) => face(id, looks.get(id.toLowerCase()) ?? drawn(id));
 
 /** @param {string} name */
 export const personFace = (name) => face(name, drawn(name), 'circle');

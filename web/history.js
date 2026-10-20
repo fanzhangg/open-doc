@@ -8,6 +8,7 @@ import { diffEdits } from '../src/core/diff.js';
 import { revisionMarks } from './marks.js';
 import { icon } from './icons.js';
 import { avatar } from './threads.js';
+import { nameOf } from './faces.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -121,7 +122,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
 
   function row(version, current) {
     const li = el('li', 'od-version', null, { role: 'option', 'data-id': version.id });
-    const face = version.author ? avatar(version.author.name, version.author.kind, true) : el('span', 'od-avatar od-avatar-small od-version-outside');
+    const face = version.author ? avatar(version.author.name, version.author.kind, true, version.author.id) : el('span', 'od-avatar od-avatar-small od-version-outside');
     if (!version.author) face.append(icon(version.kind === 'opened' ? 'file' : 'history'));
     const who = el('span', 'od-version-who', authorLabel(version));
     const when = el('span', 'od-version-time', timeRange(version));
@@ -241,7 +242,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   // ---- words ----
 
   function authorLabel(version) {
-    if (version.author) return version.author.name;
+    if (version.author) return version.author.kind === 'agent' && version.author.id ? nameOf(version.author.id, version.author.name) : version.author.name;
     return version.kind === 'opened' ? 'Opened' : 'Outside OpenDoc';
   }
 

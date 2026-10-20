@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLIPPY, buddiesHere, buddyText, colorSlots, parseBuddy, tagline } from '../src/core/buddies.js';
+import { CLIPPY, buddiesHere, buddyText, colorSlots, defaultName, parseBuddy, tagline } from '../src/core/buddies.js';
 import { readSettings } from '../src/store/settings.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
@@ -47,6 +47,14 @@ test('a buddy file: the name is the file name, the text who it is, its first lin
   assert.equal(here[0], CLIPPY);
 });
 
+test('a new buddy is named a common first name, not one taken (in any case), then with a number', () => {
+  assert.equal(defaultName([], () => 0), 'Alice');
+  assert.equal(defaultName(['alice'], () => 0), 'Ben', 'a taken name is skipped');
+  const all = ['Alice', 'Ben', 'Chloe', 'Daniel', 'Emma', 'Frank', 'Grace', 'Henry', 'Iris', 'Jack', 'Kate', 'Leo', 'Maya', 'Noah', 'Olivia', 'Paul', 'Quinn', 'Rose', 'Sam', 'Tina', 'Victor', 'Wendy', 'Zoe', 'John'];
+  assert.equal(defaultName(all, () => 0), 'Alice2');
+  assert.equal(defaultName([...all, 'Alice2'], () => 0), 'Alice3');
+});
+
 const CLIPPY_ROW = ['Clippy', CLIPPY.about, 'app'];
 
 test('buddy colors: Clippy has its own; up to seven others get different ones, the same in any order', () => {
@@ -68,14 +76,14 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     assert.deepEqual(await who(opened), [CLIPPY_ROW]);
     await assert.rejects(readdir(join(settingsDir, 'buddies')), { code: 'ENOENT' }, 'nothing written until it is changed');
-    await opened.call('updateBuddy', { name: 'clippy', patch: { about: 'Mine now.\n\nReply in French.' } });
+    await opened.call('updateBuddy', { id: 'Clippy', patch: { about: 'Mine now.\n\nReply in French.' } });
     assert.equal(await readFile(join(settingsDir, 'buddies', 'Clippy.md'), 'utf8'), 'Mine now.\n\nReply in French.\n');
     assert.deepEqual(await who(opened), [mine]);
-    await assert.rejects(opened.call('updateBuddy', { name: 'Clippy', patch: { name: 'Clip' } }), refused('bad_input'));
-    await assert.rejects(opened.call('deleteBuddy', { name: 'Clippy' }), refused('bad_input'));
+    await assert.rejects(opened.call('updateBuddy', { id: 'Clippy', patch: { name: 'Clip' } }), refused('bad_input'));
+    await assert.rejects(opened.call('deleteBuddy', { id: 'Clippy' }), refused('bad_input'));
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'clippy' } }), /the name clippy is taken/);
-    await opened.call('createBuddy', { buddy: { name: 'Ada' } });
-    await assert.rejects(opened.call('updateBuddy', { name: 'Ada', patch: { name: 'Clippy' } }), /the name Clippy is taken/);
+    const { agents } = await opened.call('createBuddy', { buddy: { name: 'Ada' } });
+    await assert.rejects(opened.call('updateBuddy', { id: agents.find((a) => a.name === 'Ada').id, patch: { name: 'Clippy' } }), /the name Clippy is taken/);
     for (const name of ['clippy', 'ada']) await assert.rejects(opened.call('saveSettings', { name }), /is taken/, 'your name is no buddy\'s');
   });
   // Any other doc has the same Clippy, and its runs say who it is now.
@@ -87,7 +95,7 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
     await until(async () => (await opened.state()).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
     assert.match(run.prompt, /Mine now\.\n\nReply in French\./);
-    await opened.call('updateBuddy', { name: 'Clippy', patch: { about: '' } });
+    await opened.call('updateBuddy', { id: 'Clippy', patch: { about: '' } });
     assert.deepEqual(await who(opened), [CLIPPY_ROW], 'cleared: Clippy as it ships');
   });
 });
@@ -131,24 +139,24 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'Bob', face: 'x' } }), refused('bad_input'), 'no stored faces');
     await assert.rejects(opened.call('createBuddy', { buddy: { name: '../evil' } }), refused('bad_input'));
 
-    const renamed = await opened.call('updateBuddy', { name: 'critic', patch: { name: 'Reviewer' } });
+    const renamed = await opened.call('updateBuddy', { id, patch: { name: 'Reviewer' } });
     assert.deepEqual(renamed.agents.map((a) => a.name), ['Clippy', 'Ada', 'Reviewer']);
     assert.deepEqual((await readdir(join(folder, '.opendoc', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
     assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), written, 'a rename keeps the id');
     assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, id);
-    await opened.call('deleteBuddy', { name: 'Reviewer' });
+    await opened.call('deleteBuddy', { id });
     assert.deepEqual(await readdir(join(folder, '.opendoc', 'buddies')), ['Ada.md']);
-    await assert.rejects(opened.call('deleteBuddy', { name: 'Reviewer' }), refused('not_found'));
+    await assert.rejects(opened.call('deleteBuddy', { id }), refused('not_found'));
   });
 });
 
 test('renaming a buddy whose file has no id keeps its old name as its id, so its comments stay its own', async () => {
   const folder = await projectFolder({ Critic: 'Checks every claim.\n' });
   await opening(join(folder, 'plan.md'), { settingsDir: await fakeConfig(), folder }, async (opened) => {
-    const renamed = await opened.call('updateBuddy', { name: 'Critic', patch: { name: 'Reviewer' } });
+    const renamed = await opened.call('updateBuddy', { id: 'Critic', patch: { name: 'Reviewer' } });
     assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, 'Critic');
     assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), '---\nid: Critic\n---\nChecks every claim.\n');
-    await opened.call('updateBuddy', { name: 'Reviewer', patch: { about: 'Changed.' } });
+    await opened.call('updateBuddy', { id: 'Critic', patch: { about: 'Changed.' } });
     assert.match(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), /^---\nid: Critic\n---\nChanged\.\n$/);
   });
 });
@@ -163,7 +171,7 @@ test('a renamed buddy keeps its comments: it answers once, is not asked again, a
     await until(async () => (await thread()).comments.length === 2, 'its reply');
     const adaId = (await thread()).comments[1].by.id;
     assert.equal(adaId, 'Ada', 'an old file is a buddy by its name');
-    await call('updateBuddy', { name: 'Ada', patch: { name: 'Bea' } });
+    await call('updateBuddy', { id: 'Ada', patch: { name: 'Bea' } });
     await call('comment', { thread: id, body: '@Bea and this' });
     await until(async () => (await thread()).comments.length === 4, 'the reply under its new name');
     assert.deepEqual((await thread()).comments.filter((c) => c.by.kind === 'ai').map((c) => [c.by.id, c.by.name]), [['Ada', 'Ada'], ['Ada', 'Bea']]);

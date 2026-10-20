@@ -81,7 +81,7 @@ function seed() {
   }
   return {
     settings, files, comments, clippy: null,
-    buddies: inFolder ? [{ name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
+    buddies: inFolder ? [{ id: 'Editor', name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { id: 'Researcher', name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
     expanded: ['notes'], sidebar: true, carry: null,
   };
 }
@@ -107,7 +107,7 @@ let current = s.files[params.get('doc')] !== undefined && DOC.test(params.get('d
 const name = (path) => path.split('/').pop();
 const me = () => ({ id: s.settings.id, name: s.settings.name, kind: 'human' });
 const comments = () => (s.comments[current] ??= []);
-const buddies = () => buddiesHere(s.buddies, s.clippy ? [{ name: CLIPPY.name, about: s.clippy }] : []);
+const buddies = () => buddiesHere(s.buddies.map((b) => ({ id: b.name, ...b })), s.clippy ? [{ name: CLIPPY.name, about: s.clippy }] : []);
 
 // FNV-1a, standing in for the file's sha256: only equality matters here.
 function hash(text) {
@@ -116,12 +116,12 @@ function hash(text) {
   return (h >>> 0).toString(16);
 }
 
-const running = new Map(); // buddy name → thread ids
-const agents = () => buddies().map((b) => ({ ...b, state: running.has(b.name) ? 'running' : 'ready', threadIds: running.get(b.name) ?? [] }));
+const running = new Map(); // buddy id → thread ids
+const agents = () => buddies().map((b) => ({ ...b, state: running.has(b.id) ? 'running' : 'ready', threadIds: running.get(b.id) ?? [] }));
 
 function view() {
   const text = s.files[current];
-  const threads = threadsOf(comments(), buddies().map((b) => b.name)).map((thread) => {
+  const threads = threadsOf(comments(), buddies().map(({ id, name }) => ({ id, name }))).map((thread) => {
     if (!thread.anchor) return { ...thread, detached: false };
     const found = locate(text, thread.anchor);
     return { ...thread, anchor: found ? createAnchor(text, found.start, found.end) : thread.anchor, detached: !found };
@@ -134,7 +134,7 @@ const emit = (event, data) => listener?.(event, data);
 
 // The buddies this user's comments ask, as the runner would start them.
 function answer() {
-  for (const thread of threadsOf(comments(), buddies().map((b) => b.name))) {
+  for (const thread of threadsOf(comments(), buddies().map(({ id, name }) => ({ id, name })))) {
     for (const asked of askedOf(thread, s.settings.id)) {
       if (running.get(asked)?.includes(thread.id)) continue;
       running.set(asked, [...(running.get(asked) ?? []), thread.id]);
@@ -144,7 +144,7 @@ function answer() {
         if (left.length) running.set(asked, left);
         else running.delete(asked);
         if (!threadsOf(comments()).find((t) => t.id === thread.id)?.resolved) {
-          comments().push({ id: newId('c'), thread: thread.id, by: ai(asked), at: new Date().toISOString(), body: 'This is a preview, so I can\'t read or edit the doc here. In the desktop app I would answer you now.' });
+          comments().push({ id: newId('c'), thread: thread.id, by: { id: asked, name: buddies().find((b) => b.id === asked)?.name ?? asked, kind: 'ai' }, at: new Date().toISOString(), body: 'This is a preview, so I can\'t read or edit the doc here. In the desktop app I would answer you now.' });
           save();
           emit('sidecar', {});
         }
@@ -201,20 +201,20 @@ const calls = {
     checkBuddy(fields);
     if (!fields.name) refuse('a buddy needs a name');
     if (buddies().some((b) => sameName(b.name, fields.name))) refuse(`the name ${fields.name} is taken`);
-    s.buddies.push(fields);
+    s.buddies.push({ id: newId('b'), ...fields });
     return changedBuddies();
   },
-  updateBuddy({ name: was, patch = {} }) {
-    const found = buddies().find((b) => sameName(b.name, was)) ?? refuse('no such buddy');
+  updateBuddy({ id, patch = {} }) {
+    const found = buddies().find((b) => b.id === id) ?? refuse('no such buddy');
     if (found.where === 'app' && patch.name !== undefined) refuse(`${found.name} keeps its name`);
     checkBuddy(patch);
     if (found.where === 'app') s.clippy = patch.about ?? s.clippy;
-    else s.buddies = s.buddies.map((b) => (sameName(b.name, was) ? { ...b, ...patch } : b));
+    else s.buddies = s.buddies.map((b) => (b.id === id ? { ...b, ...patch } : b));
     return changedBuddies();
   },
-  deleteBuddy({ name: gone }) {
-    if (sameName(gone, CLIPPY.name)) refuse(`${CLIPPY.name} cannot be deleted`);
-    s.buddies = s.buddies.filter((b) => !sameName(b.name, gone));
+  deleteBuddy({ id: gone }) {
+    if (gone === CLIPPY.id) refuse(`${CLIPPY.name} cannot be deleted`);
+    s.buddies = s.buddies.filter((b) => b.id !== gone);
     return changedBuddies();
   },
   history: () => ({ versions: [] }),

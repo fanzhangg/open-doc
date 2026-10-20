@@ -179,7 +179,7 @@ async function start() {
     pin: (chip) => people.pin(...who(chip)),
     unpeek: () => people.unpeek(),
   });
-  setBuddies(initial.agents.map((a) => a.name));
+  setBuddies(initial.agents);
   people.render({ agents: initial.agents });
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
@@ -481,7 +481,7 @@ function showAgents(next) {
   if (json === shownAgents) return;
   shownAgents = json;
   standAtWork(next);
-  setBuddies(next.map((a) => a.name));
+  setBuddies(next);
   people.render({ agents: next });
   margin.setAgents(next);
   paintMarks();
@@ -563,7 +563,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   shownComments = json;
   // A failed run's reply that is new since the last update: its buddy flinches.
   const failed = threads.flatMap((t) => t.comments).filter((c) => c.failed);
-  if (failedShown) for (const c of failed.filter((c) => !failedShown.has(c.id))) people?.failed(c.by.name);
+  if (failedShown) for (const c of failed.filter((c) => !failedShown.has(c.id))) people?.failed(c.by.id);
   failedShown = new Set(failed.map((c) => c.id));
   comments = { threads, people: writers, edits, notice, readOnly };
   showReadOnly(readOnly);
@@ -722,16 +722,16 @@ async function undoReply(id) {
 // the end of its last edit, or at the passage it was asked about until it
 // edits. The place is an anchor, so it follows the text; the cursor goes with
 // the page, and with the buddy once it is no longer here.
-const cursors = new Map(); // buddy name -> anchor of the character before its cursor
+const cursors = new Map(); // buddy id -> anchor of the character before its cursor
 let working = new Set();
 
 function standAtWork(statuses) {
-  const names = new Set(statuses.map((a) => a.name));
-  for (const name of cursors.keys()) if (!names.has(name)) cursors.delete(name);
-  const now = new Set(statuses.filter((a) => modeOf(a) === 'working').map((a) => a.name));
+  const ids = new Set(statuses.map((a) => a.id));
+  for (const id of cursors.keys()) if (!ids.has(id)) cursors.delete(id);
+  const now = new Set(statuses.filter((a) => modeOf(a) === 'working').map((a) => a.id));
   for (const a of statuses) {
-    const thread = !working.has(a.name) && now.has(a.name) && comments?.threads.find((t) => a.threadIds.includes(t.id) && t.anchor && !t.detached);
-    if (thread) cursors.set(a.name, thread.anchor);
+    const thread = !working.has(a.id) && now.has(a.id) && comments?.threads.find((t) => a.threadIds.includes(t.id) && t.anchor && !t.detached);
+    if (thread) cursors.set(a.id, thread.anchor);
   }
   working = now;
 }

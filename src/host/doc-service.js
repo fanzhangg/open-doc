@@ -318,7 +318,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
     for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash, version: v.id };
+      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash, version: v.id };
       if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
     }
     return edits;
@@ -352,9 +352,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (fields.name !== undefined && [CLIPPY.name, (await me()).name].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
 
-  // The buddy here named `name`.
-  async function buddyNamed(name) {
-    const found = (await buddies()).find((b) => sameName(b.name, name ?? ''));
+  // The buddy here with id `id`.
+  async function buddyById(id) {
+    const found = (await buddies()).find((b) => b.id === id);
     if (!found) throw new DocError('not_found', 'no such buddy');
     return found;
   }
@@ -380,10 +380,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return changeBuddies(() => writeBuddy(dir, { id: newId('b'), ...fields }));
   }
 
-  // Change buddy `name` here: its name (renames its file) or who it is.
+  // Change buddy `id` here: its name (renames its file) or who it is.
   // Clippy's is the user's own Clippy.md, in every doc; it keeps its name.
-  async function updateBuddy({ name, patch = {} } = {}) {
-    const found = await buddyNamed(name);
+  async function updateBuddy({ id, patch = {} } = {}) {
+    const found = await buddyById(id);
     if (found.where === 'app' && patch.name !== undefined) throw new DocError('bad_input', `${found.name} keeps its name`);
     await checkBuddy(patch);
     const { where, ...was } = found;
@@ -391,9 +391,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return changeBuddies(() => writeBuddy(projectDir(), { ...was, ...patch }, found.name));
   }
 
-  // Delete buddy `name`'s file. Its comments stay. Clippy stays.
-  async function deleteBuddy({ name } = {}) {
-    const found = await buddyNamed(name);
+  // Delete buddy `id`'s file. Its comments stay. Clippy stays.
+  async function deleteBuddy({ id } = {}) {
+    const found = await buddyById(id);
     if (found.where === 'app') throw new DocError('bad_input', `${found.name} cannot be deleted`);
     return changeBuddies(() => removeBuddy(projectDir(), found.name));
   }

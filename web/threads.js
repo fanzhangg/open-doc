@@ -7,7 +7,7 @@
 // Undo. Only people resolve and reopen threads.
 
 import { icon } from './icons.js';
-import { agentFace, buddyColor, personFace } from './faces.js';
+import { agentFace, buddyColor, nameOf, personFace } from './faces.js';
 import { mentionSpans } from '../src/core/mentions.js';
 
 const GAP = 10;
@@ -21,8 +21,8 @@ const MENTION_BEFORE_CARET = /(^|[^A-Za-z0-9._-])@([A-Za-z0-9._-]*)$/;
  *           onUndo: (replyId: string) => Promise<void>, onShowEdits: (replyId: string | null) => void,
  *           onSelect: (threadId: string | null) => void, onHover: (threadId: string | null) => void,
  *           anchorTops: (items: { id: string, anchor: object }[]) => Map<string, number>,
- *           mentionChoices?: (query: string, me: string) => { name, kind, group, tagline? }[],
- *           mentionable?: () => { name: string, kind: string }[] }} handlers
+ *           mentionChoices?: (query: string, me: string) => { id?, name, kind, group, tagline? }[],
+ *           mentionable?: () => { id?: string, name: string, kind: string }[] }} handlers
  */
 export function createCommentMargin(margin, handlers) {
   let threads = [];
@@ -81,10 +81,10 @@ export function createCommentMargin(margin, handlers) {
     const card = el('article', 'od-card');
     card.dataset.thread = thread.id;
     const active = thread.id === activeId;
-    const working = thread.resolved ? [] : agents.filter((a) => a.threadIds.includes(thread.id)).map((a) => a.name);
+    const working = thread.resolved ? [] : agents.filter((a) => a.threadIds.includes(thread.id));
     card.classList.toggle('od-card-active', active);
     card.classList.toggle('od-card-working', working.length > 0);
-    if (working.length > 0) card.style.setProperty('--buddy', buddyColor(working[0]));
+    if (working.length > 0) card.style.setProperty('--buddy', buddyColor(working[0].id));
     card.classList.toggle('od-card-resolved', thread.resolved);
     // A click that ends selecting the card's text leaves the selection, to copy.
     card.addEventListener('click', (event) => {
@@ -109,9 +109,9 @@ export function createCommentMargin(margin, handlers) {
     });
 
     // Each buddy working on it, its face at work; several can at once.
-    for (const name of working) {
+    for (const { id, name } of working) {
       const row = el('div', 'od-typing');
-      row.append(avatar(name, 'agent', true), el('span', '', `${name} is working…`));
+      row.append(avatar(name, 'agent', true, id), el('span', '', `${name} is working…`));
       card.append(row);
     }
     if (thread.resolved) {
@@ -133,10 +133,11 @@ export function createCommentMargin(margin, handlers) {
     const head = el('div', 'od-msg-head');
     const who = el('div', 'od-who');
     const kind = kindOf(comment);
-    const name = el('span', 'od-name', comment.by.name);
+    const shown = kind === 'agent' ? nameOf(comment.by.id, comment.by.name) : comment.by.name; // a buddy by its name now
+    const name = el('span', 'od-name', shown);
     who.append(name, el('time', 'od-time', relativeTime(comment.at)));
-    namecardFor(name, comment.by.name, kind, 'click');
-    head.append(namecardFor(avatar(comment.by.name, kind), comment.by.name, kind, 'click'), who);
+    namecardFor(name, shown, kind, 'click');
+    head.append(namecardFor(avatar(shown, kind, false, comment.by.id), shown, kind, 'click'), who);
     if (action) head.append(action);
     const open = unfolded.has(comment.id);
     const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
@@ -144,8 +145,8 @@ export function createCommentMargin(margin, handlers) {
     if (comment.body.trim()) row.append(head, body, foldButton(comment.id, open));
     else row.append(head);
     // To retry, or to redo what was dropped, the human asks again.
-    if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${comment.by.name} again to retry.`));
-    if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${comment.by.name} again to redo it.`));
+    if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${shown} again to retry.`));
+    if (comment.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${shown} again to redo it.`));
     if (edits[comment.id]) row.append(receipt(comment.id, edits[comment.id]));
     row.classList.toggle('od-msg-failed', Boolean(comment.failed));
     return row;
@@ -191,8 +192,8 @@ export function createCommentMargin(margin, handlers) {
     button.setAttribute('aria-expanded', String(open));
     if (!open) {
       const faces = el('span', 'od-more-faces');
-      const authors = new Map(hidden.map((c) => [c.by.name, kindOf(c)]));
-      for (const [name, kind] of [...authors].slice(0, 3)) faces.append(avatar(name, kind, true));
+      const authors = new Map(hidden.map((c) => [c.by.id, c]));
+      for (const c of [...authors.values()].slice(0, 3)) faces.append(avatar(c.by.name, kindOf(c), true, c.by.id));
       button.append(faces);
     }
     const n = hidden.length;
@@ -489,7 +490,7 @@ export function fillMentionMenu(menu, choices, selected, onPick) {
     if (choice.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
     who.append(name);
     if (choice.tagline) who.append(el('span', 'od-mention-sub', choice.tagline));
-    item.append(avatar(choice.name, choice.kind, true), who);
+    item.append(avatar(choice.name, choice.kind, true, choice.id), who);
     item.addEventListener('mousedown', (event) => {
       event.preventDefault();
       onPick(choice);
@@ -514,7 +515,7 @@ export function withMentions(text, people) {
     const chip = el('span', `od-at od-at-${who.kind}`, text.slice(start, end));
     chip.dataset.mention = who.name;
     chip.dataset.mentionKind = who.kind;
-    if (who.kind === 'agent') chip.style.setProperty('--buddy', buddyColor(who.name));
+    if (who.kind === 'agent') chip.style.setProperty('--buddy', buddyColor(who.id));
     nodes.push(chip);
     at = end;
   }
@@ -535,12 +536,12 @@ export function namecardFor(node, name, kind, how) {
   return node;
 }
 
-export function avatar(name, kind, small = false) {
+export function avatar(name, kind, small = false, id = name) {
   const agent = kind === 'agent';
   const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`);
-  // Everyone's face is drawn from their name (faces.js): people round,
+  // A buddy's face is drawn from its id, a person's from the name (faces.js): people round,
   // buddies a circle, square, triangle, pentagon or cloud, all drawn by hand.
-  node.append(agent ? agentFace(name) : personFace(name));
+  node.append(agent ? agentFace(id) : personFace(name));
   node.title = name;
   return node;
 }
