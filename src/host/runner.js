@@ -18,7 +18,7 @@ const RUN_TIMEOUT_MS = 30 * 60 * 1000; // no one can stop a run by hand: one tha
 export class Runner {
   /**
    * `asks()` resolves to the asks waiting now: [{ threadId, thread, buddy:
-   * { name, about } }]. `doc()` to { name, text,
+   * { name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
    * comments }, `comments` the sidecar's text or null.
    * `script()` is the path of the agent script, `folder()` the project
    * folder or null, `human()` the user's name. `finish(result)` takes a run
@@ -93,10 +93,10 @@ export class Runner {
     this.stopped = false;
   }
 
-  #start(key, { threadId, thread, buddy }) {
+  #start(key, { threadId, thread, buddy, buddies }) {
     const run = { threadId, name: buddy.name, child: null, done: null, cancelled: false };
     this.runs.set(key, run);
-    run.done = this.#run(run, thread, buddy)
+    run.done = this.#run(run, thread, buddy, buddies)
       .catch((error) => console.error(`Run of ${buddy.name} failed to finish:`, error))
       .finally(() => {
         this.runs.delete(key);
@@ -106,7 +106,7 @@ export class Runner {
     this.onChange();
   }
 
-  async #run(run, thread, buddy) {
+  async #run(run, thread, buddy, buddies) {
     const { name: docName, text: base, comments } = await this.doc();
     const dir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
     try {
@@ -117,7 +117,7 @@ export class Runner {
       await writeFile(sidecar, before);
       const script = this.script();
       const folder = this.folder();
-      const prompt = buildPrompt({ buddy, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
+      const prompt = buildPrompt({ buddy, buddies, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
       const at = Date.now();
       const result = await runScript(script, { cwd: dir, prompt, timeoutMs: this.timeoutMs, env: {
         OPENDOC_DOC: copy,
@@ -199,12 +199,14 @@ export function runScript(script, { cwd, prompt, env, timeoutMs = RUN_TIMEOUT_MS
  * comments the copy `sidecarName`, both named by their full path: a
  * project may hold a file of the same name.
  */
-export function buildPrompt({ buddy, docName, sidecarName = `${docName}${SIDECAR_SUFFIX}`, thread, folder = null, human = null }) {
+export function buildPrompt({ buddy, buddies = [], docName, sidecarName = `${docName}${SIDECAR_SUFFIX}`, thread, folder = null, human = null }) {
   const quote = thread.anchor?.exact;
   const said = thread.comments.map((c) => `${c.by.name}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
+  const others = buddies.filter((b) => b.name !== buddy.name);
   return [
     `You are ${buddy.name}, co-authoring the doc ${docName} in your working folder, like a teammate. ${human ?? 'Someone'} is the owner and driver of the doc; the others in the thread are teammates too, people or buddies. You are answering a comment on it.`,
     ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
+    ...(others.length ? [`The other buddies here:\n\n${others.map((b) => `${b.name}${b.about.trim() ? `: ${b.about.trim()}` : ''}`).join('\n\n')}`] : []),
     `The comment thread, oldest first, ${quote ? `on the text "${quote}"` : 'on the whole doc'}:\n\n<thread>\n${said}\n</thread>`,
     `Do what the latest comment asks of you. Where it asks for a change to the doc, edit ${docName} in place, keeping its file format. Others may be editing it meanwhile: change only the parts you mean to, and do not rewrite or reformat the rest. A comment that @mentions another buddy is for that buddy: leave it to them unless it also asks you.${folder ? ` The project folder is ${folder}: read what the comment needs there, but edit nothing in it. A file path in a comment is relative to the project folder.` : ''}`,
     `${sidecarName} holds the doc's comments, one JSON object per line. To comment as a reviewer would, append lines to it, one per comment: {"anchor":{"exact":"<text of the doc as written in the file, found once>"},"body":"..."} on a passage, {"body":"..."} on the whole doc, or {"thread":"<id of a thread's first comment>","body":"..."} to reply in a thread. Comment only where someone has something to decide; fix small things in the doc instead. Only people resolve threads. Change no other line, and edit no other file.`,

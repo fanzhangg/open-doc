@@ -9,6 +9,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, installAgents, listAgents } from '../src/store/agents.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
@@ -196,4 +197,12 @@ test('the shipped agent scripts are written when missing, then left alone; Reset
   assert.equal(await readFile(claude, 'utf8'), '#!/bin/sh\necho mine\n', 'yours once written');
   await installAgents(dir, { platform: 'linux', reset: 'claude' });
   assert.equal(await readFile(claude, 'utf8'), await readFile(join(ROOT, 'agents', 'claude'), 'utf8'));
+});
+
+test('the prompt tells a buddy who the other buddies are, as the app shows them', () => {
+  const thread = { anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
+  const buddies = [{ name: 'Ada', about: 'Edits for tone.' }, { name: 'Bo', about: '' }, { name: 'Cy', about: 'Checks facts.' }];
+  const prompt = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread });
+  assert.match(prompt, /The other buddies here:\n\nBo\n\nCy: Checks facts\./);
+  assert.doesNotMatch(prompt, /Ada: /, 'not itself');
 });
