@@ -21,7 +21,7 @@ export class Runner {
    * { name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
    * comments }, `comments` the sidecar's text or null.
    * `script()` is the path of the agent script, `folder()` the project
-   * folder or null, `human()` the user's name. `finish(result)` takes a run
+   * folder or null, `human()` the user, { name, about }. `finish(result)` takes a run
    * that ended: { threadId, name, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
@@ -204,7 +204,8 @@ export function buildPrompt({ buddy, buddies = [], docName, sidecarName = `${doc
   const said = thread.comments.map((c) => `${c.by.name}: ${c.resolved ? '(resolved the thread)' : c.body}`).join('\n\n');
   const others = buddies.filter((b) => b.name !== buddy.name);
   return [
-    `You are ${buddy.name}, co-authoring the doc ${docName} in your working folder, like a teammate. ${human ?? 'Someone'} is the owner and driver of the doc; the others in the thread are teammates too, people or buddies. You are answering a comment on it.`,
+    `You are ${buddy.name}, co-authoring the doc ${docName} in your working folder, like a teammate. ${human?.name ?? 'Someone'} is the owner and driver of the doc; the others in the thread are teammates too, people or buddies. You are answering a comment on it.`,
+    ...(human?.about ? [`Who ${human.name} is:\n\n${human.about}`] : []),
     ...(buddy.about.trim() ? [`Who you are:\n\n${buddy.about.trim()}`] : []),
     ...(others.length ? [`The other buddies here:\n\n${others.map((b) => `${b.name}${b.about.trim() ? `: ${b.about.trim()}` : ''}`).join('\n\n')}`] : []),
     `The comment thread, oldest first, ${quote ? `on the text "${quote}"` : 'on the whole doc'}:\n\n<thread>\n${said}\n</thread>`,

@@ -55,7 +55,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     doc: async () => ({ name: basename(docPath), text: (await readDoc(docPath)).text, comments: await readSidecarText(docPath) }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
-    human: async () => (await me()).name,
+    human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
     log: (entry) => logRun(settingsDir, { doc: docPath, ...entry }),

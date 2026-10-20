@@ -21,11 +21,12 @@ test('configDir follows each OS convention and the override', () => {
 });
 
 test('patches are checked key by key', () => {
-  assert.doesNotThrow(() => checkSettingsPatch({ font: 'serif', wordCount: true, name: 'fzhan' }));
+  assert.doesNotThrow(() => checkSettingsPatch({ font: 'serif', wordCount: true, name: 'fzhan', about: 'I write novels.' }));
   assert.doesNotThrow(() => checkSettingsPatch({ name: null }));
   assert.throws(() => checkSettingsPatch({ font: 'comic' }), SettingsError);
   assert.throws(() => checkSettingsPatch({ colour: 'red' }), /unknown setting/);
   assert.throws(() => checkSettingsPatch({ wordCount: 'yes' }), SettingsError);
+  assert.throws(() => checkSettingsPatch({ about: 5 }), SettingsError);
   assert.throws(() => checkSettingsPatch({ name: 'two words' }), SettingsError);
   assert.throws(() => checkSettingsPatch([]), SettingsError);
 });
