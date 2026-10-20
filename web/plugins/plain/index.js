@@ -11,5 +11,9 @@ export const plain = {
   extensions: null,
   always: true,
   createView: createPlainView,
-  settings: [],
+  settings: [
+    { key: 'lineNumbers', type: 'switch', label: 'Line numbers', default: true, group: 'Display' },
+    { key: 'wrap', type: 'switch', label: 'Wrap long lines', default: true },
+    { key: 'fontSize', type: 'number', label: 'Font size', min: 12, max: 20, step: 1, unit: 'px', default: 14 },
+  ],
 };
