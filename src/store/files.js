@@ -6,9 +6,11 @@
 // UTF-8, no byte order mark, lines ending in \n. How the file wrote those
 // (`form`) is kept here, to write it back the same way.
 
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { appendFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
+import { promisify } from 'node:util';
 
 export const SIDECAR_SUFFIX = '.opendoc.jsonl';
 const LOCK_STALE_MS = 2000;
@@ -81,6 +83,33 @@ export async function readSidecarText(docPath) {
     if (error.code === 'ENOENT') return null;
     throw error;
   }
+}
+
+/**
+ * Write the sidecar. Comments may be private and the repo public, so inside
+ * a git work tree its pattern first goes into the repo's `info/exclude`, a
+ * file git never commits: nothing for the user to do, and a person who wants
+ * to share comments adds `!*.opendoc.jsonl` after it. Checked at every write, so a folder
+ * that becomes a repo later is covered; outside a repo or without git, no-op.
+ */
+export async function writeSidecar(docPath, text) {
+  await excludeSidecars(dirname(docPath));
+  await writeAtomic(sidecarPath(docPath), text);
+}
+
+async function excludeSidecars(dir) {
+  const pattern = '*' + SIDECAR_SUFFIX;
+  let file;
+  try {
+    const { stdout } = await promisify(execFile)('git', ['rev-parse', '--git-path', 'info/exclude'], { cwd: dir });
+    file = resolve(dir, stdout.trim());
+  } catch {
+    return;
+  }
+  const current = await readFile(file, 'utf8').catch(() => '');
+  if (current.split('\n').includes(pattern)) return;
+  await mkdir(dirname(file), { recursive: true });
+  await appendFile(file, (current === '' || current.endsWith('\n') ? '' : '\n') + pattern + '\n');
 }
 
 /** Rename a doc and its sidecar together, never over another file. */
