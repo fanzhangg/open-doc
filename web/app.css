@@ -112,6 +112,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-status-text { overflow: hidden; text-overflow: ellipsis; }
 .od-status[data-state="error"], .od-status[data-state="conflict"] { color: var(--red); }
 .od-status[data-state="offline"] { color: var(--text-soft); }
+/* the Markdown editor's word count, in its toolbar */
 .od-count { color: var(--text-faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .od-people { display: flex; align-items: center; gap: 8px; }
@@ -234,6 +235,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-toolbar button, .od-bubble button { border: 0; background: none; border-radius: 6px; height: 28px; min-width: 28px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; color: var(--text); flex: none; }
 .od-toolbar button:hover:not(:disabled), .od-bubble button:hover:not(:disabled) { background: var(--hover); }
 .od-toolbar button[aria-pressed="true"], .od-bubble button[aria-pressed="true"] { background: var(--active); color: var(--text); }
+.od-toolbar .od-count { padding: 0 8px; }
 .od-toolbar .od-pill { border-radius: 6px; padding: 0 8px; font-weight: 500; }
 .od-toolbar .od-tool-comment { color: var(--text-soft); }
 .od-comment-count { min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--hover); font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums; }
@@ -546,15 +548,7 @@ label.od-setting { cursor: pointer; }
 [data-kind="claude"] [data-for]:not([data-for~="claude"]),
 [data-kind="codex"] [data-for]:not([data-for~="codex"]),
 [data-kind="custom"] [data-for]:not([data-for~="custom"]) { display: none; }
-.od-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.od-fonts button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text-soft); font-size: 12px; }
-.od-fonts button:hover { background: var(--hover); }
-.od-fonts button[aria-checked="true"] { border-color: var(--text); color: var(--text); background: var(--hover); }
-.od-font-sample { font-size: 24px; line-height: 1.2; color: var(--text); }
-[data-font="sans"] > .od-font-sample { font-family: var(--ui-font); }
-[data-font="serif"] > .od-font-sample { font-family: var(--serif); }
-[data-font="mono"] > .od-font-sample { font-family: var(--mono); font-size: 20px; }
-.od-segmented { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--bg-soft); flex: none; }
+[data-font="sans"] > [data-font="serif"] > [data-font="mono"] > .od-segmented { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--bg-soft); flex: none; }
 .od-segmented button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; font-size: 12px; color: var(--text-soft); }
 .od-segmented button[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow); }
 .od-stepper { align-items: center; }

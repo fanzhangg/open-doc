@@ -98,7 +98,7 @@ check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
 check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
 check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
-const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { font: 'serif' }).then((r) => Boolean(r.result))`);
+const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { plugins: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
 
 step('the Markdown plugin, off and on');

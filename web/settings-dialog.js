@@ -1,5 +1,4 @@
-// The Settings dialog (General, Appearance, Editor, Plugins, Shortcuts,
-// Agent), tooltips that show shortcuts, and how shortcuts are written: shared
+// The Settings dialog (General, Plugins, Shortcuts, Agent), tooltips that show shortcuts, and how shortcuts are written: shared
 // by the editor (web/ui.js) and the desktop start window (desktop/start.js),
 // so both look and behave the same. Settings are saved for every doc and
 // window (see settings.js); a change made in another window shows up here
@@ -22,8 +21,6 @@ const DIALOG = `
   <nav class="od-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
     <div class="od-settings-title">Settings</div>
     <button type="button" role="tab" data-section="general" data-icon="user">General</button>
-    <button type="button" role="tab" data-section="appearance" data-icon="display">Appearance</button>
-    <button type="button" role="tab" data-section="editor" data-icon="text">Editor</button>
     <button type="button" role="tab" data-section="plugins" data-icon="plugin">Plugins</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
@@ -42,10 +39,6 @@ const DIALOG = `
           <div class="od-input-error" role="alert" hidden>Use letters, digits, . _ or -</div>
         </div>
       </div>
-    </section>
-
-    <section class="od-settings-section" role="tabpanel" data-section="appearance" hidden>
-      <h2>Appearance</h2>
       <div class="od-setting">
         <div class="od-setting-text">
           <span class="od-setting-label">Theme</span>
@@ -56,35 +49,6 @@ const DIALOG = `
           <button type="button" role="radio" data-theme-choice="dark">Dark</button>
         </div>
       </div>
-      <div class="od-setting od-setting-stacked">
-        <div class="od-setting-text">
-          <span class="od-setting-label">Document font</span>
-        </div>
-        <div class="od-fonts" role="radiogroup" aria-label="Document font">
-          <button type="button" role="radio" data-font="sans"><span class="od-font-sample">Ag</span>Sans</button>
-          <button type="button" role="radio" data-font="serif"><span class="od-font-sample">Ag</span>Serif</button>
-          <button type="button" role="radio" data-font="mono"><span class="od-font-sample">Ag</span>Mono</button>
-        </div>
-      </div>
-      <div class="od-setting">
-        <div class="od-setting-text">
-          <span class="od-setting-label">Text width</span>
-        </div>
-        <div class="od-segmented" role="radiogroup" aria-label="Text width">
-          <button type="button" role="radio" data-width="normal">Normal</button>
-          <button type="button" role="radio" data-width="wide">Wide</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="od-settings-section" role="tabpanel" data-section="editor" hidden>
-      <h2>Editor</h2>
-      <label class="od-setting">
-        <span class="od-setting-text">
-          <span class="od-setting-label">Word count</span>
-        </span>
-        <input type="checkbox" class="od-switch" data-setting="wordCount">
-      </label>
     </section>
 
     <section class="od-settings-section" role="tabpanel" data-section="plugins" hidden>
@@ -182,15 +146,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
     const root = document.documentElement;
     if (settings.theme === 'system') delete root.dataset.theme;
     else root.dataset.theme = settings.theme;
-    root.dataset.font = settings.font;
-    root.dataset.width = settings.width;
-    const mark = (selector, attr, value) => {
-      for (const button of dialog.querySelectorAll(selector)) button.setAttribute('aria-checked', String(button.dataset[attr] === value));
-    };
-    mark('[data-font]', 'font', settings.font);
-    mark('[data-theme-choice]', 'themeChoice', settings.theme);
-    mark('[data-width]', 'width', settings.width);
-    for (const box of dialog.querySelectorAll('[data-setting]')) box.checked = Boolean(settings[box.dataset.setting]);
+    for (const button of dialog.querySelectorAll('[data-theme-choice]')) button.setAttribute('aria-checked', String(button.dataset.themeChoice === settings.theme));
     for (const [i, plugin] of plugins.entries()) {
       const own = pluginSettings(settings, plugin);
       pluginParts[i].state.textContent = plugin.always ? 'Always on' : own.enabled ? 'On' : 'Off';
@@ -251,13 +207,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, plu
       showPlugin(null);
       dialog.querySelector(`[data-open-plugin="${id}"]`).focus();
     }
-    else if (button.dataset.font) set({ font: button.dataset.font });
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
-    else if (button.dataset.width) set({ width: button.dataset.width });
-  });
-  dialog.addEventListener('change', (event) => {
-    const { setting } = event.target.dataset ?? {};
-    if (setting) set({ [setting]: event.target.checked });
   });
   // Up and down move between sections, as in a vertical tab list.
   dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {

@@ -179,10 +179,10 @@ test('settings.json holds no buddy; a v1 settings.json is discarded', async () =
   const folder = await projectFolder();
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     await opened.call('createBuddy', { buddy: { name: 'Ada', about: 'Mine.' } });
-    await opened.call('saveSettings', { font: 'serif' });
+    await opened.call('saveSettings', { theme: 'dark' });
   });
   const stored = JSON.parse(await readFile(join(settingsDir, 'settings.json'), 'utf8'));
-  assert.deepEqual(Object.keys(stored).sort(), ['font', 'id', 'version']);
-  assert.equal(stored.version, 2);
+  assert.deepEqual(Object.keys(stored).sort(), ['id', 'theme', 'version']);
+  assert.equal(stored.version, 3);
   assert.notEqual(stored.id, v1.id);
 });

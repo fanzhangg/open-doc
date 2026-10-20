@@ -111,10 +111,12 @@ Codex): a script in `agents/` in your config folder that you may edit (see
 - **Changes from outside** (a `git pull`, another editor) show up live and
   merge with your typing. Where they overlap what you are typing, your typing
   stays and their version is in history.
-- **Settings** (name, theme, font, width, word count, plugins, agent) are
+- **Settings** (name and theme, plugins, shortcuts, agent) are
   the same dialog in every window, the home page too (it has no Plugins:
   those come with a doc's editor), and a change applies at once to all of
-  them. Buddies are not in Settings: they are changed on their cards.
+  them. How a doc looks and what its editor offers are its plugin's
+  settings, not global ones. Buddies are not in Settings: they are changed
+  on their cards.
 - **Plugins.** Every text file opens in the Plain text plugin's editor
   (always on) unless a plugin gives its format a WYSIWYG one, and merges changes as plain text unless a
   plugin gives it rules of its own. Two are built in, both for Markdown, on
@@ -129,7 +131,8 @@ Codex): a script in `agents/` in your config folder that you may edit (see
   where it would not, your text stays, as when you both change the same
   words. Settings > Plugins lists each plugin with its files, what it does
   and whether it is on (Plain text: Always on); its page has its switch and
-  its own settings (for the editor: Outline, Focus mode) while it is on.
+  its own settings while it is on. The editor's: the page's font and width,
+  Outline, Focus mode and Word count (shown in its toolbar).
   Switching the editor applies at once to every open doc: a Markdown doc
   turns to plain text and back, comments still in the margin, and nothing is
   written. Switching the harness applies from the next merge.

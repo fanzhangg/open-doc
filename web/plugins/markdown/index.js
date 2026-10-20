@@ -11,7 +11,10 @@ export const markdown = {
   // Loaded with the first Markdown doc.
   createView: (options) => import('./view.js').then((view) => view.createMarkdownView(options)),
   settings: [
-    { key: 'outline', type: 'switch', label: 'Outline', default: true },
+    { key: 'font', type: 'choice', label: 'Document font', options: [['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']], default: 'sans', group: 'Page' },
+    { key: 'width', type: 'choice', label: 'Text width', options: [['normal', 'Normal'], ['wide', 'Wide']], default: 'normal' },
+    { key: 'outline', type: 'switch', label: 'Outline', default: true, group: 'Tools' },
     { key: 'focus', type: 'switch', label: 'Focus mode', default: false },
+    { key: 'wordCount', type: 'switch', label: 'Word count', default: false },
   ],
 };
