@@ -340,7 +340,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-editor .ProseMirror-focused .ProseMirror-gapcursor { display: block; }
 @keyframes od-gapcursor-blink { to { visibility: hidden; } }
 
-/* the plain view (web/plugins/plain/view.js): any other text file, as it is, in mono;
+/* the plain view (web/views/plain/view.js): any other text file, as it is, in mono;
    the page scrolls it, so its scroller lets a flag over the first line show */
 .od-editor .cm-editor.cm-focused { outline: none; }
 .od-editor .cm-editor .cm-scroller { font: var(--code-size)/1.6 var(--mono); overflow: visible; }
@@ -560,7 +560,7 @@ label.od-setting { cursor: pointer; }
 .od-setting-hint code { font-family: var(--mono); font-size: 0.92em; }
 .od-setting-row { display: flex; align-items: center; gap: 8px; }
 .od-settings-intro { margin: -4px 0 16px; font-size: 12px; color: var(--text-soft); }
-/* Settings with a page of their own (a plugin): a row per page, the whole row its button */
+/* Settings with a page of their own (a view or a rule): a row per page, the whole row its button */
 .od-setting-pages { list-style: none; margin: 0; padding: 0; }
 .od-setting-pages li { border-top: 1px solid var(--border); }
 .od-setting-pages button { display: flex; align-items: center; gap: 16px; width: calc(100% + 16px); min-height: 52px; margin: 0 -8px; padding: 12px 8px; border: 0; border-radius: 6px; background: none; font-size: 13px; text-align: left; }
