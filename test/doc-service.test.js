@@ -98,6 +98,39 @@ test('comments: written as the user, one line each; the anchor is never rewritte
   });
 });
 
+test('a save from an older text is merged into the doc: the changes of both stay, and where both changed the same text the save\'s stays', async () => {
+  await withDoc(async ({ call, state, docPath }) => {
+    const before = await state();
+    await writeFile(docPath, SAMPLE.replace('Q4', 'Q1').replace('beta cohort', 'early users'));
+    const saved = await call('saveDoc', { text: SAMPLE.replace('## Risks', '## Main risks').replace('beta cohort', 'beta testers'), baseHash: before.docHash });
+    assert.ok(!saved.conflict);
+    assert.match(saved.text, /Q1 Launch Plan/);
+    assert.match(saved.text, /## Main risks/);
+    assert.match(saved.text, /beta testers/);
+    assert.doesNotMatch(saved.text, /early users/);
+    assert.equal(await readFile(docPath, 'utf8'), saved.text);
+    assert.equal((await state()).docHash, saved.docHash);
+  });
+});
+
+test('a save from an older text, over a buddy\'s edit: the versions end with the buddy\'s and then the human\'s; undoing the buddy\'s keeps what the human changed', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state }) => {
+    const before = await state();
+    const { id } = await call('comment', { anchor: null, body: '@Pilot replace "extra load" with "peak load"' });
+    const replyId = (await until(async () => (await threadOf(state, id)).comments.length === 2 && (await threadOf(state, id)).comments, 'the reply')).at(-1).id;
+    const saved = await call('saveDoc', { text: before.text.replace('extra load', 'traffic').replace('Q4', 'Q1'), baseHash: before.docHash });
+    assert.ok(!saved.conflict);
+    assert.match(saved.text, /handle the traffic\./);
+    assert.match(saved.text, /Q1 Launch Plan/);
+    assert.doesNotMatch(saved.text, /peak/);
+    const { versions } = await call('history');
+    assert.equal(versions.at(-2).reply, replyId);
+    assert.equal(versions.at(-1).reply, undefined);
+    const undone = await call('undoReply', { id: replyId });
+    assert.match(undone.text, /handle the traffic\./, 'the buddy\'s change there was the human\'s to keep');
+  });
+});
+
 test('resolving is a comment with resolved; any later comment reopens', async () => {
   await withDoc(async ({ call, state, docPath }) => {
     const { id } = await call('comment', { anchor: null, body: 'Fix this' });

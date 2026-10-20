@@ -17,7 +17,6 @@ import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { merge3 } from '../src/core/merge.js';
-import { rulesOf } from '../src/rules/index.js';
 import { diffEdits } from '../src/core/diff.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
@@ -27,6 +26,9 @@ import { FORMAT_VERSION } from '../src/core/comments.js';
 
 const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
+// Typing meets a change in the same line: the typing stays whole. (The doc host
+// decides the rest; this page only carries typing not yet saved over what it is told.)
+const WHOLE_LINES = [{ mergeLine: () => false }];
 // Changes from disk and comment updates wait for a pause in typing this long,
 // but never longer than WAIT_FOR_PAUSE_MS: taking them in while keys arrive
 // would stall the keys.
@@ -342,12 +344,15 @@ async function save() {
   saving = true;
   const savedVersion = version;
   const text = editor.getText();
-  let conflicted = false;
+  let behind = false; // the doc has changes this save did not have
   setStatus('Saving…', 'saving');
   try {
     const { status: code, data } = await api.saveDoc(text, baseHash);
     if (code === 409) {
-      conflicted = true;
+      behind = true;
+    } else if (data.text !== text) {
+      synced = text; // the doc host merged the doc's changes into this save: carry on from what was sent
+      behind = true;
     } else {
       baseHash = data.docHash;
       synced = text;
@@ -360,7 +365,7 @@ async function save() {
   } finally {
     saving = false;
   }
-  if (conflicted) {
+  if (behind) {
     await syncFromDisk(); // the file changed under us: merge it in, then save again
     return;
   }
@@ -444,7 +449,7 @@ async function doSync(by) {
   const theirs = fresh.text;
   // Compare the live text, not `dirty`: the editor reports typing on a debounce.
   // Where the change overlaps what the human typed since, the human's stays.
-  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', rules: rulesOf(docName, settings.get()) });
+  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', rules: WHOLE_LINES });
   // A buddy's changes show as its revision; anything else glows.
   editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
   paintMarks();

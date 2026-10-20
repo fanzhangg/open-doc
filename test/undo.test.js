@@ -5,7 +5,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
-import { merge3 } from '../src/core/merge.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 async function withDoc(fn, content = SAMPLE) {
@@ -100,10 +99,8 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
     const pulled = SAMPLE.replace('The main risk is', 'The risk we see is');
     await writeFile(docPath, pulled);
     const saved = await call('saveDoc', { text: typed, baseHash: before.docHash });
-    assert.equal(saved.conflict, true, 'the page learns the file changed');
-    // The page merges what it has into the file, its own text first (web/main.js).
-    const merged = merge3(before.text, typed, saved.text, { prefer: 'ours' });
-    await call('saveDoc', { text: merged.text, baseHash: saved.docHash });
+    assert.ok(!saved.conflict, 'the doc host merges the pulled version into the save');
+    assert.match(saved.text, /The risk we see is .* extra load at launch\./);
     assert.match(await disk(), /The risk we see is .* extra load at launch\./);
     const external = (await versions()).filter((v) => v.kind === 'external');
     assert.equal(external.length, 1);
@@ -115,7 +112,7 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
     const theirs = now.text.replace('beta cohort', 'early users');
     await writeFile(docPath, theirs);
     const again = await call('saveDoc', { text: mine, baseHash: now.docHash });
-    await call('saveDoc', { text: merge3(now.text, mine, again.text, { prefer: 'ours' }).text, baseHash: again.docHash });
+    assert.equal(again.text, mine);
     assert.match(await disk(), /beta testers/);
     const history = await Promise.all((await versions()).map(async (v) => (await call('version', { id: v.id })).text));
     assert.ok(history.includes(theirs), 'the pulled version is saved');
