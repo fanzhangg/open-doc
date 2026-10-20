@@ -12,7 +12,7 @@ import { ruleSettings, viewSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
-  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
+  ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Plain text view', 'Mod+Shift+T'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];
 
 // The dialog itself, put into the page by setupSettings: static, no user text.
