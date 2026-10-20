@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, pluginSettings, resolveSettings } from '../src/core/settings.js';
 import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
 import { markdown } from '../web/plugins/markdown/index.js';
+import { markdownHarness } from '../src/plugins/markdown.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
 
@@ -133,14 +134,14 @@ test('plugins: a switch changed is saved alone and survives a fresh read', async
   assert.deepEqual(pluginSettings(settings, markdown), { enabled: false, outline: true, focus: true });
 });
 
-test('plugins: only booleans by plugin id; a bad switch falls back alone', () => {
+test('plugins: only booleans, strings and numbers by plugin id; a bad value falls back alone', () => {
   assert.doesNotThrow(() => checkSettingsPatch({ plugins: { markdown: { outline: false }, csv: {} } }));
-  for (const plugins of [[], null, { markdown: true }, { markdown: { focus: 'yes' } }, { markdown: [] }]) {
+  for (const plugins of [[], null, { markdown: true }, { markdown: { focus: null } }, { markdown: { focus: {} } }, { markdown: [] }]) {
     assert.throws(() => checkSettingsPatch({ plugins }), SettingsError, JSON.stringify(plugins));
   }
   assert.deepEqual(resolveSettings({ plugins: 'on' }).plugins, {});
   const resolved = resolveSettings({ plugins: { markdown: { enabled: 'no', outline: false }, broken: 3 } });
-  assert.deepEqual(resolved.plugins, { markdown: { outline: false } });
+  assert.deepEqual(resolved.plugins, { markdown: { enabled: 'no', outline: false } });
   assert.deepEqual(pluginSettings(resolved, markdown), { enabled: true, outline: false, focus: false });
 });
 
@@ -151,4 +152,26 @@ test('plugins: ids this version does not know are kept', async () => {
   await updateSettings({ plugins: { markdown: { outline: false } } }, dir);
   const raw = JSON.parse(await readFile(settingsPath(dir), 'utf8'));
   assert.deepEqual(raw.plugins, { csv: { enabled: false, header: true }, markdown: { outline: false } });
+});
+
+test('plugins: a value is kept only if its field allows it, else the default', () => {
+  const plugin = {
+    id: 'demo',
+    settings: [
+      { key: 'on', type: 'switch', default: true },
+      { key: 'mode', type: 'choice', options: [['a', 'A'], [4, 'Four']], default: 'a' },
+      { key: 'size', type: 'number', min: 12, max: 20, default: 14 },
+    ],
+  };
+  const own = (demo) => pluginSettings(resolveSettings({ plugins: { demo } }), plugin);
+  assert.deepEqual(own({}), { enabled: true, on: true, mode: 'a', size: 14 });
+  assert.deepEqual(own({ on: false, mode: 4, size: 20, enabled: false }), { enabled: false, on: false, mode: 4, size: 20 });
+  assert.deepEqual(own({ on: 'x', mode: 'b', size: 21 }), { enabled: true, on: true, mode: 'a', size: 14 });
+  assert.deepEqual(own({ mode: '4', size: 13.5 }), { enabled: true, on: true, mode: 'a', size: 14 });
+  assert.doesNotThrow(() => checkSettingsPatch({ plugins: { demo: { mode: 'a', size: 16 } } }));
+});
+
+test('plugins: on by default, the Markdown editor and its harness included', () => {
+  assert.equal(pluginSettings(resolveSettings(null), markdown).enabled, true);
+  assert.equal(pluginSettings(resolveSettings(null), markdownHarness).enabled, true);
 });
