@@ -304,7 +304,10 @@ function followPlugins() {
   following = following.then(async () => {
     const chosen = viewFor(docName, settings.get());
     if (chosen.id !== made.id) await remakeView(chosen);
-    else if (chosen.settings && JSON.stringify(chosen.settings) !== JSON.stringify(made.settings)) editor.applySettings(chosen.settings);
+    else if (chosen.settings && JSON.stringify(chosen.settings) !== JSON.stringify(made.settings)) {
+      editor.applySettings(chosen.settings);
+      await history.viewChanged(); // an open history view follows too
+    }
     made = chosen;
   }).catch((error) => setStatus(`Could not switch the view: ${error.message}`, 'error'));
 }
