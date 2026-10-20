@@ -17,7 +17,7 @@
 // folder, so a running OpenDoc and the user's settings are not touched. The
 // app is driven over the DevTools protocol, the one port it opens here.
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -53,7 +53,8 @@ writeFileSync(join(config, 'agents', 'fake'), `#!/bin/sh\nexec node "${fake}"\n`
 chmodSync(join(config, 'agents', 'fake'), 0o755);
 writeFileSync(join(config, 'agents', 'fake.cmd'), `@node "${fake}"\r\n`);
 writeFileSync(join(config, 'settings.json'), JSON.stringify({ agent: 'fake' }));
-const env = { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: work };
+const hold = join(work, 'hold-saves'); // while it exists, the doc host holds back the answer to a save (desktop/doc-host.js)
+const env = { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: work, OPENDOC_HOLD_SAVES: hold };
 delete env.ELECTRON_RUN_AS_NODE;
 
 const step = (text) => console.log(`smoke: ${text}`);
@@ -121,6 +122,10 @@ check(ruleOn === '1 *2* 3 4*\n', `on, with the view off: the line conflicts and 
 await notes.evaluate(`document.querySelector('.od-settings [data-owner="markdown-rule"][data-key="enabled"]').click()`);
 const ruleOff = await mergesOutside(notes, docs[1]);
 check(ruleOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(ruleOff)})`);
+
+step('typing while a save is on its way');
+const midSave = await typesDuringSave(notes, docs[1]);
+check(midSave === 'one A B\ntwo\nTHREE\n', `what is typed while a save is on its way stays, with the change from outside (${JSON.stringify(midSave)})`);
 
 if (process.platform === 'linux') {
   const all = listening(app.pid);
@@ -298,6 +303,39 @@ async function mergesOutside(page, doc) {
     const text = await page.evaluate(shown);
     return text.includes('4*') && readFileSync(doc, 'utf8') === text && text;
   }, 15_000, 'the merge to be saved').catch(() => null);
+}
+
+// The doc is changed from outside right after ' A' is typed, and the save's answer is
+// held back while ' B' is typed: the page ends with all three, saved.
+async function typesDuringSave(page, doc) {
+  const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
+  // The end of the first line: the caret may be anywhere after the doc was read from disk.
+  const endOfFirstLine = async () => {
+    const mac = process.platform === 'darwin';
+    const keys = [
+      { modifiers: mac ? 4 : 2, ...(mac ? { key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38 } : { key: 'Home', code: 'Home', windowsVirtualKeyCode: 36 }) }, // the top of the doc
+      { modifiers: 0, key: 'End', code: 'End', windowsVirtualKeyCode: 35 },
+    ];
+    for (const key of keys) for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, ...key });
+  };
+  writeFileSync(doc, 'one\ntwo\nthree\n');
+  await waitFor(async () => (await page.evaluate(shown)) === 'one\ntwo\nthree\n', 15_000, 'the doc from disk');
+  await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
+  writeFileSync(hold, '');
+  try {
+    await endOfFirstLine();
+    await page.send('Input.insertText', { text: ' A' });
+    writeFileSync(doc, 'one\ntwo\nTHREE\n'); // before the typing is saved
+    await waitFor(() => readFileSync(doc, 'utf8').includes(' A'), 15_000, 'the save to reach the doc');
+    await endOfFirstLine();
+    await page.send('Input.insertText', { text: ' B' });
+  } finally {
+    rmSync(hold, { force: true });
+  }
+  return waitFor(async () => {
+    const text = await page.evaluate(shown);
+    return readFileSync(doc, 'utf8') === text && text;
+  }, 15_000, 'the typing to be saved').catch(() => null);
 }
 
 // Start the app on `paths`.

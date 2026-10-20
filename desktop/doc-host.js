@@ -18,6 +18,7 @@
 //   closeAll
 // The host says `{ type: 'ready' }` once it can take them.
 
+import { existsSync } from 'node:fs';
 import { openDoc } from '../src/host/doc-service.js';
 import { renameFile } from './files.js';
 
@@ -25,6 +26,13 @@ import { renameFile } from './files.js';
 const channel = process.parentPort
   ? { listen: (fn) => process.parentPort.on('message', (event) => fn(event.data, event.ports)), send: (message) => process.parentPort.postMessage(message) }
   : { listen: (fn) => process.on('message', (message) => fn(message, [])), send: (message) => process.send(message) };
+
+// For the smoke test: while the file `OPENDOC_HOLD_SAVES` names exists, the answer
+// to a save waits, so the test can type while a save is on its way.
+const holdSaves = process.env.OPENDOC_HOLD_SAVES;
+const held = async () => {
+  while (holdSaves && existsSync(holdSaves)) await new Promise((done) => setTimeout(done, 50));
+};
 
 const docs = new Map(); // docId → { service, ports: Set }
 let nextId = 0;
@@ -77,7 +85,9 @@ function serve(entry, port) {
   entry.ports.add(port);
   port.on('message', async ({ data: { id, type, arg } }) => {
     try {
-      port.postMessage({ id, result: (await entry.service.call(type, arg)) ?? null });
+      const result = (await entry.service.call(type, arg)) ?? null;
+      if (type === 'saveDoc') await held();
+      port.postMessage({ id, result });
     } catch (error) {
       if (!error.code) console.error(error);
       port.postMessage({ id, error: { message: String(error?.message ?? error), code: error?.code } });
