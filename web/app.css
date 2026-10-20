@@ -31,8 +31,8 @@
   --scrim: rgba(20, 19, 16, 0.32);
   --shadow: 0 1px 2px rgba(20, 19, 16, 0.06), 0 0 0 1px rgba(20, 19, 16, 0.05);
   --shadow-raised: 0 8px 24px rgba(20, 19, 16, 0.1), 0 2px 6px rgba(20, 19, 16, 0.06), 0 0 0 1px rgba(20, 19, 16, 0.05);
-  --ui-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+  --ui-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", SimSun, serif;
   --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
   --doc-font: var(--ui-font);
   --doc-size: 16px;
