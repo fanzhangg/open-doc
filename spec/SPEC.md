@@ -90,6 +90,9 @@ need no such check. The steps, in order:
    several, pick the one whose start is closest to `start` (ties: earliest).
    This follows edits that grow or shrink the quote itself, such as
    "extra load" becoming "extra peak load".
+   Text typed right after the quote also falls in the gap, so when the last
+   16 characters of `exact` still occur in it, the span ends after their last
+   occurrence.
 3. **Fuzzy.** Search for approximate matches of `exact` allowing up to
    `floor(len(exact) / 2)` edits (insertions, deletions, substitutions),
    first in a window around `start`, then in the whole text; among the

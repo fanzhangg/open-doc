@@ -8,6 +8,7 @@ export const CONTEXT_LENGTH = 32;
 export const MIN_FUZZY_LENGTH = 4;
 export const SHORT_QUOTE_LENGTH = 8;
 export const MIN_BRACKET_CONTEXT = 8;
+export const TAIL_LENGTH = 16;
 const WINDOW_SLACK = 2048;
 const WEIGHTS = { quote: 50, prefix: 20, suffix: 20, position: 2 };
 
@@ -71,7 +72,15 @@ function bracket(text, anchor) {
     const distance = Math.abs(start - anchor.start);
     if (!best || distance < best.distance) best = { start, end, distance };
   }
-  return best && { start: best.start, end: best.end, method: 'bracket', score: 0 };
+  return best && { start: best.start, end: trimTail(text, anchor, best), method: 'bracket', score: 0 };
+}
+
+// Text typed after the quote lands between it and the suffix, so the gap
+// swallows it: when the quote's own tail survives in the gap, end there.
+function trimTail(text, { exact }, { start, end }) {
+  const tail = exact.slice(-TAIL_LENGTH);
+  const at = text.slice(start, end).lastIndexOf(tail);
+  return at === -1 ? end : start + at + tail.length;
 }
 
 // The one acceptance rule for exact and fuzzy candidates (SPEC.md §3.2). A
