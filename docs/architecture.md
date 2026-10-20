@@ -142,8 +142,13 @@ typing; its own settings reach its view as they are.
 ### Interfaces
 
 The target: each component does one thing (principle 7) through the few
-calls below (principle 8). The code is not there yet; the steps are #177,
-#178, #179 and #180.
+calls below (principle 8). Done: one `comment` call and one function that
+builds a comment (#177), the Runner's `reconcile` (#178), and a save from an
+older text merged by the host (#179; the code calls it `saveDoc`, and
+`stop`/`resume` for `pause`). Not yet: Config, History and Store as the
+components below, and `DocService.move`. The page still runs the rules when
+it merges typing with an outside change, since a rule's switch applies there
+too (#180).
 
 Every writer works the same way: it holds a **buffer** (the page's editor,
 or a buddy's copy), and **submits** the buffer's difference from the base it
