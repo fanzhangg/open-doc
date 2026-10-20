@@ -2,7 +2,7 @@
 // found in the doc's text as it is now. An edit changed since is left out.
 
 import { findEdit } from '../src/core/diff.js';
-import { buddyColor } from './faces.js';
+import { buddyColor, nameOf } from './faces.js';
 
 /** Edit marks on `text` for `edits` (diffEdits records), shown as `by`'s, animated once by a new `replay` number. */
 export function revisionMarks(text, edits, { by = null, replay = 0 } = {}) {
@@ -20,7 +20,7 @@ export function cursorNode({ by, working }) {
   node.contentEditable = 'false';
   const label = document.createElement('span');
   label.className = 'od-cursor-name';
-  label.textContent = by;
+  label.textContent = nameOf(by);
   node.append(label);
   return node;
 }

@@ -218,7 +218,7 @@ test('deleting a buddy stops its runs', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, settingsDir }) => {
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
     await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
-    await call('deleteBuddy', { name: 'Pilot' });
+    await call('deleteBuddy', { id: 'Pilot' });
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await pause(1000);
     assert.equal((await threadOf(state, id)).comments.length, 1);

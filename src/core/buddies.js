@@ -47,6 +47,16 @@ export function parseBuddy(name, text) {
   return { id: id ?? name, name, about: body.replace(FRONT, '').trim() };
 }
 
+const FIRST_NAMES = ['Alice', 'Ben', 'Chloe', 'Daniel', 'Emma', 'Frank', 'Grace', 'Henry', 'Iris', 'Jack', 'Kate', 'Leo', 'Maya', 'Noah', 'Olivia', 'Paul', 'Quinn', 'Rose', 'Sam', 'Tina', 'Victor', 'Wendy', 'Zoe', 'John'];
+
+/** A name for a new buddy: a common first name that is not in `taken`, else one with a number. */
+export function defaultName(taken, random = Math.random) {
+  const free = FIRST_NAMES.filter((n) => !taken.some((t) => sameName(t, n)));
+  if (free.length > 0) return free[Math.floor(random() * free.length)];
+  const base = FIRST_NAMES[Math.floor(random() * FIRST_NAMES.length)];
+  for (let i = 2; ; i++) if (!taken.some((t) => sameName(t, base + i))) return base + i;
+}
+
 /** The first line of who `buddy` is, for a name card or the @ menu. */
 export const tagline = (buddy) => buddy.about.split('\n')[0];
 

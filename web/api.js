@@ -35,9 +35,9 @@ export const api = {
   /** A new buddy, the project's: { agents }. */
   createBuddy: (buddy) => call('createBuddy', { buddy }),
   /** Change buddy `name` here: { agents }. */
-  updateBuddy: (name, patch) => call('updateBuddy', { name, patch }),
+  updateBuddy: (id, patch) => call('updateBuddy', { id, patch }),
   /** Delete buddy `name`'s file: { agents }. */
-  deleteBuddy: (name) => call('deleteBuddy', { name }),
+  deleteBuddy: (id) => call('deleteBuddy', { id }),
   /** Undo the edit of buddy reply `id`: { docHash, text, threads, … }. */
   undoReply: (id) => call('undoReply', { id }),
   /** The doc's versions, oldest first (src/store/history.js). */

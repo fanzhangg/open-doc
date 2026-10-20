@@ -13,7 +13,7 @@
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { avatar, namecardFor } from './threads.js';
-import { tagline } from '../src/core/buddies.js';
+import { defaultName, tagline } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 export const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
@@ -136,6 +136,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
   const isMe = (p) => p.id === getId();
   const statusOf = (name) => statuses.find((s) => same(s.name, name)) ?? null;
+  const idOf = (name) => statusOf(name)?.id ?? name; // a buddy's face and color come from its id
   const introOf = (name) => {
     const status = statusOf(name);
     return status ? tagline(status) : '';
@@ -155,19 +156,19 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // growing and one at work keeps moving through the doc's other updates.
   function paintFaces() {
     const names = agentsHere();
-    const flinching = (name) => failedAt.get(name.toLowerCase()) > Date.now() - FAILED_MS;
-    const faces = names.map((name) => ({ name, mode: modeOf(statusOf(name)), failed: flinching(name) }));
+    const flinching = (id) => failedAt.get(id) > Date.now() - FAILED_MS;
+    const faces = names.map((name) => ({ id: idOf(name), name, mode: modeOf(statusOf(name)), failed: flinching(idOf(name)) }));
     const key = JSON.stringify(faces);
     if (key !== painted) {
       painted = key;
-      root.replaceChildren(...faces.map(({ name, mode, failed }) => {
+      root.replaceChildren(...faces.map(({ id, name, mode, failed }) => {
         const wrap = el('span', 'od-agent');
         wrap.dataset.presence = mode;
         const face = el('button', 'od-agent-face');
         face.type = 'button';
         face.dataset.agent = name;
         face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
-        face.append(avatar(name, 'agent'));
+        face.append(avatar(name, 'agent', false, id));
         if (failed) face.firstChild.classList.add('od-failed');
         namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
         wrap.append(face);
@@ -240,7 +241,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const row = el('div', 'od-people-row');
     const open = el('button', 'od-people-open');
     open.type = 'button';
-    open.append(avatar(status.name, 'agent', true), el('span', 'od-people-name', status.name), el('span', 'od-people-role', tagline(status) || WHERE[status.where]));
+    open.append(avatar(status.name, 'agent', true, status.id), el('span', 'od-people-name', status.name), el('span', 'od-people-role', tagline(status) || WHERE[status.where]));
     open.addEventListener('click', () => toggle(`agent:${status.name}`));
     row.append(open);
     if (status.where === 'project') {
@@ -251,7 +252,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       remove.append(icon('trash'));
       remove.addEventListener('click', async () => {
         if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
-        take(await api.deleteBuddy(status.name).catch(() => ({}))); // gone already: nothing to do
+        take(await api.deleteBuddy(status.id).catch(() => ({}))); // gone already: nothing to do
       });
       row.append(remove);
     }
@@ -265,6 +266,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const field = el('input', 'od-people-new-name');
     field.type = 'text';
     field.placeholder = 'New buddy';
+    field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name)]);
     field.maxLength = 64;
     field.spellcheck = false;
     field.setAttribute('aria-label', "New buddy's name");
@@ -312,7 +314,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const head = el('div', 'od-profile');
     head.dataset.presence = modeOf(status);
     const pic = el('span', 'od-profile-face');
-    pic.append(avatar(name, 'agent'));
+    pic.append(avatar(name, 'agent', false, idOf(name)));
     const who = el('div', 'od-profile-who');
     // Click the name to edit it right there.
     who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'od-profile-name', name));
@@ -332,7 +334,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     field.setAttribute('aria-label', `Who ${agent.name} is`);
     field.addEventListener('change', async () => {
       try {
-        take(await api.updateBuddy(agent.name, { about: field.value }));
+        take(await api.updateBuddy(agent.id, { about: field.value }));
       } catch (failure) {
         field.setAttribute('aria-invalid', 'true');
         field.title = failure.message;
@@ -391,7 +393,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (value === agent.name) return settle();
     if (!NAME_PATTERN.test(value)) return fail(field, NAME_RULE);
     try {
-      const result = await api.updateBuddy(agent.name, { name: value });
+      const result = await api.updateBuddy(agent.id, { name: value });
       if (showing === `agent:${agent.name}`) showing = `agent:${value}`;
       take(result);
       settle();
@@ -440,13 +442,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // ---- @names in the text ----
 
-  /** Everyone an @name can mean here: [{ name, kind }], agents first. */
+  /** Everyone an @name can mean here: [{ id, name, kind }], agents first. */
   function mentionable() {
     const found = [];
-    const add = (name, kind) => {
-      if (!found.some((p) => same(p.name, name))) found.push({ name, kind });
+    const add = (name, kind, id = name) => {
+      if (!found.some((p) => same(p.name, name))) found.push({ id, name, kind });
     };
-    for (const name of agentsHere()) add(name, 'agent');
+    for (const name of agentsHere()) add(name, 'agent', idOf(name));
     add(getName(), 'human');
     for (const p of writers) add(p.name, 'human');
     return found;
@@ -468,9 +470,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const q = query.toLowerCase();
     const matches = (name, intro = '') => name.toLowerCase().startsWith(q) || (q.length >= 2 && intro.toLowerCase().includes(q));
     const here = agentsHere();
-    const inDoc = here.filter((n) => matches(n, introOf(n))).map((name) => ({ name, kind: 'agent', group: 'Buddies', tagline: introOf(name) }));
+    const inDoc = here.filter((n) => matches(n, introOf(n))).map((name) => ({ id: idOf(name), name, kind: 'agent', group: 'Buddies', tagline: introOf(name) }));
     const people = writers.filter((p) => !isMe(p) && matches(p.name))
-      .map((p) => ({ name: p.name, kind: 'human', group: 'People' }));
+      .map((p) => ({ id: p.id, name: p.name, kind: 'human', group: 'People' }));
     return [...inDoc, ...people].slice(0, 12);
   }
 
@@ -484,9 +486,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     pin,
     /** An agent whose run is in progress, if any. */
     running: () => statuses.find((s) => s.state === 'running') ?? null,
-    /** `name`'s run failed: its face shakes and flashes red, once. */
-    failed(name) {
-      failedAt.set(name.toLowerCase(), Date.now());
+    /** Buddy `id`'s run failed: its face shakes and flashes red, once. */
+    failed(id) {
+      failedAt.set(id, Date.now());
       paintFaces();
     },
     /** Your name changed: repaint your card if it is open. */

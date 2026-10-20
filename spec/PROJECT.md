@@ -28,12 +28,18 @@ A **project** is a folder opened from the app's home page.
 
 `<Name>.md`:
 
-- **The file name is the buddy's name and its id.** It starts with a letter
+- **The file name is the buddy's name.** It starts with a letter
   or digit, then letters, digits, `.`, `_`, `-`; unique in its folder,
   compared case-insensitively; not `Clippy`. Renaming the file renames
   the buddy.
-- **The text says who it is**, given to its agent as is. The first line
-  shows next to its name: on its card and in the @ menu.
+- **Its id is a line at the top of the file**, `id: b_…` between two `---`
+  lines, made when the buddy is created and kept when it is renamed. The
+  app finds a buddy, its comments and its face by the id; the name is only
+  what it is called. A file without one is a buddy whose id is its name;
+  renaming it in the app writes its old name as its id. Move or copy the
+  file whole, id included.
+- **The text says who it is**, given to its agent as is, without the id
+  lines. The first line shows next to its name: on its card and in the @ menu.
 
 ```markdown
 Checks every claim against the code.
@@ -45,8 +51,8 @@ A doc reaches Clippy and, in a project, the project's buddies. Clippy's
 name, face and color are the app's. Who it is is the text of the user's
 `buddies/Clippy.md` in their config folder, the same in every doc; with no
 such file, or an empty one, Clippy is as it ships. Its color is the yellow of eight, evenly apart in hue. A project buddy's
-face is made from its name. Its color is one of the other seven: the one
-its name picks or, when a buddy before it by name has that one, the next
+face is made from its id. Its color is one of the other seven: the one
+its id picks or, when a buddy before it by id has that one, the next
 free one. So Clippy and up to seven buddies look different, and a project
 looks the same on every machine.
 

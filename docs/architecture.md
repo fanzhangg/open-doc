@@ -36,6 +36,9 @@ with a way to fix it.
 8. **The fewest interfaces.** A new call is the last resort: first reuse one
    that exists, or delete the need. Who a writer is (a person, a buddy) is
    known only where its buffer is made, never by the component that merges.
+9. **Never take mutable state as the truth.** Find and join things by a
+   stable id; a name, a path or a color is an alias that may change, kept
+   only for show. A buddy is its id, not its name.
 
 ## The app
 
@@ -69,8 +72,8 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | Reached from | every doc, in either mode | docs in their project only |
 | Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.opendoc/buddies/<Name>.md` in the project |
 | Travels with | the user | the project folder |
-| Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from it |
-| Color | yellow, its own | one of the other seven, picked by name |
+| Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from its id |
+| Color | yellow, its own | one of the other seven, picked by id |
 
 ### Components
 
@@ -221,7 +224,7 @@ written only by the app.
 
 ## A buddy's turn
 
-A thread waits on buddy X when a comment by this machine's user, newer than
+A thread waits on buddy X (by id) when a comment by this machine's user, newer than
 X's last comment there, asks X. A comment asks whom it @mentions; one that
 mentions no one asks the thread's buddies: the one that opened it, and each
 the user @mentioned there before. An empty one (resolving, reopening) asks
@@ -233,7 +236,7 @@ only on docs open in a window.
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
-   `OPENDOC_BUDDY`.
+   `OPENDOC_BUDDY` (the name is for the script; the app goes by id).
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.
 3. On exit 0, DocService saves versions before and after, merges the doc
