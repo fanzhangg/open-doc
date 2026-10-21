@@ -1,0 +1,7 @@
+{
+  "name": "Claude Code",
+  "about": "Anthropic's coding agent, run as your own claude command, with its login and config.",
+  "settings": [
+    { "key": "model", "type": "text", "label": "Model", "hint": "A model or an alias, such as opus. Empty: Claude Code's own.", "default": "" }
+  ]
+}

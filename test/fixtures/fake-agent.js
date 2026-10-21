@@ -10,7 +10,8 @@
 //   reply-first <text>                  append a reply in the sidecar's first thread
 //   tamper                              change the first comment's line, and append one that resolves its thread
 // Commands after the first may follow `;;`.
-// Each run logs one JSON line to $FAKE_DIR/runs.log when it starts.
+// Each run logs one JSON line to $FAKE_DIR/runs.log when it starts, with
+// the OPENDOC_SETTING_* it was given.
 
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
@@ -20,8 +21,9 @@ for await (const chunk of process.stdin) prompt += chunk;
 const thread = prompt.match(/<thread>\n([\s\S]*?)\n<\/thread>/)?.[1] ?? '';
 const ask = thread.split('\n\n').at(-1) ?? '';
 const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: comments, OPENDOC_PROJECT: project, OPENDOC_BUDDY: buddy, FAKE_DIR: dir } = process.env;
+const settings = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('OPENDOC_SETTING_')));
 const onPath = (process.env.PATH ?? '').split(delimiter).some((d) => d && ['opendoc', 'opendoc.cmd'].some((f) => existsSync(join(d, f))));
-appendFileSync(join(dir, 'runs.log'), JSON.stringify({ buddy, ask, cwd: process.cwd(), files: readdirSync(process.cwd()), doc, comments, project, prompt, opendoc: onPath }) + '\n');
+appendFileSync(join(dir, 'runs.log'), JSON.stringify({ buddy, ask, cwd: process.cwd(), files: readdirSync(process.cwd()), doc, comments, project, prompt, settings, opendoc: onPath }) + '\n');
 
 if (/\bhold\b/.test(ask)) {
   while (!existsSync(join(dir, `release-${buddy}`))) await new Promise((r) => setTimeout(r, 50));

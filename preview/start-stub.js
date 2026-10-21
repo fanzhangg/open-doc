@@ -18,7 +18,7 @@
 
   window.opendocDesktop = {
     openFolder: () => log('Open project…'),
-    agentScripts: () => Promise.resolve({ agents: ['claude', 'codex'], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents' }),
+    agentScripts: () => Promise.resolve({ agents: [{ id: 'claude', name: 'Claude Code', about: '', settings: [] }, { id: 'codex', name: 'Codex', about: '', settings: [] }], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents' }),
     resetAgentScript: (name) => log(`Reset ${name}`),
     showAgents: () => log('Show folder'),
     openRecent: (index) => log(`Open ${recent[index]?.name}`),

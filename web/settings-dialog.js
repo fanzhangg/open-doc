@@ -93,9 +93,6 @@ const DIALOG = `
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
-// The shipped agent scripts by what they run; the user's own, by file name.
-const AGENT_NAMES = { claude: 'Claude Code', codex: 'Codex', opendoc: 'OpenDoc agent (any model)' };
-
 /** "Mod+Shift+F" → "Ctrl+Shift+F", or "⌘⇧F" on a Mac. */
 export function keyLabel(keys) {
   if (!mac) return keys.replace(/Mod/g, 'Ctrl');
@@ -148,8 +145,8 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     }
     shipped = found.shipped;
     dialog.querySelector('.od-agents-folder').textContent = found.folder;
-    const names = found.agents.includes(store.get().agent) ? found.agents : [...found.agents, store.get().agent];
-    scriptSelect.replaceChildren(...names.map((name) => Object.assign(document.createElement('option'), { value: name, textContent: AGENT_NAMES[name] ?? name })));
+    const agents = found.agents.some((a) => a.id === store.get().agent) ? found.agents : [...found.agents, { id: store.get().agent, name: store.get().agent }];
+    scriptSelect.replaceChildren(...agents.map((a) => Object.assign(document.createElement('option'), { value: a.id, textContent: a.name })));
     scriptSelect.value = store.get().agent;
     dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
   }

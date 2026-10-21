@@ -59,6 +59,7 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     assert.equal(run.buddy, 'Clippy');
     assert.equal(run.project, '');
     assert.equal(run.opendoc, false, 'no opendoc to call');
+    assert.deepEqual(run.settings, {}, 'an agent with no manifest has no settings');
     assert.match(run.prompt, /A general writing assistant/, 'Clippy is built in');
     assert.match(run.prompt, /fzhan: @Clippy replace/);
     await until(() => !existsSync(run.cwd), 'the folder to be gone after', 5000);
@@ -167,6 +168,29 @@ test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async
   });
 });
 
+test('a run gets each of its agent\'s settings as OPENDOC_SETTING_<KEY>: the stored value or the default', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc();
+  const settingsDir = await fakeConfig({ agents: { fake: { model: 'small', effort: 'high', other: 'x' }, claude: { model: 'opus' } } });
+  await writeFile(join(settingsDir, 'agents', 'fake.json'), JSON.stringify({ name: 'Fake', settings: [
+    { key: 'model', type: 'text', label: 'Model', default: 'big' },
+    { key: 'effort', type: 'choice', label: 'Effort', options: [['low', 'Low'], ['high', 'High']], default: 'low' },
+    { key: 'endpoint', type: 'text', label: 'Endpoint', default: '' },
+    { key: 'tries', type: 'number', label: 'Tries', min: 1, max: 5, default: 3 },
+    { key: 'fast', type: 'switch', label: 'Fast', default: false },
+    { key: 'key', type: 'secret', label: 'Key' },
+  ] }));
+  const { doc } = await openTestDoc(docPath, { settingsDir });
+  try {
+    await doc.call('comment', { anchor: null, body: '@Clippy quiet' });
+    const [run] = await until(async () => (await fakeRuns(settingsDir)).length && fakeRuns(settingsDir), 'the run');
+    assert.deepEqual(run.settings, {
+      OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_EFFORT: 'high', OPENDOC_SETTING_ENDPOINT: '', OPENDOC_SETTING_TRIES: '3', OPENDOC_SETTING_FAST: 'false', OPENDOC_SETTING_KEY: '',
+    }, 'every field, only its agent\'s; none set is empty');
+  } finally {
+    await doc.close();
+  }
+});
+
 test('the shipped scripts pass the project folder only when there is one', () => {
   for (const name of ['claude', 'codex', 'opendoc']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
   assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /set ADD=--add-dir "%OPENDOC_PROJECT%" --disallowedTools "Edit\(\/%P%\/\*\*\)"/, 'claude.cmd keeps the project read only');
@@ -176,21 +200,35 @@ test('the shipped scripts pass the project folder only when there is one', () =>
   // fail with EPIPE) and print the arguments they get.
   const bin = execFileSync('mktemp', ['-d']).toString().trim();
   execFileSync('sh', ['-c', `printf '#!/bin/sh\\ncat >/dev/null; echo "$@"\\n' > "${bin}/claude"; printf '#!/bin/sh\\ncat >/dev/null; while [ "$1" != "--output-last-message" ]; do shift; done; echo reply > "$2"\\n' > "${bin}/codex"; chmod +x "${bin}/claude" "${bin}/codex"`]);
-  const run = (name, project) => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, OPENDOC_PROJECT: project, OPENDOC_DOC: '/run/my doc.md' }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+  const run = (name, project, model = '') => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, OPENDOC_PROJECT: project, OPENDOC_DOC: '/run/my doc.md', OPENDOC_SETTING_MODEL: model }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
   assert.equal(run('claude', ''), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence', 'Claude gets the doc copy as already read');
   assert.equal(run('claude', '/work/my project'), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence --add-dir /work/my project --disallowedTools Edit(//work/my project/**)', 'the project is read only');
+  assert.equal(run('claude', '', 'opus'), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence --model opus', 'the model, when set');
   assert.equal(run('codex', ''), 'reply', 'codex prints only its last message');
 });
 
-test('the shipped agent scripts are written when missing, then left alone; Reset writes one again', async () => {
+test('the shipped agents are written when missing, then left alone; Reset writes one again', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
   await installAgents(dir, { platform: 'linux' });
   await installAgents(dir, { platform: 'win32' });
-  assert.deepEqual(await listAgents(dir, 'linux'), ['claude', 'codex', 'opendoc']);
-  assert.deepEqual(await listAgents(dir, 'win32'), ['claude', 'codex', 'opendoc']);
+  const ids = async (platform) => (await listAgents(dir, platform)).map((a) => a.id);
+  assert.deepEqual([await ids('linux'), await ids('win32')], [['claude', 'codex', 'opendoc'], ['claude', 'codex', 'opendoc']]);
+  assert.deepEqual((await listAgents(dir, 'linux')).map((a) => [a.name, a.settings.map((f) => `${f.key}:${f.type}`).join()]), [
+    ['Claude Code', 'model:text'], ['Codex', 'model:text'], ['OpenDoc agent', 'provider:choice,endpoint:text,model:text,key:secret,effort:choice'],
+  ], 'each with its manifest, all valid');
   const windows = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
   await installAgents(windows, { platform: 'win32' });
-  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'codex.cmd', 'opendoc.cmd', 'opendoc.mjs'], 'with the program the OpenDoc agent runs');
+  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'opendoc.cmd', 'opendoc.json', 'opendoc.mjs'], 'with the program the OpenDoc agent runs');
+  await writeFile(join(agentsDir(dir), 'mine'), '#!/bin/sh\n');
+  await writeFile(join(agentsDir(dir), 'broken'), '#!/bin/sh\n');
+  await writeFile(join(agentsDir(dir), 'broken.json'), '{ "name": ');
+  assert.deepEqual((await listAgents(dir, 'linux')).filter((a) => ['broken', 'mine'].includes(a.id)), [
+    { id: 'broken', name: 'broken', about: '', settings: [] }, { id: 'mine', name: 'mine', about: '', settings: [] },
+  ], 'without a manifest, or with one that is not JSON, an agent is its file name');
+  const manifest = join(agentsDir(dir), 'claude.json');
+  await writeFile(manifest, '{}');
+  await installAgents(dir, { platform: 'linux', reset: 'claude' });
+  assert.equal(await readFile(manifest, 'utf8'), await readFile(join(ROOT, 'agents', 'claude.json'), 'utf8'), 'Reset writes the manifest too');
   const claude = agentScript('claude', dir, 'linux');
   assert.equal(basename(agentScript('claude', dir, 'win32')), 'claude.cmd');
   await writeFile(claude, '#!/bin/sh\necho mine\n');

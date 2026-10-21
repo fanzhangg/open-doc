@@ -16,7 +16,7 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | `OPENDOC_COMMENTS` | the sidecar copy's path |
 | `OPENDOC_PROJECT` | the project folder; empty in doc mode |
 | `OPENDOC_BUDDY` | the buddy's name |
-| `OPENDOC_SETTING_<KEY>` | each of the agent's [settings](#settings) (*planned*) |
+| `OPENDOC_SETTING_<KEY>` | each of the agent's [settings](#settings) |
 | stdout | the reply; may be empty |
 | Exit 0 | success; the app merges the doc copy's edits into the doc and adds the appended comments. Otherwise the reply is marked `failed`, with the end of the output. |
 
@@ -47,7 +47,7 @@ edits and comments.
 
 ## Agents
 
-*Planned.* An agent is a plugin: a **manifest** says what can be set, a
+An agent is a plugin: a **manifest** says what can be set, a
 **program** does the work. Settings live apart from both, so a program can be
 replaced (Reset to Default, a new version) without losing them.
 
@@ -62,8 +62,10 @@ replaced (Reset to Default, a new version) without losing them.
   once when missing; then they are yours. Reset to Default writes one again.
 - An agent without a manifest is shown by its file name, with no settings.
 - One agent runs every buddy; Settings > Agents picks which, and each agent
-  with a manifest has its own page there, as a view does in Settings > Views.
-  To give one buddy another program, branch on `OPENDOC_BUDDY` in it.
+  with a manifest has its own page there, as a view does in Settings > Views
+  (*planned*; today Settings > Agent picks it, and its settings are edited
+  in `settings.json`). To give one buddy another program, branch on
+  `OPENDOC_BUDDY` in it.
 
 ### Settings
 
@@ -74,11 +76,13 @@ replaced (Reset to Default, a new version) without losing them.
 | --- | --- | --- |
 | `switch`, `choice`, `number` | as for a view | `settings.json`: `agents: { <name>: { <key>: value } }` |
 | `text` | a line of text, such as a model | the same |
-| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not |
+| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not (*planned*) |
 
-A run gets each field as `OPENDOC_SETTING_<KEY>` (`model` →
-`OPENDOC_SETTING_MODEL`): the stored value or the default, a secret
-decrypted. A shell script needs nothing to read them:
+A key is lower case letters, digits and `_`. A manifest that is not valid
+is ignored, as if there were none. A run gets each field as
+`OPENDOC_SETTING_<KEY>` (`model` → `OPENDOC_SETTING_MODEL`): the stored
+value or the default, a secret decrypted, empty when there is none. A shell
+script needs nothing to read them:
 
 ```sh
 #!/bin/sh
