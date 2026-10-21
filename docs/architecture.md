@@ -253,7 +253,8 @@ that yields is dropped wherever anything changed the same line since, unless
 both changed one line in places apart and the doc's rules allow a character
 merge there; what was dropped comes back (a buddy's reply says `conflict`).
 It yields to a person's edit that started before it too, though it reached
-the host first. Of two edits that yield, the first to land wins. An edit
+the host first; a buddy's turn that loses part of it so is marked
+`conflict` on its version in history, since its reply is already written. Of two edits that yield, the first to land wins. An edit
 lands on the text in memory, the file is written, and only then does it go
 to every window as `ops` (`{ epoch, rev, ops, id }`, `id` the window's name
 for its own edit; `yields`, and a buddy's `reply` and `by`): a window

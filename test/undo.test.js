@@ -47,7 +47,7 @@ test('Undo on a reply removes that buddy\'s edit and keeps later edits, yours an
   await withDoc(async ({ call, state, ask, type, disk, versions }) => {
     const ada = await ask('@Ada replace "extra load" with "extra peak load"');
     const run = (await state()).edits[ada.id];
-    assert.deepEqual({ ...run, version: undefined }, { state: 'edited', by: 'Ada', changes: 1, version: undefined }, 'the receipt: who, how many places');
+    assert.deepEqual({ ...run, version: undefined }, { state: 'edited', by: 'Ada', changes: 1, version: undefined, conflict: false }, 'the receipt: who, how many places');
     assert.equal((await call('version', { id: run.version })).version.reply, ada.id, 'the page shows the run\'s edits from its version');
     await type('week one', 'week 1');
     await ask('@Ben replace "beta cohort" with "beta group"');

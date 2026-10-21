@@ -85,12 +85,13 @@ export function apply(text, ops) {
  * nothing is dropped. When it is `landed` that yields (it reached the host
  * first, but this edit started before it), the same holds the other way
  * round: `ops` comes out as the edit from what `landed` made to `ops` with
- * what stays of `landed` on it.
+ * what stays of `landed` on it, and `dropped` says whether `landed` lost
+ * anything to it.
  */
 export function transform(ops, landed, { first = false, yields = false, landedYields = false, base = '', rules = [] } = {}) {
   if (landedYields) {
     const kept = transform(landed, ops, { yields: true, base, rules });
-    return { ops: diffOps(apply(base, landed), apply(apply(base, ops), kept.ops)), dropped: false };
+    return { ops: diffOps(apply(base, landed), apply(apply(base, ops), kept.ops)), dropped: kept.dropped };
   }
   let dropped = false;
   if (yields && landed.length > 0) {

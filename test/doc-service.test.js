@@ -140,6 +140,27 @@ test('an edit after a buddy\'s, on the same text: undoing the buddy\'s keeps wha
   });
 });
 
+test('a person\'s edit that started before a buddy\'s turn landed wins its line, and the turn is marked conflict', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, edit, state }) => {
+    const before = await state();
+    const ask = async (body) => {
+      const { id } = await call('comment', { anchor: null, body });
+      return (await until(async () => (await threadOf(state, id)).comments.length === 2 && (await threadOf(state, id)).comments, 'the reply')).at(-1).id;
+    };
+    const apart = await ask('@Pilot replace "Q4 Launch" with "Q1 Launch"');
+    await edit(before.text.replace('beta cohort', 'beta testers'), before); // typed on the text before the turn
+    assert.equal((await state()).edits[apart].conflict, false, 'on another line: nothing taken back');
+    const now = await state();
+    const same = await ask('@Pilot replace "beta testers" with "beta group"');
+    await edit(now.text.replace('beta testers', 'beta folks'), now); // the same word
+    const after = await state();
+    assert.match(after.text, /Q1 Launch Plan/);
+    assert.match(after.text, /beta folks/);
+    assert.doesNotMatch(after.text, /group/);
+    assert.equal(after.edits[same].conflict, true);
+  });
+});
+
 test('resolving is a comment with resolved; any later comment reopens', async () => {
   await withDoc(async ({ call, state, docPath }) => {
     const { id } = await call('comment', { anchor: null, body: 'Fix this' });

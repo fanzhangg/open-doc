@@ -46,7 +46,9 @@ export function historyDir(docPath, root) {
  * 'external' (changed outside OpenDoc); `author` is { id?, name, kind } or null
  * when unknown; `added` and `removed` count the characters changed since
  * the version before. A buddy's edit has the `thread` it answered and the
- * id of its `reply`; an undo of one has the reply it `undid`.
+ * id of its `reply`, and `conflict` when a person's edit that started
+ * before it landed took part of it back; an undo of one has the reply it
+ * `undid`.
  */
 export async function readHistory(docPath, root) {
   return (await readIndex(historyDir(docPath, root))).versions;
@@ -116,6 +118,21 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
     while (versions.length > MAX_VERSIONS || (versions.length > 1 && kept() > MAX_HISTORY_CHARS)) dropped.push(versions.shift().hash);
     await saveIndex(dir, index, docPath, dropped);
     return version;
+  } finally {
+    await release();
+  }
+}
+
+/** Mark the version of buddy reply `reply`'s edit `conflict`: part of it was taken back. */
+export async function markConflict(docPath, root, reply) {
+  const dir = historyDir(docPath, root);
+  const release = await lockFile(join(dir, 'index.json.lock'), dir);
+  try {
+    const index = await readIndex(dir);
+    const version = index.versions.find((v) => v.reply === reply);
+    if (!version || version.conflict) return;
+    version.conflict = true;
+    await saveIndex(dir, index, docPath, []);
   } finally {
     await release();
   }

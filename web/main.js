@@ -252,7 +252,10 @@ async function start() {
   const events = api.events();
   events.on('ops', (data) => client.receive(data));
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
-  events.on('history', () => history.changed());
+  events.on('history', () => {
+    history.changed();
+    afterTyping('sidecar', refreshThreads); // a buddy's turn may now be marked conflict
+  });
   events.on('agents', (data) => showAgents(data));
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {

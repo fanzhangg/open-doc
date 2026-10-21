@@ -19,7 +19,7 @@ import { SettingsError } from '../core/settings.js';
 import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
+import { VERSION_ID, markConflict, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
@@ -80,7 +80,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // this service started, `epoch` names that start (a window that sees a
   // new one takes the text again). `log` holds the latest landed edits, the
   // one that made rev `logStart + k + 1` at k, to move a window's edit from
-  // an older rev: { ops }, and the `base` text of one that yields.
+  // an older rev: { ops }, and the `base` text of one that yields, with a
+  // buddy's `reply`.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
   let text = opened.text;
@@ -96,7 +97,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // it) or from here: one that yields (a buddy's, with its `reply` and buddy
   // `by`; an outside change; an undo).
   function land(ops, meta = {}) {
-    log.push(meta.yields ? { ops, base: text } : { ops });
+    log.push(meta.yields ? { ops, base: text, reply: meta.reply } : { ops });
     if (log.length > LOG_SIZE) {
       log.shift();
       logStart++;
@@ -167,20 +168,26 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // A window's edit: operations `ops` on rev `rev` of epoch `epoch`, moved over
   // what landed since, by character; an edit that yields, there since, yields
-  // to it too. `id` names it in the `ops` event that tells it. An epoch or
-  // rev this service no longer has is `stale`: the window takes the text
-  // again (state) and sends its edit on that.
+  // to it too, and a buddy's turn that loses part of it so is marked
+  // `conflict` in history. `id` names it in the `ops` event that tells it.
+  // An epoch or rev this service no longer has is `stale`: the window takes
+  // the text again (state) and sends its edit on that.
   async function submit({ ops, rev: at, epoch: from, id } = {}) {
     if (!validOps(ops) || !Number.isInteger(at) || typeof id !== 'string') throw new DocError('bad_input', 'expected { ops, rev, epoch, id }');
     return serial(async () => {
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
+      const overridden = [];
       for (const landed of log.slice(at - logStart)) {
-        ops = transform(ops, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base, rules: await rules() }).ops;
+        const moved = transform(ops, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base, rules: await rules() });
+        if (moved.dropped && landed.reply) overridden.push(landed.reply);
+        ops = moved.ops;
       }
       if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
       land(ops, { id });
       typed();
       await commit();
+      for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
+      if (overridden.length > 0) emit('history', {});
       return { rev };
     });
   }
@@ -375,14 +382,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
-  // { state: 'edited' | 'undone', by, changes, version } }, `changes` how
-  // many places the run changed and `version` the version that holds the doc
-  // right after it.
+  // { state: 'edited' | 'undone', by, changes, version, conflict } },
+  // `changes` how many places the run changed, `version` the version that
+  // holds the doc right after it, and `conflict` whether a person's edit that
+  // started before it took part of it back.
   async function replyEdits() {
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
     for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, version: v.id };
+      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, version: v.id, conflict: Boolean(v.conflict) };
       if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
     }
     return edits;
