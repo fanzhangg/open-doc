@@ -4,13 +4,12 @@
 // @mentioned in the doc's comments (runner.js) and lands what each run
 // changed when it ends. It lives in the doc host; windows call it over a
 // message port (desktop/doc-host.js) and hear its events (ops, sidecar,
-// agents, settings, history, renamed, missing). In project mode its
-// project's files are read through ProjectService, at the same door.
+// agents, settings, history, renamed, missing, team). In project mode its
+// project's files are read through ProjectService, and its team changed
+// through Team (team.js), at the same door.
 
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
-import { userInfo } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
@@ -21,13 +20,14 @@ import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
-import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
+import { TeamError } from './team.js';
 
 /** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale', 'forbidden'). */
 class DocError extends Error {
@@ -53,16 +53,16 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), handed to runs as OPENDOC_PROJECT. `secrets()` gives the agents'
- * secrets, decrypted ({ <agent>: { <key>: value } }, src/store/secrets.js),
- * handed to runs with the other settings. `emit(event, data)` hears
- * what changed. `call(type, arg, who)` runs a request of `who`'s (see
+ * mode), handed to runs as OPENDOC_PROJECT; `team`, its Team (team.js).
+ * `secrets()` gives the agents' secrets, decrypted ({ <agent>: { <key>:
+ * value } }, src/store/secrets.js), handed to runs with the other settings.
+ * `emit(event, data)` hears what changed. `call(type, arg, who)` runs a request of `who`'s (see
  * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
- * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
+ * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, team: object | null) => void, close: () => Promise<void> }>}
  */
-export async function openDoc(docPath, { folder = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
+export async function openDoc(docPath, { folder = null, team = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
@@ -434,15 +434,18 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return projectBuddiesDir(folder);
   };
 
-  // A buddy can be called anything but Clippy or its owner's name.
+  // A buddy can be called anything but Clippy, its owner's or a teammate's name.
   async function checkBuddy(fields) {
     try {
       checkBuddyPatch(fields);
     } catch (error) {
       throw new DocError(error.code, error.message);
     }
-    if (fields.name !== undefined && [CLIPPY.name, (await me()).name].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
+    if (fields.name !== undefined && [CLIPPY.name, (await me()).name, ...(await teamNames())].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
+
+  // The names of the teammates and of those asking to join.
+  const teamNames = async () => (team ? team.names() : []);
 
   // The buddy here with id `id`.
   async function buddyById(id) {
@@ -501,11 +504,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return chronicle;
   }
 
-  // This user, as their comments name them: their id (made once, kept when
-  // the name changes) and name.
-  async function me() {
-    const settings = await settingsWithId(settingsDir);
-    return { id: settings.id, name: settings.name ?? defaultName(), kind: 'human' };
+  // This user, as their comments name them.
+  function me() {
+    return ownerOf(settingsDir);
   }
 
   // Watch both files and tell the page what changed, including the doc
@@ -597,6 +598,17 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return project;
   };
   const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
+  const inTeam = () => {
+    if (!team) throw new DocError('bad_input', 'a doc on its own has no team');
+    return team;
+  };
+  async function changeTeam(fn) {
+    await fn(inTeam());
+    return team.list();
+  }
+  // The owner's windows follow the team (desktop/doc-host.js sends `team` to theirs alone).
+  const followTeam = () => team?.onChange(async () => emit('team', await team.list())) ?? (() => {});
+  let stopFollowingTeam = followTeam();
   await syncAgents();
 
   // What a window may ask, by the level it needs (`can`). Each returns what
@@ -633,8 +645,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     owner: {
       async saveSettings(patch) {
         if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
-        // Your name is no buddy's here, as no buddy's is yours.
-        if (typeof patch?.name === 'string' && (await buddies()).some((b) => sameName(b.name, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
+        // Your name is no buddy's or teammate's here, as theirs are not yours.
+        if (typeof patch?.name === 'string' && [...(await buddies()).map((b) => b.name), ...(await teamNames())].some((n) => sameName(n, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
         try {
           return { settings: await updateSettings(patch, settingsDir) };
         } catch (error) {
@@ -652,6 +664,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         await installAgents(settingsDir, { reset: body.name });
         return { agents: await listAgents(settingsDir) };
       },
+      // The project's team (team.js), each call answered with the team as it is then.
+      team: () => inTeam().list(),
+      allow: (body) => changeTeam((t) => t.allow(body?.id, body?.level)),
+      remove: (body) => changeTeam((t) => t.remove(body?.id)),
+      setLevel: (body) => changeTeam((t) => t.set(body?.id, { level: body?.level })),
+      link: () => changeTeam((t) => t.link()),
     },
   };
 
@@ -664,7 +682,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       try {
         return await calls[level][type](arg, who);
       } catch (error) {
-        if (error instanceof StoreError) throw new DocError(error.code, error.message);
+        if (error instanceof StoreError || error instanceof TeamError) throw new DocError(error.code, error.message);
         throw error;
       }
     },
@@ -675,9 +693,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     runner,
     docPath: () => docPath,
     moveTo,
-    setFolder(next) {
+    setFolder(next, nextTeam) {
       folder = next;
       project = folder ? projectService(folder) : null;
+      stopFollowingTeam();
+      team = nextTeam;
+      stopFollowingTeam = followTeam();
       stopWatchingProjectBuddies();
       stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
       syncAgents();
@@ -691,6 +712,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       stopWatchingSettings();
       stopWatchingProjectBuddies();
       stopWatchingUserBuddies();
+      stopFollowingTeam();
       closed = true;
       await runner.stop();
     },
@@ -724,20 +746,6 @@ async function fileHash(path) {
   } catch {
     return null;
   }
-}
-
-let cachedName;
-function defaultName() {
-  if (cachedName !== undefined) return cachedName;
-  let name = '';
-  try {
-    name = execFileSync('git', ['config', 'user.name'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    // no git, or no name configured
-  }
-  if (!name) name = userInfo().username;
-  cachedName = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64) || 'me';
-  return cachedName;
 }
 
 // A line per run in the config folder's logs/runs.jsonl: what a slow or

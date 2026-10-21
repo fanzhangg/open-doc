@@ -149,7 +149,7 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   onSettingsChanged: (callback) => {
     ipcRenderer.on('opendoc:settings-changed', () => callback());
   },
-  /** Menu commands for the page: 'settings' or 'shortcuts'. */
+  /** Commands for the page: 'settings' or 'shortcuts' from the menu, 'team' from a notification. */
   onCommand: (callback) => {
     ipcRenderer.on('opendoc:command', (_event, name) => callback(String(name)));
   },

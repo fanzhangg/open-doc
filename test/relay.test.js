@@ -15,7 +15,7 @@ import { promisify } from 'node:util';
 import { createClient } from '../web/client.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
 import { until } from './helpers.js';
-import { page as teammatePage, project as newProject, roomOf, startHost as hostOn, startRelay } from './relay/harness.js';
+import { idOf, page as teammatePage, pageAt, project as newProject, roomOf, startHost as hostOn, startRelay, teammate as newTeammate } from './relay/harness.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const TEXT = '# Plan\n\nShip the preview first.\n';
@@ -28,17 +28,23 @@ after(() => relay?.stop());
 
 const project = () => newProject(TEXT);
 const startHost = (shared) => hostOn(shared, relay.url);
-const page = (secret, doc) => teammatePage(relay.url, secret, doc);
+const page = (secret, who, doc) => teammatePage(relay.url, secret, who, doc);
+
+// The owner's call `call` to the doc host, through a window of `doc`.
+async function asOwner(host, shared, call, arg, doc = 'plan.md') {
+  const { docId } = await host.request('open', { docPath: join(shared.folder, doc), folder: shared.folder });
+  return host.request('call', { docId, call, arg });
+}
 
 test('a page reads a doc through the relay as a teammate who can read, and sees the owner type', async () => {
   const shared = await project();
   const host = await startHost(shared);
   try {
-    const teammate = page(shared.secret);
+    const teammate = page(shared.secret, shared.sam); // no doc named: the project's first
     const { result: state } = await teammate.call('state');
     assert.equal(state.text, TEXT);
     assert.equal(state.level, 'read');
-    assert.equal(state.me.name, 'Teammate');
+    assert.deepEqual(state.me, { id: idOf(shared.sam.key), name: 'Sam', kind: 'human' });
     assert.notEqual(state.settings.name, 'owner', 'the owner\'s settings stay theirs');
     assert.ok(teammate.events.some((e) => e.event === 'hello'));
 
@@ -62,7 +68,7 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
   const shared = await project();
   const host = await startHost(shared);
   try {
-    const teammate = page(shared.secret);
+    const teammate = page(shared.secret, shared.sam);
     const { result: state } = await teammate.call('state');
     const owner = { id: state.me.id, name: 'owner', kind: 'human', level: 'owner' };
     const calls = {
@@ -70,6 +76,7 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
       recreate: {}, comment: { body: 'hi' }, restoreVersion: { id: 'x' }, undoReply: { id: 'x' },
       saveSettings: { name: 'mallory' }, createBuddy: { buddy: { name: 'Spy' } }, updateBuddy: { id: 'clippy', patch: {} },
       deleteBuddy: { id: 'x' }, scripts: {}, resetScript: { name: 'claude' },
+      team: {}, allow: { id: 'x', level: 'write' }, remove: { id: 'x' }, setLevel: { id: state.me.id, level: 'write' }, link: {},
     };
     for (const [type, arg] of Object.entries(calls)) {
       for (const sent of [arg, { ...arg, who: owner }]) {
@@ -78,7 +85,7 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
       }
     }
     // A `who` beside the request, not in its arg, changes nothing either.
-    const socket = new WebSocket(`${relay.url}/rooms/${roomOf(shared.secret)}?doc=plan.md`);
+    const socket = new WebSocket(`${relay.url}/rooms/${roomOf(shared.secret)}?${new URLSearchParams({ doc: 'plan.md', ...shared.sam })}`);
     const answers = [];
     socket.addEventListener('message', ({ data }) => answers.push(JSON.parse(data)));
     await new Promise((done) => socket.addEventListener('open', done));
@@ -97,7 +104,7 @@ test('a page reaches only what the project shows, and is told why not; only with
   const host = await startHost(shared);
   try {
     for (const doc of ['.opendoc/secret.md', '../plan.md', 'nothing.md']) {
-      const turnedAway = page(shared.secret, doc);
+      const turnedAway = page(shared.secret, shared.sam, doc);
       const { error } = await turnedAway.call('state');
       assert.equal(error.code, 'not_found', doc);
       assert.equal(error.message, 'This doc is not in the shared project');
@@ -120,7 +127,7 @@ test('when the host goes away the page waits, and once it is back resyncs with s
   const shared = await project();
   let host = await startHost(shared);
   try {
-    const teammate = page(shared.secret);
+    const teammate = page(shared.secret, shared.sam);
     const { result: state } = await teammate.call('state');
     let shown = state.text;
     const client = createClient({
@@ -151,7 +158,7 @@ test('when the host goes away the page waits, and once it is back resyncs with s
 });
 
 test('a link no host is in says so, and the page waits for one', async () => {
-  const teammate = page('a secret no host has');
+  const teammate = page('a secret no host has', newTeammate());
   let answered = false;
   teammate.call('state').then(() => { answered = true; });
   await until(() => teammate.lines.length > 0, 'the line');
@@ -159,20 +166,111 @@ test('a link no host is in says so, and the page waits for one', async () => {
   assert.equal(answered, false, 'the call waits for a host');
 });
 
-test('the browser build shows the doc read only, live', async () => {
+test('a first join waits for the owner, who is told; Allow (Read) lets the page in at read', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    const noor = newTeammate('Noor');
+    const asking = page(shared.secret, noor);
+    let answered = null;
+    asking.call('state').then((answer) => { answered = answer; });
+    await until(() => asking.lines.includes('waiting'), 'the page waiting');
+    assert.deepEqual(host.joins, [{ folder: shared.folder, name: 'Noor' }]);
+    const team = await asOwner(host, shared, 'team');
+    assert.deepEqual(team.pending, [{ id: idOf(noor.key), name: 'Noor' }]);
+    assert.equal(answered, null, 'nothing is served before Allow');
+
+    await asOwner(host, shared, 'allow', { id: idOf(noor.key), level: 'read' });
+    await until(() => answered, 'the page let in');
+    assert.equal(answered.result.level, 'read');
+    assert.equal(answered.result.me.name, 'Noor');
+    assert.deepEqual(asking.lines, ['waiting', 'in']);
+    // Allowed once: the next time it is let in at once.
+    const again = page(shared.secret, noor);
+    assert.equal((await again.call('state')).result.me.name, 'Noor');
+    assert.deepEqual((await asOwner(host, shared, 'team')).members.map((m) => [m.name, m.level]), [['Sam', 'read'], ['Noor', 'read']]);
+  } finally {
+    host.kill();
+  }
+});
+
+test('a name taken on the project is refused, a request turned down is told so', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    for (const name of ['owner', 'Clippy', 'sam']) {
+      const { error } = await page(shared.secret, newTeammate(name)).call('state');
+      assert.equal(error.code, 'name_taken', name);
+    }
+    const ada = newTeammate('Ada');
+    const asking = page(shared.secret, ada);
+    const answer = asking.call('state');
+    await until(() => asking.lines.includes('waiting'), 'the page waiting');
+    assert.equal((await page(shared.secret, newTeammate('ADA')).call('state')).error.code, 'name_taken', 'a name asking to join is taken too');
+    await assert.rejects(asOwner(host, shared, 'createBuddy', { buddy: { name: 'Sam' } }), (error) => error.message === 'the name Sam is taken');
+    await asOwner(host, shared, 'remove', { id: idOf(ada.key) });
+    assert.equal((await answer).error.code, 'denied');
+    assert.deepEqual((await asOwner(host, shared, 'team')).pending, []);
+  } finally {
+    host.kill();
+  }
+});
+
+test('Remove turns a teammate\'s page away at once; a new link ends every old one', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    const sam = page(shared.secret, shared.sam);
+    await sam.call('state');
+    await asOwner(host, shared, 'remove', { id: idOf(shared.sam.key) });
+    await until(() => sam.lines.includes('refused'), 'the page turned away');
+    assert.equal((await sam.call('state')).error.code, 'removed');
+
+    const noor = newTeammate('Noor');
+    const asking = page(shared.secret, noor);
+    asking.call('state');
+    await until(() => asking.lines.includes('waiting'), 'the page waiting');
+    await asOwner(host, shared, 'allow', { id: idOf(noor.key), level: 'write' });
+    const before = page(shared.secret, noor);
+    await before.call('state');
+    const { link } = await asOwner(host, shared, 'link');
+    const room = new URL(link).searchParams.get('room');
+    assert.notEqual(room, roomOf(shared.secret));
+    assert.equal(new URL(link).searchParams.get('relay'), relay.url);
+    await until(() => before.lines.includes('refused'), 'the old link\'s page turned away');
+    assert.equal((await before.call('state')).error.code, 'link_replaced');
+    const old = page(shared.secret, noor);
+    old.call('state');
+    await until(() => old.lines.length > 0, 'the old link');
+    assert.deepEqual(old.lines, ['nohost']);
+    // Teammates stay on the project, and join from the new link at once.
+    assert.equal((await pageAt(relay.url, room, noor).call('state')).result.me.name, 'Noor');
+  } finally {
+    host.kill();
+  }
+});
+
+test('the browser build asks a name, waits for Allow, then shows the doc read only, live', async () => {
   await promisify(execFile)(process.execPath, [join(root, 'preview', 'build.js')]);
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-relay-page-'));
   const room = roomOf(shared.secret);
   const url = new URL(`file://${join(root, 'dist', 'preview', 'team.html')}`);
-  url.search = new URLSearchParams({ relay: relay.url, room, doc: 'plan.md' }).toString();
+  url.search = new URLSearchParams({ relay: relay.url, room }).toString(); // as the Invite link names it
   const electron = createRequire(import.meta.url)('electron');
   const env = { ...process.env, RELAY_PAGE: url.href };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   try {
-    const shown = await app.page('plan.md');
+    const shown = await app.page('opendoc');
+    await waitFor(() => shown.evaluate(`!document.querySelector('.od-join').hidden`), 30_000, 'the name asked');
+    await shown.evaluate(`document.querySelector('.od-join input').value = 'Noor'; document.querySelector('.od-join').requestSubmit()`);
+    await until(() => host.joins.length > 0, 'the owner told');
+    const status = () => shown.evaluate(`document.querySelector('.od-status-text').textContent`);
+    await waitFor(async () => (await status()) === 'Waiting for the owner to let you in', 10_000, 'the page waiting');
+    const { pending } = await asOwner(host, shared, 'team');
+    await asOwner(host, shared, 'allow', { id: pending[0].id, level: 'read' });
     const text = () => shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.innerText ?? ''`);
     await waitFor(async () => (await text()).includes('Ship the preview first.'), 30_000, 'the doc');
     assert.equal(await shown.evaluate(`document.querySelector('.od-stage [contenteditable]').contentEditable`), 'false');

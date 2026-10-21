@@ -5,11 +5,12 @@
 
 import { fork } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeTeam } from '../../src/store/team.js';
 import { relayHost } from '../../web/relay.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -26,33 +27,43 @@ export async function startRelay() {
 /** The room of `secret`, as a link names it. */
 export const roomOf = (secret) => createHash('sha256').update(secret).digest('hex');
 
+/** A teammate's browser: its key, made once, and their name. */
+export const teammate = (name = 'Sam') => ({ key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`, name });
+
+/** The id the host knows the teammate of `key` by (desktop/doc-host.js). */
+export const idOf = (key) => `p_${roomOf(key).slice(0, 24)}`;
+
 /**
  * A project folder holding `doc` with `text` (and a hidden
- * .opendoc/secret.md), a config folder for its owner, and a secret to share
- * it with.
+ * .opendoc/secret.md), a config folder for its owner, and its team: a link
+ * (`secret`) and `sam`, a teammate who can read.
  */
 export async function project(text, doc = 'plan.md') {
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
+  const folder = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
   await writeFile(join(folder, doc), text);
   await mkdir(join(folder, '.opendoc'));
   await writeFile(join(folder, '.opendoc', 'secret.md'), 'hidden\n');
   const config = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
   await writeFile(join(config, 'settings.json'), JSON.stringify({ name: 'owner', agents: [] }));
-  return { folder, config, secret: `s-${Math.random().toString(36).slice(2)}` };
+  const secret = `s-${Math.random().toString(36).slice(2)}`;
+  const sam = teammate('Sam');
+  await writeTeam(folder, { secret, members: [{ id: idOf(sam.key), name: sam.name, level: 'read' }] }, config);
+  return { folder, config, secret, sam };
 }
 
 /**
- * A doc host, as the app starts it, sharing `folder` through the relay at
- * `relay`: `request(type, arg)` asks it as the app does; `owner(doc)` is the
- * owner's line to `doc` in the project, as a window's `call(type, arg)` and
- * the `ops` events it hears.
+ * The owner's doc host, as the app starts it, sharing `folder` through the
+ * relay at `relay`: `request(type, arg)` asks it as the app does; `joins`
+ * holds who asked to join, as the app hears it.
  */
-export async function startHost({ folder, config, secret }, relay) {
-  const child = fork(join(root, 'desktop', 'doc-host.js'), [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+export async function startHost({ folder, config }, relay) {
+  const child = fork(join(root, 'desktop', 'doc-host.js'), [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config, OPENDOC_RELAY: relay }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+  const joins = [];
   const asked = new Map();
   let nextId = 0;
   const ready = new Promise((done) => child.once('message', done));
-  child.on('message', ({ id, result, error }) => {
+  child.on('message', ({ id, type, result, error, ...said }) => {
+    if (type === 'join') joins.push(said);
     asked.get(id)?.[error ? 1 : 0](error ?? result);
     asked.delete(id);
   });
@@ -64,17 +75,21 @@ export async function startHost({ folder, config, secret }, relay) {
       child.send({ id, type, ...arg });
     });
   };
-  await request('share', { folder, relay, secret });
-  return { request, kill: () => child.kill() };
+  await request('share', { folder });
+  return { request, joins, kill: () => child.kill() };
 }
 
 /**
- * A teammate's page on `doc`: `call` resolves to { result } or { error },
- * `events` holds what it heard, `lines` how its line was, each change, and
- * `onEvent(fn)` hears each event.
+ * The page of teammate `who` ({ key, name }) on `doc` (none: the project's
+ * first): `call` resolves to { result } or { error }, `events` holds what
+ * it heard, `lines` how its line was, each change, and `onEvent(fn)` hears
+ * each event.
  */
-export function page(relay, secret, doc = 'plan.md') {
-  const host = relayHost(new URLSearchParams({ relay, room: roomOf(secret), doc }));
+export const page = (relay, secret, who, doc = null) => pageAt(relay, roomOf(secret), who, doc);
+
+/** The same, in room `room`. */
+export function pageAt(relay, room, who, doc = null) {
+  const host = relayHost(new URLSearchParams({ relay, room, ...(doc ? { doc } : {}) }), () => who);
   const events = [];
   const lines = [];
   const listeners = [];

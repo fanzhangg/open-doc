@@ -3,8 +3,9 @@
 // lock and atomic rename as the sidecar, so two windows changing different
 // settings at once both keep their change.
 
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, rename } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { SETTINGS_VERSION, USER_ID, checkSettingsPatch, mergeSettings, resolveSettings } from '../core/settings.js';
 import { newId } from '../core/comments.js';
@@ -45,6 +46,31 @@ export async function settingsWithId(dir = configDir()) {
   const { settings } = await readSettings(dir);
   if (settings.id) return settings;
   return change((stored) => (USER_ID.test(stored.id ?? '') ? {} : { id: newId('u') }), dir);
+}
+
+/**
+ * This user, as their comments name them: their id (made once, kept when
+ * the name changes) and name, by default git's user.name, else their login.
+ * @returns {Promise<{ id: string, name: string, kind: 'human' }>}
+ */
+export async function ownerOf(dir = configDir()) {
+  const settings = await settingsWithId(dir);
+  return { id: settings.id, name: settings.name ?? defaultName(), kind: 'human' };
+}
+
+let cachedName;
+/** The name of a user who set none: git's user.name, else their login, as a name may be. */
+export function defaultName() {
+  if (cachedName !== undefined) return cachedName;
+  let name = '';
+  try {
+    name = execFileSync('git', ['config', 'user.name'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    // no git, or no name configured
+  }
+  if (!name) name = userInfo().username;
+  cachedName = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64) || 'me';
+  return cachedName;
 }
 
 /**
