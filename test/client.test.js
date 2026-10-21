@@ -117,3 +117,26 @@ test('a page that missed the event of its own edit landing takes the text again,
   assert.equal((await host.call('state')).text, expected);
   await host.close();
 });
+
+test('a doc host that stops after writing an edit, before telling the page: started again, it says so, and the edit is not sent twice', async () => {
+  const docPath = await tempDoc(TEXT);
+  const settingsDir = await fakeConfig();
+  let receive = () => {};
+  const old = await openDoc(docPath, { settingsDir }); // it stops before telling anything, or answering
+  let host = { call: (type, arg) => (type === 'submit' ? (old.call(type, arg), new Promise(() => {})) : old.call(type, arg)) };
+  const { view, client } = page(() => host);
+  client.start(await old.call('state'));
+  view.text = view.text.replace('Beta two', 'Beta two typed'); // an insert: two of them would both stay
+  client.flush();
+  await until(async () => (await readFile(docPath, 'utf8')).includes('typed'), 'the edit written');
+  await old.close();
+  host = await openDoc(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  receive = (event) => client.receive(event);
+  await client.resync(); // the page's new connection says hello
+  await client.landed();
+  const expected = 'Alpha one.\n\nBeta two typed.\n\nGamma three.\n';
+  assert.equal(view.text, expected);
+  assert.equal((await host.call('state')).text, expected);
+  assert.equal(await readFile(docPath, 'utf8'), expected);
+  await host.close();
+});
