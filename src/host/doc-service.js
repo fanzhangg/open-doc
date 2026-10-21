@@ -16,15 +16,16 @@ import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
-import { SettingsError } from '../core/settings.js';
+import { SettingsError, agentSettings } from '../core/settings.js';
 import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
+import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
-import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
+import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
 
@@ -52,27 +53,31 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
+ * mode), handed to runs as OPENDOC_PROJECT. `secrets()` gives the agents'
+ * secrets, decrypted ({ <agent>: { <key>: value } }, src/store/secrets.js),
+ * handed to runs with the other settings. `emit(event, data)` hears
  * what changed. `call(type, arg, who)` runs a request of `who`'s (see
  * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
  * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
  */
-export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
+export async function openDoc(docPath, { folder = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
     doc: async () => ({ name: basename(docPath), text, comments: await readSidecarText(docPath) }),
-    script: () => agentScript(currentAgent, settingsDir),
+    agent: async () => {
+      const { settings } = await readSettings(settingsDir);
+      return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir), secrets()[settings.agent]) };
+    },
     folder: () => folder,
     human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
     log: (entry) => logRun(settingsDir, { doc: docPath, ...entry }),
   });
-  let currentAgent = 'claude'; // the agent script that runs every buddy (settings.agent)
   let lastSidecarHash = null;
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
@@ -304,7 +309,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // Clippy, as the user made it, and the project's buddies.
   async function buddies() {
-    currentAgent = (await readSettings(settingsDir)).settings.agent;
     return buddiesHere(folder ? await readBuddies(projectBuddiesDir(folder)) : [], await readBuddies(userBuddiesDir(settingsDir)));
   }
 
@@ -633,7 +637,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       createBuddy,
       updateBuddy,
       deleteBuddy,
-      scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) }),
+      scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir), secrets: secretsSet(secrets()) }),
       // A shipped agent script, written again as it came.
       async resetScript(body) {
         if (!SHIPPED_AGENTS.includes(body?.name)) throw new DocError('bad_input', 'not a shipped agent');

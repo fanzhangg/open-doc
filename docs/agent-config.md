@@ -16,6 +16,7 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | `OPENDOC_COMMENTS` | the sidecar copy's path |
 | `OPENDOC_PROJECT` | the project folder; empty in doc mode |
 | `OPENDOC_BUDDY` | the buddy's name |
+| `OPENDOC_SETTING_<KEY>` | each of the agent's [settings](#settings) |
 | stdout | the reply; may be empty |
 | Exit 0 | success; the app merges the doc copy's edits into the doc and adds the appended comments. Otherwise the reply is marked `failed`, with the end of the output. |
 
@@ -45,44 +46,56 @@ The rules on stdin tell the agent to comment only where the user has
 something to decide, to resolve only when asked to, and not to repeat in its reply what the app shows: its
 edits and comments.
 
-## Agent scripts
+## Agents
 
-- In `agents/` of the config folder
-  (`~/Library/Application Support/OpenDoc/agents/` on macOS): `<name>` on
-  macOS and Linux, `<name>.cmd` on Windows. Never in a project: a shared
-  folder must not decide what runs here.
-- Claude Code, Codex and the [OpenDoc agent](opendoc-agent.md) ship,
-  written once when missing; then they are yours. Reset to Default writes
-  one again. The OpenDoc agent's two scripts run `opendoc.mjs`, written
-  next to them.
-- One agent runs every buddy; Settings picks which. To give one buddy
-  another program, branch on `OPENDOC_BUDDY` in the script.
-- Everything about the program (model, flags, cleaning up its output) is in
-  the script:
+An agent is a plugin: a **manifest** says what can be set, a
+**program** does the work. Settings live apart from both, so a program can be
+replaced (Reset to Default, a new version) without losing them.
+
+| In `agents/` of the config folder | |
+| --- | --- |
+| `<name>` (`<name>.cmd` on Windows) | the program, under the contract above |
+| `<name>.json` | its manifest: `{ name, about, settings }`; optional |
+
+- The config folder is `~/Library/Application Support/OpenDoc/` on macOS.
+  Never in a project: a shared folder must not decide what runs here.
+- Claude Code, Codex and the [OpenDoc agent](opendoc-agent.md) ship, written
+  once when missing; then they are yours. Reset to Default writes one again.
+- An agent without a manifest is shown by its file name, with no settings.
+- One agent runs every buddy; Settings > Agents picks which, on the agent's
+  own page there, as a view has in Settings > Views. The page shows the
+  fields of its manifest, and for a shipped agent, Reset to Default. To give
+  one buddy another program, branch on `OPENDOC_BUDDY` in it.
+
+### Settings
+
+`settings` is an ordered list of fields, as a view's
+([architecture](architecture.md#views-and-rules)), with two more types:
+
+| `type` | Holds | Stored |
+| --- | --- | --- |
+| `switch`, `choice`, `number` | as for a view | `settings.json`: `agents: { <name>: { <key>: value } }` |
+| `text` | a line of text, such as a model | the same |
+| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not |
+
+A key is lower case letters, digits and `_`. Only the app's main process
+can decrypt a secret; it hands the secrets to the doc host, which runs the
+agents. A manifest that is not valid
+is ignored, as if there were none. A run gets each field as
+`OPENDOC_SETTING_<KEY>` (`model` → `OPENDOC_SETTING_MODEL`): the stored
+value or the default, a secret decrypted, empty when there is none. A shell
+script needs nothing to read them:
 
 ```sh
 #!/bin/sh
 exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-persistence \
+  ${OPENDOC_SETTING_MODEL:+--model "$OPENDOC_SETTING_MODEL"} \
   ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
 ```
 
 `@"…"` attaches the doc copy to the prompt as already read, so Claude Code
 edits it without first spending a round trip to read it. The Windows script
 does not do this yet.
-
-The [OpenDoc agent](opendoc-agent.md) needs Node.js and a model server
-that speaks the OpenAI Chat Completions API. Its endpoint, model and key
-are at the top of `opendoc.mjs`:
-
-```js
-const ENDPOINT = 'http://localhost:11434/v1'; // Ollama, as it ships
-const MODEL = 'qwen3'; // a model that calls tools: ollama pull qwen3
-const KEY = process.env.OPENAI_API_KEY; // sent when set
-```
-
-For a cloud, set its endpoint and model, and `OPENAI_API_KEY` in your
-environment (your shell's profile on macOS and Linux). A run that fails
-says what failed and where these are.
 
 ## Permissions
 

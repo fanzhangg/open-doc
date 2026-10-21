@@ -2,6 +2,8 @@
 # Runs a buddy on Claude Code (docs/agent-config.md): the prompt on stdin,
 # the doc's copy in the working folder, the reply on stdout. Yours to change.
 # The project is read only: its files are the user's, not the copy.
+# The model is Settings > Agents' if set (agents/claude.json), else Claude Code's own.
 # @"…" attaches the copy as read, so Claude edits it without reading it first.
 exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-persistence \
+  ${OPENDOC_SETTING_MODEL:+--model "$OPENDOC_SETTING_MODEL"} \
   ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}

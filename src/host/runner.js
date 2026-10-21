@@ -22,7 +22,9 @@ export class Runner {
    * `asks()` resolves to the asks waiting now: [{ threadId, thread, buddy:
    * { id, name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
    * comments }, `comments` the sidecar's text or null.
-   * `script()` is the path of the agent script, `folder()` the project
+   * `agent()` resolves to the agent that runs every buddy: { script (its
+   * path), settings ({ <key>: value }, each handed to the run as
+   * OPENDOC_SETTING_<KEY>) }. `folder()` is the project
    * folder or null, `human()` the user, { name, about }. `finish(result)` takes a run
    * that ended: { threadId, id, name, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
@@ -31,8 +33,8 @@ export class Runner {
    * when a run starts or ends. `log(entry)` takes a line on each run that
    * ended: { buddy, thread, at, ms, outcome: ok | failed | timedOut | stopped, code }.
    */
-  constructor({ asks, doc, script, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
-    Object.assign(this, { asks, doc, script, folder, human, finish, onChange, log, timeoutMs });
+  constructor({ asks, doc, agent, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
+    Object.assign(this, { asks, doc, agent, folder, human, finish, onChange, log, timeoutMs });
     this.runs = new Map(); // keyOf(threadId, id) → { threadId, id, name, child, done, cancelled, ended }
     this.stopped = false;
     this.checking = null;
@@ -121,7 +123,7 @@ export class Runner {
       const sidecar = join(dir, docName + SIDECAR_SUFFIX);
       const before = comments ?? `${JSON.stringify({ opendoc: FORMAT_VERSION })}\n`;
       await writeFile(sidecar, before);
-      const script = this.script();
+      const { script, settings } = await this.agent();
       const folder = this.folder();
       const prompt = buildPrompt({ buddy, buddies, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
       const at = Date.now();
@@ -130,6 +132,7 @@ export class Runner {
         OPENDOC_COMMENTS: sidecar,
         OPENDOC_PROJECT: folder ?? '',
         OPENDOC_BUDDY: buddy.name,
+        ...Object.fromEntries(Object.entries(settings).map(([key, value]) => [`OPENDOC_SETTING_${key.toUpperCase()}`, String(value ?? '')])),
       }, onChild: (child) => {
         run.child = child;
         if (run.cancelled) killTree(child);

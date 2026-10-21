@@ -25,7 +25,9 @@ const RESTART_WINDOW_MS = 60_000;
  * the doc's buddies at work), `call(call, arg)` (the doc's answer, asked
  * as the owner), `setFolder(folder)`, and `onRestart`, called
  * once a host that stopped has the doc open again (its pages attach again).
- * `shutdown()` closes every doc and stops the host, for quitting.
+ * `setSecrets(secrets)` hands the host the agents' secrets, decrypted
+ * (doc-host.js), and every host started after it; it resolves once the host
+ * has them. `shutdown()` closes every doc and stops the host, for quitting.
  */
 export function createDocHost({ fork, log = console.error }) {
   let child = null;
@@ -37,6 +39,7 @@ export function createDocHost({ fork, log = console.error }) {
   const stops = [];
   let shuttingDown = null;
   let gaveUp = false;
+  let secrets = null;
 
   function launch() {
     const started = fork();
@@ -48,6 +51,7 @@ export function createDocHost({ fork, log = console.error }) {
     started.on('exit', (code) => {
       if (started === child) onExit(code);
     });
+    if (secrets) request('secrets', { secrets }).catch(log); // before any doc opens
   }
 
   function onMessage(message) {
@@ -166,8 +170,13 @@ export function createDocHost({ fork, log = console.error }) {
     return shuttingDown;
   }
 
+  function setSecrets(next) {
+    secrets = next;
+    return request('secrets', { secrets });
+  }
+
   launch();
-  return { openHostedDoc, shutdown };
+  return { openHostedDoc, setSecrets, shutdown };
 }
 
 // An error as the host sent it, with the fields the app's dialogs read.

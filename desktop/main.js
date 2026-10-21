@@ -5,15 +5,17 @@
 // talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
+import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
+import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents, readAgent } from '../src/store/agents.js';
+import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
+import { NAME_PATTERN } from '../src/core/mentions.js';
 import { moveHistory } from '../src/store/history.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
@@ -451,7 +453,7 @@ function pageCommand(win, name) {
   page?.webContents.send('opendoc:command', name);
 }
 
-// Settings > Agent > Show folder: where the agent scripts are, to edit them.
+// Settings > Agents > Show folder: where the agents are, to edit them.
 function showAgents() {
   shell.openPath(agentsDir()).catch(() => {});
 }
@@ -483,11 +485,11 @@ function recentMenu() {
 // ---- the start window's settings ----
 
 // The settings the start window shows and changes (its Settings dialog, a
-// doc's but Views and Rules): your name, how things look and the agent, never buddies.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'agent'];
+// doc's but Views and Rules): your name, how things look and the agents, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'agent', 'agents'];
 
-// Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
-const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });
+// Settings > Agents: the agents, as a doc's page gets them from its doc host.
+const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir(), secrets: secretsSet(secrets) });
 
 async function resetAgentScript(name) {
   if (!SHIPPED_AGENTS.includes(name)) throw new Error('not a shipped agent');
@@ -499,6 +501,25 @@ async function saveStartSettings(patch) {
   const isPlainObject = typeof patch === 'object' && patch !== null && !Array.isArray(patch);
   if (!isPlainObject || !Object.keys(patch).every((key) => PAGE_SETTING_KEYS.includes(key))) throw new Error('not allowed');
   return pageSettings(await updateSettings(patch));
+}
+
+// ---- the agents' secrets ----
+
+// API keys and the like (src/store/secrets.js), decrypted here, the one
+// process with the keychain, and handed to the doc host for the runs. A
+// page learns only which are set.
+let secrets = {};
+
+// Set agent `agent`'s secret `key`, one its manifest declares, or clear it with ''.
+async function saveSecret({ agent, key, value }) {
+  const declared = NAME_PATTERN.test(agent) && (await readAgent(agent)).settings.some((field) => field.key === key && field.type === 'secret');
+  if (!declared) throw new Error('not allowed');
+  const own = { ...secrets[agent], [key]: value };
+  if (!value) delete own[key];
+  const next = { ...secrets, [agent]: own };
+  await writeSecrets(safeStorage, next);
+  secrets = next;
+  await docHost.setSecrets(secrets); // before the page asks the doc host which are set
 }
 
 // ---- the sidebar's file operations ----
@@ -793,6 +814,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'showAgents' && (fromStart || fromDoc)) return void showAgents();
   if (action === 'agentScripts' && fromStart) return agentScripts();
   if (action === 'resetAgentScript' && fromStart) return void (await resetAgentScript(arg));
+  if (action === 'saveSecret' && (fromStart || fromDoc)) return void (await saveSecret(arg));
   if (action === 'recent' && fromStart) {
     return recentProjects().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
   }
@@ -870,6 +892,11 @@ async function start() {
   // environment from this process, so the login shell's goes in first.
   Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
   docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
+  secrets = await readSecrets(safeStorage).catch((error) => {
+    console.error('Could not read the agents\' secrets:', error.message);
+    return {};
+  });
+  docHost.setSecrets(secrets).catch((error) => console.error(error.message));
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write');

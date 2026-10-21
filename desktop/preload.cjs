@@ -132,9 +132,11 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   trashSidecar: () => act('trashSidecar'),
   /** Show the folder of the agent scripts. */
   showAgents: () => act('showAgents'),
-  /** The start window's Settings > Agent: { agents, shipped, folder }, and resetting a shipped script. */
+  /** The start window's Settings > Agents: { agents, shipped, folder, secrets }, and resetting a shipped agent. */
   agentScripts: () => ipcRenderer.invoke('opendoc:action', 'agentScripts'),
   resetAgentScript: (name) => act('resetAgentScript', String(name)),
+  /** Settings > Agents in any window: set agent `agent`'s secret `key` (an API key), or clear it with ''. */
+  saveSecret: (agent, key, value) => act('saveSecret', { agent: String(agent), key: String(key), value: String(value) }),
   openRecent: (index) => act('openRecent', Number(index)),
   recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
   onRecentChanged: (callback) => {

@@ -4,7 +4,7 @@
 // the recent list only log, since there is no app to open them.
 
 (() => {
-  let settings = { name: 'you', theme: 'system', agent: 'claude' };
+  let settings = { name: 'you', theme: 'system', agent: 'claude', agents: {} };
   const recent = [
     { name: 'open-doc', folder: '~/Workplace' },
     { name: 'docs', folder: '~/Workplace/open-doc' },
@@ -18,8 +18,9 @@
 
   window.opendocDesktop = {
     openFolder: () => log('Open project…'),
-    agentScripts: () => Promise.resolve({ agents: ['claude', 'codex'], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents' }),
+    agentScripts: () => Promise.resolve({ agents: [{ id: 'claude', name: 'Claude Code', about: '', settings: [] }, { id: 'codex', name: 'Codex', about: '', settings: [] }], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents', secrets: {} }),
     resetAgentScript: (name) => log(`Reset ${name}`),
+    saveSecret: (agent, key) => log(`Set ${agent}'s ${key}`),
     showAgents: () => log('Show folder'),
     openRecent: (index) => log(`Open ${recent[index]?.name}`),
     recent: () => Promise.resolve(recent.map((doc) => ({ ...doc }))),

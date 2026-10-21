@@ -1,0 +1,7 @@
+{
+  "name": "Codex",
+  "about": "OpenAI's coding agent, run as your own codex command, with its login and config.",
+  "settings": [
+    { "key": "model", "type": "text", "label": "Model", "hint": "Empty: Codex's own.", "default": "" }
+  ]
+}

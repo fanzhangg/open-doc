@@ -12,7 +12,10 @@ import { apply } from '../src/core/ot.js';
 import { askedOf, newComment, newId, peopleOf, threadsOf } from '../src/core/comments.js';
 import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
-import { DEFAULT_SETTINGS, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, agentOf, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
+import claude from '../agents/claude.json' with { type: 'json' };
+import codex from '../agents/codex.json' with { type: 'json' };
+import opendoc from '../agents/opendoc.json' with { type: 'json' };
 
 const params = new URLSearchParams(location.search);
 const inFolder = params.has('folder');
@@ -63,6 +66,7 @@ const THREADS = inFolder
   ]
   : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: CLIPPY.name, answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
 
+const AGENTS = Object.entries({ claude, codex, opendoc }).map(([id, manifest]) => agentOf(id, manifest));
 const ai = (name) => ({ id: name, name, kind: 'ai' });
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -191,8 +195,8 @@ const calls = {
     emit('settings', s.settings);
     return { settings: s.settings };
   },
-  scripts: () => ({ agents: ['claude', 'codex', 'opendoc'], shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)' }),
-  resetScript: () => ({ agents: ['claude', 'codex'] }),
+  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)', secrets: {} }),
+  resetScript: () => ({ agents: AGENTS }),
   createBuddy({ buddy }) {
     if (!inFolder) refuse('buddies other than Clippy belong to a project');
     const fields = { about: '', ...buddy };
