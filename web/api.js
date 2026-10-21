@@ -2,9 +2,10 @@
 // line the desktop app's preload gives the page (window.opendocHost), or in
 // a plain browser through the relay (relay.js).
 
+import { identity } from './join.js';
 import { relayHost } from './relay.js';
 
-const host = window.opendocHost ?? relayHost(new URLSearchParams(location.search));
+const host = window.opendocHost ?? relayHost(new URLSearchParams(location.search), identity);
 
 async function call(type, arg) {
   const { result, error } = await host.call(type, arg);
@@ -64,4 +65,15 @@ export const api = {
   list: (path) => call('list', { path }),
   /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
   read: (path) => call('read', { path }),
+  /**
+   * The owner's: the project's team, { members: [{ id, name, level }],
+   * pending: [{ id, name }] (asking to join), link (or null) }, and changing
+   * it, each answered with the team then. `level` is 'read' or 'write'.
+   */
+  team: () => call('team'),
+  allow: (id, level) => call('allow', { id, level }),
+  remove: (id) => call('remove', { id }),
+  setLevel: (id, level) => call('setLevel', { id, level }),
+  /** A new link: every one before it ends. */
+  link: () => call('link'),
 };

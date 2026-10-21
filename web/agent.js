@@ -1,12 +1,15 @@
 // The people in the header, laid out like a shared doc's: avatars of the
-// buddies the doc reaches, a Buddies button, then yours.
+// buddies the doc reaches, a Team button, then yours.
 //
 // A card is where everyone is changed: on a buddy's, a click on its name
 // edits it in place, and who it is is a field right under it; your own
-// card edits your name the same way. Faces are drawn from names.
+// card edits your name the same way; on a teammate's, the owner sets Read
+// or Edit, or removes them. Faces are drawn from names.
 //
-// A buddy answers when @mentioned. The Buddies list (the button after the
-// faces) has every buddy here; in a project it deletes one and makes one.
+// A buddy answers when @mentioned. The Team panel (the button after the
+// faces) has you, in a project your teammates (a request to join at the
+// top) and the invite link, then every buddy here; in a project it deletes
+// a buddy and makes one. Only the owner changes the team and the buddies.
 //
 // The comment box asks this module what to offer after @.
 
@@ -20,12 +23,14 @@ const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a let
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, getAbout: () => string, setAbout: (about: string) => void, project?: () => boolean, onResult: (result: { agents? }) => void }} options
+ *           setName: (name: string) => boolean, getAbout: () => string, setAbout: (about: string) => void, project?: () => boolean,
+ *           owner?: () => boolean, onResult: (result: { agents? }) => void }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, project = () => false, onResult }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, project = () => false, owner = () => true, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
-  let showing = null; // 'me' | 'buddies' | 'agent:<name>' | 'person:<name>' | null
+  let team = null; // the project's team, for its owner (api.team)
+  let showing = null; // 'me' | 'team' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
   // name on the page, or editable, opened by a click (or a click on the card
   // itself) or by hovering a face in the header.
@@ -34,7 +39,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let anchor = null; // the name on the page the card opened next to; null: under the header
   let editing = false; // whether the shown card's name is being edited in place
 
-  invite.addEventListener('click', () => toggle('buddies'));
+  invite.addEventListener('click', () => toggle('team'));
   me.addEventListener('click', () => toggle('me'));
   root.addEventListener('click', (event) => {
     const face = event.target.closest('[data-agent]');
@@ -109,11 +114,12 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (kind !== 'agent' && same(name, getName())) return 'me';
     const agent = agentsHere().find((n) => same(n, name));
     if (agent || kind === 'agent') return `agent:${agent ?? name}`;
-    return `person:${writers.find((p) => same(p.name, name))?.name ?? name}`;
+    return `person:${memberNamed(name)?.name ?? writers.find((p) => same(p.name, name))?.name ?? name}`;
   }
 
-  // Only another person's card has nothing to change.
-  const editable = () => Boolean(showing) && !showing.startsWith('person:');
+  // Only another person's card has nothing to change, but for the owner a teammate's.
+  const editable = () => Boolean(showing) && (!showing.startsWith('person:') || Boolean(memberNamed(showing.slice(7))));
+  const memberNamed = (name) => team?.members.find((m) => same(m.name, name)) ?? null;
 
   // Under the header, or next to the name it opened from: below it, or above
   // when there is no room, kept inside the window.
@@ -186,7 +192,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     panel.dataset.state = viewOnly ? 'view' : 'edit';
     panel.toggleAttribute('data-editable', editable());
     if (showing === 'me') panel.replaceChildren(...meCard());
-    else if (showing === 'buddies') panel.replaceChildren(...buddiesCard());
+    else if (showing === 'team') panel.replaceChildren(...teamCard());
     else if (showing?.startsWith('person:')) panel.replaceChildren(...personCard(showing.slice(7)));
     else if (agentShown()) panel.replaceChildren(...agentCard(agentShown()));
     if (!panel.hidden) place();
@@ -222,19 +228,136 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return [head, about];
   }
 
+  // A teammate's card has, for the owner, Read or Edit and Remove.
   function personCard(name) {
-    return [personHead(name, 'Commented on this doc')];
+    const teammate = memberNamed(name);
+    if (!teammate) return [personHead(name, 'Commented on this doc')];
+    if (viewOnly) return [personHead(name, LEVEL[teammate.level])];
+    const level = el('div', 'od-teammate-row');
+    level.append(levelChoice(teammate.level, (next) => changeTeam(() => api.setLevel(teammate.id, next))));
+    const remove = el('button', 'od-secondary od-danger', 'Remove from this project');
+    remove.type = 'button';
+    remove.addEventListener('click', async () => {
+      if (!window.confirm(`Remove ${teammate.name} from this project?\n\nTheir pages close at once. Their comments stay.`)) return;
+      await changeTeam(() => api.remove(teammate.id));
+      toggle('team');
+    });
+    const removeRow = el('div', 'od-teammate-row');
+    removeRow.append(remove);
+    return [personHead(name, 'Teammate'), level, removeRow];
   }
 
-  // Every buddy here, one line each: a click opens its card, and a project's
-  // buddy is deleted from here. Then, in a project, a line to name a new
-  // buddy: Enter makes it and opens its card.
-  function buddiesCard() {
+  // Read or Edit, Edit to start: `pick(level)` hears a change.
+  function levelChoice(level, pick) {
+    const choice = el('div', 'od-segmented');
+    choice.setAttribute('role', 'radiogroup');
+    choice.setAttribute('aria-label', 'Access');
+    for (const [value, label] of [['read', 'Read'], ['write', 'Edit']]) {
+      const option = el('button', null, label);
+      option.type = 'button';
+      option.setAttribute('role', 'radio');
+      option.setAttribute('aria-checked', String(value === level));
+      option.addEventListener('click', () => {
+        for (const other of choice.children) other.setAttribute('aria-checked', String(other === option));
+        pick(value);
+      });
+      choice.append(option);
+    }
+    return choice;
+  }
+
+  // A change to the team, as `request()` asks it: the panel shows the team it answers with, or what went wrong.
+  async function changeTeam(request) {
+    try {
+      team = await request();
+      paintCard();
+    } catch (failure) {
+      const error = el('div', 'od-input-error', failure.message);
+      panel.querySelector('.od-input-error')?.remove();
+      panel.querySelector('.od-card-head, .od-profile')?.after(error);
+    }
+  }
+
+  // You, then in a project your teammates, a request to join at the top,
+  // then every buddy here, one line each: a click opens a card, and a
+  // project's buddy is deleted from here. Then, in a project, a line to name
+  // a new buddy: Enter makes it and opens its card. Only the owner sees the
+  // teammates and changes anything.
+  function teamCard() {
     const head = el('div', 'od-card-head');
-    head.append(el('div', 'od-card-title', 'Buddies'));
+    head.append(el('div', 'od-card-title', 'Team'));
+    if (team) head.append(inviteButtons());
     const list = el('div', 'od-people-list');
-    list.append(...statuses.map(buddyRow));
-    return project() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
+    list.append(meRow());
+    if (team) {
+      list.append(el('div', 'od-setting-group', 'Teammates'), ...team.pending.map(pendingRow), ...team.members.map(memberRow));
+      if (team.pending.length + team.members.length === 0) list.append(el('div', 'od-people-none', 'No one yet: send them the invite link.'));
+    }
+    list.append(el('div', 'od-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
+    return project() && owner() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
+  }
+
+  // Invite link copies the project's one link, made the first time; New link ends every old one.
+  function inviteButtons() {
+    const buttons = el('div', 'od-people-invite');
+    const copy = el('button', 'od-secondary', 'Invite link');
+    copy.type = 'button';
+    copy.prepend(icon('link'));
+    copy.addEventListener('click', async () => {
+      if (!team.link) await changeTeam(() => api.link());
+      if (!team.link) return;
+      await navigator.clipboard.writeText(team.link);
+      const copied = panel.querySelector('.od-people-invite .od-secondary');
+      if (copied) copied.lastChild.textContent = 'Copied';
+    });
+    buttons.append(copy);
+    if (team.link) {
+      const renew = el('button', 'od-secondary', 'New link');
+      renew.type = 'button';
+      renew.addEventListener('click', () => {
+        if (window.confirm('Make a new invite link?\n\nEvery old link stops working, and pages open on it close. Teammates on the project stay, and join again from the new link.')) changeTeam(() => api.link());
+      });
+      buttons.append(renew);
+    }
+    return buttons;
+  }
+
+  function meRow() {
+    const row = el('div', 'od-people-row');
+    const open = el('button', 'od-people-open');
+    open.type = 'button';
+    open.append(avatar(getName(), 'human', true), el('span', 'od-people-name', getName()), el('span', 'od-people-role', 'You'));
+    open.addEventListener('click', () => toggle('me'));
+    row.append(open);
+    return row;
+  }
+
+  // Someone asking to join: Read or Edit (Edit to start), and Allow or Deny.
+  function pendingRow({ id, name }) {
+    const wrap = el('div', 'od-people-pending');
+    const row = el('div', 'od-people-row');
+    row.append(avatar(name, 'human', true), el('span', 'od-people-name', name), el('span', 'od-people-role', 'Asks to join'));
+    let level = 'write';
+    const actions = el('div', 'od-people-actions');
+    const deny = el('button', 'od-secondary', 'Deny');
+    deny.type = 'button';
+    deny.addEventListener('click', () => changeTeam(() => api.remove(id)));
+    const allow = el('button', 'od-primary', 'Allow');
+    allow.type = 'button';
+    allow.addEventListener('click', () => changeTeam(() => api.allow(id, level)));
+    actions.append(levelChoice(level, (next) => { level = next; }), el('span', 'od-spacer'), deny, allow);
+    wrap.append(row, actions);
+    return wrap;
+  }
+
+  function memberRow(member) {
+    const row = el('div', 'od-people-row');
+    const open = el('button', 'od-people-open');
+    open.type = 'button';
+    open.append(avatar(member.name, 'human', true), el('span', 'od-people-name', member.name), el('span', 'od-people-role', LEVEL[member.level]));
+    open.addEventListener('click', () => toggle(`person:${member.name}`));
+    row.append(open);
+    return row;
   }
 
   function buddyRow(status) {
@@ -244,7 +367,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     open.append(avatar(status.name, 'agent', true, status.id), el('span', 'od-people-name', status.name), el('span', 'od-people-role', tagline(status) || WHERE[status.where]));
     open.addEventListener('click', () => toggle(`agent:${status.name}`));
     row.append(open);
-    if (status.where === 'project') {
+    if (status.where === 'project' && owner()) {
       const remove = el('button', 'od-icon-btn od-people-delete');
       remove.type = 'button';
       remove.dataset.tip = `Delete ${status.name}`;
@@ -266,7 +389,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const field = el('input', 'od-people-new-name');
     field.type = 'text';
     field.placeholder = 'New buddy';
-    field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name)]);
+    field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name), ...(team ? [...team.members, ...team.pending].map((p) => p.name) : [])]);
     field.maxLength = 64;
     field.spellcheck = false;
     field.setAttribute('aria-label', "New buddy's name");
@@ -431,10 +554,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   const take = (result) => onResult(result);
 
-  /** Any of: `agents` (the buddies here, with their statuses), `people` (who commented). */
-  function render({ agents, people: nextWriters }) {
+  /** Any of: `agents` (the buddies here, with their statuses), `people` (who commented), `team` (the project's, for its owner). */
+  function render({ agents, people: nextWriters, team: nextTeam }) {
     if (agents) statuses = agents;
     if (nextWriters) writers = nextWriters;
+    if (nextTeam) team = nextTeam;
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();
@@ -493,7 +617,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     },
     /** Your name changed: repaint your card if it is open. */
     renameMe() {
-      if (showing === 'me') paintCard();
+      if (showing === 'me' || showing === 'team') paintCard();
+    },
+    /** Open the Team panel, where a request to join waits. */
+    showTeam() {
+      if (showing !== 'team') toggle('team');
     },
   };
 }
@@ -505,6 +633,9 @@ const STANDING = { working: 'Working…', away: 'Not running here' };
 const WHERE = { app: 'In all your docs', project: "This project's" };
 
 const LABELS = { working: 'Working…', away: 'Not here' };
+
+// What a teammate may do, under their name.
+const LEVEL = { read: 'Can read', write: 'Can edit' };
 
 /** 'working', 'idle' (answers when @mentioned), or 'away' (no status: not run here). */
 export function modeOf(status) {

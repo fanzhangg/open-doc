@@ -2,19 +2,24 @@
 // (relay/worker.js; docs/architecture.md, Sharing), with the same
 // `{ call, onEvent }` the app's preload gives a window (window.opendocHost),
 // and `onLine`, how the line is. The page's address names the relay, the
-// room and the doc: `?relay=<ws: or wss: URL>&room=<room>&doc=<path in the
-// project>`. Calls wait for the host's `hello`; one on its way when the line
-// drops fails as `offline`. The line is made again every few seconds, and
-// the host's `hello` on it resyncs the page, unless the host turned the page
+// room and maybe the doc: `?relay=<ws: or wss: URL>&room=<room>&doc=<path in
+// the project>`; the line names who the page is, as `identity()` says when
+// the first call makes it. Calls wait for the host's `hello`, which comes
+// once the owner lets the teammate in; one on its way when the line drops
+// fails as `offline`. The line is made again every few seconds, and the
+// host's `hello` on it resyncs the page, unless the host turned the page
 // away: then every call fails with the host's reason.
 
 const RETRY_MS = 2000;
 const HOST_AWAY = 4000; // the relay: no host in the room (relay/worker.js)
 const TURNED_AWAY = 4001; // the host, with its reason
 
-/** The doc host reached through the relay the page's `params` name. */
-export function relayHost(params) {
-  const url = `${params.get('relay')}/rooms/${params.get('room')}?doc=${encodeURIComponent(params.get('doc') ?? '')}`;
+/**
+ * The doc host reached through the relay the page's `params` name, as
+ * `identity()`: { key, made once in this browser; name }.
+ */
+export function relayHost(params, identity) {
+  let url = null;
   let socket = null;
   let online = false; // the host said hello on this line
   let served = false; // and on some line before
@@ -32,9 +37,11 @@ export function relayHost(params) {
   };
 
   function connect() {
+    url ??= `${params.get('relay')}/rooms/${params.get('room')}?${new URLSearchParams({ ...(params.get('doc') ? { doc: params.get('doc') } : {}), ...identity() })}`;
     socket = new WebSocket(url);
     socket.addEventListener('message', ({ data }) => {
       const message = JSON.parse(data);
+      if (message.event === 'waiting') return setLine({ reason: 'waiting' });
       if (message.event === 'hello') {
         online = served = true;
         setLine(null);
@@ -54,7 +61,7 @@ export function relayHost(params) {
         refused = { message: REFUSED[reason] ?? 'The host turned this page away', code: reason };
         for (const done of [...calls.values(), ...unsent.splice(0).map((r) => r.done)]) done({ error: refused });
         calls.clear();
-        return setLine({ reason: 'refused', message: refused.message });
+        return setLine({ reason: 'refused', ...refused });
       }
       for (const done of calls.values()) done({ error: { message: 'The host is offline', code: 'offline' } });
       calls.clear();
@@ -69,10 +76,10 @@ export function relayHost(params) {
     calls.set(request.id, done);
     socket.send(JSON.stringify(request));
   }
-  connect();
 
   return {
     call: (type, arg) => new Promise((done) => {
+      if (!socket) connect();
       const request = { id: ++nextCall, type: String(type), arg, done };
       if (refused) done({ error: refused });
       else if (online) send(request);
@@ -84,9 +91,10 @@ export function relayHost(params) {
     },
     /**
      * `fn(line)` hears how the line is: null once the host is in, else
-     * `{ reason }`, 'host' (it went away), 'nohost' (it was never in: the
-     * link may be from an earlier time), 'relay' (the relay cannot be
-     * reached), or 'refused' with the host's `message`.
+     * `{ reason }`, 'waiting' (for the owner to let the teammate in), 'host'
+     * (it went away), 'nohost' (it was never in: the link may be from an
+     * earlier time), 'relay' (the relay cannot be reached), or 'refused'
+     * with the host's `message` and `code`.
      */
     onLine(fn) {
       showLine = fn;
@@ -98,4 +106,9 @@ export function relayHost(params) {
 // Why the host turns a page away (desktop/doc-host.js), as the page says it.
 const REFUSED = {
   not_found: 'This doc is not in the shared project',
+  name_taken: 'Someone on this project already has that name',
+  bad_input: 'This page could not say who you are',
+  denied: 'The owner did not let you in',
+  removed: 'The owner removed you from this project',
+  link_replaced: 'This link no longer works: ask the owner for the new one',
 };

@@ -8,15 +8,19 @@
 // agent (test/fixtures/fake-agent.js). `collab:make` opens a doc of that
 // text in a project folder and hands the page a port to it, as a window
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
-// `collab:release` hold Pilot's turns and let them go; `collab:share` shares
-// that project through a relay (test/perf/typing.test.js). VIEWS_SEARCH is
-// the page's query, such as `?delay=0`.
+// `collab:release` hold Pilot's turns and let them go. The project has a
+// link and Sam, a teammate who can read; `collab:share` shares it through
+// the relay at OPENDOC_RELAY and answers the link's secret and Sam's key
+// (test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
+// `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeTeam } from '../../src/store/team.js';
 import { fakeConfig, tempDoc } from '../helpers.js';
+import { idOf } from '../relay/harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -48,9 +52,12 @@ app.whenReady().then(async () => {
     if (doc) await request('close', { docId: doc.docId });
     const path = await tempDoc(text);
     await mkdir(join(dirname(path), '.opendoc', 'buddies'), { recursive: true });
+    const folder = await realpath(dirname(path));
+    const team = { secret: `s-${Math.random().toString(36).slice(2)}`, key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
+    await writeTeam(folder, { secret: team.secret, members: [{ id: idOf(team.key), name: 'Sam', level: 'read' }] }, config);
     await writeFile(join(dirname(path), '.opendoc', 'buddies', 'Pilot.md'), '\n');
-    const { docId } = await request('open', { docPath: path, folder: dirname(path) });
-    doc = { docId, path };
+    const { docId } = await request('open', { docPath: path, folder });
+    doc = { docId, path, folder, team };
     const { port1, port2 } = new MessageChannelMain();
     await request('attach', { docId }, [port1]);
     window.webContents.postMessage('collab:port', null, [port2]);
@@ -58,5 +65,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:write', (event, text) => writeFile(doc.path, text));
   ipcMain.handle('collab:hold', () => rm(join(config, 'release-Pilot'), { force: true }));
   ipcMain.handle('collab:release', () => writeFile(join(config, 'release-Pilot'), ''));
-  ipcMain.handle('collab:share', (event, relay, secret) => request('share', { folder: dirname(doc.path), relay, secret }));
+  ipcMain.handle('collab:share', async () => {
+    await request('share', { folder: doc.folder });
+    return doc.team;
+  });
 });

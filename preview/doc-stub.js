@@ -5,7 +5,8 @@
 // sessionStorage, so switching docs (`?folder&doc=<path>`, a new page as
 // in the app) and reloading keep it; a new tab starts over.
 // Buddies don't run: one asked answers with a set reply after a moment.
-// No history, no undo, no menus.
+// No history, no undo, no menus. A project's team is a sample: Noor can
+// edit, Sam asks to join, and no link is made.
 
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { apply } from '../src/core/ot.js';
@@ -88,6 +89,7 @@ function seed() {
     settings, files, comments, clippy: null,
     buddies: inFolder ? [{ id: 'Editor', name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { id: 'Researcher', name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
     expanded: ['notes'], sidebar: true, carry: null,
+    team: { members: [{ id: 'p_noor', name: 'Noor', level: 'write' }], pending: [{ id: 'p_sam', name: 'Sam' }], link: null },
   };
 }
 
@@ -172,6 +174,12 @@ function checkBuddy(fields) {
   if (fields.name !== undefined && [CLIPPY.name, s.settings.name].some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
 }
 
+function changeTeam(fn) {
+  s.team = fn(s.team);
+  save();
+  return s.team;
+}
+
 function changedBuddies() {
   save();
   emit('agents', agents());
@@ -179,7 +187,7 @@ function changedBuddies() {
 }
 
 const calls = {
-  state: () => ({ doc: name(current), text: s.files[current], epoch, rev, ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
+  state: () => ({ doc: name(current), text: s.files[current], epoch, rev, ...view(), settings: s.settings, defaultName: 'you', me: me(), level: 'owner', agents: agents(), project: inFolder }),
   submit({ ops, rev: at, epoch: from, id }) {
     if (from !== epoch || at !== rev) throw Object.assign(new Error('the doc has moved on'), { code: 'stale' });
     s.files[current] = apply(s.files[current], ops);
@@ -219,6 +227,11 @@ const calls = {
     s.buddies = s.buddies.filter((b) => b.id !== gone);
     return changedBuddies();
   },
+  team: () => s.team,
+  allow: ({ id, level }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: [...t.members, { ...t.pending.find((p) => p.id === id), level }] })),
+  remove: ({ id }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: t.members.filter((m) => m.id !== id) })),
+  setLevel: ({ id, level }) => changeTeam((t) => ({ ...t, members: t.members.map((m) => (m.id === id ? { ...m, level } : m)) })),
+  link: () => changeTeam((t) => ({ ...t, link: `${location.origin}${location.pathname.replace(/[^/]*$/, '')}team.html?room=${newId('r')}` })),
   history: () => ({ versions: [] }),
   version: () => refuse('no history in the preview'),
   restoreVersion: () => refuse('no history in the preview'),

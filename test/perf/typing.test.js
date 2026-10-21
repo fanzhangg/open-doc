@@ -43,7 +43,7 @@ before(async () => {
 <main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main></div>
 <script src="page.js"></script>`);
   const electron = createRequire(import.meta.url)('electron');
-  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), VIEWS_SEARCH: '?delay=0' };
+  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), VIEWS_SEARCH: '?delay=0', OPENDOC_RELAY: relay.url };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchElectron(electron, [join(root, 'test', 'views', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   page = await app.page('typing');
@@ -61,11 +61,10 @@ const percentile = (ms, q) => [...ms].sort((a, b) => a - b)[Math.min(ms.length -
 
 async function measure() {
   await run(`collab.make(${JSON.stringify(TEXT)}, { view: 'markdown' })`);
-  const secret = `s-${Math.random().toString(36).slice(2)}`;
-  await run(`collabHost.share(${JSON.stringify(relay.url)}, ${JSON.stringify(secret)})`);
+  const { secret, key } = await run('collabHost.share()');
 
   // The teammate's page: when each key's character is shown there.
-  const teammate = teammatePage(relay.url, secret);
+  const teammate = teammatePage(relay.url, secret, { key, name: 'Sam' });
   const typedAt = [];
   const ms = [];
   let text = null;

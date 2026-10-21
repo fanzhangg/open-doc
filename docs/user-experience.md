@@ -7,7 +7,8 @@ built: today one person writes with AI buddies.
 
 ## Teammates
 
-*Planned.* A project is written by its team at the same time. Everyone on it
+A project is written by its team at the same time (teammates who edit are
+*planned*: today one given Edit still reads). Everyone on it
 is the **owner** (you), a **teammate** (another person) or an **AI buddy**,
 and in a doc they are alike: a face and a unique name, each edits and
 comments, can be @mentioned, and is named wherever the doc says who did
@@ -30,8 +31,9 @@ makes it and opens its card). Click a face anywhere for its card: a name that
 edits in place (yours, or an AI buddy's but not Clippy's; a renamed AI buddy
 keeps its comments, face and color), for an AI buddy who it is, a field right
 under it saved when you leave it, then Read or Edit for a teammate. A teammate and an AI buddy each have **Remove from this
-project** (an AI buddy's file is deleted; Clippy stays). Today the panel is
-the **Buddies** list: the AI buddies, their cards and New AI buddy.
+project** (an AI buddy's file is deleted; Clippy stays). In a doc opened
+on its own the panel has only you and Clippy; on a teammate's page, only
+the owner changes the team and the AI buddies.
 
 ## The basic loop
 
@@ -61,13 +63,16 @@ the **Buddies** list: the AI buddies, their cards and New AI buddy.
 
 ## Sharing a project
 
-*Planned.* **Invite link**, in the Team panel, gives one link for the
-project, permanent until you make a new one. Whoever opens it, in a browser
+**Invite link**, in the Team panel, copies one link for the project,
+permanent until you make a **New link**. Whoever opens it, in a browser
 with no install and no account, picks a name (not one already on the
 project) and waits. You get a notification; in the Team panel you pick Read
 or Edit (Edit to start) and **Allow**, or **Deny**. That is only the first
-time: then they see what you see, the file tree and every doc in the
-project. A new link ends every old one; **Remove** ends one person.
+time: then the link lets them in at once, to the project's first doc
+(the file tree and every doc in the project are *planned*). A new link
+ends every old one, and pages open on it close; **Remove** ends one person
+at once. A page turned away says why: a name taken, a request denied,
+removed, a link replaced, a doc not in the project.
 
 Your computer is the host, so the project is there only while it is awake and
 the app is open. The app keeps the computer awake while teammates are in. A

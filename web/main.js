@@ -24,6 +24,7 @@ import { rulesOf } from '../src/rules/index.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
+import { askName, named } from './join.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { FORMAT_VERSION } from '../src/core/comments.js';
 
@@ -90,6 +91,7 @@ window.opendocStay = () => {
 
 // How the line to the host is, in a teammate's page (web/relay.js).
 const LINE = {
+  waiting: 'Waiting for the owner to let you in',
   host: 'The host is offline: waiting for it to come back',
   nohost: 'No one is sharing at this link now. It may be from an earlier time: ask for a new one. Waiting…',
   relay: 'Cannot reach the relay: trying again',
@@ -101,10 +103,17 @@ function showLine(line) {
 
 async function start() {
   api.line(showLine);
+  // A teammate's page in a browser: their name, picked once, joins them.
+  if (!window.opendocHost && !named()) await askName();
   let initial;
   try {
     initial = await api.state();
   } catch (error) {
+    if (error.code === 'name_taken') {
+      await askName(`${error.message}: pick another`);
+      location.reload();
+      return;
+    }
     document.body.textContent = `Could not load the doc: ${error.message}`;
     return;
   }
@@ -138,7 +147,7 @@ async function start() {
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
-  window.opendocDesktop?.onCommand((name) => chrome.command(name));
+  window.opendocDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
   files = createFileList({
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
@@ -184,6 +193,7 @@ async function start() {
     getAbout: () => settings.get().about,
     setAbout: (about) => settings.set({ about }),
     project: () => inProject,
+    owner: () => level === 'owner',
     onResult: takeAgentResult,
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
@@ -195,6 +205,7 @@ async function start() {
   });
   setBuddies(initial.agents);
   people.render({ agents: initial.agents });
+  if (inProject && level === 'owner') api.team().then((team) => people.render({ team }), () => {});
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
@@ -272,6 +283,7 @@ async function start() {
     afterTyping('sidecar', refreshThreads); // a buddy's turn may now be marked conflict
   });
   events.on('agents', (data) => showAgents(data));
+  events.on('team', (data) => people.render({ team: data }));
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
     showDocName(data.doc);

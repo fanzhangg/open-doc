@@ -11,10 +11,9 @@ what it changed back in. (The code calls a turn a run: `Runner`,
 `runs.jsonl`.) [Sharing](#sharing): how a teammate's browser joins the same
 host.
 
-Sharing is built only as far as a teammate's page reading a doc through
-the relay; joining, Team and teammates who edit are designed, not built.
-What they change is marked *planned*; everything else is what the code
-does.
+Sharing is built as far as teammates who join from a link, are allowed by
+the owner and read; teammates who edit are designed, not built. What they
+change is marked *planned*; everything else is what the code does.
 
 No backward compatibility with earlier formats: a version 1 sidecar is
 ignored, and a version 2 one is not converted. A sidecar this version must
@@ -128,9 +127,9 @@ flowchart TD
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Relay (`relay/`) | a Cloudflare Worker that joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
-| Team | *planned:* who is on a project and what each may do. See Sharing |
+| Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
 
-DocService, Runner and ProjectService run in the doc host, the app's utility process.
+DocService, Runner, ProjectService and Team run in the doc host, the app's utility process.
 Windows reach it over Electron message ports; a teammate's page over the
 relay.
 
@@ -234,10 +233,10 @@ with the views' side of them (#215; the code calls Undo on a reply
 `undoReply`, and a restore is still its own call, `restoreVersion`). Not
 yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
-teammates who join and edit, Team and `cursor`. The door is built for the
-owner, AI buddies and a teammate's page that reads (#223, #226);
-ProjectService is behind it (#229), but an agent still reads more than it
-shows (#230).
+teammates who edit, and `cursor`. The door is built for the owner, AI
+buddies and a teammate's page that reads (#223, #226); ProjectService
+(#229) and Team (#227) are behind it, but an agent still reads more than
+it shows (#230).
 
 **Every writer comes through one door.** A page's call comes as
 `call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call
@@ -305,7 +304,7 @@ does not yield: an undo must not give way to a buddy's edit.
 | DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor(at)`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
-| Team | who is on the project and what each may do | for the owner `allow(id, access)`, `remove(id)`, `set(id, { access })` with `access` `read` or `edit`, `link()`; the door asks it a `who`'s level; a request to join comes from the relay as `join({ id, name })` |
+| Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
 | ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agents | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
 | Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
@@ -373,7 +372,7 @@ written only by the app.
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
-| `team/` | *planned:* each project's teammates and their access |
+| `team/` | each project's link (the secret its room is made from) and teammates, `{ id, name, level }`, in a file named by the SHA-256 of the project folder's real path: a project that moves must allow its teammates again |
 
 ## A buddy's turn
 
@@ -438,8 +437,9 @@ the same time; their merges are applied one at a time.
 ## Sharing
 
 A teammate joins the owner's project from a link, in a browser. Built: a
-page reads a doc through the relay, as a teammate who can read (#226).
-*Planned:* joining, Allow, Team and teammates who edit.
+page reads a doc through the relay (#226); joining, Allow and Team
+(#227). *Planned:* teammates who edit: until then a teammate given Edit
+reads.
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -455,24 +455,31 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   its pages: the relay numbers each page as a peer, which a page cannot
   forge. A room is the SHA-256 of a secret only the host knows; the host
   proves it holds the secret when it connects, so a link, which names only
-  the room, lets no one pose as the host. The doc host shares a project
-  when asked (`share`); *planned*, the app asks it from the Team panel.
+  the room, lets no one pose as the host. The app's own doc host shares a
+  project, at its link, once a doc of it opens, so a teammate's page gets
+  the owner's edits straight from the host that orders them. The relay is
+  at `OPENDOC_RELAY`; where it is deployed is not decided yet, and without
+  one nothing is shared.
 - **One seam.** A page talks to the host through `{ call, onEvent }`: in the
   app a message port, in a browser the relay (`web/relay.js`). The host
   serves both the same way (`serve` in `desktop/doc-host.js`), adding a
   `who` to every call. The browser build is `preview/`: `team.html` is the
   doc window on the relay, where the preview's `doc-stub.js` plays the host.
-  A page names its doc by its path in the project; the doc is open once
-  however many windows and pages have it. Anyone but the owner gets the
-  default settings, not the owner's, and a path in the project, not its
-  real path.
+  A page names its doc by its path in the project, or none for the
+  project's first; the doc is open once however many windows and pages
+  have it. Anyone but the owner gets the default settings, not the
+  owner's, and a path in the project, not its real path. A page the host
+  turns away is told why (`not_found`, `name_taken`, `denied`, `removed`,
+  `link_replaced`), and says so.
 - **Everyone is a participant**: `{ id, name, kind, level }`. The host sets
-  `who` from the connection (a
-  teammate's id is made once in their browser; an AI buddy's is in its file)
-  and never trusts one sent in a message. Until joining is built, every
-  page is `Teammate`, numbered by its peer, at read. Names are unique on a project,
-  people's and AI buddies' together. `can(who, level)` is the one place
-  that decides:
+  `who` from the connection and never trusts one sent in a message. A
+  teammate's id is the hash of a key made once in their browser, which
+  only that browser and the host (through the relay) see, so no one who
+  reads an id in a comment can pose as them; an AI buddy's is in its file.
+  Names are unique on a project, people's and AI buddies' together: Team
+  refuses a name taken by the owner, an AI buddy, a teammate or a request,
+  and DocService a buddy's or the owner's taken by a teammate.
+  `can(who, level)` is the one place that decides:
   - *Owner:* rename, move, delete and create files; settings, AI buddies
     and agent scripts; and all a teammate who can edit may.
   - *A teammate's access*, Read or Edit (write), set when the owner allows
@@ -482,11 +489,18 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
     it; it decides nothing.
 - **Joining.** The link is one per project, permanent until the owner makes a
-  new one, and grants nothing by itself. A first join asks the owner, with a
-  notification, and waits for Allow, where the owner picks Read or Edit;
-  Allow binds the teammate's id to that browser. A name already taken on the
+  new one, and grants nothing by itself: it names the relay and the room,
+  and opens `team.html` (at `OPENDOC_TEAM_PAGE`, by default the one the
+  site publishes). The page asks a name once, and joins with it and its
+  key. A first join asks the owner, with a notification (the host tells
+  the app `join`), and waits, told `waiting`, for Allow in the Team panel,
+  where the owner picks Read or Edit; Allow binds the teammate's id to that
+  browser, and from then on the link lets it in at once. A request lives
+  in the host's memory; a teammate in `team/`. A name already taken on the
   project is refused at the door, and the teammate picks another. Remove
-  ends one teammate; a new link ends every old one.
+  turns one teammate's pages away at once; a new link turns away every
+  page on the old one, whose room then has no host, and teammates join
+  again from the new one.
 - **Scope is the project folder**, served by a `ProjectService` to the
   owner's windows and teammates alike, so both see the same tree. A path is
   resolved to its real path and must be inside the root; a link out of it,

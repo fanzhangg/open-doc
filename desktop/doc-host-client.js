@@ -28,8 +28,10 @@ const RESTART_WINDOW_MS = 60_000;
  * `setSecrets(secrets)` hands the host the agents' secrets, decrypted
  * (doc-host.js), and every host started after it; it resolves once the host
  * has them. `shutdown()` closes every doc and stops the host, for quitting.
+ * `onJoin({ folder, name })` hears that `name` asks to join the project in
+ * `folder`.
  */
-export function createDocHost({ fork, log = console.error }) {
+export function createDocHost({ fork, log = console.error, onJoin = () => {} }) {
   let child = null;
   let ready = false;
   let queue = [];
@@ -60,6 +62,7 @@ export function createDocHost({ fork, log = console.error }) {
       for (const queued of queue.splice(0)) child.postMessage(...queued);
       return;
     }
+    if (message?.type === 'join') return onJoin({ folder: message.folder, name: message.name });
     const call = pending.get(message?.id);
     if (!call) return;
     pending.delete(message.id);
