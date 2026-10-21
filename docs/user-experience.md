@@ -18,8 +18,8 @@ something.
   resolve, ask AI buddies); one who can only **Read** sees it all and
   changes nothing.
 - **AI buddies** are a name and who it is, in one markdown file. An agent on
-  your computer does their work, when asked. They always edit and comment;
-  each resolves only if you turn its switch on.
+  your computer does their work, when asked. They edit, comment and
+  resolve as whoever asked them may, and resolve a thread only when asked to.
 - Only you rename, move, delete or create files, and change settings, AI
   buddies and agents.
 
@@ -29,8 +29,7 @@ buddy** (it starts with a random first name, which you can type over: Enter
 makes it and opens its card). Click a face anywhere for its card: a name that
 edits in place (yours, or an AI buddy's but not Clippy's; a renamed AI buddy
 keeps its comments, face and color), for an AI buddy who it is, a field right
-under it saved when you leave it, then Read or Edit for a teammate, Resolve
-for an AI buddy. A teammate and an AI buddy each have **Remove from this
+under it saved when you leave it, then Read or Edit for a teammate. A teammate and an AI buddy each have **Remove from this
 project** (an AI buddy's file is deleted; Clippy stays). Today the panel is
 the **Buddies** list: the AI buddies, their cards and New AI buddy.
 
@@ -121,7 +120,8 @@ script in `agents/` in your config folder that you may edit (see
   grey and struck through where it was, until you type, press Escape or
   another run's edits land.
 - An AI buddy comments as people do: on any passage, or in any thread. It
-  resolves only if the owner allows it. Its comments ask no one.
+  resolves the thread it answers when asked to ("…and resolve"). Its
+  comments ask no one.
 - Under its reply the app shows how many places the run edited; clicking
   it shows them in the text again (and scrolls to them), clicking again
   hides them. Edits changed since are left out. The reply only says why,

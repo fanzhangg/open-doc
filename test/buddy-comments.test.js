@@ -30,7 +30,7 @@ async function ask(call, state, body) {
 const BY = { id: 'Clippy', name: 'Clippy', kind: 'ai' };
 const AT = '2026-10-17T10:00:00.000Z';
 
-test('appended lines are comments; changed lines, unknown threads and bad lines are not', () => {
+test('appended lines are comments, and resolve the run\'s thread; changed lines, unknown threads and bad lines are not', () => {
   const before = '{"opendoc":3}\n{"id":"c_first01","by":{"id":"u_1","name":"fzhan","kind":"human"},"at":"2026-10-17T09:00:00Z","body":"Hi"}\n';
   const after = before.replace('"Hi"', '"Changed"') + [
     '{"anchor":{"exact":"beta cohort"},"body":"Who is in it?"}',
@@ -38,19 +38,22 @@ test('appended lines are comments; changed lines, unknown threads and bad lines 
     '{"anchor":{"exact":"the"},"body":"Everywhere."}',
     '{"body":"Fine overall."}',
     '{"thread":"c_first01","body":"Agreed.","resolved":true}',
+    '{"thread":"c_other01","resolved":true}',
     '{"thread":"c_nothere","body":"Lost."}',
     '{"body":"  "}',
     'not json',
   ].join('\n') + '\n';
   const text = 'We gather feedback from the beta cohort before the release.';
-  const added = appendedComments(before, after, { text, by: BY, at: AT, threads: new Set(['c_first01']) });
-  assert.deepEqual(added.map(({ id, ...c }) => c), [
+  const added = appendedComments(before, after, { text, by: BY, at: AT, threads: new Set(['c_first01']), own: 'c_first01' });
+  assert.equal(added.resolves, true);
+  assert.equal(appendedComments(before, after, { text, by: BY, at: AT, threads: new Set(['c_first01']), own: 'c_mine001' }).resolves, false, 'only the run\'s own thread');
+  assert.deepEqual(added.comments.map(({ id, ...c }) => c), [
     { by: BY, at: AT, body: 'Who is in it?', anchor: { exact: 'beta cohort', prefix: 'We gather feedback from the ', suffix: ' before the release.', start: 28 } },
     { by: BY, at: AT, body: 'From whom?', anchor: { exact: 'gather feedback', prefix: 'We ', suffix: ' from the beta cohort before the', start: 3 } },
     { by: BY, at: AT, body: 'Everywhere.', anchor: null },
     { by: BY, at: AT, body: 'Fine overall.', anchor: null },
     { by: BY, at: AT, body: 'Agreed.', thread: 'c_first01' },
-  ], 'a quote with a line break matches its spaces; a quote found twice is on the whole doc; resolved is dropped; the changed line is not new');
+  ], 'a quote with a line break matches its spaces; a quote found twice is on the whole doc; the changed line is not new');
 });
 
 test('a run appends a thread on a quote, one on the whole doc and a reply, and prints nothing: all are the buddy\'s', { timeout: 30_000 }, async () => {
@@ -73,13 +76,13 @@ test('a run appends a thread on a quote, one on the whole doc and a reply, and p
   });
 });
 
-test('a run that rewrites a line, resolves a thread or quotes text found twice changes nothing it may not', { timeout: 30_000 }, async () => {
+test('a run that rewrites a line, resolves another thread or quotes text found twice changes nothing it may not', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, docPath }) => {
     const { id: earlier } = await call('comment', { anchor: null, body: 'Keep this.' });
     const { threads } = await ask(call, state, '@Clippy tamper;; append {"anchor":{"exact":"the"},"body":"Which one?"}');
     const kept = threads.find((t) => t.id === earlier);
     assert.equal(kept.comments[0].body, 'Keep this.', 'the line it changed is not taken');
-    assert.ok(!kept.resolved, 'it cannot resolve');
+    assert.ok(!kept.resolved, 'it resolves only the thread it answers');
     assert.equal(kept.comments.at(-1).body, 'Closing.');
     assert.equal(threads.find((t) => t.comments[0].body === 'Which one?').anchor, null, 'a quote found twice is on the whole doc');
     assert.ok(!(await readFile(sidecarPath(docPath), 'utf8')).includes('Tampered.'));

@@ -77,7 +77,8 @@ const handlers = {
 };
 
 /**
- * A page's requests over `port`: `{ id, type, arg }`, answered with
+ * A page's requests over `port`, each as the owner (a window is theirs):
+ * `{ id, type, arg }`, answered with
  * `{ id, result }` or `{ id, error: { message, code } }`. Events go to it as
  * `{ event, data }`, starting with `hello`.
  */
@@ -85,7 +86,7 @@ function serve(entry, port) {
   entry.ports.add(port);
   port.on('message', async ({ data: { id, type, arg } }) => {
     try {
-      const result = (await entry.service.call(type, arg)) ?? null;
+      const result = (await entry.service.call(type, arg, await entry.service.owner())) ?? null;
       if (type === 'submit') await held();
       port.postMessage({ id, result });
     } catch (error) {

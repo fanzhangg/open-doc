@@ -32,16 +32,17 @@ app fills in `id`, `by` and `at`.
 | `{"anchor":{"exact":"…"},"body":"…"}` | a thread on that text |
 | `{"body":"…"}` | a thread on the whole doc |
 | `{"thread":"c_…","body":"…"}` | a reply in that thread |
+| `{"thread":"c_…","resolved":true}` | the run's reply resolves its thread; only the thread the run answers |
 
 - `exact` quotes the doc copy as the agent left it, as written in the file
   (markup included), and must be found exactly once (any run of whitespace
   may stand for another); the app makes the rest of the anchor. Otherwise
   the thread is on the whole doc.
 - Any other change to the copy is ignored: changed or removed lines,
-  `resolved`, lines that are not valid.
+  `resolved` on another thread, lines that are not valid.
 
 The rules on stdin tell the agent to comment only where the user has
-something to decide, and not to repeat in its reply what the app shows: its
+something to decide, to resolve only when asked to, and not to repeat in its reply what the app shows: its
 edits and comments.
 
 ## Agent scripts

@@ -80,7 +80,7 @@
       "bad": []
     },
     {
-      "name": "resolved when the latest human comment says so; a later comment reopens",
+      "name": "resolved when the latest comment says so; a later comment reopens",
       "sidecar": [
         "{\"opendoc\":3}",
         "{\"id\":\"c_res00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Fix this\"}",
@@ -111,17 +111,29 @@
       "bad": []
     },
     {
-      "name": "only people resolve and reopen: a buddy's later comment leaves it resolved; an empty human reply reopens",
+      "name": "anyone resolves and reopens: a buddy's resolved resolves, its later comment reopens, as an empty human reply does",
       "sidecar": [
         "{\"opendoc\":3}",
         "{\"id\":\"c_late0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"@Ada look\"}",
         "{\"id\":\"c_late0002\",\"thread\":\"c_late0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
-        "{\"id\":\"c_late0003\",\"thread\":\"c_late0001\",\"by\":{\"id\":\"Ada\",\"name\":\"Ada\",\"kind\":\"ai\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"Done.\"}",
+        "{\"id\":\"c_late0003\",\"thread\":\"c_late0001\",\"by\":{\"id\":\"Ada\",\"name\":\"Ada\",\"kind\":\"ai\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"Done.\",\"resolved\":true}",
         "{\"id\":\"c_reop0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Another\"}",
         "{\"id\":\"c_reop0002\",\"thread\":\"c_reop0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
-        "{\"id\":\"c_reop0003\",\"thread\":\"c_reop0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"\"}"
+        "{\"id\":\"c_reop0003\",\"thread\":\"c_reop0001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"\"}",
+        "{\"id\":\"c_bot00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"Third\"}",
+        "{\"id\":\"c_bot00002\",\"thread\":\"c_bot00001\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T11:00:00Z\",\"body\":\"\",\"resolved\":true}",
+        "{\"id\":\"c_bot00003\",\"thread\":\"c_bot00001\",\"by\":{\"id\":\"Ada\",\"name\":\"Ada\",\"kind\":\"ai\"},\"at\":\"2026-10-01T12:00:00Z\",\"body\":\"Late.\"}"
       ],
       "threads": [
+        {
+          "id": "c_bot00001",
+          "resolved": false,
+          "comments": [
+            "c_bot00001",
+            "c_bot00002",
+            "c_bot00003"
+          ]
+        },
         {
           "id": "c_late0001",
           "resolved": true,

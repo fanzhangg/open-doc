@@ -26,13 +26,22 @@ import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { Runner } from './runner.js';
 
-/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale'). */
+/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale', 'forbidden'). */
 class DocError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;
   }
 }
+
+// What a call may need, each level allowing the ones before it.
+const LEVELS = ['read', 'write', 'owner'];
+
+// Whether `who` ({ id, name, kind, level }) may make a call that needs `level`.
+const can = (who, level) => LEVELS.indexOf(who?.level) >= LEVELS.indexOf(level);
+
+// A comment's `by`: who wrote it.
+const byOf = ({ id, name, kind }) => ({ id, name, kind });
 
 /**
  * Open the doc at `docPath`. Its buddies are the user's and, in project
@@ -42,10 +51,11 @@ class DocError extends Error {
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
  * mode), handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
- * what changed. `call(type, arg)` runs a window's request (see `calls`);
+ * what changed. `call(type, arg, who)` runs a request of `who`'s (see
+ * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
- * @returns {Promise<{ call: (type: string, arg?: object) => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
+ * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
  */
 export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
@@ -266,14 +276,14 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (next !== current.lines) await writeSidecar(docPath, serializeSidecar(next));
   }
 
-  // A comment by this user: a first comment (`anchor` on the doc's text, or
+  // A comment by `who`: a first comment (`anchor` on the doc's text, or
   // null for the whole doc), or a reply in `thread`. Resolving is an empty
   // reply with `resolved`, reopening an empty reply; neither asks anyone.
-  async function comment({ thread, anchor = null, body, resolved } = {}) {
+  async function comment({ thread, anchor = null, body, resolved } = {}, who) {
     if (typeof body !== 'string' || (body.trim() === '' && thread === undefined)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
     if (resolved === true && thread === undefined) throw new DocError('bad_input', 'only a reply can resolve');
-    const added = newComment({ thread, anchor, body, resolved }, { by: await me(), at: new Date().toISOString() });
+    const added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date().toISOString() });
     await serial(() => changeComments((lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
       return [...lines, { comment: added }];
@@ -290,16 +300,17 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
-  // only this user's comments ask.
+  // only the comments of those who may write ask, and only the owner does
+  // until teammates join.
   async function asks() {
     if (closed) return [];
     const here = await buddies();
     if (here.length === 0) return [];
     const { lines, problem } = await readComments();
     if (problem) return []; // a buddy could not post its reply
-    const mine = (await me()).id;
+    const askers = [(await me()).id];
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
-    return threads.flatMap((thread) => askedOf(thread, mine).map((id) => ({
+    return threads.flatMap((thread) => askedOf(thread, askers).map((id) => ({
       threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here,
     })).filter((ask) => ask.buddy)); // a thread's opener may be gone
   }
@@ -333,7 +344,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // buddy's change there is dropped and the reply says `conflict`. A run
   // whose thread was resolved meanwhile is dropped whole. Its reply and
   // comments come just after the last comment it saw, so one written while
-  // it worked still asks. Run in `serial`.
+  // it worked still asks; the reply resolves the thread when the run asked
+  // to. The buddy acts with the level of whoever asked it, at most write:
+  // until teammates join only the owner asks, so it always may. Run in
+  // `serial`.
   async function finishRun({ threadId, id: buddyId, name, base, seen, edited, comments, body, failed }) {
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
     if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
@@ -349,16 +363,16 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     }
     const by = { id: buddyId, name, kind: 'ai' };
     const at = Date.parse(seen) + 1;
-    const reply = {
-      id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
-      ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
-    };
     // Its comments are on the doc as it is now, its edit landed.
     await changeComments((lines) => {
       if (!lines.some((l) => l.comment?.id === threadId)) return lines;
       const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
-      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(at).toISOString(), threads }) : [];
-      return [...lines, ...added.map((comment) => ({ comment })), { comment: reply }];
+      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(at).toISOString(), threads, own: threadId }) : { comments: [], resolves: false };
+      const reply = {
+        id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
+        ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),
+      };
+      return [...lines, ...added.comments.map((comment) => ({ comment })), { comment: reply }];
     }).catch((error) => console.error(`Could not post ${name}'s reply:`, error));
   }
 
@@ -563,57 +577,69 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
   await syncAgents();
 
-  // What a window may ask. Each returns what changed, for the window that asked.
+  // What a window may ask, by the level it needs (`can`). Each returns what
+  // changed, for the window that asked.
   const calls = {
-    state,
-    submit,
-    recreate: () => serial(recreate),
-    comment: (body) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }),
-    async saveSettings(patch) {
-      if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
-      // Your name is no buddy's here, as no buddy's is yours.
-      if (typeof patch?.name === 'string' && (await buddies()).some((b) => sameName(b.name, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
-      try {
-        return { settings: await updateSettings(patch, settingsDir) };
-      } catch (error) {
-        if (error instanceof SettingsError) throw new DocError('bad_input', error.message);
-        throw error;
-      }
+    read: {
+      state,
+      async history() {
+        await serial(flushTyping); // typing not paused yet is a version too
+        await chronicle;
+        return { versions: await readHistory(docPath, settingsDir) };
+      },
+      async version(body) {
+        const found = await readVersion(docPath, settingsDir, versionId(body?.id));
+        if (!found) throw new DocError('not_found', 'no such version');
+        return found;
+      },
     },
-    createBuddy,
-    updateBuddy,
-    deleteBuddy,
-    scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) }),
-    // A shipped agent script, written again as it came.
-    async resetScript(body) {
-      if (!SHIPPED_AGENTS.includes(body?.name)) throw new DocError('bad_input', 'not a shipped agent');
-      await installAgents(settingsDir, { reset: body.name });
-      return { agents: await listAgents(settingsDir) };
+    write: {
+      submit,
+      recreate: () => serial(recreate),
+      comment: (body, who) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }, who),
+      restoreVersion: (body) => serial(() => restoreVersion(body)),
+      undoReply: (body) => serial(() => undoReply(body)),
     },
-    async history() {
-      await serial(flushTyping); // typing not paused yet is a version too
-      await chronicle;
-      return { versions: await readHistory(docPath, settingsDir) };
+    owner: {
+      async saveSettings(patch) {
+        if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
+        // Your name is no buddy's here, as no buddy's is yours.
+        if (typeof patch?.name === 'string' && (await buddies()).some((b) => sameName(b.name, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
+        try {
+          return { settings: await updateSettings(patch, settingsDir) };
+        } catch (error) {
+          if (error instanceof SettingsError) throw new DocError('bad_input', error.message);
+          throw error;
+        }
+      },
+      createBuddy,
+      updateBuddy,
+      deleteBuddy,
+      scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) }),
+      // A shipped agent script, written again as it came.
+      async resetScript(body) {
+        if (!SHIPPED_AGENTS.includes(body?.name)) throw new DocError('bad_input', 'not a shipped agent');
+        await installAgents(settingsDir, { reset: body.name });
+        return { agents: await listAgents(settingsDir) };
+      },
     },
-    async version(body) {
-      const found = await readVersion(docPath, settingsDir, versionId(body?.id));
-      if (!found) throw new DocError('not_found', 'no such version');
-      return found;
-    },
-    restoreVersion: (body) => serial(() => restoreVersion(body)),
-    undoReply: (body) => serial(() => undoReply(body)),
   };
 
   return {
-    async call(type, arg) {
-      if (!Object.hasOwn(calls, type)) throw new DocError('bad_input', `unknown call: ${type}`);
+    // The door: every call comes through here, once, as `who`.
+    async call(type, arg, who) {
+      const level = LEVELS.find((l) => Object.hasOwn(calls[l], type));
+      if (!level) throw new DocError('bad_input', `unknown call: ${type}`);
+      if (!can(who, level)) throw new DocError('forbidden', `${who?.name ?? 'no one'} may not ${type} here`);
       try {
-        return await calls[type](arg);
+        return await calls[level][type](arg, who);
       } catch (error) {
         if (error instanceof StoreError) throw new DocError(error.code, error.message);
         throw error;
       }
     },
+    /** The owner of this machine, as a `who`. */
+    owner: async () => ({ ...(await me()), level: 'owner' }),
     /** What a window hears first: whether the doc is missing, and who is at work. */
     hello: () => ({ missing, agents: agentStatuses() }),
     runner,

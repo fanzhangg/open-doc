@@ -201,13 +201,13 @@ test('the shipped agent scripts are written when missing, then left alone; Reset
 });
 
 test('the prompt tells a buddy who the other members are, as the app shows them', () => {
-  const thread = { anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
+  const thread = { id: 'c_thread01', anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
   const buddies = [{ id: 'b_ada', name: 'Ada', about: 'Edits for tone.' }, { id: 'b_bo', name: 'Bo', about: '' }, { id: 'b_cy', name: 'Cy', about: 'Checks facts.' }];
   const prompt = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread });
   assert.match(prompt, /The other members of the doc:\n\nBo\n\nCy: Checks facts\./);
   assert.doesNotMatch(prompt, /Ada: /, 'not itself');
   const withUser = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread, human: { name: 'fzhan', about: 'I write novels.' } });
   assert.match(withUser, /The other members of the doc:\n\nfzhan \(owner\): I write novels\.\n\nBo/);
-  assert.match(withUser, /Only fzhan resolves threads/);
+  assert.match(withUser, /Resolve this thread only when the last comment asks you to: append \{"thread":"c_thread01","resolved":true\}/);
   assert.doesNotMatch(prompt, /I write novels/, 'nothing about an owner who wrote nothing');
 });
