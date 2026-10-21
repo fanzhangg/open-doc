@@ -157,9 +157,12 @@ change. The word count runs a few times a second at most.
 
 ## Many writers
 
-*Planned.* The host orders every edit as text operations on a revision
+The host orders every edit as text operations on a revision
 ([Interfaces](architecture.md#interfaces)). Since the view already takes and
-gives text, the operations can live in the page, with the contract as it is.
+gives text, the operations live in the page (`web/client.js`), with the
+contract as it is: plan A, in both views. Teammates typing at once are
+*planned* ([Sharing](architecture.md#sharing)); today the writers are the
+person, AI buddies and changes from outside.
 
 ### Plan A: the view stays as it is
 
@@ -205,11 +208,11 @@ more code, so only if plan A fails a must-pass case.
 - **Core** (`src/core/ot.js`): `diffOps`, `transform`, `apply`, kept if the
   prototype passes; tested for convergence (random concurrent operations
   from two pages end in the host's text on both).
-- **Harness** (`test/collab/page.js`; by hand, `preview/collab.js`): two
+- **Harness** (`test/collab/page.js`): two
   views of one doc side by side, made as the app makes them (`viewFor`),
-  joined by an in-memory host with 150 ms each way, and a script that types
-  into both. No relay, permissions, files or AI buddies. Kept until the page
-  sends operations itself: the latency test (`test/perf/`) runs on it.
+  each with the page's client, joined to the doc host (`test/views/main.js`)
+  with 150 ms each way, and a script that types into both. No relay or
+  permissions. The latency test (`test/perf/`) runs on it.
 
 | # | Must pass | When |
 | --- | --- | --- |
@@ -224,6 +227,7 @@ more code, so only if plan A fails a must-pass case.
 Measured, with no bar: how often merges break bold, links or tables; caret
 moves when a block changes kind; `getText` time per batch on a 200 KB doc.
 
-If it passes: Core operations, the host's ordering, the page's side, then
-the plain view (CodeMirror over the same text and contract, simpler). If it
-fails: plan B, with its own prototype.
+It passed (#214), so plan A is built: Core operations, the host's ordering,
+and the page's side, the same for both views (#215). The seven cases run
+against the real host (`test/collab.test.js`), with two more: the doc
+changed outside, and a buddy's turn landing, while one types.
