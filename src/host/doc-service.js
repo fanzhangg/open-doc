@@ -9,7 +9,7 @@
 // through Team (team.js), at the same door.
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
@@ -107,6 +107,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // buddy's `reply`.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
+  // `writtenStat` is the file's stat as this service last wrote it: a file
+  // that still has it is not read again (a doc of millions of characters
+  // takes tens of milliseconds), `form` how its lines end.
   let text = opened.text;
   let rev = 0;
   const epoch = newId('e');
@@ -114,6 +117,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   let logStart = 0;
   let written = text;
   let writtenHash = opened.hash;
+  let writtenStat = null;
+  let form = opened.form;
+  // Whether the file, as `now` (a stat, or null) says, is still as this service wrote it.
+  const ours = (now) => sameStat(now, writtenStat);
   let told = []; // landed edits not yet written and told to windows, as `ops` events
   // Windows' edits the file holds that a service before this one may not
   // have told them of (noteWritten).
@@ -135,24 +142,31 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 
   // Write what landed, then tell every window: what a window has heard of is
   // in the file. A file changed outside since it was last written is merged
-  // first. A missing doc is not written; its edits are still told. Run in
-  // `serial`.
+  // first, and one changed while it was being written, just before it took
+  // the file's place, too, then written again. A missing doc is not
+  // written; its edits are still told. Run in `serial`.
   async function commit() {
-    if (!missing && text !== written) {
-      let disk = null;
-      try {
-        disk = await readDoc(docPath);
-      } catch (error) {
-        if (error.code !== 'no_doc') throw error;
+    while (!missing && text !== written) {
+      const before = await stat(docPath).catch(() => null);
+      if (!ours(before)) {
+        let disk;
+        try {
+          disk = await readDoc(docPath);
+        } catch (error) {
+          if (error.code !== 'no_doc') throw error;
+          break;
+        }
+        form = disk.form;
+        if (disk.hash !== writtenHash) await takeOutside(disk);
+        if (text === written) break;
       }
-      if (disk && disk.hash !== writtenHash) await takeOutside(disk);
-      if (disk && text !== written) {
-        writtenHash = hashText(text);
-        // A window told nothing yet, should this service stop now, learns from it its edit is in.
-        await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
-        await writeDoc(docPath, text, disk.form);
-        written = text;
-      }
+      writtenHash = hashText(text);
+      // A window told nothing yet, should this service stop now, learns from it its edit is in.
+      await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
+      const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before));
+      if (!wrote) continue;
+      writtenStat = wrote;
+      written = text;
     }
     for (const event of told.splice(0)) emit('ops', event);
   }
@@ -234,7 +248,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     await mkdir(dirname(docPath), { recursive: true });
     writtenHash = hashText(text);
     await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
-    await writeDoc(docPath, text);
+    writtenStat = await writeDoc(docPath, text, form);
     written = text;
     await noteVersion(text, { kind: 'edit', author: byOf(who) });
     return {};
@@ -551,6 +565,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // so a write of this service's is all before the read or all after it:
   // a read from before it is never taken for someone else's change.
   async function onDocChanged() {
+    if (!missing && ours(await stat(docPath).catch(() => null))) return true; // this service's own write
     let doc;
     try {
       doc = await readDoc(docPath);
@@ -760,6 +775,9 @@ function validOps(ops) {
   }
   return true;
 }
+
+// Whether stats `a` and `b` (or null) are of one file, unchanged.
+const sameStat = (a, b) => Boolean(a && b && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino);
 
 function versionId(id) {
   if (typeof id !== 'string' || !VERSION_ID.test(id)) throw new DocError('bad_input', 'invalid version id');

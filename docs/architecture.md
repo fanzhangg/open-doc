@@ -213,11 +213,15 @@ limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
 job on every pull request) opens each view at its limits, in the doc shape
 that costs it most, types while a teammate's edits arrive, and fails when
 the promise is missed twice running; `test/perf/typing.test.js` types in
-a view, as the owner, and times each key to a teammate's page through the
-relay run locally. A view sends each change the person makes as it is made
-(`onEdit`), one edit on its way at a time: keys typed while one is on its
-way go out together once it is answered, so typing reaches others while it
-goes on, not once it pauses. Two dependencies are quadratic in one
+a view, as the owner, and times each key to the character on a teammate's
+page (the browser build, its applyText and marks included) through the
+relay run locally, with the teammate's line 40 ms slower each way as over
+the internet, in a small Markdown doc and in the plain view's longest,
+which the host writes whole on every key. A view sends each change the
+person makes as it is made (`onEdit`), one edit on its way at a time: keys
+typed while one is on its way go out together once it is answered, so
+typing reaches others while it goes on, not once it pauses; a teammate far
+from the relay sends one edit per round trip. Two dependencies are quadratic in one
 paragraph's length; installs and builds patch them in node_modules, for the
 page and the doc host alike (`scripts/patch-deps.js`), until
 they are fixed upstream.
@@ -338,7 +342,11 @@ when read. Nothing stores it.
   the text the file held when last written. Where it overlaps what was typed
   since, the typing wins and the outside version is only in history.
 - Before writing, DocService checks the file is still what it last wrote;
-  if not, it lands the outside change first, the same way.
+  if not, it lands the outside change first, the same way. A file whose
+  size, mtime and inode are still those of its own last write is not read
+  again, nor when the watch fires for that write: a doc of millions of
+  characters takes tens of milliseconds to read and hash, on every key
+  (#235).
 - Every file is written whole: a temporary file in the same folder,
   renamed over it.
 - Above the files, a doc is its text: UTF-8, no byte order mark, lines

@@ -57,7 +57,7 @@ export function encodeText(text, { bom = false, crlf = false } = {}) {
   return Buffer.from((bom ? BOM : '') + (crlf ? text.replace(/\n/g, '\r\n') : text));
 }
 
-export const hashText = (text) => hashBytes(Buffer.from(text));
+export const hashText = hashBytes; // a string is hashed as UTF-8, without a copy
 
 /** @returns {Promise<{ text: string, hash: string, form: { bom: boolean, crlf: boolean } }>} `hash` of the text */
 export async function readDoc(docPath) {
@@ -73,9 +73,13 @@ export async function readDoc(docPath) {
   return { ...decoded, hash: hashText(decoded.text) };
 }
 
-/** Write `text` over the doc in `form` (a new doc: \n, no BOM). */
-export function writeDoc(docPath, text, form) {
-  return writeAtomic(docPath, encodeText(text, form));
+/**
+ * Write `text` over the doc in `form` (a new doc: \n, no BOM); resolves to
+ * the file's stat as written, or null when `still()`, asked just before the
+ * new file takes the doc's place, resolves to false.
+ */
+export function writeDoc(docPath, text, form, still) {
+  return writeAtomic(docPath, encodeText(text, form), still);
 }
 
 /** The sidecar's text, or null when the doc has none yet. */
@@ -149,15 +153,22 @@ export async function lockFile(path, target) {
   }
 }
 
-// Write a temp file next to the target and rename it into place. On Windows a
-// rename can fail briefly while another process has the target open.
-export async function writeAtomic(path, content) {
+// Write a temp file next to the target and rename it into place, unless
+// `still()` says not to (null then); resolves to its stat as written, taken
+// before anyone else could change it. On Windows a rename can fail briefly
+// while another process has the target open.
+export async function writeAtomic(path, content, still = async () => true) {
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temp, content);
+  const written = await stat(temp);
+  if (!(await still())) {
+    await rm(temp, { force: true });
+    return null;
+  }
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(temp, path);
-      return;
+      return written;
     } catch (error) {
       if (attempt >= 20 || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) {
         await rm(temp, { force: true });
