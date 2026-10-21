@@ -1,8 +1,16 @@
-# The relay (docs/architecture.md, Sharing). `npx wrangler dev` runs it
-# locally, as the tests do; where it is deployed is not decided yet.
-name = "opendoc-relay"
+# The relay and the teammate's page (docs/architecture.md, Sharing), at
+# https://opendoc.ponjo.app. Deploy from here, after `npm ci && npm run build`
+# at the root: `cf deploy --dry-run`, then `cf deploy` (README.md, Sharing).
+# The tests run it locally with wrangler (test/relay/harness.js).
+name = "opendoc"
 main = "worker.js"
 compatibility_date = "2026-07-01"
+workers_dev = false
+routes = [{ pattern = "opendoc.ponjo.app", custom_domain = true }]
+
+# The teammate's page, team.html, and what it loads (scripts/build.js).
+[assets]
+directory = "../dist/web"
 
 [[durable_objects.bindings]]
 name = "ROOMS"
@@ -11,3 +19,9 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# Rooms an address opens a minute (worker.js).
+[[ratelimits]]
+name = "HOSTS"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

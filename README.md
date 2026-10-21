@@ -29,7 +29,7 @@ npm install
 npm run build                 # bundle the editor into dist/web
 npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
-OPENDOC_RELAY=ws://127.0.0.1:8787 npm run desktop   # share projects through the relay, run locally with `npx wrangler dev` in relay/
+OPENDOC_RELAY=ws://127.0.0.1:8787 npm run desktop   # share through the relay run locally (`npx wrangler dev` in relay/, after the build), not wss://opendoc.ponjo.app
 
 npm run lint
 npm ci --prefix relay         # once: wrangler, which runs the relay locally for the tests
@@ -41,6 +41,19 @@ npm run smoke:desktop         # launch the built app and check it
 npm run pack:desktop          # unpacked app in release/
 npm run dist:desktop          # installer in release/
 ```
+
+### Deploying the relay
+
+The relay and the teammate's page are one Cloudflare Worker at `opendoc.ponjo.app` ([relay/wrangler.toml](relay/wrangler.toml)). Its owner deploys it from a clean checkout of `main`, signed in to Cloudflare with the `cf` CLI:
+
+```bash
+npm ci && npm run build       # the page it serves, in dist/web
+cd relay
+cf deploy --dry-run           # check
+cf deploy
+```
+
+Then check it on two machines: [the sharing checklist](docs/testing-ci.md#sharing--two-machines-by-hand).
 
 ## Learn more
 

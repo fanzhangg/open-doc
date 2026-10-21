@@ -1,6 +1,6 @@
 // Bundle the browser editor into dist/web (run at publish time, not install).
 import { build } from 'esbuild';
-import { copyFile, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { patchDeps } from './patch-deps.js';
@@ -46,6 +46,14 @@ await build({
   logLevel: 'info',
 });
 await copyFile(join(root, 'web', 'index.html'), join(out, 'index.html'));
+// A teammate's page: the doc window reaching the doc host through the relay
+// at its own origin (web/relay.js), which serves it (relay/wrangler.toml)
+// and not the app's own window.
+const page = await readFile(join(root, 'web', 'index.html'), 'utf8');
+const team = page.replace("default-src 'none';", "default-src 'none'; connect-src 'self';");
+if (team === page) throw new Error('web/index.html changed: update scripts/build.js');
+await writeFile(join(out, 'team.html'), team);
+await writeFile(join(out, '.assetsignore'), 'index.html\n');
 await copyFile(join(root, 'web', 'app.css'), join(out, 'app.css'));
 await copyFile(join(root, 'build', 'icon.svg'), join(out, 'icon.svg'));
 

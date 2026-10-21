@@ -24,7 +24,7 @@ async function newHost() {
   const logged = [];
   const host = createDocHost({
     fork: () => {
-      const child = fork(HOST, [], { env: { ...process.env, OPENDOC_CONFIG_DIR: settingsDir }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+      const child = fork(HOST, [], { env: { OPENDOC_RELAY: '', ...process.env, OPENDOC_CONFIG_DIR: settingsDir }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
       child.sent = [];
       processes.push(child);
       return { postMessage: (message) => child.sent.push(message.type) && child.send(message), on: (event, fn) => child.on(event, fn), kill: () => child.kill() };

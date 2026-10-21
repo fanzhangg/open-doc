@@ -101,6 +101,28 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - The main flow: open a doc and a folder, @mention a buddy, the fake agent
   edits, Undo on its reply, Cmd+Z undoes only the human's edit, restore a version.
 
+### Sharing — two machines, by hand
+
+After each deploy of the relay (README, Deploying the relay). The owner on
+machine A runs the app from `main` with no `OPENDOC_RELAY`; the teammate is
+on machine B, on another network (a phone's hotspot will do), in a browser.
+
+1. **Invite.** A opens a project, Team > Invite link. The link is
+   `https://opendoc.ponjo.app/team?room=…`. B opens it, picks a name, and
+   is told it waits for the owner.
+2. **Allow.** A is notified; in Team, Edit and Allow. B's page shows the
+   project's first doc, editable, in a moment. B reloads: in at once.
+3. **Both typing.** Both type in the same paragraph at once for a minute.
+   Each sees the other's keys as they type; nothing is lost, and the file
+   on A holds both. A sets B to Read: B's tools go; back to Edit.
+4. **Sleep and wake.** A sleeps (close the lid) for two minutes. B says the
+   host went away. A wakes: within 30 seconds B is back in the doc by
+   itself, with A's text, and both type again.
+5. **Idle.** Leave both untouched for ten minutes, then type: still live.
+6. **A new link ends the old one.** A makes a New link. B's page says the
+   link no longer works; B opens the new link and is in at once, without
+   Allow. A removes B: B's page says so.
+
 ## CI
 
 | Stage | Trigger | Runs | On failure |

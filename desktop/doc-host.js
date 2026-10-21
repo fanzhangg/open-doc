@@ -26,9 +26,9 @@
 // The host says `{ type: 'ready' }` once it can take them, and
 // `{ type: 'join', folder, name }` when someone asks to join a project.
 //
-// The relay is at OPENDOC_RELAY (a ws: or wss: URL; none: no sharing), and
-// a link opens the teammate's page at OPENDOC_TEAM_PAGE (by default the
-// one the site publishes) with the relay and the room.
+// The relay is at OPENDOC_RELAY (a ws: or wss: URL; empty: no sharing), by
+// default the one deployed (relay/wrangler.toml), and a link opens the
+// teammate's page it serves, at the same origin, with the room.
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -39,8 +39,7 @@ import { createTeam } from '../src/host/team.js';
 import { renameFile } from './files.js';
 import { firstDoc, listDocs } from './folder.js';
 
-const RELAY = process.env.OPENDOC_RELAY || null;
-const TEAM_PAGE = process.env.OPENDOC_TEAM_PAGE || 'https://fanzhangg.github.io/open-doc/preview/team.html';
+const RELAY = process.env.OPENDOC_RELAY ?? 'wss://opendoc.ponjo.app';
 
 // An Electron utility process; plain Node's child_process.fork in the tests.
 const channel = process.parentPort
@@ -96,7 +95,7 @@ function docAt(docPath, folder) {
 // shares the project at it, ending the one before.
 function teamOf(folder) {
   if (!projects.has(folder)) {
-    const team = createTeam(folder, { linkOf: RELAY && ((secret) => `${TEAM_PAGE}?${new URLSearchParams({ relay: RELAY, room: roomOf(secret) })}`) });
+    const team = createTeam(folder, { linkOf: RELAY && ((secret) => `${RELAY.replace(/^ws/, 'http')}/team?room=${roomOf(secret)}`) });
     projects.set(folder, { team, sharing: null });
     team.onChange(() => startSharing(folder).catch((error) => console.error(error)));
   }
@@ -229,9 +228,14 @@ function share(folder, team, secret) {
   let join;
   const joined = new Promise((done) => { join = done; });
 
+  let retry = RECONNECT_MS;
+
   function connect() {
     socket = new WebSocket(`${RELAY}/rooms/${roomOf(secret)}?secret=${encodeURIComponent(secret)}`);
-    socket.addEventListener('open', () => join());
+    socket.addEventListener('open', () => {
+      retry = RECONNECT_MS;
+      join();
+    });
     socket.addEventListener('message', ({ data }) => take(JSON.parse(data)));
     // A connection refused fires `error` alone, one that drops `close` too.
     let lost = false;
@@ -239,7 +243,8 @@ function share(folder, team, secret) {
       if (lost) return;
       lost = true;
       for (const peer of [...peers.keys()]) gone(peer);
-      if (!stopped) setTimeout(connect, RECONNECT_MS);
+      if (!stopped) setTimeout(connect, retry);
+      retry = Math.min(2 * retry, MAX_RECONNECT_MS);
     };
     socket.addEventListener('error', drop);
     socket.addEventListener('close', drop);
@@ -363,8 +368,10 @@ function peerPort(send) {
   return port;
 }
 
-// How long a host whose relay connection dropped waits to connect again.
+// How long a host whose relay connection dropped waits to connect again:
+// twice as long each time it is not made, up to MAX_RECONNECT_MS.
 const RECONNECT_MS = 1000;
+const MAX_RECONNECT_MS = 30_000;
 
 channel.listen(async ({ id, type, ...arg }, ports) => {
   try {

@@ -126,7 +126,7 @@ flowchart TD
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
-| Relay (`relay/`) | a Cloudflare Worker that joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
+| Relay (`relay/`) | a Cloudflare Worker at `opendoc.ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
 
 DocService, Runner, ProjectService and Team run in the doc host, the app's utility process.
@@ -452,7 +452,7 @@ the same time; their merges are applied one at a time.
 
 A teammate joins the owner's project from a link, in a browser. Built: a
 page reads a doc through the relay (#226); joining, Allow and Team
-(#227); teammates who edit (#228).
+(#227); teammates who edit (#228); the relay deployed (#241).
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -463,21 +463,31 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   teammates are in, and a page waits and reconnects by itself.
 - **A relay** (`relay/worker.js`, a Cloudflare Worker, one Durable Object
   per room) joins the host's outgoing WebSocket to each teammate's, over
-  TLS, and stores nothing. There is no encryption of our own: the relay is
+  TLS, and stores nothing. It is at `opendoc.ponjo.app`, on the owner of
+  this repo's Cloudflare account, and serves the teammate's page too, so
+  page and relay share one origin (the page may connect to its own origin
+  only). There is no encryption of our own: the relay is
   ours, and it could read what passes. The host has one connection for all
   its pages: the relay numbers each page as a peer, which a page cannot
   forge. A room is the SHA-256 of a secret only the host knows; the host
   proves it holds the secret when it connects, so a link, which names only
   the room, lets no one pose as the host. The app's own doc host shares a
   project, at its link, once a doc of it opens, so a teammate's page gets
-  the owner's edits straight from the host that orders them. The relay is
-  at `OPENDOC_RELAY`; where it is deployed is not decided yet, and without
-  one nothing is shared.
+  the owner's edits straight from the host that orders them. The app's
+  relay is `wss://opendoc.ponjo.app` unless `OPENDOC_RELAY` names another
+  (empty: nothing is shared).
+- **Limits**, so the relay is no free pipe and stays within the Workers
+  free plan: at most 20 pages in a room (one more is turned away, `full`),
+  no message over 8 MiB characters (its sender is closed), and 60 rooms a
+  minute from one address. Sockets hibernate between messages, so an idle
+  room costs nothing; a page waiting for its host, and a host for the
+  relay, try again twice as long each time, up to 30 seconds.
 - **One seam.** A page talks to the host through `{ call, onEvent }`: in the
   app a message port, in a browser the relay (`web/relay.js`). The host
   serves both the same way (`serve` in `desktop/doc-host.js`), adding a
-  `who` to every call. The browser build is `preview/`: `team.html` is the
-  doc window on the relay, where the preview's `doc-stub.js` plays the host.
+  `who` to every call. `team.html` (built with the app's pages, in
+  `dist/web`) is the doc window on the relay; in the preview (`preview/`)
+  `doc-stub.js` plays the host instead.
   A page names its doc by its path in the project, or none for the
   project's first; the doc is open once however many windows and pages
   have it. Anyone but the owner gets the default settings, not the
@@ -502,10 +512,10 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
     it; it decides nothing.
 - **Joining.** The link is one per project, permanent until the owner makes a
-  new one, and grants nothing by itself: it names the relay and the room,
-  and opens `team.html` (at `OPENDOC_TEAM_PAGE`, by default the one the
-  site publishes). The page asks a name once, and joins with it and its
-  key. A first join asks the owner, with a notification (the host tells
+  new one, and grants nothing by itself: it names the room, and opens the
+  page the relay serves at the same origin
+  (`https://opendoc.ponjo.app/team?room=<room>`). The page asks a name
+  once, and joins with it and its key. A first join asks the owner, with a notification (the host tells
   the app `join`), and waits, told `waiting`, for Allow in the Team panel,
   where the owner picks Read or Edit; Allow binds the teammate's id to that
   browser, and from then on the link lets it in at once. A request lives
