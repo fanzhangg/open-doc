@@ -5,10 +5,10 @@
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '../web/client.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
@@ -271,6 +271,34 @@ test('Remove turns a teammate\'s page away at once; a new link ends every old on
   }
 });
 
+test('a teammate sees the owner\'s tree and opens any doc in it at once, nothing hidden', async () => {
+  const shared = await project();
+  await mkdir(join(shared.folder, 'notes'));
+  await writeFile(join(shared.folder, 'notes', 'b.md'), 'B\n');
+  const host = await startHost(shared);
+  try {
+    const sam = page(shared.secret, shared.sam);
+    const first = (await sam.call('state')).result;
+    assert.deepEqual(first.place, { name: basename(shared.folder), path: 'plan.md' });
+    for (const path of ['', 'notes']) assert.deepEqual((await sam.call('list', { path })).result, await asOwner(host, shared, 'list', { path }), path);
+    assert.deepEqual((await sam.call('list', { path: '' })).result.map((e) => e.name), ['notes', 'plan.md']);
+
+    // Another doc: the same link on it, let in at once, no one asked.
+    const other = page(shared.secret, shared.sam, 'notes/b.md');
+    const { result } = await other.call('state');
+    assert.equal(result.text, 'B\n');
+    assert.equal(result.place.path, 'notes/b.md');
+    assert.deepEqual(host.joins, []);
+
+    for (const path of ['.opendoc', '.opendoc/secret.md', '../', 'notes/../.opendoc/secret.md']) {
+      assert.equal((await sam.call('list', { path })).error?.code, 'not_found', path);
+      assert.equal((await sam.call('read', { path })).error?.code, 'not_found', path);
+    }
+  } finally {
+    host.kill();
+  }
+});
+
 test('the relay serves the teammate\'s page from its own origin, and only it', async () => {
   const served = await fetch(`${relay.origin}/team?room=${'0'.repeat(64)}`);
   assert.equal(served.status, 200);
@@ -342,6 +370,24 @@ test('the browser build asks a name, waits for Allow, then shows the doc read on
     const owner = await host.request('call', { docId, call: 'state' });
     await host.request('call', { docId, call: 'submit', arg: { ops: [{ from: TEXT.length, to: TEXT.length, insert: '\nThen ask for feedback.\n' }], rev: owner.rev, epoch: owner.epoch, id: 'w.1' } });
     await waitFor(async () => (await text()).includes('Then ask for feedback.'), 10_000, 'the owner\'s typing');
+
+    // The project's tree, the doc marked, and no file menu: the files are the owner's.
+    await mkdir(join(shared.folder, 'notes'));
+    await writeFile(join(shared.folder, 'notes', 'b.md'), 'Notes on the plan\n');
+    const rows = () => shown.evaluate(`[...document.querySelectorAll('.od-files-row')].filter((r) => !r.closest('[hidden]')).map((r) => r.dataset.path)`).catch(() => []);
+    await shown.evaluate('window.dispatchEvent(new Event("focus"))'); // back in front: the tree read again
+    await waitFor(async () => JSON.stringify(await rows()) === '["notes","plan.md"]', 10_000, 'the tree');
+    assert.equal(await shown.evaluate(`document.querySelector('[aria-current="page"]').dataset.path`), 'plan.md');
+    assert.ok(await shown.evaluate(`document.querySelector('[data-path="plan.md"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))`), 'no menu');
+    await shown.evaluate(`document.querySelector('[data-path="notes"]').click()`);
+    await waitFor(async () => (await rows()).includes('notes/b.md'), 10_000, 'the folder open');
+    await shown.evaluate(`document.querySelector('[data-path="notes/b.md"]').click()`);
+    await waitFor(async () => (await text().catch(() => '')).includes('Notes on the plan'), 30_000, 'the other doc');
+    assert.equal(new URL(await shown.evaluate('location.href')).searchParams.get('doc'), 'notes/b.md');
+    assert.equal(host.joins.length, 1, 'not asked again');
+    await waitFor(async () => (await rows()).includes('notes/b.md'), 10_000, 'the folder still open');
+    await shown.evaluate(`document.querySelector('[data-path="plan.md"]').click()`);
+    await waitFor(async () => (await text().catch(() => '')).includes('Then ask for feedback.'), 30_000, 'back');
 
     // A thread: a reader sees it, with nothing to reply, resolve or undo with.
     await host.request('call', { docId, call: 'comment', arg: { anchor: null, body: 'Shall we?' } });

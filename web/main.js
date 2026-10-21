@@ -151,6 +151,7 @@ async function start() {
   });
   window.opendocDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
   files = createFileList({
+    place: initial.place,
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
       if (carry.commentsHidden) showComments(false);

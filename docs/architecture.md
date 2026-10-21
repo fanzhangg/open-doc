@@ -452,7 +452,8 @@ the same time; their merges are applied one at a time.
 
 A teammate joins the owner's project from a link, in a browser. Built: a
 page reads a doc through the relay (#226); joining, Allow and Team
-(#227); teammates who edit (#228); the relay deployed (#241).
+(#227); teammates who edit (#228); the relay deployed (#241); the
+project's tree and every doc in it (#242).
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -489,8 +490,11 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   `dist/web`) is the doc window on the relay; in the preview (`preview/`)
   `doc-stub.js` plays the host instead.
   A page names its doc by its path in the project, or none for the
-  project's first; the doc is open once however many windows and pages
-  have it. Anyone but the owner gets the default settings, not the
+  project's first; `state` tells it that path and the project's name
+  (`place`), for its sidebar (`web/files.js`), which reads the tree through
+  the door (`list`, `read`) and opens another doc as the page of the same
+  link on it, let in at once. The doc is open once however many windows
+  and pages have it. Anyone but the owner gets the default settings, not the
   owner's, and a path in the project, not its real path. A page the host
   turns away is told why (`not_found`, `name_taken`, `denied`, `removed`,
   `link_replaced`), and says so.

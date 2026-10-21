@@ -9,8 +9,8 @@
 // through Team (team.js), at the same door.
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
@@ -285,6 +285,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       level: who.level,
       agents: agentStatuses(),
       project: folder !== null, // whether buddies can be made here
+      // The project's name and the doc's path in it, for a teammate's sidebar.
+      place: folder && { name: basename(folder), path: relative(folder, await realpath(docPath).catch(() => docPath)).split(sep).join('/') },
     };
   }
 
