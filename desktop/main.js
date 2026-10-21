@@ -451,7 +451,7 @@ function pageCommand(win, name) {
   page?.webContents.send('opendoc:command', name);
 }
 
-// Settings > Agent > Show folder: where the agent scripts are, to edit them.
+// Settings > Agents > Show folder: where the agents are, to edit them.
 function showAgents() {
   shell.openPath(agentsDir()).catch(() => {});
 }
@@ -483,10 +483,10 @@ function recentMenu() {
 // ---- the start window's settings ----
 
 // The settings the start window shows and changes (its Settings dialog, a
-// doc's but Views and Rules): your name, how things look and the agent, never buddies.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'agent'];
+// doc's but Views and Rules): your name, how things look and the agents, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'agent', 'agents'];
 
-// Settings > Agent: the agents, as a doc's page gets them from its doc host.
+// Settings > Agents: the agents, as a doc's page gets them from its doc host.
 const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir(), secrets: secretsSet(secrets) });
 
 async function resetAgentScript(name) {

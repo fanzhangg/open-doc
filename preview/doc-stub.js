@@ -195,7 +195,7 @@ const calls = {
     emit('settings', s.settings);
     return { settings: s.settings };
   },
-  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)' }),
+  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)', secrets: {} }),
   resetScript: () => ({ agents: AGENTS }),
   createBuddy({ buddy }) {
     if (!inFolder) refuse('buddies other than Clippy belong to a project');

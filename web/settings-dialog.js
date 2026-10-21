@@ -1,14 +1,14 @@
-// The Settings dialog (General, Views, Rules, Shortcuts, Agent), tooltips that show shortcuts, and how shortcuts are written: shared
+// The Settings dialog (General, Views, Rules, Shortcuts, Agents), tooltips that show shortcuts, and how shortcuts are written: shared
 // by the editor (web/ui.js) and the desktop start window (web/start.js),
 // so both look and behave the same. Settings are saved for every doc and
 // window (see settings.js); a change made in another window shows up here
-// too. Every window shows the same sections, Agent among them (the agent
-// script that runs every buddy), except Views and Rules, which only a doc's
-// window has. Buddies are not here:
+// too. Every window shows the same sections, Agents among them (the
+// programs that do a buddy's work, and their settings), except Views and
+// Rules, which only a doc's window has. Buddies are not here:
 // they belong to a doc's People.
 
 import { hydrateIcons, icon } from './icons.js';
-import { ruleSettings, viewSettings } from '../src/core/settings.js';
+import { agentSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
@@ -24,7 +24,7 @@ const DIALOG = `
     <button type="button" role="tab" data-section="views" data-icon="pencil">Views</button>
     <button type="button" role="tab" data-section="rules" data-icon="check">Rules</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
-    <button type="button" role="tab" data-section="agent" data-icon="settings">Agent</button>
+    <button type="button" role="tab" data-section="agents" data-icon="settings">Agents</button>
   </nav>
   <div class="od-settings-main">
     <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
@@ -68,18 +68,14 @@ const DIALOG = `
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="agent" hidden>
-      <h2>Agent</h2>
-      <div class="od-setting">
-        <div class="od-setting-text">
-          <label for="od-agent-script">Runs every buddy</label>
-          <span class="od-setting-hint">A script in <code class="od-agents-folder"></code>: the prompt on stdin, the reply on stdout. Edit it to change the program, model or flags; the OpenDoc agent's are at the top of <code>opendoc.mjs</code> next to it.</span>
+    <section class="od-settings-section" role="tabpanel" data-section="agents" hidden>
+      <div class="od-page-list">
+        <h2>Agents</h2>
+        <p class="od-settings-intro">What does a buddy's work: a program in <code class="od-agents-folder"></code>, with the prompt on stdin and the reply on stdout. One runs every buddy.</p>
+        <ul class="od-setting-pages"></ul>
+        <div class="od-setting-row">
+          <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
         </div>
-        <select id="od-agent-script" class="od-input"></select>
-      </div>
-      <div class="od-setting-row">
-        <button type="button" class="od-secondary" data-action="reset-agent">Reset to Default</button>
-        <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
       </div>
     </section>
 
@@ -106,8 +102,9 @@ export function keyLabel(keys) {
  * one page shows. `views` (web/views/index.js) and `rules` (src/rules/index.js)
  * fill Views and Rules, which show only when there are some: a list of them,
  * each opening its own page.
- * `scripts` ({ list() → { agents, shipped, folder }, reset(name),
- * showFolder? }) backs Agent, which picks the agent script.
+ * `scripts` ({ list() → { agents, shipped, folder, secrets }, reset(id),
+ * saveSecret(id, key, value), showFolder? }, see web/api.js) backs Agents:
+ * a list of the agents, read again each time it shows, each opening its page.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
  *           setName: (name: string) => boolean, onApply?: (settings: object) => void, views?: object[], rules?: object[],
  *           scripts: object }} options
@@ -115,15 +112,22 @@ export function keyLabel(keys) {
 export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], rules = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
-  // Views and Rules are lists of pages alike: `read(settings, item)` gives an item's settings.
+  // Views, Rules and Agents are lists of pages alike: `paint(settings)` shows their settings.
   const lists = [['views', 'Views', views, viewSettings], ['rules', 'Rules', rules, ruleSettings]].map(([kind, title, items, read]) => {
     const list = dialog.querySelector(`[data-section="${kind}"] .od-page-list`);
     const parts = items.map((item) => itemRowAndPage(kind, title, item, (patch) => store.set(patch)));
     list.querySelector('ul').append(...parts.map((part) => part.row));
     list.after(...parts.map((part) => part.page));
     if (items.length === 0) dialog.querySelector(`[role="tab"][data-section="${kind}"]`).remove();
-    return { list, items, parts, read };
+    const paint = (settings) => items.forEach((item, i) => {
+      const own = read(settings, item);
+      parts[i].state.textContent = item.always ? 'Always on' : own.enabled ? 'On' : 'Off';
+      parts[i].paint(own);
+    });
+    return { list, parts, paint };
   });
+  const agents = { list: dialog.querySelector('[data-section="agents"] .od-page-list'), parts: [], paint() {} };
+  lists.push(agents);
   hydrateIcons(dialog);
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
@@ -132,28 +136,46 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
 
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
   dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
-  const scriptSelect = dialog.querySelector('#od-agent-script');
-  let shipped = [];
 
-  // The scripts are read again each time the section shows: the user may add one.
-  async function paintScripts() {
+  // The agents are read again each time Agents shows (the user may add
+  // one), and after a Reset, which leaves the page `id` open.
+  let secretsSet = {}; // which secrets are set: { <agent>: [<key>] }
+  async function listAgents(id = null) {
     let found;
     try {
       found = await scripts.list();
     } catch {
       return;
     }
-    shipped = found.shipped;
+    secretsSet = found.secrets;
     dialog.querySelector('.od-agents-folder').textContent = found.folder;
-    const agents = found.agents.some((a) => a.id === store.get().agent) ? found.agents : [...found.agents, { id: store.get().agent, name: store.get().agent }];
-    scriptSelect.replaceChildren(...agents.map((a) => Object.assign(document.createElement('option'), { value: a.id, textContent: a.name })));
-    scriptSelect.value = store.get().agent;
-    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
+    for (const { page } of agents.parts) page.remove();
+    agents.parts = found.agents.map((agent) => agentRowAndPage(agent, found.shipped.includes(agent.id), {
+      pick: () => set({ agent: agent.id }),
+      change: (key, value) => set({ agents: { [agent.id]: { [key]: value } } }),
+      saveSecret: async (key, value) => {
+        try {
+          await scripts.saveSecret(agent.id, key, value);
+          secretsSet = (await scripts.list()).secrets;
+          apply();
+        } catch {
+          // not saved: it still shows as it was
+        }
+      },
+      reset() {
+        if (window.confirm(`Reset ${agent.name} to what OpenDoc comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(() => listAgents(agent.id), () => {});
+      },
+    }));
+    agents.list.querySelector('ul').replaceChildren(...agents.parts.map((part) => part.row));
+    agents.list.after(...agents.parts.map((part) => part.page));
+    hydrateIcons(dialog);
+    agents.paint = (settings) => found.agents.forEach((agent, i) => {
+      const secrets = Object.fromEntries((secretsSet[agent.id] ?? []).map((key) => [key, true]));
+      agents.parts[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secrets });
+    });
+    apply();
+    showPage(agents, id);
   }
-  scriptSelect.addEventListener('change', () => {
-    set({ agent: scriptSelect.value });
-    dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
-  });
 
   function apply() {
     const settings = store.get();
@@ -161,13 +183,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     if (settings.theme === 'system') delete root.dataset.theme;
     else root.dataset.theme = settings.theme;
     for (const button of dialog.querySelectorAll('[data-theme-choice]')) button.setAttribute('aria-checked', String(button.dataset.themeChoice === settings.theme));
-    for (const { items, parts, read } of lists) {
-      for (const [i, item] of items.entries()) {
-        const own = read(settings, item);
-        parts[i].state.textContent = item.always ? 'Always on' : own.enabled ? 'On' : 'Off';
-        parts[i].paint(own);
-      }
-    }
+    for (const list of lists) list.paint(settings);
     if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
   }
@@ -178,7 +194,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
     for (const panel of sections) panel.hidden = panel.dataset.section !== section;
-    if (section === 'agent') paintScripts();
+    if (section === 'agents') listAgents();
     for (const list of lists) showPage(list, null);
   }
 
@@ -212,10 +228,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     const button = event.target.closest('button');
     if (!button) return;
     if (button.dataset.action === 'close') dialog.close();
-    else if (button.dataset.action === 'reset-agent') {
-      const name = scriptSelect.value;
-      if (window.confirm(`Reset ${name} to the script OpenDoc comes with?\n\nYour changes to it are lost.`)) scripts.reset(name).catch(() => {});
-    } else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
+    else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
     else if (button.dataset.openPage) {
       showPage(listOf(button), button.dataset.openPage);
       dialog.querySelector(`[data-page="${button.dataset.openPage}"] .od-back`).focus();
@@ -257,12 +270,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   return { get: () => store.get(), set, open, toggle };
 }
 
-// The row of a view or a rule (of `kind`) in its list (its name and
-// extensions, what it does, on or off) and its page: its switch, then the
-// fields it declares (shown while it is on, and while their `when` holds).
-// `state` says on or off in the row; `paint(own)` shows the item's settings
-// `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
-function itemRowAndPage(kind, title, item, save) {
+// The row of a view, a rule or an agent in its list (its name and
+// extensions, what it is, `state`) and its page: Back to the list `title`,
+// its name and what it is, then `nodes`.
+function rowAndPage(title, item, nodes) {
   const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
   const name = el('span', 'od-setting-label', item.name);
   if (extensions.length > 0) name.append(el('span', 'od-setting-ext', extensions.join(' ')));
@@ -277,7 +288,22 @@ function itemRowAndPage(kind, title, item, save) {
   open.append(summary, stateBox);
   const row = el('li');
   row.append(open);
+  const page = el('div');
+  page.dataset.page = item.id;
+  page.hidden = true;
+  const back = el('button', 'od-back', title);
+  back.type = 'button';
+  Object.assign(back.dataset, { action: 'back', icon: 'back' });
+  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), ...nodes);
+  return { row, page, state };
+}
 
+// A view's or a rule's (of `kind`) row and page: its switch, then the
+// fields it declares (shown while it is on, and while their `when` holds).
+// `state` says on or off in the row; `paint(own)` shows the item's settings
+// `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
+function itemRowAndPage(kind, title, item, save) {
+  const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
   const change = (key, value) => save({ [kind]: { [item.id]: { [key]: value } } });
   const enabled = item.always
     ? alwaysOn()
@@ -287,17 +313,52 @@ function itemRowAndPage(kind, title, item, save) {
       change,
     );
   const fields = (item.settings ?? []).map((field) => fieldRow(field, item.id, change));
-  const page = el('div');
-  page.dataset.page = item.id;
-  page.hidden = true;
-  const back = el('button', 'od-back', title);
-  back.type = 'button';
-  Object.assign(back.dataset, { action: 'back', icon: 'back' });
-  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), enabled.node, ...fields.map((field) => field.node));
+  const { row, page, state } = rowAndPage(title, item, [enabled.node, ...fields.map((field) => field.node)]);
   const paint = (own) => {
     enabled.paint(own);
     fields.forEach((field, i) => {
       field.node.hidden = !own.enabled || !matches(item.settings[i].when, own);
+      field.paint(own);
+    });
+  };
+  return { row, page, state, paint };
+}
+
+// An agent's row and page: whether it runs every buddy (a switch that picks
+// it, or On), the fields its manifest declares (shown while their `when`
+// holds), and Reset to Default for one OpenDoc ships. `pick()` makes it the
+// one; `change(key, value)` and `saveSecret(key, value)` save a field.
+// `paint(using, own)` shows whether it is the one and its settings `own`, a
+// secret as true when set.
+function agentRowAndPage(agent, shipped, { pick, change, saveSecret, reset }) {
+  const text = el('span', 'od-setting-text');
+  text.append(el('span', 'od-setting-label', 'Runs every buddy'), el('span', 'od-setting-hint', 'One agent does. Switch another on to use it instead.'));
+  const toggle = el('input', 'od-switch');
+  toggle.type = 'checkbox';
+  toggle.ariaLabel = 'Runs every buddy';
+  toggle.addEventListener('change', pick);
+  const on = el('span', 'od-setting-state', 'On');
+  const use = el('div', 'od-setting');
+  use.append(text, toggle, on);
+  const secret = (key) => agent.settings.find((field) => field.key === key).type === 'secret';
+  const fields = agent.settings.map((field) => fieldRow(field, agent.id, (key, value) => (secret(key) ? saveSecret : change)(key, value)));
+  const nodes = [use, ...fields.map((field) => field.node)];
+  if (shipped) {
+    const buttons = el('div', 'od-setting-row');
+    const button = el('button', 'od-secondary', 'Reset to Default');
+    button.type = 'button';
+    button.addEventListener('click', reset);
+    buttons.append(button);
+    nodes.push(buttons);
+  }
+  const { row, page, state } = rowAndPage('Agents', agent, nodes);
+  const paint = (using, own) => {
+    state.textContent = using ? 'Runs every buddy' : '';
+    toggle.checked = using;
+    toggle.hidden = using;
+    on.hidden = !using;
+    fields.forEach((field, i) => {
+      field.node.hidden = !matches(agent.settings[i].when, own);
       field.paint(own);
     });
   };
@@ -320,7 +381,7 @@ function matches(when = {}, own) {
   return Object.entries(when).every(([key, want]) => (want && typeof want === 'object' && !Array.isArray(want) ? own[key] !== want.not : [want].flat().includes(own[key])));
 }
 
-// One setting of the view or rule `id` as a row: its label and hint, and a control by
+// One setting of the view, rule or agent `id` as a row: its label and hint, and a control by
 // type (marked with its owner and the key), under a heading if it starts a
 // `group`. `change(key, value)` saves a change; `paint(own)` shows the current value.
 function fieldRow(field, id, change) {
@@ -348,6 +409,30 @@ function fieldRow(field, id, change) {
     });
     control.append(...buttons);
     paint = (own) => buttons.forEach((button, i) => button.setAttribute('aria-checked', String(field.options[i][0] === own[field.key])));
+  } else if (field.type === 'text') {
+    control = el('input', 'od-input');
+    Object.assign(control, { type: 'text', spellcheck: false, autocomplete: 'off', ariaLabel: field.label });
+    control.addEventListener('change', () => change(field.key, control.value.trim() || field.default)); // empty is the default again
+    paint = (own) => {
+      if (document.activeElement !== control) control.value = own[field.key];
+    };
+  } else if (field.type === 'secret') {
+    // Never shown, only whether it is set: typing one in replaces it.
+    const input = el('input', 'od-input');
+    Object.assign(input, { type: 'password', autocomplete: 'off', ariaLabel: field.label });
+    input.addEventListener('change', () => {
+      if (input.value.trim()) change(field.key, input.value.trim());
+      input.value = '';
+    });
+    const clear = el('button', 'od-link-button', 'Clear');
+    clear.type = 'button';
+    clear.addEventListener('click', () => change(field.key, ''));
+    control = el('div', 'od-setting-row');
+    control.append(input, clear);
+    paint = (own) => {
+      input.placeholder = own[field.key] ? 'Set' : 'Not set';
+      clear.hidden = !own[field.key];
+    };
   } else {
     const step = field.step ?? 1;
     let now;
