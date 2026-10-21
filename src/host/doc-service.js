@@ -427,26 +427,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // going missing (moved or deleted outside the app) and coming back.
   async function onFilesChanged() {
     try {
-      let doc;
-      try {
-        doc = await readDoc(docPath);
-      } catch (error) {
-        if (error.code !== 'no_doc') throw error;
-        if (!missing) {
-          missing = true;
-          emit('missing', { missing: true, doc: basename(docPath) });
-        }
-        return;
-      }
-      if (missing) {
-        missing = false;
-        emit('missing', { missing: false, doc: basename(docPath) });
-      }
-      if (doc.hash !== lastDocHash) {
-        lastDocHash = doc.hash;
-        await noteDisk(doc);
-        emit('doc', { docHash: doc.hash });
-      }
+      if (!(await serial(onDocChanged))) return;
       const sidecarHash = await fileHash(sidecarPath(docPath));
       if (sidecarHash !== lastSidecarHash) {
         lastSidecarHash = sidecarHash;
@@ -456,6 +437,33 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     } catch (error) {
       if (!(error instanceof StoreError)) console.error(error);
     }
+  }
+
+  // The doc's part of onFilesChanged; false when it is missing. In `serial`,
+  // so a write of this service's is all before the read or all after it:
+  // a read from before it is never taken for someone else's change.
+  async function onDocChanged() {
+    let doc;
+    try {
+      doc = await readDoc(docPath);
+    } catch (error) {
+      if (error.code !== 'no_doc') throw error;
+      if (!missing) {
+        missing = true;
+        emit('missing', { missing: true, doc: basename(docPath) });
+      }
+      return false;
+    }
+    if (missing) {
+      missing = false;
+      emit('missing', { missing: false, doc: basename(docPath) });
+    }
+    if (doc.hash !== lastDocHash) {
+      lastDocHash = doc.hash;
+      await noteDisk(doc);
+      emit('doc', { docHash: doc.hash });
+    }
+    return true;
   }
 
   // Settings are shared with every other window: pass on changes from any
