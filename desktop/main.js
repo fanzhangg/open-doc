@@ -1,4 +1,4 @@
-// The OpenDoc desktop app (Electron main process): app lifecycle, one app
+// The Ponjo desktop app (Electron main process): app lifecycle, one app
 // instance for every launch, the menus, the Open / Open Folder / New Doc /
 // Rename dialogs, and the app state (recent docs and folders, last folder,
 // window bounds). Each doc window shows the editor page (dist/web), which
@@ -96,7 +96,7 @@ async function openPath(path, { create = false, parent = null } = {}) {
   if (isDirectory(path)) return openFolder(path, parent);
   const docPath = await docPathFor(path);
   if (!docPath) {
-    await warn(parent, `OpenDoc can't open ${basename(path)}.`,
+    await warn(parent, `Ponjo can't open ${basename(path)}.`,
       'It opens text files (UTF-8, up to 20 MB) and their comment files (.opendoc.jsonl).');
     return false;
   }
@@ -234,7 +234,7 @@ async function newDocDialog(parent) {
   } catch (error) {
     if (error.code !== 'exists') return failed(parent, `Could not create ${basename(path)}.`, error);
     const open = await ask(parent, `${basename(path)} already exists.`,
-      `OpenDoc never replaces a file. Open the existing doc in ${dirname(path)} instead?`, 'Open');
+      `Ponjo never replaces a file. Open the existing doc in ${dirname(path)} instead?`, 'Open');
     if (open) await openPath(path, { parent });
     return;
   }
@@ -269,7 +269,7 @@ async function renameDialog(win) {
     recentChanged();
   } catch (error) {
     const detail = error.code === 'exists'
-      ? `${basename(error.path)} already exists in ${dirname(error.path)}. OpenDoc never replaces a file; pick another name.`
+      ? `${basename(error.path)} already exists in ${dirname(error.path)}. Ponjo never replaces a file; pick another name.`
       : error.message;
     await warn(win, `Could not rename ${basename(from)}.`, detail);
   }
@@ -910,7 +910,7 @@ async function start() {
   // own so that what the docs do never holds up the windows. It takes its
   // environment from this process, so the login shell's goes in first.
   Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
-  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }), onJoin: askedToJoin });
+  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'Ponjo Docs' }), onJoin: askedToJoin });
   secrets = await readSecrets(safeStorage).catch((error) => {
     console.error('Could not read the agents\' secrets:', error.message);
     return {};

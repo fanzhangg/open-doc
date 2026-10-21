@@ -1,6 +1,6 @@
 ; Windows installer hooks (electron-builder's customInstall / customUnInstall).
 ;
-; OpenDoc registers as one of the apps that can open .md and .markdown files
+; Ponjo registers as one of the apps that can open .md and .markdown files
 ; ("Open with" and "Choose another app"), and adds New > Markdown Document to
 ; Explorer's right-click menu. It never makes itself the default app: the user
 ; picks that in Windows. Uninstalling removes only what was added here.
@@ -18,7 +18,7 @@
 !macroend
 
 !macro customInstall
-  ; The file type OpenDoc opens docs as.
+  ; The file type Ponjo opens docs as.
   WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}" "" "Markdown Document"
   WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\DefaultIcon" "" '"$INSTDIR\resources\app\build\document.ico",0'
   WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\shell\open\command" "" '"$appExe" "%1"'

@@ -1,13 +1,13 @@
 // The doc's version history: a snapshot of the doc each time it changes on
 // disk, with who changed it (the human, a buddy, or a program outside
-// OpenDoc), so any earlier version can be looked at and restored, and a
+// Ponjo), so any earlier version can be looked at and restored, and a
 // buddy's edit undone.
 //
 // History is kept per doc in the user's config folder, not next to the doc,
 // so it never shows up in the doc's folder or in git:
 //   <config>/history/<key>/index.json   the versions, oldest first
 //   <config>/history/<key>/<sha256>.md  each version's text, by content
-// `key` is derived from the doc's absolute path; renaming a doc in OpenDoc
+// `key` is derived from the doc's absolute path; renaming a doc in Ponjo
 // moves its history along (moveHistory).
 //
 // A burst of typing is one version: a change by people who typed in the
@@ -44,7 +44,7 @@ export function historyDir(docPath, root) {
  * The versions of the doc, oldest first:
  *   { id, kind, author, authors?, startedAt, at, hash, size, added, removed, thread?, reply?, undid?, restoredFrom? }
  * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
- * 'external' (changed outside OpenDoc); `author` is { id?, name, kind } or null
+ * 'external' (changed outside Ponjo); `author` is { id?, name, kind } or null
  * when unknown, the first of `authors` when several typed it; `added` and `removed` count the characters changed since
  * the version before. A buddy's edit has the `thread` it answered and the
  * id of its `reply`, and `conflict` when a person's edit that started

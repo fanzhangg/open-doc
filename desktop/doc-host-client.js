@@ -93,8 +93,8 @@ export function createDocHost({ fork, log = console.error, onJoin = () => {} }) 
 
   // `transfer`: message ports that go with the request.
   function request(type, arg = {}, transfer = []) {
-    if (gaveUp) return Promise.reject(new Error('The doc host keeps stopping. Restart OpenDoc.'));
-    if (shuttingDown && !child) return Promise.reject(new Error('OpenDoc is quitting.'));
+    if (gaveUp) return Promise.reject(new Error('The doc host keeps stopping. Restart Ponjo.'));
+    if (shuttingDown && !child) return Promise.reject(new Error('Ponjo is quitting.'));
     if (!child) launch();
     return new Promise((resolve, reject) => {
       const id = ++nextId;
@@ -106,7 +106,7 @@ export function createDocHost({ fork, log = console.error, onJoin = () => {} }) 
   }
 
   async function openHostedDoc(docPath, { folder = null } = {}) {
-    if (shuttingDown) throw new Error('OpenDoc is quitting.');
+    if (shuttingDown) throw new Error('Ponjo is quitting.');
     let docId = (await request('open', { docPath, folder })).docId;
     let started = Promise.resolve();
     let closed = false;

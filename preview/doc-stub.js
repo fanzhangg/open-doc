@@ -22,7 +22,7 @@ const params = new URLSearchParams(location.search);
 const inFolder = params.has('folder');
 const KEY = `opendoc.preview.${inFolder ? 'folder' : 'doc'}`;
 
-const WELCOME = `# Welcome to OpenDoc
+const WELCOME = `# Welcome to Ponjo
 
 This is a preview of the editor in a browser. Edit anything: changes stay in this tab.
 
@@ -52,7 +52,7 @@ Open a doc from the sidebar, rename one (F2), delete one (Delete) or drag it int
 
 We agreed to ship the preview first and ask for feedback before the next step.
 `,
-  'drafts/launch-post.md': `# Introducing OpenDoc
+  'drafts/launch-post.md': `# Introducing Ponjo
 
 Write plain Markdown with people and AI buddies, in comments next to the text.
 `,

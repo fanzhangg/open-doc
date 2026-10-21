@@ -41,7 +41,7 @@ export const api = {
   line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
-   * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   * Ponjo comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
    */
   scripts: () => call('scripts'),
   /** Write shipped agent `name` (its program and manifest) again as it came. */

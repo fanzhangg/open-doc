@@ -154,7 +154,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
         }
       },
       reset() {
-        if (window.confirm(`Reset ${agent.name} to what OpenDoc comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(listAgents, () => {});
+        if (window.confirm(`Reset ${agent.name} to what Ponjo comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(listAgents, () => {});
       },
     }));
     dialog.querySelector('[data-section="agents"] .od-choices').replaceChildren(...choices.map((choice) => choice.node));
@@ -314,7 +314,7 @@ function itemRowAndPage(kind, title, item, save) {
 
 // An agent in Agents: a radio that picks it to run every buddy, its name
 // and what it is; and under it while it is picked, the fields its manifest
-// declares (shown while their `when` holds) and, for one OpenDoc ships,
+// declares (shown while their `when` holds) and, for one Ponjo ships,
 // Reset to Default. `change(key, value)` and `saveSecret(key, value)` save a
 // field. `paint(using, own)` shows whether it is picked and its settings
 // `own`, a secret as true when set.

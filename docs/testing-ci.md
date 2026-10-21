@@ -1,6 +1,6 @@
 # Testing and CI/CD (draft)
 
-How OpenDoc is tested and shipped, derived from
+How Ponjo is tested and shipped, derived from
 [architecture](architecture.md), [SPEC](../spec/SPEC.md),
 [PROJECT](../spec/PROJECT.md) and [agent config](agent-config.md).
 Each test guards a rule there; a test that guards none is not needed.

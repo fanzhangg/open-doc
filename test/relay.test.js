@@ -325,7 +325,7 @@ test('the browser build asks a name, waits for Allow, then shows the doc read on
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   try {
-    const shown = await app.page('opendoc');
+    const shown = await app.page('Ponjo');
     await waitFor(() => shown.evaluate(`!document.querySelector('.od-join').hidden`), 30_000, 'the name asked');
     await shown.evaluate(`document.querySelector('.od-join input').value = 'Noor'; document.querySelector('.od-join').requestSubmit()`);
     await until(() => host.joins.length > 0, 'the owner told');

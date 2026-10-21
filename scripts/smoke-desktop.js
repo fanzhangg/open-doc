@@ -14,7 +14,7 @@
 //
 // Without a path it tests the packaged app in release/ if there is one, else
 // the app from this checkout. Settings and the Electron profile go to a temp
-// folder, so a running OpenDoc and the user's settings are not touched. The
+// folder, so a running Ponjo and the user's settings are not touched. The
 // app is driven over the DevTools protocol, the one port it opens here.
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
@@ -82,7 +82,7 @@ for (const [i, doc] of docs.entries()) {
     for (let i = 0; i < 100 && !document.querySelector('.ProseMirror'); i++) await new Promise((r) => setTimeout(r, 100));
     return { title: document.title, text: document.querySelector('.ProseMirror')?.textContent ?? '' };
   })()`);
-  check(loaded.title === `${name} — opendoc`, `a window shows ${name} (${loaded.title})`);
+  check(loaded.title === `${name} — Ponjo`, `a window shows ${name} (${loaded.title})`);
   check(loaded.text.includes('Q4 Launch Plan'), `the editor loaded ${name}`);
   check(await answers(page, 'Q4 Launch Plan', `Q${i + 1} Launch Plan`, doc), `a buddy answers in ${name} and its edit lands`);
 }

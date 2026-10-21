@@ -1,4 +1,4 @@
-// The opendoc page: wires the editor, the comment margin, the people (the
+// The Ponjo page: wires the editor, the comment margin, the people (the
 // doc's buddies and you) and the doc in the doc host together. Typing goes
 // to the doc host as operations, which orders every edit and writes the doc
 // (web/client.js); others' edits (a buddy's, another program's) come back as
@@ -444,7 +444,7 @@ function setMissing(on) {
   missingBanner.hidden = !on;
   if (on) {
     const name = document.querySelector('.od-doc-name').textContent;
-    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside OpenDoc. Changes here are not being saved.`;
+    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside Ponjo. Changes here are not being saved.`;
     setStatus('Not saved: the doc is missing', 'error');
     return;
   }
@@ -553,8 +553,8 @@ function showReadOnly(problem) {
   readOnlyBanner.hidden = !problem;
   if (!problem) return;
   readOnlyBanner.querySelector('.od-banner-text').textContent = {
-    older: 'These comments are from an older OpenDoc, so they are read-only here.',
-    newer: 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.',
+    older: 'These comments are from an older Ponjo, so they are read-only here.',
+    newer: 'These comments are from a newer Ponjo, so they are read-only here. Update Ponjo to add comments.',
     invalid: `This doc's comments file does not start with {"opendoc":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
   }[problem];
   readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'newer';
@@ -811,7 +811,7 @@ function anchorTops(items) {
 
 function showDocName(name) {
   docName = name;
-  document.title = `${name} — opendoc`;
+  document.title = `${name} — Ponjo`;
   document.querySelector('.od-doc-name').textContent = name;
 }
 

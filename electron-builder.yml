@@ -1,4 +1,4 @@
-# Installers for the OpenDoc desktop app (docs/architecture.md, Desktop app).
+# Installers for the Ponjo desktop app (docs/architecture.md, Desktop app).
 # Build with `npm run dist:desktop`; output goes to release/.
 
 appId: dev.opendoc.desktop
@@ -35,7 +35,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   include: build/installer.nsh
 
-# On Windows, build/installer.nsh registers OpenDoc as an app that can open
+# On Windows, build/installer.nsh registers Ponjo as an app that can open
 # .md files, without making it the default. macOS and Linux declare the types.
 mac:
   target: dmg

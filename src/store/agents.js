@@ -1,7 +1,7 @@
 // Agents (docs/agent-config.md#agents): what runs a buddy's work, in the
 // config folder's `agents/`: the program `<name>` on macOS and Linux,
 // `<name>.cmd` on Windows, and its manifest `<name>.json`, if any. Claude
-// Code, Codex and the OpenDoc agent ship, written when missing; then they
+// Code, Codex and the Ponjo agent ship, written when missing; then they
 // are the user's. Never in a project: a shared folder must not decide what
 // runs on this machine.
 

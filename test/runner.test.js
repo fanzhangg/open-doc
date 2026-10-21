@@ -253,11 +253,11 @@ test('the shipped agents are written when missing, then left alone; Reset writes
   const ids = async (platform) => (await listAgents(dir, platform)).map((a) => a.id);
   assert.deepEqual([await ids('linux'), await ids('win32')], [['claude', 'codex', 'opendoc'], ['claude', 'codex', 'opendoc']]);
   assert.deepEqual((await listAgents(dir, 'linux')).map((a) => [a.name, a.settings.map((f) => `${f.key}:${f.type}`).join()]), [
-    ['Claude Code', 'model:text'], ['Codex', 'model:text'], ['OpenDoc agent', 'provider:choice,endpoint:text,model:text,key:secret,effort:choice'],
+    ['Claude Code', 'model:text'], ['Codex', 'model:text'], ['Ponjo agent', 'provider:choice,endpoint:text,model:text,key:secret,effort:choice'],
   ], 'each with its manifest, all valid');
   const windows = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
   await installAgents(windows, { platform: 'win32' });
-  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'opendoc.cmd', 'opendoc.json', 'opendoc.mjs'], 'with the program the OpenDoc agent runs');
+  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'opendoc.cmd', 'opendoc.json', 'opendoc.mjs'], 'with the program the Ponjo agent runs');
   await writeFile(join(agentsDir(dir), 'mine'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken.json'), '{ "name": ');

@@ -1,4 +1,4 @@
-// The OpenDoc agent (docs/opendoc-agent.md): `turn` with a fake `infer`;
+// The Ponjo agent (docs/opendoc-agent.md): `turn` with a fake `infer`;
 // each provider's `infer` on a fake server of its API; and the shipped
 // script once, with its settings and its log.
 
@@ -214,20 +214,20 @@ test('the shipped script runs a turn under the contract, with its settings from 
     answers.push([404, { error: 'model "gpt-5" not found' }]);
     const failed = await run();
     assert.equal(failed.code, 1);
-    assert.equal(failed.stderr, `${api.url}/chat/completions: 404 {"error":"model \\"gpt-5\\" not found"}\nCheck the endpoint and the model.\nThe provider, endpoint, model and key are in Settings > Agents > OpenDoc agent.\n`);
-    assert.deepEqual(await run(undefined, { ...settings, KEY: '' }), { code: 1, stdout: '', stderr: 'No API key: set one in Settings > Agents > OpenDoc agent.\n' });
+    assert.equal(failed.stderr, `${api.url}/chat/completions: 404 {"error":"model \\"gpt-5\\" not found"}\nCheck the endpoint and the model.\nThe provider, endpoint, model and key are in Settings > Agents > Ponjo agent.\n`);
+    assert.deepEqual(await run(undefined, { ...settings, KEY: '' }), { code: 1, stdout: '', stderr: 'No API key: set one in Settings > Agents > Ponjo agent.\n' });
 
     const log = await readFile(join(config, 'logs', 'opendoc.jsonl'), 'utf8');
     assert.deepEqual(log.trim().split('\n').map((l) => JSON.parse(l)).map((entry) => [entry.buddy, entry.messages.map((m) => m.role), entry.error]), [
       ['Ada', ['user', 'assistant'], null],
       ['Ada', ['user'], failed.stderr.trim()],
-      ['Ada', [], 'No API key: set one in Settings > Agents > OpenDoc agent.'],
+      ['Ada', [], 'No API key: set one in Settings > Agents > Ponjo agent.'],
     ], 'each turn\'s messages are logged');
     assert.doesNotMatch(log, /sk-secret-test/, 'never the key');
 
     await api.close();
-    assert.match((await run()).stderr, new RegExp(`^Cannot reach ${api.url}/chat/completions \\(ECONNREFUSED\\)\\.\nThe provider, endpoint, model and key are in Settings > Agents > OpenDoc agent\\.`));
-    assert.deepEqual(await run('/nowhere'), { code: 1, stdout: '', stderr: 'The OpenDoc agent runs on Node.js: install it from https://nodejs.org, with node on PATH.\n' });
+    assert.match((await run()).stderr, new RegExp(`^Cannot reach ${api.url}/chat/completions \\(ECONNREFUSED\\)\\.\nThe provider, endpoint, model and key are in Settings > Agents > Ponjo agent\\.`));
+    assert.deepEqual(await run('/nowhere'), { code: 1, stdout: '', stderr: 'The Ponjo agent runs on Node.js: install it from https://nodejs.org, with node on PATH.\n' });
   } finally {
     await api.close().catch(() => {});
   }

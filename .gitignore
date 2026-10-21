@@ -7,7 +7,7 @@ release/
 !.claude/skills/
 !.claude/settings.json
 
-# OpenDoc's own comments and buddies: local only
+# Ponjo's own comments and buddies: local only
 *.opendoc.json
 *.opendoc.jsonl
 .opendoc/

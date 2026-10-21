@@ -1,4 +1,4 @@
-// The OpenDoc agent (docs/opendoc-agent.md): a model reads and proposes, and
+// The Ponjo agent (docs/opendoc-agent.md): a model reads and proposes, and
 // this program checks the proposal and applies it to the copies. Run by
 // `opendoc` (`opendoc.cmd` on Windows) next to it, on your own node, under
 // the contract of docs/agent-config.md; its settings (opendoc.json) come
@@ -197,7 +197,7 @@ export function files({ doc, sidecar, project }) {
 }
 
 // Where a failed run's reply sends the user: the failure, then what to change.
-const SETTINGS = 'The provider, endpoint, model and key are in Settings > Agents > OpenDoc agent.';
+const SETTINGS = 'The provider, endpoint, model and key are in Settings > Agents > Ponjo agent.';
 const HINTS = { 401: 'Check the API key.', 404: 'Check the endpoint and the model.' };
 
 const CACHED = { type: 'ephemeral' };
@@ -265,7 +265,7 @@ async function main() {
   let messages = []; // the turn's, which it goes on adding to after each step
   let error = null;
   try {
-    if (!key) throw new Error('No API key: set one in Settings > Agents > OpenDoc agent.');
+    if (!key) throw new Error('No API key: set one in Settings > Agents > Ponjo agent.');
     const infer = INFER[provider]({ endpoint, model, key, effort });
     const step = (sent, tools) => infer((messages = sent), tools);
     const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer: step, readFile: readable });

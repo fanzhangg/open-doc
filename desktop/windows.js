@@ -384,7 +384,7 @@ export function showStartWindow() {
     fullscreenable: false,
     autoHideMenuBar: true,
     show: false,
-    title: 'OpenDoc',
+    title: 'Ponjo',
     ...WINDOW_ICON,
     webPreferences: securePreferences(),
   });

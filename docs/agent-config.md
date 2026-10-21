@@ -1,7 +1,7 @@
 # Agent Config
 
 An agent is the CLI that does a buddy's work (Claude Code, Codex, any
-other), started by a script. OpenDoc runs the script and knows nothing
+other), started by a script. Ponjo runs the script and knows nothing
 else about it.
 
 ## The contract
@@ -20,7 +20,7 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | stdout | the reply; may be empty |
 | Exit 0 | success; the app merges the doc copy's edits into the doc and adds the appended comments. Otherwise the reply is marked `failed`, with the end of the output. |
 
-The program needs no OpenDoc tool: it reads files, edits them and prints.
+The program needs no Ponjo tool: it reads files, edits them and prints.
 
 ## Comments
 
@@ -59,7 +59,7 @@ replaced (Reset to Default, a new version) without losing them.
 
 - The config folder is `~/Library/Application Support/OpenDoc/` on macOS.
   Never in a project: a shared folder must not decide what runs here.
-- Claude Code, Codex and the [OpenDoc agent](opendoc-agent.md) ship, written
+- Claude Code, Codex and the [Ponjo agent](opendoc-agent.md) ship, written
   once when missing; then they are yours. Reset to Default writes one again.
 - An agent without a manifest is shown by its file name, with no settings.
 - One agent runs every buddy: Settings > Agents lists them, one picked. The
@@ -99,7 +99,7 @@ does not do this yet.
 
 ## Permissions
 
-OpenDoc sets only what the contract needs: the working folder, the copy,
+Ponjo sets only what the contract needs: the working folder, the copy,
 the project's mirror in project mode. The script makes the run unattended
 and lets it edit the copy. The shipped scripts keep the project read only:
 an edit there would skip the merge, the receipt and Undo.
@@ -117,7 +117,7 @@ mirror only keeps the real path from it.
 
 Everything else (web, shell, which files it may read or write) is the CLI's
 own config (`~/.claude/settings.json`, `~/.codex/config.toml`), as when you
-run it yourself. OpenDoc neither grants nor blocks it.
+run it yourself. Ponjo neither grants nor blocks it.
 
 An agent is not told where the real doc is. If its CLI lets it write there
 anyway, the app sees an outside change and merges it; a broken sidecar line

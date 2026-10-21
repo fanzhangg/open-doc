@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs a buddy on the OpenDoc agent (docs/opendoc-agent.md): opendoc.mjs,
+# Runs a buddy on the Ponjo agent (docs/opendoc-agent.md): opendoc.mjs,
 # next to this script, on your own node. Yours to change.
-command -v node >/dev/null || { echo 'The OpenDoc agent runs on Node.js: install it from https://nodejs.org, with node on PATH.' >&2; exit 1; }
+command -v node >/dev/null || { echo 'The Ponjo agent runs on Node.js: install it from https://nodejs.org, with node on PATH.' >&2; exit 1; }
 exec node "$(dirname "$0")/opendoc.mjs"

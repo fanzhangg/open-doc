@@ -89,7 +89,7 @@ async function teammatePage({ room, key }) {
   delete env.ELECTRON_RUN_AS_NODE;
   const browser = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${await mkdtemp(join(dir, 'teammate-'))}`], { env });
   teammates.push(browser);
-  const shown = await browser.page('opendoc');
+  const shown = await browser.page('Ponjo');
   // Sam, on this browser, as the page keeps them; then the page again, on a slow line.
   await shown.send('Page.enable'); // for the script below
   await shown.send('Page.addScriptToEvaluateOnNewDocument', { source: slowLine(LINE_MS) });

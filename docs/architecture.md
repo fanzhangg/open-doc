@@ -2,7 +2,7 @@
 
 ## Overview
 
-How OpenDoc is built, in three parts. [The app](#the-app): the doc host, a
+How Ponjo is built, in three parts. [The app](#the-app): the doc host, a
 background process that does every file write and runs the AI buddies, and
 the windows you edit in. [A buddy's turn](#a-buddys-turn): AI buddies are
 agents that answer comments, and a turn is one AI buddy answering one
@@ -28,7 +28,7 @@ with a way to fix it.
 2. **Only the app writes them.** An agent gets only a copy. Any other
    change (other editors, `git pull`) is seen and merged.
 3. **An agent is a filter:** prompt on stdin, copies of the doc and its
-   comments to edit, reply on stdout. It knows nothing of OpenDoc and
+   comments to edit, reply on stdout. It knows nothing of Ponjo and
    remembers nothing.
 4. **No one resolves a conflict by hand.** Between people, nothing typed is
    dropped: the host orders their edits and merges them by character. An
@@ -378,7 +378,7 @@ written only by the app.
 | File | Holds |
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; views', rules' and agents' settings; which agent runs buddies |
-| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the OpenDoc agent ship |
+| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |

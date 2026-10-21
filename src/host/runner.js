@@ -2,7 +2,7 @@
 // waiting on a buddy, and none for an ask that is gone. A run copies the doc and its sidecar
 // into a new private folder, runs the agent script there with the prompt on
 // stdin, and hands back the copies and the script's stdout when it exits. The agent knows
-// nothing of OpenDoc. Which runs are working lives only here, in memory.
+// nothing of Ponjo. Which runs are working lives only here, in memory.
 
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

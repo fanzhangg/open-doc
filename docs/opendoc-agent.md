@@ -1,4 +1,4 @@
-# OpenDoc Agent
+# Ponjo Agent
 
 An agent of our own, run like Claude Code and Codex: a script in
 `agents/` under the same [contract](agent-config.md#the-contract). Inside,
