@@ -25,8 +25,9 @@ async function newHost() {
   const host = createDocHost({
     fork: () => {
       const child = fork(HOST, [], { env: { ...process.env, OPENDOC_CONFIG_DIR: settingsDir }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+      child.sent = [];
       processes.push(child);
-      return { postMessage: (message) => child.send(message), on: (event, fn) => child.on(event, fn), kill: () => child.kill() };
+      return { postMessage: (message) => child.sent.push(message.type) && child.send(message), on: (event, fn) => child.on(event, fn), kill: () => child.kill() };
     },
     log: (error) => logged.push(error.message),
   });
@@ -100,9 +101,10 @@ test('a doc that cannot be read fails to open', async () => {
   }
 });
 
-test('a doc host that stops is started again and opens the open docs again', async () => {
+test('a doc host that stops is started again and opens the open docs again, the agents\' secrets first', async () => {
   const { host, processes, logged } = await newHost();
   try {
+    await host.setSecrets({ opendoc: { key: 'sk-test' } });
     const docPath = await tempDoc();
     const doc = await host.openHostedDoc(docPath);
     const closedDoc = await host.openHostedDoc(await tempDoc());
@@ -113,6 +115,7 @@ test('a doc host that stops is started again and opens the open docs again', asy
     await restarted;
     assert.equal(processes.length, 2);
     assert.ok(await serves(doc));
+    assert.deepEqual(processes[1].sent.slice(0, 2), ['secrets', 'open'], 'the new host has the secrets before it opens a doc');
     assert.match(logged.join('\n'), /stopped/);
 
     // It still renames and closes from the new host.

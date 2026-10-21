@@ -31,7 +31,10 @@ export const api = {
     }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
-  /** The agents: { agents: [{ id, name, about, settings }], shipped: the ids OpenDoc comes with, folder }. */
+  /**
+   * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
+   * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   */
   scripts: () => call('scripts'),
   /** Write shipped agent `name` (its program and manifest) again as it came. */
   resetScript: (name) => call('resetScript', { name }),

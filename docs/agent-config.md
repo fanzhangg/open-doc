@@ -76,9 +76,11 @@ replaced (Reset to Default, a new version) without losing them.
 | --- | --- | --- |
 | `switch`, `choice`, `number` | as for a view | `settings.json`: `agents: { <name>: { <key>: value } }` |
 | `text` | a line of text, such as a model | the same |
-| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not (*planned*) |
+| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not |
 
-A key is lower case letters, digits and `_`. A manifest that is not valid
+A key is lower case letters, digits and `_`. Only the app's main process
+can decrypt a secret; it hands the secrets to the doc host, which runs the
+agents. A manifest that is not valid
 is ignored, as if there were none. A run gets each field as
 `OPENDOC_SETTING_<KEY>` (`model` → `OPENDOC_SETTING_MODEL`): the stored
 value or the default, a secret decrypted, empty when there is none. A shell

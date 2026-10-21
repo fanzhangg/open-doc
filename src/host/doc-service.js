@@ -22,6 +22,7 @@ import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, w
 import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
+import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { Runner } from './runner.js';
@@ -41,13 +42,15 @@ class DocError extends Error {
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), handed to runs as OPENDOC_PROJECT. `emit(event, data)` hears
+ * mode), handed to runs as OPENDOC_PROJECT. `secrets()` gives the agents'
+ * secrets, decrypted ({ <agent>: { <key>: value } }, src/store/secrets.js),
+ * handed to runs with the other settings. `emit(event, data)` hears
  * what changed. `call(type, arg)` runs a window's request (see `calls`);
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
  * @returns {Promise<{ call: (type: string, arg?: object) => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
  */
-export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
+export async function openDoc(docPath, { folder = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
@@ -55,7 +58,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     doc: async () => ({ name: basename(docPath), text, comments: await readSidecarText(docPath) }),
     agent: async () => {
       const { settings } = await readSettings(settingsDir);
-      return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir)) };
+      return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir), secrets()[settings.agent]) };
     },
     folder: () => folder,
     human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
@@ -591,7 +594,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     createBuddy,
     updateBuddy,
     deleteBuddy,
-    scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir) }),
+    scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir), secrets: secretsSet(secrets()) }),
     // A shipped agent script, written again as it came.
     async resetScript(body) {
       if (!SHIPPED_AGENTS.includes(body?.name)) throw new DocError('bad_input', 'not a shipped agent');

@@ -124,7 +124,7 @@ flowchart TD
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
-| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, a project's files in the sidebar; starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`). An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
+| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, a project's files in the sidebar; starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Team, ProjectService | *planned:* who is on a project and what each may do; the project's files, the same for everyone. See Sharing |
 
 DocService and Runner run in the doc host, the app's utility process.
@@ -352,6 +352,7 @@ written only by the app.
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; views', rules' and agents' settings; which agent runs buddies |
 | `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the OpenDoc agent ship |
+| `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
 | `team/` | *planned:* each project's teammates, their access, and which AI buddies may resolve |

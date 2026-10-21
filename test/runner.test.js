@@ -11,6 +11,7 @@ import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
+import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -189,6 +190,40 @@ test('a run gets each of its agent\'s settings as OPENDOC_SETTING_<KEY>: the sto
   } finally {
     await doc.close();
   }
+});
+
+// A stand-in for Electron's safeStorage: not encryption, but not the text either.
+const cipher = {
+  encryptString: (text) => Buffer.from(text).reverse(),
+  decryptString: (bytes) => Buffer.from(bytes).reverse().toString(),
+};
+
+test('a secret is kept encrypted in the config folder, reaches its agent\'s run, and never settings.json or a log', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc();
+  const settingsDir = await fakeConfig({ agents: { fake: { model: 'small' } } });
+  await writeFile(join(settingsDir, 'agents', 'fake.json'), JSON.stringify({ name: 'Fake', settings: [
+    { key: 'model', type: 'text', label: 'Model', default: '' },
+    { key: 'key', type: 'secret', label: 'API key' },
+  ] }));
+  assert.deepEqual(await readSecrets(cipher, settingsDir), {}, 'none yet');
+  await writeSecrets(cipher, { fake: { key: 'sk-fake-123' }, other: { key: 'sk-other-456' } }, settingsDir);
+  const secrets = await readSecrets(cipher, settingsDir);
+  assert.deepEqual(secrets, { fake: { key: 'sk-fake-123' }, other: { key: 'sk-other-456' } });
+  assert.deepEqual(secretsSet(secrets), { fake: ['key'], other: ['key'] }, 'Settings learns only which are set');
+  const { doc } = await openTestDoc(docPath, { settingsDir, secrets: () => secrets });
+  try {
+    assert.deepEqual((await doc.call('scripts')).secrets, { fake: ['key'], other: ['key'] });
+    const id = (await doc.call('comment', { anchor: null, body: '@Clippy say done' })).id;
+    await until(async () => (await doc.call('state')).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
+    const [run] = await fakeRuns(settingsDir);
+    assert.deepEqual(run.settings, { OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_KEY: 'sk-fake-123' }, 'its own agent\'s only');
+  } finally {
+    await doc.close();
+  }
+  const written = async (dir) => (await Promise.all((await readdir(dir, { recursive: true, withFileTypes: true }))
+    .filter((e) => e.isFile() && e.name !== 'runs.log').map((e) => readFile(join(e.parentPath, e.name), 'utf8')))).join('\n');
+  assert.ok((await readdir(settingsDir)).includes('secrets.bin'));
+  assert.doesNotMatch(await written(settingsDir), /sk-fake|sk-other/, 'not in settings.json, the runs\' log or any other file of the config folder');
 });
 
 test('the shipped scripts pass the project folder only when there is one', () => {
