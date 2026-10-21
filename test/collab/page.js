@@ -24,7 +24,7 @@ const later = (fn) => {
 
 const host = { text: '', log: [], clients: [] };
 function submit(client, ops, rev) {
-  for (const landed of host.log.slice(rev)) ops = transform(ops, landed);
+  for (const landed of host.log.slice(rev)) ops = transform(ops, landed).ops;
   host.text = apply(host.text, ops);
   host.log.push(ops);
   for (const c of host.clients) later(() => (c === client ? c.ack() : c.receive(ops, client?.name ?? 'outside')));
@@ -60,8 +60,8 @@ function createClient(view, name) {
         const flushed = performance.now();
         client.rev++;
         client.pending = client.pending.map((mine) => {
-          const moved = transform(mine, ops);
-          ops = transform(ops, mine, { first: true });
+          const moved = transform(mine, ops).ops;
+          ops = transform(ops, mine, { first: true }).ops;
           return moved;
         });
         client.last = apply(client.last, ops);

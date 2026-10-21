@@ -4,6 +4,7 @@
 // doc's rules refuses (src/rules). Edits that overlap conflict.
 
 import { lineMatches as matches } from './diff.js';
+import { mergeLine } from './ot.js';
 
 /**
  * With `prefer: 'ours'`, a conflict keeps our side and reports theirs as
@@ -101,34 +102,6 @@ export function followLines(from, to, at, count) {
   }
   return { start, end: Math.max(start, end) };
 }
-
-/**
- * Merge two edits of one line when they change separate parts of it, or
- * null when they overlap (or both insert at the same place).
- */
-export function mergeLine(base, ours, theirs) {
-  const a = changedSpan(base, ours);
-  const c = changedSpan(base, theirs);
-  const [first, second] = a.from <= c.from ? [a, c] : [c, a];
-  const bothInsertHere = first.from === first.to && second.from === second.to && first.from === second.from;
-  if (first.to > second.from || bothInsertHere) return null;
-  return base.slice(0, first.from) + first.text + base.slice(first.to, second.from) + second.text + base.slice(second.to);
-}
-
-// The one span of `base` that `next` replaced, by common prefix and suffix,
-// never splitting a surrogate pair: { from, to, text }.
-function changedSpan(base, next) {
-  let p = 0;
-  while (p < base.length && p < next.length && base[p] === next[p]) p++;
-  if (p > 0 && isHighSurrogate(base.charCodeAt(p - 1))) p--;
-  let s = 0;
-  while (s < base.length - p && s < next.length - p && base[base.length - 1 - s] === next[next.length - 1 - s]) s++;
-  if (s > 0 && isLowSurrogate(base.charCodeAt(base.length - s))) s--;
-  return { from: p, to: base.length - s, text: next.slice(p, next.length - s) };
-}
-
-const isHighSurrogate = (code) => code >= 0xd800 && code <= 0xdbff;
-const isLowSurrogate = (code) => code >= 0xdc00 && code <= 0xdfff;
 
 function same(a, b) {
   return a.length === b.length && a.every((line, i) => line === b[i]);
