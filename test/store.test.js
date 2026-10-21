@@ -91,3 +91,13 @@ test('a sidecar outside a git work tree is written as before', async () => {
   assert.equal(await readSidecarText(docPath), `{"opendoc":3}\n`);
   assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
 });
+
+test('writeAtomic resolves to the stat it wrote, or leaves the file alone when, just before, it should not', async () => {
+  const path = await tempDoc('before\n');
+  const written = await writeAtomic(path, 'mine\n');
+  const now = await stat(path);
+  assert.deepEqual([written.size, written.mtimeMs, written.ino], [now.size, now.mtimeMs, now.ino]);
+  assert.equal(await writeAtomic(path, 'not written\n', async () => false), null);
+  assert.equal(readFileSync(path, 'utf8'), 'mine\n');
+  assert.deepEqual((await readdir(dirname(path))).sort(), ['plan.md'], 'no temp file left');
+});

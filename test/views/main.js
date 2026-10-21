@@ -11,7 +11,7 @@
 // `collab:release` hold Pilot's turns and let them go. The project has a
 // link and Sam, a teammate who can edit; `collab:share` shares it through
 // the relay at OPENDOC_RELAY and answers the link's secret and room and
-// Sam's key (test/perf/typing.test.js, test/collab-team.test.js). VIEWS_SEARCH is the page's query, such as
+// Sam's key (test/collab.test.js, test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
 // `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';

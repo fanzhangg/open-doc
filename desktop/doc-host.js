@@ -269,6 +269,8 @@ function share(folder, team, secret) {
     const entry = peers.get(peer);
     if (!entry || entry.admitted) return;
     entry.admitted = true;
+    // A name no project shares: a part starting with `.` (`..` too), or empty (an absolute path).
+    if (entry.doc && entry.doc.split('/').some((part) => !part || part.startsWith('.'))) return turnAway(peer, 'hidden');
     try {
       const path = entry.doc || firstDoc(await listDocs(folder)) || '';
       const docId = await docAt((await project.open(path)).path, folder);

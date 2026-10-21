@@ -103,11 +103,15 @@ test('a page reaches only what the project shows, and is told why not; only with
   const shared = await project();
   const host = await startHost(shared);
   try {
-    for (const doc of ['.opendoc/secret.md', '../plan.md', 'nothing.md']) {
+    for (const [doc, code, message] of [
+      ['.opendoc/secret.md', 'hidden', 'Names starting with . and paths out of the project are never shared'],
+      ['../plan.md', 'hidden'], ['/etc/hosts', 'hidden'],
+      ['nothing.md', 'not_found', 'This doc is not in the shared project'],
+    ]) {
       const turnedAway = page(shared.secret, shared.sam, doc);
       const { error } = await turnedAway.call('state');
-      assert.equal(error.code, 'not_found', doc);
-      assert.equal(error.message, 'This doc is not in the shared project');
+      assert.equal(error.code, code, doc);
+      if (message) assert.equal(error.message, message);
       assert.deepEqual(turnedAway.lines, ['refused']);
       assert.deepEqual(turnedAway.events, [], doc);
     }
@@ -299,6 +303,16 @@ test('the browser build asks a name, waits for Allow, then shows the doc read on
     const owner = await host.request('call', { docId, call: 'state' });
     await host.request('call', { docId, call: 'submit', arg: { ops: [{ from: TEXT.length, to: TEXT.length, insert: '\nThen ask for feedback.\n' }], rev: owner.rev, epoch: owner.epoch, id: 'w.1' } });
     await waitFor(async () => (await text()).includes('Then ask for feedback.'), 10_000, 'the owner\'s typing');
+
+    // A thread: a reader sees it, with nothing to reply, resolve or undo with.
+    await host.request('call', { docId, call: 'comment', arg: { anchor: null, body: 'Shall we?' } });
+    await waitFor(() => shown.evaluate(`document.querySelector('.od-margin').textContent.includes('Shall we?')`), 10_000, 'the comment');
+    const visible = (selector) => shown.evaluate(`[...document.querySelectorAll('${selector}')].filter((node) => node.offsetParent).length`);
+    for (const selector of ['.od-composer', '.od-resolve', '.od-toolbar [data-command]']) assert.equal(await visible(selector), 0, selector);
+
+    // Turned away, the page says why.
+    await asOwner(host, shared, 'remove', { id: pending[0].id });
+    await waitFor(async () => (await status()) === 'The owner removed you from this project', 10_000, 'the page told it was removed');
   } finally {
     await app.quit();
     host.kill();

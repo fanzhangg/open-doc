@@ -106,6 +106,7 @@ export function relayHost(params, identity) {
 // Why the host turns a page away (desktop/doc-host.js), as the page says it.
 const REFUSED = {
   not_found: 'This doc is not in the shared project',
+  hidden: 'Names starting with . and paths out of the project are never shared',
   name_taken: 'Someone on this project already has that name',
   bad_input: 'This page could not say who you are',
   denied: 'The owner did not let you in',

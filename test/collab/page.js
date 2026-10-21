@@ -5,9 +5,9 @@
 // (docs/markdown-view.md, Many writers): typing goes out as operations as
 // it is typed, one edit on its way at a time; before taking
 // the host's edits a view's text is read once more, the edits moved over
-// what it has not landed, and shown with applyText. With `?relay=<URL>`
-// the second view is a teammate who can edit, reaching the doc host through
-// the relay at URL (web/relay.js), as a browser page does.
+// what it has not landed, and shown with applyText. With `?relay=<URL>`,
+// `make` can make the second view a teammate who can edit, reaching the doc
+// host through the relay at URL (web/relay.js), as a browser page does.
 
 import { createMarkdownView } from '../../web/views/markdown/view.js';
 import { markdown } from '../../web/views/markdown/index.js';
@@ -114,14 +114,15 @@ const collab = {
   clients: [],
   // Both views of `text`: the Markdown view, `{ view: 'plain' }`, or
   // `{ view: 'auto' }`, the one the app would open a .md doc in (read-only
-  // past every view's limits). Resolves to that view's id and whether it edits.
-  async make(text, { view: kind = 'markdown' } = {}) {
+  // past every view's limits); with `teammate`, the second through the
+  // relay. Resolves to that view's id and whether it edits.
+  async make(text, { view: kind = 'markdown', teammate: throughRelay = false } = {}) {
     for (const c of collab.clients) await c.view.destroy();
     collab.clients = [];
     await bridge.make(text);
     const { result: state } = await bridge.call('state');
     Object.assign(host, { text: state.text, rev: state.rev, epoch: state.epoch });
-    teammate = RELAY ? await teammateLine() : null;
+    teammate = throughRelay ? await teammateLine() : null;
     // As the app makes it: its size judged by viewFor, named as a Markdown doc.
     const sized = viewFor('doc.md', resolveSettings({}), text);
     const chosen = kind === 'auto' ? sized : { id: kind, editable: true, color: sized.color };

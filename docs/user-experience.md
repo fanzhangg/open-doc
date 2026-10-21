@@ -71,7 +71,11 @@ time: then the link lets them in at once, to the project's first doc
 (the file tree and every doc in the project are *planned*). A new link
 ends every old one, and pages open on it close; **Remove** ends one person
 at once. A page turned away says why: a name taken, a request denied,
-removed, a link replaced, a doc not in the project.
+removed, a link replaced, a doc not in the project, a name the project
+never shares (starting with `.`, or out of it). One that cannot reach the
+host says whether the relay cannot be reached, the host went away, or no
+one is sharing at the link. A teammate who can only read sees no tool that
+would be refused: no formatting, no reply box, Resolve, Undo or Restore.
 
 Your computer is the host, so the project is there only while it is awake and
 the app is open. The app keeps the computer awake while teammates are in. A

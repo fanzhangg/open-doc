@@ -121,6 +121,8 @@ async function start() {
   myId = initial.me.id;
   inProject = initial.project;
   level = initial.level;
+  // A teammate who can only read sees no tool that would be refused: no reply, Resolve, Undo or Restore.
+  document.documentElement.toggleAttribute('data-reader', level === 'read');
   // The settings are the owner's: anyone else's stay in this page.
   settings = createSettings(initial.settings, {
     save: level === 'owner' ? api.saveSettings : async () => settings.get(),
@@ -630,7 +632,7 @@ function revealText(id) {
 
 // Comments are on selected text only.
 function requestComment() {
-  if (comments?.readOnly) return;
+  if (comments?.readOnly || level === 'read') return;
   const selection = editor.selection();
   if (!selection || selection.from === selection.to) return;
   if (narrow.matches) openSheet(true);

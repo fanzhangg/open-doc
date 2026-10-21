@@ -37,6 +37,11 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
     sent = id;
     answer = call('submit', { ops: pending[0], rev, epoch, id }).then(() => true, (error) => {
       if (id !== sent) return false; // sent again since
+      // Not this page's to send (set to Read meanwhile): nothing more goes out.
+      if (error.code === 'forbidden') {
+        onError(error);
+        return false;
+      }
       // An edit the host would not take (an epoch or rev it no longer has):
       // take its text again, and send the edit on that.
       if (error.code !== 'stale') onError(error);

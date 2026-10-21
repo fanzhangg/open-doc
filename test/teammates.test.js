@@ -77,7 +77,7 @@ test('a teammate\'s @mention starts a turn, undone by them; one whose asker is s
     assert.deepEqual(['undo', 'Sam'], [(await versions(owner.call)).at(-1).kind, (await versions(owner.call)).at(-1).author.name]);
 
     await sam('comment', { anchor: null, body: '@Pilot hold replace "Beta" with "BETA"' });
-    await until(async () => (await fakeRuns(settingsDir)).length === 2, 'the second turn');
+    await until(async () => (await fakeRuns(settingsDir).catch(() => [])).length === 2, 'the second turn'); // its line may be half written
     await team.set('p_sam', { level: 'read' });
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await new Promise((done) => setTimeout(done, 1500));
