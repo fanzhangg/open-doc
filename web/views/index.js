@@ -23,6 +23,7 @@
 // longest run of text without a blank line }. A doc past them opens in the
 // Plain text view; past its limits too, it opens read-only.
 
+import { longestBlock } from '../../src/core/diff.js';
 import { claims, viewSettings } from '../../src/core/settings.js';
 import { markdown } from './markdown/index.js';
 import { plain } from './plain/index.js';
@@ -61,14 +62,3 @@ export function viewFor(name, settings, text = '') {
 }
 
 const fits = ({ limits }, text) => !limits || (text.length <= limits.chars && (!limits.blockChars || longestBlock(text) <= limits.blockChars));
-
-// The longest run of `text` without a blank line in it.
-function longestBlock(text) {
-  let longest = 0;
-  let start = 0;
-  for (const blank of text.matchAll(/\n[ \t]*\n/g)) {
-    longest = Math.max(longest, blank.index - start);
-    start = blank.index + blank[0].length;
-  }
-  return Math.max(longest, text.length - start);
-}

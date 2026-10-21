@@ -19,6 +19,7 @@ import { patchDeps } from '../../scripts/patch-deps.js';
 import { LATENCY } from '../../web/views/index.js';
 import { markdown } from '../../web/views/markdown/index.js';
 import { plain } from '../../web/views/plain/index.js';
+import { COLOR_BLOCK_CHARS } from '../../web/views/plain/view.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -66,6 +67,7 @@ const CASES = [
   ['markdown', 'one long block', verses(markdown.limits.blockChars)],
   ['plain', 'blocks', blocks(plain.limits.chars)],
   ['plain', 'verses', verses(plain.limits.chars)],
+  ['plain', 'one long coloured block', verses(COLOR_BLOCK_CHARS)],
 ];
 
 let app;

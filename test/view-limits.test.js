@@ -17,6 +17,8 @@ test('a doc opens in the Markdown view up to its limits, then as plain text, the
   assert.deepEqual(choose(paragraphs(markdown.limits.chars + 1)), { id: 'plain', editable: true, tooLong: true });
   const verses = 'Genesis 1:1\tIn the beginning.\n'.repeat(Math.ceil(markdown.limits.blockChars / 30) + 1);
   assert.deepEqual(choose(verses), { id: 'plain', editable: true, tooLong: true }, 'one block past its limit');
+  const crlf = paragraphs(markdown.limits.chars).replace(/\n/g, '\r\n').slice(0, markdown.limits.chars);
+  assert.deepEqual(choose(crlf), { id: 'markdown', editable: true, tooLong: false }, 'blank lines ending in \\r\\n part blocks');
   assert.deepEqual(choose(paragraphs(plain.limits.chars)), { id: 'plain', editable: true, tooLong: true });
   assert.deepEqual(choose(paragraphs(plain.limits.chars + 1)), { id: 'plain', editable: false, tooLong: true });
   const txt = viewFor('notes.txt', settings, paragraphs(plain.limits.chars + 1));

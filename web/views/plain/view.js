@@ -10,7 +10,7 @@ import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemi
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits, sameEnd, sameStart } from '../../../src/core/diff.js';
+import { diffEdits, longestBlock, sameEnd, sameStart } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
@@ -18,6 +18,7 @@ import { indentKeys, resolveIndent } from './indent.js';
 import { createStatusBar } from './status.js';
 import { indentGuides, whitespaceMarks } from './whitespace.js';
 
+export const COLOR_BLOCK_CHARS = 10_000; // docs/architecture.md, Latency
 const FLASH_MS = 6000;
 const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
 const fromDisk = Annotation.define();
@@ -109,7 +110,9 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   });
 
   // The file's language, by its name, loads after the text is shown; no language, no colour.
-  const language = LanguageDescription.matchFilename(languages, name);
+  // A block longer than COLOR_BLOCK_CHARS is parsed again whole on each keystroke, so a doc
+  // with one when it opens has no colour.
+  const language = longestBlock(text) <= COLOR_BLOCK_CHARS ? LanguageDescription.matchFilename(languages, name) : null;
   language?.load().then((support) => {
     if (!destroyed) view.dispatch({ effects: syntax.reconfigure([support, syntaxHighlighting(defaultHighlightStyle)]) });
   }, () => {});

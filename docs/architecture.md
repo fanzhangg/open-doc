@@ -175,6 +175,7 @@ paragraph is parsed whole on every edit in it):
 | --- | --- | --- |
 | Markdown | 100,000 characters; no block over 10,000 | opens as plain text, and says so |
 | Plain text | 5,000,000 characters | opens read-only, and says so |
+| Plain text's colour | no block over 10,000 characters | the doc opens without colour |
 
 The desktop app opens text files up to 20 MB, room for the plain view's
 limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI

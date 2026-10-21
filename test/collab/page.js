@@ -103,7 +103,7 @@ const collab = {
     collab.clients = await Promise.all(stages.map(async (stage) => {
       let client;
       const toolbar = stage.closest('main').previousElementSibling;
-      const view = await create({ stage, text, toolbar, editable: chosen.editable, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
+      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
       client = createClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
       client.last = text;
       return client;
