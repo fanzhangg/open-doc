@@ -118,7 +118,8 @@ async function start() {
   offerRename();
   paintNameChip();
 
-  made = viewFor(docName, settings.get());
+  made = viewFor(docName, settings.get(), initial.text);
+  showSize(made, initial.text);
   editor = await makeView(made, initial.text);
   synced = initial.text;
   chrome = createChrome({
@@ -226,7 +227,7 @@ async function start() {
   });
   history = createHistory({
     api,
-    chooseView: () => viewFor(docName, settings.get()),
+    chooseView: () => viewFor(docName, settings.get(), editor.getText()),
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
     onClose: () => editor.focus(),
@@ -298,6 +299,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
+    editable: chosen.editable,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),
   });
@@ -310,8 +312,10 @@ function makeView(chosen, text) {
 let following = Promise.resolve();
 function followViews() {
   following = following.then(async () => {
-    const chosen = viewFor(docName, settings.get());
-    if (chosen.id !== made.id) await remakeView(chosen);
+    const text = editor.getText();
+    const chosen = viewFor(docName, settings.get(), text);
+    showSize(chosen, text);
+    if (chosen.id !== made.id || chosen.editable !== made.editable) await remakeView(chosen);
     else if (chosen.settings && JSON.stringify(chosen.settings) !== JSON.stringify(made.settings)) {
       editor.applySettings(chosen.settings);
       await history.viewChanged(); // an open history view follows too
@@ -554,6 +558,23 @@ async function refreshThreads() {
   return refreshing;
 }
 
+// A doc too long for the view that claims it opens as plain text, and one too
+// long for that, read-only (web/views/index.js): the banner says so, unless
+// the comments have a notice of their own.
+let sizeNotice = null;
+function showSize(chosen, text) {
+  const size = `${text.length.toLocaleString()} characters`;
+  sizeNotice = !chosen.editable ? `This doc is too long to edit here (${size}), so it opens read-only.`
+    : chosen.tooLong ? `This doc is too long for the Markdown view (${size}), so it opens as plain text.` : null;
+  paintNotice();
+}
+
+function paintNotice() {
+  const text = comments?.notice ?? sizeNotice;
+  noticeBanner.hidden = !text;
+  noticeBanner.querySelector('.od-banner-text').textContent = text ?? '';
+}
+
 // Show the doc's comments (from state() or a comment request). Redrawing
 // every card for the same ones would stall typing.
 let failedShown = null; // ids of the failed replies on screen; null until the first update
@@ -570,8 +591,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   paintMarks();
   margin.update(threads, { id: myId, name: me }, edits);
   people?.render({ people: writers });
-  noticeBanner.hidden = !notice;
-  noticeBanner.querySelector('.od-banner-text').textContent = notice ?? '';
+  paintNotice();
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
   paintEmpty();

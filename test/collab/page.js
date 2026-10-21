@@ -7,7 +7,9 @@
 
 import { createMarkdownView } from '../../web/views/markdown/view.js';
 import { markdown } from '../../web/views/markdown/index.js';
-import { viewSettings } from '../../src/core/settings.js';
+import { plain } from '../../web/views/plain/index.js';
+import { viewFor } from '../../web/views/index.js';
+import { resolveSettings, viewSettings } from '../../src/core/settings.js';
 import { apply, diffOps, transform } from '../../src/core/ot.js';
 
 const DELAY = Number(new URLSearchParams(location.search).get('delay') ?? 150); // ms each way
@@ -89,18 +91,25 @@ const stages = [...document.querySelectorAll('.od-stage')];
 const collab = {
   host,
   clients: [],
-  async make(text) {
+  // Both views of `text`: the Markdown view, `{ view: 'plain' }`, or
+  // `{ view: 'auto' }`, the one the app would open a .md doc in (read-only
+  // past every view's limits). Resolves to that view's id and whether it edits.
+  async make(text, { view: kind = 'markdown' } = {}) {
     for (const c of collab.clients) await c.view.destroy();
     Object.assign(host, { text, log: [], clients: [] });
+    const chosen = kind === 'auto' ? viewFor('doc.md', resolveSettings({}), text) : { id: kind, editable: true };
+    const declared = chosen.id === 'plain' ? plain : markdown;
+    const create = chosen.id === 'plain' ? plain.createView : createMarkdownView;
     collab.clients = await Promise.all(stages.map(async (stage) => {
       let client;
       const toolbar = stage.closest('main').previousElementSibling;
-      const view = await createMarkdownView({ stage, text, toolbar, settings: viewSettings({ views: {} }, markdown), onChange: () => client.flush() });
+      const view = await create({ stage, text, toolbar, editable: chosen.editable, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
       client = createClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
       client.last = text;
       return client;
     }));
     host.clients = collab.clients;
+    return { id: chosen.id, editable: chosen.editable };
   },
   // Put the caret (or a selection) in view i on characters [start, end) of
   // the first `quote` in its drawn text (a glow can split it across nodes).

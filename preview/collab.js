@@ -7,6 +7,7 @@ import { build } from 'esbuild';
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { patchDeps } from '../scripts/patch-deps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist', 'collab');
@@ -16,7 +17,7 @@ await cp(join(root, 'dist', 'web', 'app.css'), join(out, 'app.css'));
 await cp(join(root, 'dist', 'web', 'fonts'), join(out, 'fonts'), { recursive: true });
 await build({
   entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(out, 'page.js'),
-  bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'warning',
+  bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'warning', plugins: [patchDeps],
 });
 
 const SAMPLE = `# Launch plan
@@ -60,6 +61,7 @@ await writeFile(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><
 <div class="bar">
   <label>Doc <select class="doc"><option value="sample">Sample</option><option value="long">Long (200 KB)</option></select></label>
   <label>or <input type="file" class="file" accept=".md,.markdown,.txt"></label>
+  <span class="view"></span>
   <span>Host delay <b class="delay"></b> ms each way (add ?delay=ms to change)</span>
   <button class="show">Host text</button>
   <span class="sync"></span>
@@ -72,8 +74,14 @@ await writeFile(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><
   const docs = { sample: SAMPLE, long: Array(Math.ceil(200000 / SAMPLE.length)).fill(SAMPLE).join('\\n') };
   const $ = (selector) => document.querySelector(selector);
   $('.delay').textContent = new URLSearchParams(location.search).get('delay') ?? 150;
-  $('.doc').onchange = () => collab.make(docs[$('.doc').value]);
-  $('.file').onchange = async () => collab.make(await $('.file').files[0].text());
+  // In the view the app would open the doc in: plain text past the Markdown
+  // view's limits, read-only past every view's.
+  const open = async (text) => {
+    const { id, editable } = await collab.make(text, { view: 'auto' });
+    $('.view').textContent = (id === 'plain' ? 'Plain text view' : 'Markdown view') + (editable ? '' : ', read-only: too long to edit');
+  };
+  $('.doc').onchange = () => open(docs[$('.doc').value]);
+  $('.file').onchange = async () => open(await $('.file').files[0].text());
   $('.show').onclick = () => { $('.host').hidden = !$('.host').hidden; };
   // Both views equal the host once nothing is on its way.
   setInterval(() => {
@@ -85,7 +93,7 @@ await writeFile(join(out, 'index.html'), `<!doctype html><meta charset="utf-8"><
     if (errors.length) console.error(errors);
     if (!$('.host').hidden) $('.host').textContent = host;
   }, 300);
-  collab.make(SAMPLE);
+  open(SAMPLE);
 </script>
 `);
 console.log(`Open in Chrome: ${pathToFileURL(join(out, 'index.html'))}`);

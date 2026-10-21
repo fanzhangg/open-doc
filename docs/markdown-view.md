@@ -139,7 +139,9 @@ and files.
 
 ### Cost
 
-A parse or a serialize of a long doc takes hundreds of milliseconds, so the
+The view keeps the latency promise ([Latency](architecture.md#latency)) up
+to 100,000 characters, with no block over 10,000; a longer doc opens in the
+plain view. A parse or a serialize of a long doc takes hundreds of milliseconds, so the
 view works a few top-level blocks at a time (`web/blocks.js`): while each
 block of the text it was given pairs with a block of its document,
 `getText` writes only the blocks changed since and splices them in, and

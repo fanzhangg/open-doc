@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
+import { patchDeps } from '../scripts/patch-deps.js';
 
 const VIEWS = ['markdown', 'plain'];
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -22,7 +23,7 @@ before(async () => {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-views-'));
   await build({
     entryPoints: [join(root, 'test', 'views', 'page.js')], outfile: join(dir, 'page.js'),
-    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
+    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error', plugins: [patchDeps],
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>views</title><link rel="stylesheet" href="app.css">

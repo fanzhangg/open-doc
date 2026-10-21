@@ -10,7 +10,7 @@ import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemi
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits } from '../../../src/core/diff.js';
+import { diffEdits, sameEnd, sameStart } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
@@ -156,8 +156,14 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
    * buddy's change (`buddy`) also glows.
    */
   function applyText(next, { by = null, buddy = false } = {}) {
+    const before = crlf ? view.state.doc.toString() : currentText();
     crlf = isCrlf(next);
-    const edits = diffEdits(view.state.doc.toString(), next.replaceAll('\r\n', '\n'));
+    const after = next.replaceAll('\r\n', '\n');
+    // Only the lines between what the two texts start and end with are diffed:
+    // a long doc changes a few lines at a time.
+    const [head, tail] = sameLines(before, after);
+    const edits = diffEdits(before.slice(head, before.length - tail), after.slice(head, after.length - tail))
+      .map(({ from, to, edit }) => ({ from: from + head, to: to + head, edit: { ...edit, start: edit.start + head } }));
     if (edits.length === 0) {
       textOf = { doc: view.state.doc, text: next };
       return;
@@ -373,4 +379,13 @@ class Flag extends WidgetType {
 }
 
 // Whether every line break of `text` is "\r\n".
+// How many characters `a` and `b` share at the start and at the end, in whole lines.
+function sameLines(a, b) {
+  let head = sameStart(a, b);
+  head = head && a.lastIndexOf('\n', head - 1) + 1;
+  const tail = sameEnd(a, b, Math.min(a.length, b.length) - head);
+  const end = a.indexOf('\n', a.length - tail);
+  return [head, end === -1 ? 0 : a.length - end];
+}
+
 const isCrlf = (text) => text.includes('\r\n') && !/\r(?!\n)|(?<!\r)\n/.test(text);

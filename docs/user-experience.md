@@ -46,6 +46,10 @@ the **Buddies** list: the AI buddies, their cards and New AI buddy.
    Any other text file (code, config, notes) opens as plain text, and
    comments and AI buddies work the same there. The WYSIWYG editor is a
    view (see Views and rules below): switched off, Markdown opens as plain text too.
+   A doc too long to write in smoothly in a view opens in the next one, and
+   says so in a banner: past 100,000 characters (or a paragraph past
+   10,000), Markdown opens as plain text; past 5,000,000, any doc opens
+   read-only.
 3. **Comment.** Select text and click the comment button at the page edge
    (Ctrl+Alt+M). The comment sits in the margin beside its text and follows
    it as the text changes.

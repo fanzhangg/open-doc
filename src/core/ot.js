@@ -4,7 +4,7 @@
 // replace [from, to) with `insert`, offsets in UTF-16 code units, sorted and
 // not overlapping. The page and the host share these.
 
-import { lineMatches } from './diff.js';
+import { lineMatches, sameEnd, sameStart } from './diff.js';
 
 /**
  * The edit that turns `base` into `text`, by character: what differs is
@@ -18,10 +18,8 @@ import { lineMatches } from './diff.js';
 export function diffOps(base, text, caret = text.length) {
   if (base === text) return [];
   const max = Math.min(base.length, text.length);
-  let start = 0;
-  while (start < max && start < caret && base.charCodeAt(start) === text.charCodeAt(start)) start++;
-  let end = 0;
-  while (end < max - start && end < text.length - caret && base.charCodeAt(base.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) end++;
+  let start = sameStart(base, text, Math.min(max, caret));
+  let end = sameEnd(base, text, Math.min(max - start, text.length - caret));
   // Never split a surrogate pair.
   if (start > 0 && isHigh(base.charCodeAt(start - 1))) start--;
   if (end > 0 && isLow(base.charCodeAt(base.length - end))) end--;

@@ -10,6 +10,7 @@ export const plain = {
   about: 'Edit any other text file as it is, with no formatting.',
   extensions: null,
   always: true,
+  limits: { chars: 5_000_000 }, // docs/architecture.md, Latency; past it a doc is read-only
   createView: createPlainView,
   settings: [
     { key: 'lineNumbers', type: 'switch', label: 'Line numbers', default: true, group: 'Display' },

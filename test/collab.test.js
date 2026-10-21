@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
+import { patchDeps } from '../scripts/patch-deps.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const MOD = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
@@ -54,7 +55,7 @@ before(async () => {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-collab-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
-    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
+    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error', plugins: [patchDeps],
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   // Two pages side by side, each without the comment margin, as with comments hidden.
@@ -73,7 +74,8 @@ before(async () => {
 after(() => app?.quit());
 
 const run = (expression) => page.evaluate(`(async () => ${expression})()`);
-const make = (text) => run(`collab.make(${JSON.stringify(text)})`);
+const VIEW = process.env.COLLAB_VIEW ?? 'markdown'; // the random typing (case 6) can run in the plain view too
+const make = (text, view = 'markdown') => run(`collab.make(${JSON.stringify(text)}, { view: '${view}' })`);
 const select = (i, quote, start, end) => run(`collab.select(${i}, ${JSON.stringify(quote)}, ${start}, ${end})`);
 const focus = (i) => run(`collab.focus(${i})`);
 const wait = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -165,7 +167,7 @@ test('5. Cmd+Z after the other typed in the same paragraph: only one\'s own typi
 });
 
 test('6. random typing in both: both views equal the host; no error', { timeout: SECONDS * 1000 + 120_000 }, async () => {
-  await make(Array(4).fill(SAMPLE).join('\n'));
+  await make(Array(4).fill(SAMPLE).join('\n'), VIEW);
   let seed = 11;
   const random = (n) => {
     seed = (seed * 1103515245 + 12345) % 2 ** 31;
@@ -182,7 +184,7 @@ test('6. random typing in both: both views equal the host; no error', { timeout:
       else if (pick < 8) await key('Backspace');
       else if (pick < 9) await key('Enter', { text: '\r' });
       else if (pick < 10) await key('z', { modifiers: MOD });
-      else await run(`collab.tool(${i}, '${['bold', 'italic', 'bullets', 'quote'][random(4)]}')`);
+      else if (VIEW === 'markdown') await run(`collab.tool(${i}, '${['bold', 'italic', 'bullets', 'quote'][random(4)]}')`);
       actions++;
     }
     await wait(random(300));

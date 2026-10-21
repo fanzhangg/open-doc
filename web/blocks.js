@@ -8,6 +8,7 @@ import { TextSelection } from '@milkdown/kit/prose/state';
 import { blockRanges, project } from '../src/markdown/project.js';
 import { projectDoc } from './pm-text.js';
 import { splice } from '../src/markdown/splice.js';
+import { sameEnd, sameStart } from '../src/core/diff.js';
 
 /**
  * Runs of children that differ between two nodes, aligned by a longest
@@ -223,11 +224,8 @@ export function typedInto(source, node, parse) {
  * the change runs on past it).
  */
 export function parseRun(doc, text, blocks, next, parse) {
-  const max = Math.min(text.length, next.length);
-  let head = 0;
-  while (head < max && text.charCodeAt(head) === next.charCodeAt(head)) head++;
-  let tail = 0;
-  while (tail < max - head && text.charCodeAt(text.length - 1 - tail) === next.charCodeAt(next.length - 1 - tail)) tail++;
+  const head = sameStart(text, next);
+  const tail = sameEnd(text, next, Math.min(text.length, next.length) - head);
   const changedEnd = text.length - tail;
   let from = blocks.findIndex((b) => b.end >= head);
   if (from === -1) from = blocks.length;

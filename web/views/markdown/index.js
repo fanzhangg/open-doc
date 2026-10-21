@@ -9,6 +9,7 @@ export const markdown = {
   about: 'Edit Markdown docs as formatted text, with a toolbar and an outline.',
   extensions: ['md', 'markdown'],
   // Loaded with the first Markdown doc.
+  limits: { chars: 100_000, blockChars: 10_000 }, // docs/architecture.md, Latency
   createView: (options) => import('./view.js').then((view) => view.createMarkdownView(options)),
   settings: [
     { key: 'font', type: 'choice', label: 'Document font', options: [['sans', 'Sans'], ['serif', 'Serif'], ['mono', 'Mono']], default: 'sans', group: 'Page' },

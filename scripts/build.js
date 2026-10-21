@@ -3,6 +3,7 @@ import { build } from 'esbuild';
 import { copyFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { patchDeps } from './patch-deps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist', 'web');
@@ -21,6 +22,7 @@ await build({
   minify: true,
   legalComments: 'linked',
   logLevel: 'info',
+  plugins: [patchDeps],
 });
 // The desktop start window (desktop/start.html loads it from here), with the editor's faces.
 await build({

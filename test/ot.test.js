@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, diffOps, transform } from '../src/core/ot.js';
+import { sameEnd, sameStart } from '../src/core/diff.js';
 
 test('diffOps is trimmed to the edit, and apply makes the text', () => {
   assert.deepEqual(diffOps('Hello world.', 'Hello, world.'), [{ from: 5, to: 5, insert: ',' }]);
@@ -93,4 +94,15 @@ test('random concurrent edits from two pages end in the host\'s text on both', (
     }
     for (const page of pages) assert.equal(page.text, host, `run ${run}`);
   }
+});
+
+test('sameStart and sameEnd find what two texts share, past whole chunks too', () => {
+  const long = 'abcdefghij'.repeat(500);
+  for (const at of [0, 1, 1023, 1024, 1025, 2500, 4999]) {
+    const changed = `${long.slice(0, at)}X${long.slice(at + 1)}`;
+    assert.equal(sameStart(long, changed), at);
+    assert.equal(sameEnd(long, changed), long.length - at - 1);
+  }
+  assert.equal(sameStart(long, long, 7), 7, 'at most max');
+  assert.equal(sameEnd('xyz', 'yz'), 2);
 });
