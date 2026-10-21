@@ -137,7 +137,8 @@ jobs:
 
   perf:
     # The latency promise (docs/architecture.md, Latency): each view at its
-    # limits, typed in while a teammate's edits arrive. A few minutes.
+    # limits, typed in while a teammate's edits arrive, and a key to a
+    # teammate's page through the relay. A few minutes.
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -149,6 +150,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix relay # wrangler, for the typing promise (test/perf/typing.test.js)
       - run: xvfb-run -a npm run test:perf # opens an Electron window
 
   stress:

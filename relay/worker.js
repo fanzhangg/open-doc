@@ -8,9 +8,10 @@
 // The host has one connection for every page: the relay numbers each page
 // as a peer, and frames go between them as JSON:
 //   to the host   { peer, open: { <parameter>: value } }, { peer, data }, { peer, close: true }
-//   from the host { peer, data }, { peer, close: true }
-// `data` is a page's message as it is, a string. While no host is in, a
-// page is turned away; when the host goes, every page is closed with 4000.
+//   from the host { peer, data }, { peer, close: <reason> }
+// `data` is a page's message as it is, a string. A page is closed with 4000
+// while no host is in, or when it goes; with 4001 and the host's reason
+// when the host turns it away.
 
 /* global WebSocketPair */
 
@@ -33,10 +34,10 @@ export class Room {
     const url = new URL(request.url);
     const secret = url.searchParams.get('secret');
     if (secret !== null && await sha256(secret) !== url.pathname.match(ROOM)[1]) return new Response('Forbidden', { status: 403 });
-    if (secret === null && !this.host) return new Response('The host is offline', { status: 503 });
     const [client, socket] = Object.values(new WebSocketPair());
     socket.accept();
     if (secret !== null) this.#host(socket);
+    else if (!this.host) socket.close(4000, 'The host is offline'); // so the page knows why
     else this.#page(socket, Object.fromEntries(url.searchParams));
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -50,7 +51,7 @@ export class Room {
       const page = this.pages.get(peer);
       if (frame.close) {
         this.pages.delete(peer);
-        page?.close(1000);
+        page?.close(4001, String(frame.close));
       } else page?.send(frame.data);
     });
     socket.addEventListener('close', () => {

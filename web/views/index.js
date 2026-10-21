@@ -35,14 +35,17 @@ const CLAIMING = [markdown];
  * The latency promise every view keeps for a doc within its `limits`, while
  * a teammate types too (docs/architecture.md, Latency), in milliseconds:
  * from the text to an editable view; from a key to its character in the
- * doc; from a teammate's edit arriving to it shown, the network aside; and
- * the longest the page is ever busy at once after it opens.
- * test/perf/latency.test.js holds every view to it at its limits.
+ * doc; from a teammate's edit arriving to it shown, the network aside; from
+ * a key to its character shown at a teammate, while the person types on,
+ * the network aside; and the longest the page is ever busy at once after
+ * it opens. test/perf/latency.test.js holds every view to it at its limits,
+ * test/perf/typing.test.js the pages between two views (`typed`).
  */
 export const LATENCY = Object.freeze({
   open: 3000,
   keystroke: { median: 30, p95: 100 },
   teammate: { median: 50, p95: 100 },
+  typed: { median: 50, p95: 100 },
   task: 500,
 });
 

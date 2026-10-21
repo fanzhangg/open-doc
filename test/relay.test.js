@@ -1,84 +1,34 @@
 // A teammate's page reaching the owner's doc host through the relay
-// (docs/architecture.md, Sharing): the relay run locally by wrangler
-// (relay/; `npm ci --prefix relay` first), the doc host forked as in
-// test/doc-host.test.js, and the page as web/relay.js and web/client.js in
-// Node, then the browser build itself in Electron.
+// (docs/architecture.md, Sharing), run locally (test/relay/harness.js): the
+// page as web/relay.js and web/client.js in Node, then the browser build
+// itself in Electron.
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile, fork } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { relayHost } from '../web/relay.js';
 import { createClient } from '../web/client.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
 import { until } from './helpers.js';
+import { page as teammatePage, project as newProject, roomOf, startHost as hostOn, startRelay } from './relay/harness.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const HOST = join(root, 'desktop', 'doc-host.js');
 const TEXT = '# Plan\n\nShip the preview first.\n';
 
 let relay;
-let relayUrl;
-
 before(async () => {
-  const wrangler = createRequire(join(root, 'relay', 'package.json')).resolve('wrangler');
-  process.env.WRANGLER_LOG ??= 'error'; // not every request
-  const { unstable_startWorker } = await import(pathToFileURL(wrangler).href);
-  relay = await unstable_startWorker({ config: join(root, 'relay', 'wrangler.toml'), dev: { server: { hostname: '127.0.0.1', port: 0 }, inspector: false, watch: false } });
-  relayUrl = `ws://${(await relay.url).host}`;
+  relay = await startRelay();
 });
+after(() => relay?.stop());
 
-after(() => relay?.dispose());
-
-// A project folder holding plan.md, and a config folder for its owner.
-async function project() {
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
-  await writeFile(join(folder, 'plan.md'), TEXT);
-  await mkdir(join(folder, '.opendoc'));
-  await writeFile(join(folder, '.opendoc', 'secret.md'), 'hidden\n');
-  const config = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
-  await writeFile(join(config, 'settings.json'), JSON.stringify({ name: 'owner', agents: [] }));
-  return { folder, config, secret: `s-${Math.random().toString(36).slice(2)}` };
-}
-
-// A doc host, as the app starts it, sharing `folder`: `request(type, arg)`
-// asks it as the app does.
-async function startHost({ folder, config, secret }) {
-  const child = fork(HOST, [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
-  const asked = new Map();
-  let nextId = 0;
-  const ready = new Promise((done) => child.once('message', done));
-  child.on('message', ({ id, result, error }) => {
-    asked.get(id)?.[error ? 1 : 0](error ?? result);
-    asked.delete(id);
-  });
-  const request = async (type, arg = {}) => {
-    await ready;
-    return new Promise((done, fail) => {
-      const id = ++nextId;
-      asked.set(id, [done, fail]);
-      child.send({ id, type, ...arg });
-    });
-  };
-  await request('share', { folder, relay: relayUrl, secret });
-  return { request, kill: () => child.kill() };
-}
-
-// A teammate's page on `doc`, as web/relay.js reaches the host: `call`
-// resolves to { result } or { error }, and `events` holds what it heard.
-function page(secret, doc = 'plan.md') {
-  const room = createHash('sha256').update(secret).digest('hex');
-  const host = relayHost(new URLSearchParams({ relay: relayUrl, room, doc }));
-  const events = [];
-  host.onEvent((event, data) => events.push({ event, data }));
-  return { call: host.call, events };
-}
+const project = () => newProject(TEXT);
+const startHost = (shared) => hostOn(shared, relay.url);
+const page = (secret, doc) => teammatePage(relay.url, secret, doc);
 
 test('a page reads a doc through the relay as a teammate who can read, and sees the owner type', async () => {
   const shared = await project();
@@ -128,7 +78,7 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
       }
     }
     // A `who` beside the request, not in its arg, changes nothing either.
-    const socket = new WebSocket(`${relayUrl}/rooms/${createHash('sha256').update(shared.secret).digest('hex')}?doc=plan.md`);
+    const socket = new WebSocket(`${relay.url}/rooms/${roomOf(shared.secret)}?doc=plan.md`);
     const answers = [];
     socket.addEventListener('message', ({ data }) => answers.push(JSON.parse(data)));
     await new Promise((done) => socket.addEventListener('open', done));
@@ -142,22 +92,20 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
   }
 });
 
-test('a page reaches only what the project shows, and only with the host\'s secret is anyone the host', async () => {
+test('a page reaches only what the project shows, and is told why not; only with the host\'s secret is anyone the host', async () => {
   const shared = await project();
   const host = await startHost(shared);
   try {
     for (const doc of ['.opendoc/secret.md', '../plan.md', 'nothing.md']) {
-      const socket = new WebSocket(`${relayUrl}/rooms/${createHash('sha256').update(shared.secret).digest('hex')}?doc=${encodeURIComponent(doc)}`);
-      const messages = [];
-      socket.addEventListener('message', ({ data }) => messages.push(data));
-      await new Promise((done) => {
-        socket.addEventListener('close', done);
-        socket.addEventListener('error', done);
-      });
-      assert.deepEqual(messages, [], doc);
+      const turnedAway = page(shared.secret, doc);
+      const { error } = await turnedAway.call('state');
+      assert.equal(error.code, 'not_found', doc);
+      assert.equal(error.message, 'This doc is not in the shared project');
+      assert.deepEqual(turnedAway.lines, ['refused']);
+      assert.deepEqual(turnedAway.events, [], doc);
     }
-    const room = createHash('sha256').update(shared.secret).digest('hex');
-    const impostor = new WebSocket(`${relayUrl}/rooms/${room}?secret=guess`);
+    const room = roomOf(shared.secret);
+    const impostor = new WebSocket(`${relay.url}/rooms/${room}?secret=guess`);
     const opened = await new Promise((done) => {
       impostor.addEventListener('open', () => done(true));
       impostor.addEventListener('error', () => done(false));
@@ -190,15 +138,25 @@ test('when the host goes away the page waits, and once it is back resyncs with s
     teammate.events.length = 0;
 
     host.kill();
-    await until(() => teammate.events.some((e) => e.event === 'offline'), 'offline');
+    await until(() => teammate.lines.includes('host'), 'the page told the host went away');
     await writeFile(join(shared.folder, 'plan.md'), `${TEXT}Changed while the host was away.\n`);
     host = await startHost(shared);
     await until(() => hellos() > 0, 'hello from the new host');
     await client.resync();
     assert.equal(shown, `${TEXT}Changed while the host was away.\n`);
+    assert.deepEqual(teammate.lines, ['host', 'in']);
   } finally {
     host.kill();
   }
+});
+
+test('a link no host is in says so, and the page waits for one', async () => {
+  const teammate = page('a secret no host has');
+  let answered = false;
+  teammate.call('state').then(() => { answered = true; });
+  await until(() => teammate.lines.length > 0, 'the line');
+  assert.deepEqual(teammate.lines, ['nohost']);
+  assert.equal(answered, false, 'the call waits for a host');
 });
 
 test('the browser build shows the doc read only, live', async () => {
@@ -206,9 +164,9 @@ test('the browser build shows the doc read only, live', async () => {
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-relay-page-'));
-  const room = createHash('sha256').update(shared.secret).digest('hex');
+  const room = roomOf(shared.secret);
   const url = new URL(`file://${join(root, 'dist', 'preview', 'team.html')}`);
-  url.search = new URLSearchParams({ relay: relayUrl, room, doc: 'plan.md' }).toString();
+  url.search = new URLSearchParams({ relay: relay.url, room, doc: 'plan.md' }).toString();
   const electron = createRequire(import.meta.url)('electron');
   const env = { ...process.env, RELAY_PAGE: url.href };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -218,6 +176,7 @@ test('the browser build shows the doc read only, live', async () => {
     const text = () => shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.innerText ?? ''`);
     await waitFor(async () => (await text()).includes('Ship the preview first.'), 30_000, 'the doc');
     assert.equal(await shown.evaluate(`document.querySelector('.od-stage [contenteditable]').contentEditable`), 'false');
+    assert.equal(await shown.evaluate(`document.querySelectorAll('.od-toolbar [data-command]').length`), 0, 'no formatting tools');
 
     const { docId } = await host.request('open', { docPath: join(shared.folder, 'plan.md'), folder: shared.folder });
     const owner = await host.request('call', { docId, call: 'state' });

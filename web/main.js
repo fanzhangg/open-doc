@@ -88,7 +88,19 @@ window.opendocStay = () => {
   document.body.inert = false;
 };
 
+// How the line to the host is, in a teammate's page (web/relay.js).
+const LINE = {
+  host: 'The host is offline: waiting for it to come back',
+  nohost: 'No one is sharing at this link now. It may be from an earlier time: ask for a new one. Waiting…',
+  relay: 'Cannot reach the relay: trying again',
+};
+function showLine(line) {
+  if (!line) setStatus('');
+  else setStatus(line.message ?? LINE[line.reason], 'error');
+}
+
 async function start() {
+  api.line(showLine);
   let initial;
   try {
     initial = await api.state();
@@ -268,15 +280,7 @@ async function start() {
   events.on('missing', (data) => setMissing(data.missing));
   // First on a new connection: the doc may have gone missing, or runs
   // started, since `state`, and the doc host may have started again.
-  // The host is away (a teammate's page, web/relay.js): its `hello` says it is back.
-  let offline = false;
-  events.on('offline', () => {
-    offline = true;
-    setStatus('The host is offline: waiting for it to come back', 'error');
-  });
   events.on('hello', (data) => {
-    if (offline) setStatus('');
-    offline = false;
     if (Boolean(data.missing) !== missing) setMissing(!missing);
     showAgents(data.agents);
     client.resync();
@@ -295,10 +299,10 @@ function makeView(chosen, text) {
     name: docName,
     toolbar: document.querySelector('.od-toolbar'),
     onComment: requestComment,
+    onEdit: () => client.edited(),
     onChange: () => {
       hideRun();
       paintMarks();
-      client.flush();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onMarkClick: (id) => {

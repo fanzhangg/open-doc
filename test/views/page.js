@@ -14,16 +14,20 @@ let view = null;
 const contract = {
   clicked: [],
   saved: [], // the settings changes the view asked to save
+  edits: [], // getText at each onEdit
+  changes: 0, // how many times onChange fired
   // `toolbar: true` gives a Markdown view its toolbar, with that view's settings.
   async make(name, text, { toolbar = false, ...options } = {}) {
     await view?.destroy();
     document.querySelector('.od-toolbar')?.remove();
     contract.clicked = [];
     contract.saved = [];
+    contract.edits = [];
+    contract.changes = 0;
     const bar = toolbar ? Object.assign(document.createElement('div'), { className: 'od-toolbar', innerHTML: '<span class="od-spacer"></span>' }) : null;
     if (bar) document.body.prepend(bar);
     const settings = viewSettings({ views: {} }, toolbar ? markdown : plain);
-    view = await VIEWS[name]({ stage, text, settings, toolbar: bar, ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
+    view = await VIEWS[name]({ stage, text, settings, toolbar: bar, ...options, onMarkClick: (id) => contract.clicked.push(id), onEdit: () => contract.edits.push(view.getText()), onChange: () => contract.changes++, saveSettings: (patch) => contract.saved.push(patch) });
     window.view = view;
   },
   // Press toolbar button `command`, as a click does.

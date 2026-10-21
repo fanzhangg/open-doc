@@ -196,6 +196,7 @@ within its limits:
 | the doc's text | an editable view | 3 s |
 | a key | its character in the doc | 30 ms median, 100 ms p95 |
 | a teammate's edit arriving | it shown (the network aside) | 50 ms median, 100 ms p95 |
+| a key | its character shown at a teammate, while the person types on (the network aside) | 50 ms median, 100 ms p95 |
 | the doc opened | the end of any one task that keeps the page busy | 500 ms |
 
 A view keeps it only up to a size, its `limits`: how long the doc is, and
@@ -212,7 +213,12 @@ The desktop app opens text files up to 20 MB, room for the plain view's
 limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
 job on every pull request) opens each view at its limits, in the doc shape
 that costs it most, types while a teammate's edits arrive, and fails when
-the promise is missed twice running. Two dependencies are quadratic in one
+the promise is missed twice running; `test/perf/typing.test.js` types in
+a view, as the owner, and times each key to a teammate's page through the
+relay run locally. A view sends each change the person makes as it is made
+(`onEdit`), one edit on its way at a time: keys typed while one is on its
+way go out together once it is answered, so typing reaches others while it
+goes on, not once it pauses. Two dependencies are quadratic in one
 paragraph's length; installs and builds patch them in node_modules, for the
 page and the doc host alike (`scripts/patch-deps.js`), until
 they are fixed upstream.

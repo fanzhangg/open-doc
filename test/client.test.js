@@ -146,3 +146,39 @@ test('a doc host that stops after writing an edit, before telling the page: star
   assert.equal(await readFile(docPath, 'utf8'), expected);
   await host.close();
 });
+
+test('a key goes out at once when nothing is on its way; keys typed meanwhile go out together once it is answered', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const sent = [];
+  let release = null;
+  const { view, client } = page(() => ({
+    call: async (type, arg) => {
+      if (type === 'submit') {
+        sent.push(arg.ops.map((op) => op.insert).join(''));
+        await new Promise((done) => { release = done; });
+      }
+      return host.call(type, arg);
+    },
+  }));
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+
+  view.text = view.text.replace('Alpha', 'Alpha!');
+  client.edited();
+  await until(() => sent.length === 1, 'the first key, at once');
+  view.text = view.text.replace('one', 'one x');
+  client.edited();
+  view.text = view.text.replace('one x', 'one xy');
+  client.edited();
+  await new Promise((done) => setTimeout(done, 50));
+  assert.deepEqual(sent, ['!'], 'nothing more while one is on its way');
+  release();
+  await until(() => sent.length === 2, 'the keys typed meanwhile');
+  assert.equal(sent[1], ' xy');
+  release();
+  await client.landed();
+  assert.equal(await readFile(docPath, 'utf8'), 'Alpha! one xy.\n\nBeta two.\n\nGamma three.\n');
+  await host.close();
+});

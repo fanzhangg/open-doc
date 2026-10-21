@@ -36,6 +36,8 @@ export const api = {
     }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
+  /** How the line to the host is, for a page in a browser (relay.js `onLine`); the app's is always there. */
+  line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
    * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.

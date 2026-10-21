@@ -209,7 +209,7 @@ function share(folder, relay, secret) {
       await serve(docs.get(docId), port, () => ({ id: `peer-${peer}`, name: 'Teammate', kind: 'human', level: 'read' }));
     } catch {
       peers.delete(peer);
-      port.close(); // no such doc in the project
+      port.close('not_found'); // no such doc in the project
     }
   }
 
@@ -231,7 +231,8 @@ function share(folder, relay, secret) {
 
 // A page reached through the relay, as a message port: messages taken
 // before `start()` wait for it. `send(frame)` sends a frame to the relay;
-// `receive(text)` takes a message from the page, `closed()` the page gone.
+// `receive(text)` takes a message from the page, `closed()` the page gone;
+// `close(reason)` turns the page away.
 function peerPort(send) {
   const handlers = {};
   let waiting = [];
@@ -253,8 +254,8 @@ function peerPort(send) {
       if (waiting) waiting.push(message);
       else handlers.message({ data: message });
     },
-    close() {
-      send({ close: true });
+    close(reason) {
+      send({ close: reason });
       port.closed();
     },
     closed() {
