@@ -1,7 +1,9 @@
 // The OpenDoc agent (docs/opendoc-agent.md): a model reads and proposes, and
 // this program checks the proposal and applies it to the copies. Run by
 // `opendoc` (`opendoc.cmd` on Windows) next to it, on your own node, under
-// the contract of docs/agent-config.md. Yours to change.
+// the contract of docs/agent-config.md; its settings (opendoc.json) come
+// as OPENDOC_SETTING_*. Plain fetch, no SDK: it runs from the config
+// folder, with no node_modules. Yours to change.
 
 import { appendFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
@@ -9,53 +11,43 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { text } from 'node:stream/consumers';
 import { fileURLToPath } from 'node:url';
 
-// Any OpenAI-compatible server: Ollama here, or a cloud with its key.
-const ENDPOINT = 'http://localhost:11434/v1';
-const MODEL = 'qwen3';
-const KEY = process.env.OPENAI_API_KEY;
-
 // Each turn's messages, a line each, next to the app's own logs.
 const LOG = fileURLToPath(new URL('../logs/opendoc.jsonl', import.meta.url));
 
 const STEPS = 20;
 const MAX_READ = 20_000; // characters a read without `lines` returns
 
+// The tools, as each provider's infer gets them: { name, description, parameters (a JSON schema) }.
 const TOOLS = [
   {
-    type: 'function',
-    function: {
-      name: 'read',
-      description: `Read a file, or list a folder. Each line comes after its number and a tab, which are not part of the file. A file over ${MAX_READ} characters read without lines gives its outline: read it in parts.`,
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'The path of the file or folder.' },
-          lines: { type: 'array', items: { type: 'integer' }, description: 'The first and last line to read, from 1.' },
-        },
-        required: ['path'],
+    name: 'read',
+    description: `Read a file, or list a folder. Each line comes after its number and a tab, which are not part of the file. A file over ${MAX_READ} characters read without lines gives its outline: read it in parts.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The path of the file or folder.' },
+        lines: { type: 'array', items: { type: 'integer' }, description: 'The first and last line to read, from 1.' },
       },
+      required: ['path'],
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'propose',
-      description: 'End your turn: your edits and your reply. To edit the doc, replace `old`, quoted exactly from it and found there once, with `new`. To comment, append to the comments file: `old` empty, `new` the lines to append. No other file can change. `reply` is what you print, and may be empty. One bad edit sends the whole proposal back, saying what to fix.',
-      parameters: {
-        type: 'object',
-        properties: {
-          edits: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { path: { type: 'string' }, old: { type: 'string' }, new: { type: 'string' } },
-              required: ['path', 'old', 'new'],
-            },
+    name: 'propose',
+    description: 'End your turn: your edits and your reply. To edit the doc, replace `old`, quoted exactly from it and found there once, with `new`. To comment, append to the comments file: `old` empty, `new` the lines to append. No other file can change. `reply` is what you print, and may be empty. One bad edit sends the whole proposal back, saying what to fix.',
+    parameters: {
+      type: 'object',
+      properties: {
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { path: { type: 'string' }, old: { type: 'string' }, new: { type: 'string' } },
+            required: ['path', 'old', 'new'],
           },
-          reply: { type: 'string' },
         },
-        required: ['edits', 'reply'],
+        reply: { type: 'string' },
       },
+      required: ['edits', 'reply'],
     },
   },
 ];
@@ -63,30 +55,35 @@ const TOOLS = [
 /**
  * One buddy answering one thread: `prompt` is stdin as is, `doc` and
  * `sidecar` the copies' paths. `infer(messages, tools)` is one step of the
- * model and resolves to its message; `readFile(path)` to a file's text, a
- * folder's entries or null. Resolves to the checked { edits, reply }, and
- * throws when the turn fails.
+ * model (INFER) and resolves to { calls: [{ id, name, args }], sent }, `args`
+ * the JSON the model wrote and `sent` its message as its API sent it;
+ * `readFile(path)` to a file's text, a folder's entries or null. Resolves to
+ * the checked { edits, reply }, and throws when the turn fails.
+ *
+ * The messages are in one form for every provider: { role: 'user', content },
+ * { role: 'assistant', calls, sent }, and { role: 'tool', id, content }, a
+ * call's result.
  */
 export async function turn({ prompt, doc, sidecar }, { infer, readFile }) {
   const messages = [{ role: 'user', content: prompt }];
   for (let step = 0; step < STEPS; step++) {
-    const message = await infer(messages, TOOLS);
-    messages.push(message);
-    const [call, ...more] = message.tool_calls ?? [];
+    const { calls, sent } = await infer(messages, TOOLS);
+    messages.push({ role: 'assistant', calls, sent });
+    const [call, ...more] = calls;
     if (!call) {
       messages.push({ role: 'user', content: 'Call read or propose.' });
       continue;
     }
-    const result = await use(call.function, { doc, sidecar, readFile });
+    const result = await use(call, { doc, sidecar, readFile });
     if (typeof result !== 'string') return result;
-    messages.push({ role: 'tool', tool_call_id: call.id, content: result });
-    for (const extra of more) messages.push({ role: 'tool', tool_call_id: extra.id, content: 'Not run: one tool per step.' });
+    messages.push({ role: 'tool', id: call.id, content: result });
+    for (const extra of more) messages.push({ role: 'tool', id: extra.id, content: 'Not run: one tool per step.' });
   }
   throw new Error(`No proposal in ${STEPS} steps.`);
 }
 
 // What a tool call gives back to the model, or a valid proposal's { edits, reply }.
-async function use({ name, arguments: json }, { doc, sidecar, readFile }) {
+async function use({ name, args: json }, { doc, sidecar, readFile }) {
   let args;
   try {
     args = JSON.parse(json);
@@ -199,34 +196,76 @@ export function files({ doc, sidecar, project }) {
 }
 
 // Where a failed run's reply sends the user: the failure, then what to change.
-const SETTINGS = `The endpoint, model and key are at the top of ${fileURLToPath(import.meta.url)}.`;
-const HINTS = {
-  401: 'Check the key.',
-  404: `Check the endpoint, and that the model ${MODEL} is there (with Ollama: ollama pull ${MODEL}).`,
+const SETTINGS = 'The provider, endpoint, model and key are in Settings > Agents > OpenDoc agent.';
+const HINTS = { 401: 'Check the API key.', 404: 'Check the endpoint and the model.' };
+
+const CACHED = { type: 'ephemeral' };
+
+/**
+ * One step of the model, by provider: `INFER[provider](settings, url)` is
+ * `infer` for `turn`, over that provider's API at `url`. `settings` are the
+ * agent's: { endpoint, model, key, effort }. Each sends `tool_choice: auto`:
+ * current Claude models refuse a forced tool call, and a reply without one is
+ * sent back anyway.
+ */
+export const INFER = {
+  // Anthropic's Messages API. The model thinks as it needs, at `effort`; its
+  // messages go back as they came, thinking included. The tools and the
+  // prompt are cached for the turn's later steps.
+  anthropic: ({ model, key, effort }, url = 'https://api.anthropic.com/v1') => async (messages, tools) => {
+    const reply = await post(`${url}/messages`, { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, {
+      model,
+      max_tokens: 16_000,
+      output_config: { effort },
+      tool_choice: { type: 'auto' },
+      tools: tools.map(({ name, description, parameters }, i) => ({ name, description, input_schema: parameters, ...(i === tools.length - 1 && { cache_control: CACHED }) })),
+      messages: messages.map((m, i) => {
+        if (m.role === 'assistant') return { role: 'assistant', content: m.sent };
+        if (m.role === 'tool') return { role: 'user', content: [{ type: 'tool_result', tool_use_id: m.id, content: m.content }] };
+        return { role: 'user', content: [{ type: 'text', text: m.content, ...(i === 0 && { cache_control: CACHED }) }] };
+      }),
+    });
+    if (reply.stop_reason === 'refusal') throw new Error(`The model refused: ${reply.stop_details?.explanation ?? 'no reason given.'}`);
+    if (reply.stop_reason === 'max_tokens') throw new Error('The model\'s answer was cut off at 16,000 tokens.');
+    const calls = reply.content.filter((block) => block.type === 'tool_use').map(({ id, name, input }) => ({ id, name, args: JSON.stringify(input) }));
+    return { calls, sent: reply.content };
+  },
+  // The Chat Completions API, which OpenAI, OpenRouter and others speak.
+  openai: ({ endpoint, model, key, effort }, url = endpoint.replace(/\/+$/, '')) => async (messages, tools) => {
+    const { choices: [{ message }] } = await post(`${url}/chat/completions`, { authorization: `Bearer ${key}` }, {
+      model,
+      reasoning_effort: effort,
+      tool_choice: 'auto',
+      tools: tools.map((tool) => ({ type: 'function', function: tool })),
+      messages: messages.map((m) => (m.role === 'assistant' ? m.sent : m.role === 'tool' ? { role: 'tool', tool_call_id: m.id, content: m.content } : m)),
+    });
+    const calls = (message.tool_calls ?? []).map(({ id, function: { name, arguments: args } }) => ({ id, name, args }));
+    return { calls, sent: message };
+  },
 };
 
-// One step of the model, over the Chat Completions API: its message.
-async function infer(messages, tools) {
-  const response = await fetch(`${ENDPOINT}/chat/completions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(KEY && { authorization: `Bearer ${KEY}` }) },
-    body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: 'auto' }), // a forced tool call some models refuse
-  }).catch((error) => {
-    throw new Error(`Cannot reach ${ENDPOINT} (${error.cause?.code ?? error.message}): is the model's server running?\n${SETTINGS}`);
+// POST `body` to `url` as JSON: the reply, or an error that says what failed and where to change it.
+async function post(url, headers, body) {
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) }).catch((error) => {
+    throw new Error(`Cannot reach ${url} (${error.cause?.code ?? error.message}).\n${SETTINGS}`);
   });
-  if (!response.ok) throw new Error([`${ENDPOINT}: ${response.status} ${await response.text()}`, HINTS[response.status], SETTINGS].filter(Boolean).join('\n'));
-  return (await response.json()).choices[0].message;
+  if (!response.ok) throw new Error([`${url}: ${response.status} ${await response.text()}`, HINTS[response.status], SETTINGS].filter(Boolean).join('\n'));
+  return response.json();
 }
 
-// The contract: the prompt on stdin, the copies' paths in the environment,
-// the edits applied to the copies, the reply on stdout. Then the log.
+// The contract: the prompt on stdin, the copies' paths and the settings in
+// the environment, the edits applied to the copies, the reply on stdout.
+// Then the log.
 async function main() {
   const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: project, OPENDOC_BUDDY: buddy } = process.env;
+  const { OPENDOC_SETTING_PROVIDER: provider, OPENDOC_SETTING_ENDPOINT: endpoint, OPENDOC_SETTING_MODEL: model, OPENDOC_SETTING_KEY: key, OPENDOC_SETTING_EFFORT: effort } = process.env;
   const readable = files({ doc, sidecar, project });
   const at = new Date().toISOString();
   let messages = []; // the turn's, which it goes on adding to after each step
   let error = null;
   try {
+    if (!key) throw new Error('No API key: set one in Settings > Agents > OpenDoc agent.');
+    const infer = INFER[provider]({ endpoint, model, key, effort });
     const step = (sent, tools) => infer((messages = sent), tools);
     const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer: step, readFile: readable });
     const texts = apply(edits, { doc, sidecar }, { doc: await readable(doc), sidecar: await readable(sidecar) });

@@ -27,13 +27,14 @@ laptop runs (an 8B model tried) claim edits they did not make.
 | Interface | Called by |
 | --- | --- |
 | `turn({ prompt, doc, sidecar }, { infer, readFile }) → { edits, reply }` | the program's `main` |
-| `infer(messages, tools) → { name, args }` | `turn`, for each step |
+| `infer(messages, tools) → { calls: [{ id, name, args }], sent }` | `turn`, for each step |
 | `read`, `propose` | the model, as tools |
 
 **`main`** is all the I/O, and all of the contract: it reads the prompt on
-stdin and the paths in `OPENDOC_DOC`, `OPENDOC_COMMENTS` and
-`OPENDOC_PROJECT`, calls `turn`, applies the edits to the copies, prints the
-reply and exits 0.
+stdin, the paths in `OPENDOC_DOC`, `OPENDOC_COMMENTS` and `OPENDOC_PROJECT`
+and its settings in `OPENDOC_SETTING_*`, calls `turn`, applies the edits to
+the copies, prints the reply and exits 0. A run without a key fails at once,
+saying where to set it.
 
 **`turn`** is one buddy answering one thread, with no I/O of its own: it
 thinks, and checks what it proposes. `prompt` is stdin as is; `doc` and
@@ -45,12 +46,13 @@ is all the turn can see: the copies, and in project mode the project's files
 
 **`infer`** is one step of the model, one implementation per provider,
 over plain HTTP (the program runs from the config folder, with no
-dependencies). `turn` keeps the messages in one neutral form, and each
-`infer` translates them:
+dependencies). `turn` keeps the messages in one neutral form (the prompt,
+each step's calls with the model's message as its API sent it, and each
+call's result), and each `infer` translates them:
 
 | `provider` | API | Its own |
 | --- | --- | --- |
-| `anthropic` | Messages (`/v1/messages`) | `output_config.effort`; prompt caching of the tools and the prompt |
+| `anthropic` | Messages (`/v1/messages`) | `output_config.effort`, the model thinking as it needs; its messages sent back as they came, thinking included; prompt caching of the tools and the prompt; a refusal or a cut-off answer fails the turn |
 | `openai` | Chat Completions at `endpoint` (OpenAI, OpenRouter and others) | `reasoning_effort` |
 
 Both send `tool_choice: "auto"`: current Claude models refuse a forced tool
@@ -105,19 +107,16 @@ flowchart LR
 | `key` | secret | none: a run without one fails, saying where to set it |
 | `effort` | choice: low, medium, high | `low`: scoped edits; higher thinks longer before it answers |
 
-- **Tests** call `turn` with a fake `infer`.
+- **Tests** call `turn` with a fake `infer`, and each `infer` on a fake
+  server of its API.
 - **Each turn's messages are logged** to a file the script names.
-
-## Steps
-
-Done: the loop, `read` and `propose`, project mode, the log, over Chat
-Completions. *Planned*, after [agents as plugins](agent-config.md#agents):
-
-1. Settings from `OPENDOC_SETTING_*`, not constants; the manifest.
-2. `infer` for Anthropic's Messages API, and the neutral messages.
-3. `effort`; no local defaults left.
 
 ## Open questions
 
+- A step waits for the whole answer, at most 16,000 tokens, with no
+  streaming: Node's `fetch` gives up on a reply that takes over five
+  minutes to start, which a high effort could reach.
+- No fallback model when Anthropic's safeguards refuse: the turn fails,
+  saying so.
 - Later: `search`, if models spend steps finding things; web access, off by
   default, the one tool that could send a doc out.
