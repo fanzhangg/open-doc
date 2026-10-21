@@ -11,14 +11,17 @@ import { lineMatches } from './diff.js';
  * trimmed, and inside it each run that changed is its own operation. So when
  * two pages restyle a block the same way (`__x__` to `**x**`, a Markdown
  * view's first touch of it), they send the same operations, which land once.
+ * `caret`, an offset in `text`, is where the writer's edit ended: what
+ * differs is not trimmed past it, so of two places an edit could be (a
+ * deleted sentence that ends as the next one starts), it is at the caret.
  */
-export function diffOps(base, text) {
+export function diffOps(base, text, caret = text.length) {
   if (base === text) return [];
   const max = Math.min(base.length, text.length);
   let start = 0;
-  while (start < max && base.charCodeAt(start) === text.charCodeAt(start)) start++;
+  while (start < max && start < caret && base.charCodeAt(start) === text.charCodeAt(start)) start++;
   let end = 0;
-  while (end < max - start && base.charCodeAt(base.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) end++;
+  while (end < max - start && end < text.length - caret && base.charCodeAt(base.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) end++;
   // Never split a surrogate pair.
   if (start > 0 && isHigh(base.charCodeAt(start - 1))) start--;
   if (end > 0 && isLow(base.charCodeAt(base.length - end))) end--;

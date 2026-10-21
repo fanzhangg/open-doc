@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Fragment, Node, Schema } from '@milkdown/kit/prose/model';
 import { EditorState, TextSelection } from '@milkdown/kit/prose/state';
-import { diffBlocks, pairRanges, parseRun, replaceBlocks, sameBlock, textOfDoc } from '../web/blocks.js';
+import { diffBlocks, pairRanges, parseRun, replaceBlocks, sameBlock, textOfDoc, typedInto } from '../web/blocks.js';
 import { blockRanges, project, projectBlocks } from '../src/markdown/project.js';
 import { splice } from '../src/markdown/splice.js';
 import { projectDoc } from '../web/pm-text.js';
@@ -46,6 +46,15 @@ test('a change in the block holding the caret leaves the caret where it was', ()
   assert.ok(apply(doc(h('A'), p('one')), doc(p('A'), p('one'), p('two')), 1).doc.eq(doc(p('A'), p('one'), p('two'))));
 });
 
+test('a block replaced whole keeps the caret at the same character', () => {
+  // the caret after "Alpha" in the second block, which becomes a heading
+  assert.equal(apply(doc(p('x'), p('Alpha one')), doc(p('x'), h('Alpha one')), 9).caret, 9);
+  // text added before the caret in the same change moves it along
+  assert.equal(apply(doc(p('x'), p('Alpha one')), doc(p('x'), h('Hi Alpha one')), 9).caret, 12);
+  // and a caret in a block another one replaces stays at its text when blocks around it go
+  assert.equal(apply(doc(p('x'), p('Alpha one')), doc(h('Alpha one')), 9).caret, 6);
+});
+
 // A long doc changed a few blocks at a time (web/views/markdown/view.js): the
 // text and projections worked out per block are those worked out whole.
 
@@ -67,6 +76,7 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
   };
   const words = ['x', ' word', '**b**', '\n', '\n\n', '- ', '```', '# ', '|', '>', '<br />', '\\'];
   let wholes = 0;
+  let typedOwn = 0;
   const runs = 150;
   for (let run = 0; run < runs; run++) {
     // In: text `given` with a change, read only around it.
@@ -88,22 +98,34 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
     doc.forEach((node, _, i) => assert.ok(sameBlock(node, whole.child(i)), `run ${run}, block ${i}`));
     assert.deepEqual(read.blocks, pairRanges(whole.content.content, blockRanges(next), true));
 
-    // Out: `doc`, with one block of it changed, written only around the change.
-    // (Where the editor cannot hold a block as written, such as a table row
-    // with a cell too many, a whole save rewrites it too; one around the
-    // change leaves it, so those are not compared.)
+    // Out: `doc`, with one block of it changed, written only around the
+    // change: typed at its end, or written anew in the editor's style. It
+    // reads as `doc` does, every other block keeps its bytes, and a block
+    // only typed into keeps its own. (Where the editor cannot hold a block as
+    // written, such as a table row with a cell too many, it rewrites it, so
+    // those are left out.)
     if (splice(next, serialize(whole)) !== next) continue;
     const i = random(doc.childCount);
-    const edited = parse(serializeNodes([doc.child(i)]) + 'typed').content.content;
+    const own = next.slice(read.blocks[i].start, read.blocks[i].end);
+    const typing = random(2) === 0;
+    const edited = parse((typing ? own : serializeNodes([doc.child(i)])) + 'typed').content.content;
+    const rewritten = parse(serializeNodes(edited)).content.content;
+    if (rewritten.length !== edited.length || edited.some((node, k) => !sameBlock(node, rewritten[k]))) continue;
     const after = doc.copy(Fragment.from([...doc.content.content.slice(0, i), ...edited, ...doc.content.content.slice(i + 1)]));
-    const ours = serialize(after);
-    const expected = ours === serialize(parse(next)) ? next : splice(next, ours);
-    const written = textOfDoc(after, doc, next, read.blocks, serializeNodes);
+    const written = textOfDoc(after, doc, next, read.blocks, serializeNodes, parse);
     if (!written) {
       wholes++;
       continue;
     }
-    assert.equal(written.text, expected, `run ${run}`);
+    const reread = parse(written.text);
+    assert.equal(reread.childCount, after.childCount, `run ${run}`);
+    after.forEach((node, _, k) => assert.ok(sameBlock(node, reread.child(k)), `run ${run}, block ${k}`));
+    const bytes = (blocksOf, text, k) => text.slice(blocksOf[k].start, blocksOf[k].end);
+    for (let k = 0; k < after.childCount; k++) {
+      const old = k < i ? k : k >= i + edited.length ? k - edited.length + 1 : -1;
+      if (old !== -1) assert.equal(bytes(written.blocks, written.text, k), bytes(read.blocks, next, old), `run ${run}: block ${k} kept`);
+    }
+    if (typing && edited.length === 1 && bytes(written.blocks, written.text, i) === `${own}typed`) typedOwn++;
     assert.deepEqual(written.blocks, pairRanges(after.content.content, blockRanges(written.text), true));
     const cache = new Map();
     for (const text of [next, written.text]) {
@@ -113,4 +135,16 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
     assert.deepEqual(projectDoc(after), projectDoc(Node.fromJSON(after.type.schema, after.toJSON())), 'kept lines are the same as fresh ones');
   }
   assert.ok(wholes < runs / 5, `${wholes} of ${runs} worked out whole`);
+  assert.ok(typedOwn > runs / 4, `${typedOwn} of ${runs} typed into in their own style`);
+});
+
+test('a block typed into keeps its own style; one formatted anew is written in the editor\'s', async () => {
+  const parse = await editorParser();
+  const typed = (source, edited) => typedInto(source, parse(edited).child(0), parse);
+  assert.equal(typed('Title\n=====', 'BTitleA\n====='), 'BTitleA\n=====');
+  assert.equal(typed('* one\n* two', '* one\n* BtwoA'), '* one\n* BtwoA');
+  assert.equal(typed('|a|b|\n|-|-|\n|cell|d|', '|a|b|\n|-|-|\n|BcellA|d|'), '|a|b|\n|-|-|\n|BcellA|d|');
+  assert.equal(typed('Some __bold__ here.', 'Some __boldly__ here.'), 'Some __boldly__ here.', 'typed inside bold, inside its markup');
+  assert.equal(typed('Some text.', 'Some \\*\\*x\\*\\* text.'), 'Some \\*\\*x\\*\\* text.', 'typed Markdown stays text, escaped');
+  assert.equal(typed('Some text.', 'Some **text**.'), null, 'formatting is the editor\'s to write');
 });

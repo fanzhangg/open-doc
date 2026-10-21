@@ -9,6 +9,10 @@ test('diffOps is trimmed to the edit, and apply makes the text', () => {
   assert.deepEqual(diffOps('a😀b', 'a😃b'), [{ from: 1, to: 3, insert: '😃' }], 'never half a surrogate pair');
   assert.deepEqual(diffOps('Some __x__ y.', 'Some **x** yz.'), [{ from: 5, to: 7, insert: '**' }, { from: 8, to: 10, insert: '**' }, { from: 12, to: 12, insert: 'z' }], 'by character');
   for (const [a, b] of [['', 'x'], ['x', ''], ['abcabc', 'abc'], ['Some __x__.', 'Some **xy**.']]) assert.equal(apply(a, diffOps(a, b)), b);
+  const deleted = 'First. The second goes here. Third.';
+  assert.deepEqual(diffOps(deleted, 'First. Third.'), [{ from: 9, to: 31, insert: '' }], 'without the caret, after the repeated "Th"');
+  assert.deepEqual(diffOps(deleted, 'First. Third.', 7), [{ from: 7, to: 29, insert: '' }], 'at the caret: the sentence itself');
+  for (const caret of [0, 3, 7, 13]) assert.equal(apply(deleted, diffOps(deleted, 'First. Third.', caret)), 'First. Third.');
 });
 
 // Both edits on `text`; `a` reached the host first. Each side ends in one text.

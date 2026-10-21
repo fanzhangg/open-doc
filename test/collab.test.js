@@ -146,7 +146,7 @@ test('4. one deletes a sentence the other types in: the typed text stays', async
   await key('Backspace');
   await typeBoth('', 'YZ'); // b types on, inside what a deleted
   const text = await settled();
-  assert.equal(text.replace('XYZ', ''), 'First sentence. Third.\n', `the typed text stays, the sentence goes: ${JSON.stringify(text)}`);
+  assert.equal(text, 'First sentence. XYZThird.\n', 'the typed text stays where the sentence was');
   console.log(`# case 4: ${JSON.stringify(text)}`);
 });
 
@@ -215,15 +215,12 @@ test('7. both edit blocks written in another style: no text doubled; only edited
     ['Some __bold__ and _slanted_ words here.', '* one\n* two', 'A hard\nwrapped line.', '1) first\n2) second', 'Untouched __x__ text.', '+ kept\n+ list'],
     [['words', 5], ['two', 3], ['wrapped', 7], ['second', 6]],
   );
-  assert.equal(merged, 'Some __bold__ and _slanted_ BwordsA here.\n\n- one\n- BtwoA\n\nA hard\nBwrappedA line.\n\n1. first\n2. BsecondA\n\nUntouched __x__ text.\n\n+ kept\n+ list\n');
+  assert.equal(merged, 'Some __bold__ and _slanted_ BwordsA here.\n\n* one\n* BtwoA\n\nA hard\nBwrappedA line.\n\n1) first\n2) BsecondA\n\nUntouched __x__ text.\n\n+ kept\n+ list\n', 'each block typed into keeps its style');
 });
 
-test('7b. both edit a setext heading or a table: no text doubled', { todo: 'plan A fails here: see the PR' }, async () => {
+test('7b. both edit a setext heading or a table: no text doubled', async () => {
   const merged = await bothTouch(['Title\n=====', 'Between.', '|a|b|\n|-|-|\n|cell|d|'], [['Title', 5], ['cell', 4]]);
-  const [heading, between, table] = merged.trimEnd().split('\n\n');
-  assert.equal(heading, '# BTitleA');
-  assert.equal(between, 'Between.');
-  assert.match(table.split('\n')[1], /^\|( *:?-+:? *\|)+$/, 'the table\'s delimiter row stays one');
+  assert.equal(merged, 'BTitleA\n=====\n\nBetween.\n\n|a|b|\n|-|-|\n|BcellA|d|\n');
 });
 
 // Measured, with no bar (docs/markdown-view.md, The prototype).

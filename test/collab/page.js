@@ -37,7 +37,7 @@ function createClient(view) {
     flush() {
       const text = view.getText();
       if (text === client.last) return;
-      client.pending.push(diffOps(client.last, text));
+      client.pending.push(diffOps(client.last, text, view.selection()?.to));
       client.last = text;
       if (client.pending.length === 1) client.send();
     },

@@ -112,9 +112,13 @@ document.
   from its first to its last differing character. It is outside the undo
   history: the caret stays, and the person's own steps map over it. `by`
   names who made the change, for its glow.
-- **Out:** `getText()` serializes the document in one common style, and
-  `splice` keeps the original bytes of every top-level block whose meaning
-  did not change. Worked out once per document.
+- **Out:** `getText()` keeps the original bytes of every top-level block
+  whose meaning did not change (`splice`). A block only typed into or
+  deleted from keeps its own bytes but for those characters, so its style
+  holds (a setext heading, `*` bullets, a table's padding) and two people
+  typing in it merge by character; that is checked by reading it back.
+  Any other changed block is written in one common style. Worked out once
+  per document.
 - **When:** `onChange` fires 200 ms after the person last changed the
   document; the page then reads `getText`.
 

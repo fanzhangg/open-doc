@@ -20,7 +20,7 @@ import {
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
   listItemKeymap,
 } from '@milkdown/kit/preset/commonmark';
-import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
+import { toggleStrikethroughCommand, insertTableCommand, remarkGFMPlugin } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
@@ -40,7 +40,7 @@ import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js
 import { editItems } from '../../review.js';
 import { markdownPlugins } from '../../markdown-schema.js';
 import { diagrams } from '../../diagrams.js';
-import { childPos, diffBlocks, pairRanges, parseRun, replaceBlocks, textOfDoc } from '../../blocks.js';
+import { childPos, diffBlocks, pairRanges, parseRun, replaceBlocks, textOfDoc, textPos } from '../../blocks.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
@@ -176,6 +176,10 @@ export async function createMarkdownView({
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options, bullet: '-', emphasis: '*', strong: '*', rule: '-', fences: true, listItemIndent: 'one',
       }));
+      // A table row is written as its own cells say, not padded to line up
+      // with the others: an edit in one cell then changes only its row, and
+      // two people typing in one table do not both re-pad it.
+      ctx.set(remarkGFMPlugin.options.key, { tablePipeAlign: false });
       // `updated` is debounced (200 ms) and fires only when the doc changed.
       ctx.get(listenerCtx).updated(() => {
         if (edited) {
@@ -231,7 +235,7 @@ export async function createMarkdownView({
   const textOf = (doc) => {
     const blocks = baseBlocks();
     if (doc === base.doc) return { text: given, blocks };
-    const found = blocks && textOfDoc(doc, base.doc, given, blocks, serializeNodes);
+    const found = blocks && textOfDoc(doc, base.doc, given, blocks, serializeNodes, parse);
     if (found) return found;
     const ours = serialize(doc);
     return { text: ours === serialize(parse(given)) ? given : splice(given, ours), blocks: null };
@@ -366,7 +370,12 @@ export async function createMarkdownView({
     const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
     if (!list) return editor.action(callCommand(wrap.key));
     if (list.node.type.name === type) return editor.action(callCommand(liftListItemCommand.key));
-    dispatch(state.tr.setNodeMarkup(list.pos, state.schema.nodes[type]));
+    // The items say which kind of list they are in, too: Milkdown turns a
+    // bulleted list whose items still say ordered back into a numbered one.
+    const tr = state.tr.setNodeMarkup(list.pos, state.schema.nodes[type], { spread: list.node.attrs.spread });
+    const listType = type === 'bullet_list' ? 'bullet' : 'ordered';
+    list.node.forEach((item, offset) => tr.setNodeMarkup(list.pos + 1 + offset, null, { ...item.attrs, listType }));
+    dispatch(tr);
     return true;
   };
   const headingCommand = (level) => (state) => editor.action(blockType(state) === `h${level}`
@@ -754,21 +763,4 @@ function changedRange(oldDoc, newDoc, h) {
   }
   if (h.b1 - h.b0 === 1) return { from, to, node: true };
   return { from: from + 1, to: to - 1 }; // several blocks: glow their text
-}
-
-// Document position of text offset `offset` inside top-level `node` at `nodePos`.
-function textPos(node, nodePos, offset) {
-  let seen = 0;
-  let result = null;
-  node.descendants((child, pos) => {
-    if (result !== null) return false;
-    if (!child.isText) return true;
-    if (offset <= seen + child.text.length) {
-      result = nodePos + 1 + pos + (offset - seen);
-      return false;
-    }
-    seen += child.text.length;
-    return true;
-  });
-  return result ?? nodePos + node.nodeSize - 1;
 }
