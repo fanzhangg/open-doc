@@ -24,7 +24,7 @@ await build({
 });
 // The desktop start window (desktop/start.html loads it from here), with the editor's faces.
 await build({
-  entryPoints: [join(root, 'desktop', 'start.js')],
+  entryPoints: [join(root, 'web', 'start.js')],
   outfile: join(out, 'start.js'),
   bundle: true,
   format: 'iife',

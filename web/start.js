@@ -2,9 +2,9 @@
 // into dist/web/start.js (scripts/build.js) so it shares the editor's look
 // and parts: its stylesheet and theme, tooltips and the Settings dialog.
 
-import { hydrateIcons, icon } from '../web/icons.js';
-import { createSettings } from '../web/settings.js';
-import { setupSettings, setupTooltips } from '../web/settings-dialog.js';
+import { hydrateIcons, icon } from './icons.js';
+import { createSettings } from './settings.js';
+import { setupSettings, setupTooltips } from './settings-dialog.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const desktop = window.opendocDesktop;
