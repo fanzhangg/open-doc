@@ -5,12 +5,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPrompt } from '../src/host/runner.js';
-import { agentScript, installAgents, listAgents } from '../src/store/agents.js';
+import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -170,7 +170,7 @@ test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async
 });
 
 test('the shipped scripts pass the project folder only when there is one', () => {
-  for (const name of ['claude', 'codex']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
+  for (const name of ['claude', 'codex', 'opendoc']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
   assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /set ADD=--add-dir "%OPENDOC_PROJECT%" --disallowedTools "Edit\(\/%P%\/\*\*\)"/, 'claude.cmd keeps the project read only');
   assert.doesNotMatch(readFileSync(join(ROOT, 'agents', 'codex.cmd'), 'utf8'), /codex exec[^\r]*--add-dir/, 'Codex reads the project without it');
   if (process.platform === 'win32') return;
@@ -188,8 +188,11 @@ test('the shipped agent scripts are written when missing, then left alone; Reset
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
   await installAgents(dir, { platform: 'linux' });
   await installAgents(dir, { platform: 'win32' });
-  assert.deepEqual(await listAgents(dir, 'linux'), ['claude', 'codex']);
-  assert.deepEqual(await listAgents(dir, 'win32'), ['claude', 'codex']);
+  assert.deepEqual(await listAgents(dir, 'linux'), ['claude', 'codex', 'opendoc']);
+  assert.deepEqual(await listAgents(dir, 'win32'), ['claude', 'codex', 'opendoc']);
+  const windows = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
+  await installAgents(windows, { platform: 'win32' });
+  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'codex.cmd', 'opendoc.cmd', 'opendoc.mjs'], 'with the program the OpenDoc agent runs');
   const claude = agentScript('claude', dir, 'linux');
   assert.equal(basename(agentScript('claude', dir, 'win32')), 'claude.cmd');
   await writeFile(claude, '#!/bin/sh\necho mine\n');

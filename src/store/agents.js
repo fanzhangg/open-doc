@@ -1,15 +1,17 @@
 // Agent scripts (docs/agent-config.md): what runs a buddy's work, in the
 // config folder's `agents/`: `<name>` on macOS and Linux, `<name>.cmd` on
-// Windows. Claude Code and Codex ship as two, written when missing; then
-// they are the user's. Never in a project: a shared folder must not decide
-// what runs on this machine.
+// Windows. Claude Code, Codex and the OpenDoc agent ship, written when
+// missing; then they are the user's. Never in a project: a shared folder
+// must not decide what runs on this machine.
 
 import { chmod, copyFile, mkdir, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configDir } from './settings.js';
 
-export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex']);
+export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex', 'opendoc']);
+// The files a shipped script runs, written next to it: one for both platforms.
+const PROGRAMS = { opendoc: ['opendoc.mjs'] };
 const SHIPPED_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents');
 const extension = (platform) => (platform === 'win32' ? '.cmd' : '');
 
@@ -25,14 +27,16 @@ export const agentScript = (name, dir = configDir(), platform = process.platform
 export async function installAgents(dir = configDir(), { reset = null, platform = process.platform } = {}) {
   await mkdir(agentsDir(dir), { recursive: true });
   for (const name of SHIPPED_AGENTS) {
-    const to = agentScript(name, dir, platform);
-    try {
-      await copyFile(join(SHIPPED_DIR, name + extension(platform)), to, name === reset ? 0 : 1); // 1: COPYFILE_EXCL
-    } catch (error) {
-      if (error.code === 'EEXIST') continue;
-      throw error;
+    for (const file of [name + extension(platform), ...(PROGRAMS[name] ?? [])]) {
+      const to = join(agentsDir(dir), file);
+      try {
+        await copyFile(join(SHIPPED_DIR, file), to, name === reset ? 0 : 1); // 1: COPYFILE_EXCL
+      } catch (error) {
+        if (error.code === 'EEXIST') continue;
+        throw error;
+      }
+      if (platform !== 'win32') await chmod(to, 0o755);
     }
-    if (platform !== 'win32') await chmod(to, 0o755);
   }
 }
 

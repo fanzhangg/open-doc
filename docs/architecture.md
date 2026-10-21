@@ -333,7 +333,7 @@ written only by the app.
 | File | Holds |
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; views' and rules' settings; which agent runs buddies |
-| `agents/` | agent scripts; Claude Code and Codex ship as two |
+| `agents/` | agent scripts; Claude Code, Codex and the OpenDoc agent ship |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
 | `team/` | *planned:* each project's teammates, their access, and which AI buddies may resolve |
