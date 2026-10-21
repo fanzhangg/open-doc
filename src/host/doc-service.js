@@ -25,6 +25,7 @@ import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir,
 import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
+import { mirrorDir, syncMirror } from './mirror.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
 import { TeamError } from './team.js';
@@ -53,7 +54,8 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), handed to runs as OPENDOC_PROJECT; `team`, its Team (team.js).
+ * mode), whose mirror (mirror.js) runs get as OPENDOC_PROJECT; `team`,
+ * its Team (team.js).
  * `secrets()` gives the agents' secrets, decrypted ({ <agent>: { <key>:
  * value } }, src/store/secrets.js), handed to runs with the other settings.
  * `emit(event, data)` hears what changed. `call(type, arg, who)` runs a request of `who`'s (see
@@ -72,7 +74,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       const { settings } = await readSettings(settingsDir);
       return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir), secrets()[settings.agent]) };
     },
-    folder: () => folder,
+    // The project, as a run reads it: its mirror, up to date (none if that fails).
+    folder: () => folder && syncMirror(folder, mirrorDir(folder, settingsDir)).catch((error) => {
+      console.error('Could not mirror the project:', error);
+      return null;
+    }),
     human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,

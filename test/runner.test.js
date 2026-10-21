@@ -9,6 +9,7 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mirrorDir } from '../src/host/mirror.js';
 import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
@@ -144,14 +145,17 @@ test('a comment that mentions no one asks no one; a buddy\'s reply asks no one',
   });
 });
 
-test('in project mode the run is told the project folder', { timeout: 30_000 }, async () => {
+test('in project mode the run is told the project\'s mirror, which holds what the project shows', { timeout: 30_000 }, async () => {
   const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
-  await withDoc(async ({ call, state, runs }) => {
+  await writeFile(join(folder, 'notes.md'), 'Notes.\n');
+  await writeFile(join(folder, '.env'), 'KEY=secret\n');
+  await withDoc(async ({ settingsDir, call, state, runs }) => {
     const id = await comment(call, '@Clippy look around');
     await until(async () => (await repliesIn(state, id)).length, 'the reply');
     const [run] = await runs();
-    assert.equal(run.project, folder);
-    assert.ok(run.prompt.includes(folder));
+    assert.equal(run.project, mirrorDir(folder, settingsDir));
+    assert.deepEqual(await readdir(run.project), ['notes.md']);
+    assert.ok(run.prompt.includes(run.project) && !run.prompt.includes(`${folder}/`));
     assert.match(run.prompt, /path in a comment is relative to the project folder/);
   }, { folder });
 });
