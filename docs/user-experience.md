@@ -7,8 +7,7 @@ built: today one person writes with AI buddies.
 
 ## Teammates
 
-A project is written by its team at the same time (teammates who edit are
-*planned*: today one given Edit still reads). Everyone on it
+A project is written by its team at the same time. Everyone on it
 is the **owner** (you), a **teammate** (another person) or an **AI buddy**,
 and in a doc they are alike: a face and a unique name, each edits and
 comments, can be @mentioned, and is named wherever the doc says who did
@@ -111,8 +110,9 @@ shows only as set or not.
   comment on a passage and the replies under it.
 - Resolving a thread stops its AI buddies at once, and nothing they did
   lands. Reopening asks no one.
-- Only people's comments ask: yours, and a teammate's who can edit
-  (*planned*). An AI buddy's reply asks no one, and neither does an `@name`
+- Only people's comments ask: yours, and a teammate's who can edit. A
+  turn acts as whoever asked it may when it ends: if they were removed or
+  set to Read meanwhile, nothing it did lands. An AI buddy's reply asks no one, and neither does an `@name`
   typed in the doc's text.
 - A comment that mentions several AI buddies asks each; they work at once.
 - Every run starts fresh with the doc, who the AI buddy is, who asked and the
@@ -133,11 +133,11 @@ shows only as set or not.
   it shows them in the text again (and scrolls to them), clicking again
   hides them. Edits changed since are left out. The reply only says why,
   or what you need to decide, and may be empty.
-- **Nothing a person types is lost** (*planned*). When two people change the same place
+- **Nothing a person types is lost.** When two people change the same place
   at once, both edits stay, in the order they reached the host. Text one
   deletes while the other types inside it keeps what was typed. If both
   replace the same word, both new words stay, to fix by hand.
-- **A person's typing is trusted** (*planned*). It is not marked by who typed it, and
+- **A person's typing is trusted.** It is not marked by who typed it, and
   when two people disagree they settle it outside the app, in a call.
 - **People win over AI buddies.** Where a person changed the same text while
   an AI buddy worked (or a change came from outside), theirs stays, the
@@ -147,8 +147,8 @@ shows only as set or not.
   those edits back, all at once, and keeps everything written since; where
   someone changed that text since, their text stays. **Cmd+Z** (Ctrl+Z)
   undoes your own typing, never anyone else's. **Undo** on an AI buddy's
-  reply undoes its run; its comments stay. Today it works on the computer
-  that ran the AI buddy; *planned*, in every window.
+  reply undoes its run; its comments stay. It works in every window of the
+  team.
 - **A failed run** replies with the end of its output, marked failed.
   @mention the AI buddy again to retry.
 
@@ -171,8 +171,8 @@ shows only as set or not.
 ## Around the doc
 
 - **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
-  who made it (a teammate, an AI buddy with the comment it answered, or a
-  program outside OpenDoc), a diff against the one before, and Restore. A version is
+  who made it (you, a teammate, both when you typed together, an AI buddy
+  with the comment it answered, or a program outside OpenDoc), a diff against the one before, and Restore. A version is
   saved before and after each buddy edit, before each change from outside
   OpenDoc, and for each undo and restore, so any of them can be restored.
   History is kept in the config folder, never next to the doc.

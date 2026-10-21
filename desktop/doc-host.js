@@ -213,8 +213,8 @@ async function serve(entry, port, who) {
  * page names its doc by its path in the project (`?doc=`; none: the
  * project's first doc), and who it is: `key`, made once in its browser
  * (the teammate's id is its hash, so no one who sees an id can pose as
- * them), and `name`. A teammate on `team` is served as a window is, as a
- * teammate who can read; anyone else asks to join and waits, told
+ * them), and `name`. A teammate on `team` is served as a window is, at
+ * their level (read or write); anyone else asks to join and waits, told
  * `waiting`, until the owner allows them. A page whose teammate is removed,
  * or turned down, is turned away at once. A connection that drops is made
  * again. `joined` resolves once the host is first in the room; `stop(reason)`
@@ -250,7 +250,7 @@ function share(folder, team, secret) {
     if (!open) return peers.get(peer)?.port.receive(data);
     const port = peerPort((frame) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ peer, ...frame })));
     const id = typeof open.key === 'string' && open.key.length >= 16 ? `p_${roomOf(open.key).slice(0, 24)}` : null;
-    const entry = { port, id, doc: open.doc ?? '', admitted: false };
+    const entry = { port, id, doc: open.doc ?? '', admitted: false, level: null };
     peers.set(peer, entry);
     let joining;
     try {
@@ -258,6 +258,7 @@ function share(folder, team, secret) {
     } catch (error) {
       return turnAway(peer, error.code ?? 'bad_input');
     }
+    entry.level = await team.levelOf(id);
     if (joining === 'member') return admit(peer);
     if (joining === 'asked') channel.send({ type: 'join', folder, name: open.name });
     port.postMessage({ event: 'waiting' });
@@ -274,7 +275,7 @@ function share(folder, team, secret) {
       entry.port.docId = docId;
       if (peers.get(peer) !== entry) return release(docId); // gone meanwhile
       await serve(docs.get(docId), entry.port, async () => ({
-        id: entry.id, name: await team.nameOf(entry.id), kind: 'human', level: (await team.levelOf(entry.id)) && 'read',
+        id: entry.id, name: await team.nameOf(entry.id), kind: 'human', level: await team.levelOf(entry.id),
       }));
     } catch {
       turnAway(peer, 'not_found'); // no such doc in the project
@@ -282,11 +283,14 @@ function share(folder, team, secret) {
   }
 
   // The team changed: a page whose teammate was allowed is served, one whose
-  // teammate is no longer on it, or was turned down, is turned away.
+  // teammate's level changed is told `level`, and one whose teammate is no
+  // longer on it, or was turned down, is turned away.
   const stopFollowing = team.onChange(async () => {
     for (const [peer, entry] of [...peers]) {
       const level = await team.levelOf(entry.id);
       if (peers.get(peer) !== entry) continue;
+      if (level && entry.level && level !== entry.level) entry.port.postMessage({ event: 'level', data: { level } });
+      entry.level = level;
       if (level) admit(peer);
       else if (!team.isPending(entry.id)) turnAway(peer, entry.admitted ? 'removed' : 'denied');
     }

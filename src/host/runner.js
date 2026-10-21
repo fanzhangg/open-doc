@@ -20,13 +20,14 @@ const keyOf = (threadId, id) => `${threadId}:${id}`;
 export class Runner {
   /**
    * `asks()` resolves to the asks waiting now: [{ threadId, thread, buddy:
-   * { id, name, about }, buddies }], `buddies` all those the doc reaches. `doc()` to { name, text,
+   * { id, name, about }, buddies, asker }], `buddies` all those the doc
+   * reaches, `asker` the id of whoever asked. `doc()` to { name, text,
    * comments }, `comments` the sidecar's text or null.
    * `agent()` resolves to the agent that runs every buddy: { script (its
    * path), settings ({ <key>: value }, each handed to the run as
    * OPENDOC_SETTING_<KEY>) }. `folder()` resolves to the project folder
    * the agent is given (its mirror, mirror.js) or null, `human()` the user, { name, about }. `finish(result)` takes a run
-   * that ended: { threadId, id, name, base, seen, edited, comments, body, failed },
+   * that ended: { threadId, id, name, asker, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
    * `comments` { before, after } the sidecar's copy at the start and end. `onChange()` runs
@@ -35,7 +36,7 @@ export class Runner {
    */
   constructor({ asks, doc, agent, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
     Object.assign(this, { asks, doc, agent, folder, human, finish, onChange, log, timeoutMs });
-    this.runs = new Map(); // keyOf(threadId, id) → { threadId, id, name, child, done, cancelled, ended }
+    this.runs = new Map(); // keyOf(threadId, id) → { threadId, id, name, asker, child, done, cancelled, ended }
     this.stopped = false;
     this.checking = null;
     this.again = false;
@@ -101,8 +102,8 @@ export class Runner {
     this.stopped = false;
   }
 
-  #start(key, { threadId, thread, buddy, buddies }) {
-    const run = { threadId, id: buddy.id, name: buddy.name, child: null, done: null, cancelled: false, ended: false };
+  #start(key, { threadId, thread, buddy, buddies, asker }) {
+    const run = { threadId, id: buddy.id, name: buddy.name, asker, child: null, done: null, cancelled: false, ended: false };
     this.runs.set(key, run);
     run.done = this.#run(run, thread, buddy, buddies)
       .catch((error) => console.error(`Run of ${buddy.name} failed to finish:`, error))
@@ -142,7 +143,7 @@ export class Runner {
       run.ended = true; // its reply is on its way: its ask going away is that reply
       await this.log({ buddy: buddy.name, thread: run.threadId, at: new Date(at).toISOString(), ms: Date.now() - at, outcome, code: result.code });
       if (stopped) return; // ended by stop or cancel: no answer
-      const out = { threadId: run.threadId, id: buddy.id, name: buddy.name, base, seen: thread.comments.at(-1).at };
+      const out = { threadId: run.threadId, id: buddy.id, name: buddy.name, asker: run.asker, base, seen: thread.comments.at(-1).at };
       if (result.code === 0) {
         const bytes = await readFile(copy).catch(() => null);
         const edited = (bytes && decodeText(bytes)?.text) ?? base; // as text, like the doc

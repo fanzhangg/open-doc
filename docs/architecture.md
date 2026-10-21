@@ -11,9 +11,9 @@ what it changed back in. (The code calls a turn a run: `Runner`,
 `runs.jsonl`.) [Sharing](#sharing): how a teammate's browser joins the same
 host.
 
-Sharing is built as far as teammates who join from a link, are allowed by
-the owner and read; teammates who edit are designed, not built. What they
-change is marked *planned*; everything else is what the code does.
+Sharing is built: teammates join from a link, are allowed by the owner,
+and read or edit. What is still designed and not built (people's cursors)
+is marked *planned*; everything else is what the code does.
 
 No backward compatibility with earlier formats: a version 1 sidecar is
 ignored, and a version 2 one is not converted. A sidecar this version must
@@ -288,7 +288,9 @@ text the file last held, the version saved after the turn) and take
 `diffOps(that base, the text now)` as what landed since, so they need no
 log, after a restart or days later. History records a version when typing
 pauses, before and after each buddy's edit, an outside change, an undo or a
-restore, and when the history is opened.
+restore, and when the history is opened, each credited to whoever made it.
+A burst of typing ends once everyone typing in it has paused: one version,
+whose `authors` are each person who typed in it (#228).
 
 **Undo on a reply is one edit**: the inverse of the turn's, from the
 versions saved before and after it, rebased with `transform` over
@@ -355,8 +357,8 @@ since: where someone changed that text since, their text stays.
 
 Each saves a version first. Undo on a reply is the same `transform` every
 edit goes through (see Interfaces): the turn's edit taken back, yielding to
-what changed since. It works where the versions are, on the doc host;
-*planned*, from any window of the team. Cmd+Z is the editor's own history,
+what changed since. It works where the versions are, on the doc host,
+from any window of the team, as whoever clicked it. Cmd+Z is the editor's own history,
 your typing only, and its result is typing like any other: a person's
 edit, which does not yield.
 
@@ -378,8 +380,8 @@ written only by the app.
 ## A buddy's turn
 
 A thread waits on AI buddy X (by id) when a person's comment that may ask, newer
-than X's last comment there, asks X: today this machine's user's, *planned*
-also a teammate's who can edit. A comment asks whom it @mentions; one that
+than X's last comment there, asks X: the owner's, or a teammate's who can
+edit. A comment asks whom it @mentions; one that
 mentions no one asks the thread's AI buddies: the one that opened it, and
 each @mentioned there before. An empty one (resolving, reopening) asks no
 one. That is computed from the sidecar and the ids of those who may ask. AI
@@ -427,9 +429,8 @@ app cannot (why, what to decide), and may be empty. The turn's edits land at
 once, shown as a revision (new text in the buddy's color, removed text
 struck through) until the user next types or another turn's edits land;
 clicking the count shows them again. The count, the revision and Undo are
-read from the version saved after the turn and the one before it: today on
-the machine that ran it only, *planned* in every window of the team, since
-the versions are on the host.
+read from the version saved after the turn and the one before it, in every
+window of the team, since the versions are on the host.
 
 ### Failures, retries and restarts
 
@@ -443,8 +444,7 @@ the same time; their merges are applied one at a time.
 
 A teammate joins the owner's project from a link, in a browser. Built: a
 page reads a doc through the relay (#226); joining, Allow and Team
-(#227). *Planned:* teammates who edit: until then a teammate given Edit
-reads.
+(#227); teammates who edit (#228).
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 

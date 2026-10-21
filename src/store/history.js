@@ -10,9 +10,10 @@
 // `key` is derived from the doc's absolute path; renaming a doc in OpenDoc
 // moves its history along (moveHistory).
 //
-// A burst of typing by the same person is one version: a change within
-// COALESCE_MS of their last one, and less than MAX_SPAN_MS after their
-// version began, replaces that version's text. A buddy's edit is always a
+// A burst of typing is one version: a change by people who typed in the
+// latest version, within COALESCE_MS of it, and less than MAX_SPAN_MS after
+// it began, replaces that version's text. A version typed by several people
+// lists them all in `authors`. A buddy's edit is always a
 // version of its own, after the version it was merged into.
 
 import { createHash } from 'node:crypto';
@@ -41,10 +42,10 @@ export function historyDir(docPath, root) {
 
 /**
  * The versions of the doc, oldest first:
- *   { id, kind, author, startedAt, at, hash, size, added, removed, thread?, reply?, undid?, restoredFrom? }
+ *   { id, kind, author, authors?, startedAt, at, hash, size, added, removed, thread?, reply?, undid?, restoredFrom? }
  * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
  * 'external' (changed outside OpenDoc); `author` is { id?, name, kind } or null
- * when unknown; `added` and `removed` count the characters changed since
+ * when unknown, the first of `authors` when several typed it; `added` and `removed` count the characters changed since
  * the version before. A buddy's edit has the `thread` it answered and the
  * id of its `reply`, and `conflict` when a person's edit that started
  * before it landed took part of it back; an undo of one has the reply it
@@ -72,7 +73,7 @@ export async function readVersion(docPath, root, id) {
 /**
  * Note that the doc now reads `text`. Returns the version that holds it
  * (new or extended), or null when it is the latest version already.
- * `change` is { kind, author, thread?, reply?, undid?, restoredFrom? }.
+ * `change` is { kind, author, authors?, thread?, reply?, undid?, restoredFrom? }.
  */
 export async function recordVersion(docPath, root, text, change, now = Date.now()) {
   const dir = historyDir(docPath, root);
@@ -89,7 +90,7 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
     const dropped = [];
     let version;
     if (last && continues(last, change, now)) {
-      // Same author, still at it: this version now ends at `text`.
+      // The same people, still at it: this version now ends at `text`.
       versions.pop();
       dropped.push(last.hash);
       const previous = versions.at(-1);
@@ -104,6 +105,7 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
         id: newId('v'),
         kind: versions.length === 0 && change.kind === 'external' ? 'opened' : change.kind,
         author: change.author ?? null,
+        ...(change.authors ? { authors: change.authors } : {}),
         startedAt: at,
         at,
         hash,
@@ -173,11 +175,14 @@ export async function moveHistory(fromPath, toPath, root) {
 }
 
 function continues(last, change, now) {
+  const typed = authorsOf(last);
   return change.kind === 'edit' && last.kind === 'edit' && !change.reply && !last.reply
-    && sameAuthor(last.author, change.author)
+    && authorsOf(change).length > 0 && authorsOf(change).every((a) => typed.some((b) => sameAuthor(a, b)))
     && now - Date.parse(last.at) < COALESCE_MS
     && now - Date.parse(last.startedAt) < MAX_SPAN_MS;
 }
+
+const authorsOf = (v) => v.authors ?? (v.author ? [v.author] : []);
 
 const sameAuthor = (a, b) => Boolean(a && b) && a.kind === b.kind && (a.id ?? a.name).toLowerCase() === (b.id ?? b.name).toLowerCase();
 
