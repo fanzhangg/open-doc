@@ -4,7 +4,8 @@ An editor to co-author local text files with your human and AI buddies.
 
 - **Real-time collaboration, humans and AI buddies together:** You and your AI buddies edit, comment and @mention in the same doc at the same time. No handoffs, no syncing between tools.
 - **You are in control:** AI buddies work beside you through comments and edits. Every change an AI buddy makes is shown and can be undone in one click, so they never take over your doc.
-- **Open & private:** Open source, plain text files with an open comment format, and works with any command-line agent. Your docs stay on your machine; Ponjo keeps nothing on a server.
+- **Teammates in a browser:** Invite people to a project with a link. They open it in a browser, with no install or account, and once you let them in they read or edit any doc in it with you, seeing who is here and where each person's cursor is. Your computer hosts the project, so it is shared while the app is open.
+- **Open & private:** Open source, plain text files with an open comment format, and works with any command-line agent. Your docs stay on your machine: teammates' edits pass through a relay that stores nothing, and Ponjo keeps nothing on a server.
 
 Still not convinced? See the [online demo](https://fanzhangg.github.io/open-doc/preview/?folder)
 

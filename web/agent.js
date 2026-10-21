@@ -1,5 +1,6 @@
 // The people in the header, laid out like a shared doc's: avatars of the
-// buddies the doc reaches, a Team button, then yours.
+// people in this doc with you, then of the buddies the doc reaches, a Team
+// button, then yours.
 //
 // A card is where everyone is changed: on a buddy's, a click on its name
 // edits it in place, and who it is is a field right under it; your own
@@ -30,6 +31,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
   let team = null; // the project's team, for its owner (api.team)
+  let here = []; // who has the project open: [{ id, name, owner, doc: whether this one }] (the doc host)
   let showing = null; // 'me' | 'team' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
   // name on the page, or editable, opened by a click (or a click on the card
@@ -44,6 +46,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   root.addEventListener('click', (event) => {
     const face = event.target.closest('[data-agent]');
     if (face) toggle(`agent:${face.dataset.agent}`);
+    const person = event.target.closest('[data-person]');
+    if (person) toggle(`person:${person.dataset.person}`);
   });
   panel.addEventListener('pointerdown', () => { hovered = false; });
   panel.addEventListener('click', (event) => {
@@ -164,10 +168,21 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const names = agentsHere();
     const flinching = (id) => failedAt.get(id) > Date.now() - FAILED_MS;
     const faces = names.map((name) => ({ id: idOf(name), name, mode: modeOf(statusOf(name)), failed: flinching(idOf(name)) }));
-    const key = JSON.stringify(faces);
+    const people = here.filter((p) => p.doc && !isMe(p)).map((p) => p.name);
+    const key = JSON.stringify([people, faces]);
     if (key !== painted) {
       painted = key;
-      root.replaceChildren(...faces.map(({ id, name, mode, failed }) => {
+      root.replaceChildren(...people.map((name) => {
+        const wrap = el('span', 'od-agent');
+        const face = el('button', 'od-agent-face');
+        face.type = 'button';
+        face.dataset.person = name;
+        face.setAttribute('aria-label', `${name} · In this doc`);
+        face.append(avatar(name, 'human'));
+        namecardFor(face, name, 'human', 'instant');
+        wrap.append(face);
+        return wrap;
+      }), ...faces.map(({ id, name, mode, failed }) => {
         const wrap = el('span', 'od-agent');
         wrap.dataset.presence = mode;
         const face = el('button', 'od-agent-face');
@@ -231,7 +246,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // A teammate's card has, for the owner, Read or Edit and Remove.
   function personCard(name) {
     const teammate = memberNamed(name);
-    if (!teammate) return [personHead(name, 'Commented on this doc')];
+    const present = here.find((p) => same(p.name, name));
+    if (!teammate) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc')];
     if (viewOnly) return [personHead(name, LEVEL[teammate.level])];
     const level = el('div', 'od-teammate-row');
     level.append(levelChoice(teammate.level, (next) => changeTeam(() => api.setLevel(teammate.id, next))));
@@ -282,7 +298,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // then every buddy here, one line each: a click opens a card, and a
   // project's buddy is deleted from here. Then, in a project, a line to name
   // a new buddy: Enter makes it and opens its card. Only the owner sees the
-  // teammates and changes anything.
+  // teammates and changes anything, and sees who is away, greyed; a
+  // teammate sees who is here.
   function teamCard() {
     const head = el('div', 'od-card-head');
     head.append(el('div', 'od-card-title', 'Team'));
@@ -292,6 +309,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (team) {
       list.append(el('div', 'od-setting-group', 'Teammates'), ...team.pending.map(pendingRow), ...team.members.map(memberRow));
       if (team.pending.length + team.members.length === 0) list.append(el('div', 'od-people-none', 'No one yet: send them the invite link.'));
+    } else if (here.some((p) => !isMe(p))) {
+      list.append(el('div', 'od-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
     }
     list.append(el('div', 'od-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
     return project() && owner() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
@@ -350,12 +369,16 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return wrap;
   }
 
-  function memberRow(member) {
+  const memberRow = (member) => personRow(member.name, LEVEL[member.level], here.some((p) => p.id === member.id) ? 'idle' : 'away');
+
+  // A person, greyed while away.
+  function personRow(name, role, presence) {
     const row = el('div', 'od-people-row');
+    row.dataset.presence = presence;
     const open = el('button', 'od-people-open');
     open.type = 'button';
-    open.append(avatar(member.name, 'human', true), el('span', 'od-people-name', member.name), el('span', 'od-people-role', LEVEL[member.level]));
-    open.addEventListener('click', () => toggle(`person:${member.name}`));
+    open.append(avatar(name, 'human', true), el('span', 'od-people-name', name), el('span', 'od-people-role', role));
+    open.addEventListener('click', () => toggle(`person:${name}`));
     row.append(open);
     return row;
   }
@@ -554,11 +577,16 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   const take = (result) => onResult(result);
 
-  /** Any of: `agents` (the buddies here, with their statuses), `people` (who commented), `team` (the project's, for its owner). */
-  function render({ agents, people: nextWriters, team: nextTeam }) {
+  /**
+   * Any of: `agents` (the buddies here, with their statuses), `people` (who
+   * commented), `team` (the project's, for its owner), `here` (who has the
+   * project open).
+   */
+  function render({ agents, people: nextWriters, team: nextTeam, here: nextHere }) {
     if (agents) statuses = agents;
     if (nextWriters) writers = nextWriters;
     if (nextTeam) team = nextTeam;
+    if (nextHere) here = nextHere;
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();

@@ -5,10 +5,10 @@
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '../web/client.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
@@ -271,6 +271,87 @@ test('Remove turns a teammate\'s page away at once; a new link ends every old on
   }
 });
 
+test('a teammate sees the owner\'s tree and opens any doc in it at once, nothing hidden', async () => {
+  const shared = await project();
+  await mkdir(join(shared.folder, 'notes'));
+  await writeFile(join(shared.folder, 'notes', 'b.md'), 'B\n');
+  const host = await startHost(shared);
+  try {
+    const sam = page(shared.secret, shared.sam);
+    const first = (await sam.call('state')).result;
+    assert.deepEqual(first.place, { name: basename(shared.folder), path: 'plan.md' });
+    for (const path of ['', 'notes']) assert.deepEqual((await sam.call('list', { path })).result, await asOwner(host, shared, 'list', { path }), path);
+    assert.deepEqual((await sam.call('list', { path: '' })).result.map((e) => e.name), ['notes', 'plan.md']);
+
+    // Another doc: the same link on it, let in at once, no one asked.
+    const other = page(shared.secret, shared.sam, 'notes/b.md');
+    const { result } = await other.call('state');
+    assert.equal(result.text, 'B\n');
+    assert.equal(result.place.path, 'notes/b.md');
+    assert.deepEqual(host.joins, []);
+
+    for (const path of ['.opendoc', '.opendoc/secret.md', '../', 'notes/../.opendoc/secret.md']) {
+      assert.equal((await sam.call('list', { path })).error?.code, 'not_found', path);
+      assert.equal((await sam.call('read', { path })).error?.code, 'not_found', path);
+    }
+  } finally {
+    host.kill();
+  }
+});
+
+test('two writers see each other\'s cursor move, following the text, and who is here', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    await asOwner(host, shared, 'setLevel', { id: idOf(shared.sam.key), level: 'write' });
+    const noor = newTeammate('Noor');
+    const asking = page(shared.secret, noor);
+    asking.call('state');
+    await until(() => asking.lines.includes('waiting'), 'Noor waiting');
+    await asOwner(host, shared, 'allow', { id: idOf(noor.key), level: 'write' });
+    const sam = page(shared.secret, shared.sam);
+    const state = (await sam.call('state')).result;
+    assert.deepEqual(state.cursors, []);
+    await until(() => asking.events.some((e) => e.event === 'hello'), 'Noor in');
+
+    // Who is here: each person once, on this doc.
+    const here = (p) => p.events.filter((e) => e.event === 'here').at(-1)?.data.map(({ name, doc }) => `${name}${doc ? '' : ' (elsewhere)'}`).sort();
+    await until(() => here(asking)?.length === 2, 'Noor told who is here');
+    assert.deepEqual(here(asking), ['Noor', 'Sam']);
+
+    // Sam's cursor reaches Noor, at once, again and again.
+    const ms = [];
+    for (let k = 1; k <= 20; k++) {
+      const seen = asking.events.length;
+      const sent = performance.now();
+      await sam.call('cursor', { at: k, rev: state.rev, epoch: state.epoch });
+      const told = await until(() => asking.events.slice(seen).find((e) => e.event === 'cursors'), 'the cursor');
+      ms.push(performance.now() - sent);
+      assert.deepEqual(told.data.cursors, [{ id: idOf(shared.sam.key), name: 'Sam', at: k }]);
+      assert.equal(told.data.by, idOf(shared.sam.key));
+    }
+    ms.sort((a, b) => a - b);
+    assert.ok(ms[10] < 50 && ms[18] < 100, `a cursor seen within the typing promise: ${ms.map(Math.round)}`);
+
+    // The owner types before it: it moves with the text, at the host and in a page's state.
+    const owner = await asOwner(host, shared, 'state');
+    await asOwner(host, shared, 'submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev: owner.rev, epoch: owner.epoch, id: 'o.1' });
+    assert.equal((await asking.call('state')).result.cursors[0].at, 22);
+    // From a rev before the owner's edit, it is moved over it.
+    await sam.call('cursor', { at: 3, rev: state.rev, epoch: state.epoch });
+    assert.equal((await asking.call('state')).result.cursors[0].at, 5);
+    assert.equal((await sam.call('cursor', { at: -1, rev: state.rev, epoch: state.epoch })).error.code, 'bad_input');
+
+    // Sam goes, and so do their cursor and face.
+    const seen = asking.events.length;
+    await asOwner(host, shared, 'remove', { id: idOf(shared.sam.key) });
+    await until(() => asking.events.slice(seen).find((e) => e.event === 'cursors' && e.data.cursors.length === 0), 'the cursor gone');
+    await until(() => here(asking)?.length === 1, 'Sam gone');
+  } finally {
+    host.kill();
+  }
+});
+
 test('the relay serves the teammate\'s page from its own origin, and only it', async () => {
   const served = await fetch(`${relay.origin}/team?room=${'0'.repeat(64)}`);
   assert.equal(served.status, 200);
@@ -315,7 +396,7 @@ test('the relay limits pages, message sizes and rooms, so it is no free pipe', a
   }
 });
 
-test('the browser build asks a name, waits for Allow, then shows the doc read only, live', async () => {
+test('the browser build asks a name, waits for Allow, then shows the doc live: its tree, the owner\'s cursor, read only until Edit', async () => {
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'ponjo-relay-page-'));
@@ -343,11 +424,43 @@ test('the browser build asks a name, waits for Allow, then shows the doc read on
     await host.request('call', { docId, call: 'submit', arg: { ops: [{ from: TEXT.length, to: TEXT.length, insert: '\nThen ask for feedback.\n' }], rev: owner.rev, epoch: owner.epoch, id: 'w.1' } });
     await waitFor(async () => (await text()).includes('Then ask for feedback.'), 10_000, 'the owner\'s typing');
 
+    // The project's tree, the doc marked, and no file menu: the files are the owner's.
+    await mkdir(join(shared.folder, 'notes'));
+    await writeFile(join(shared.folder, 'notes', 'b.md'), 'Notes on the plan\n');
+    const rows = () => shown.evaluate(`[...document.querySelectorAll('.od-files-row')].filter((r) => !r.closest('[hidden]')).map((r) => r.dataset.path)`).catch(() => []);
+    await shown.evaluate('window.dispatchEvent(new Event("focus"))'); // back in front: the tree read again
+    await waitFor(async () => JSON.stringify(await rows()) === '["notes","plan.md"]', 10_000, 'the tree');
+    assert.equal(await shown.evaluate(`document.querySelector('[aria-current="page"]').dataset.path`), 'plan.md');
+    assert.ok(await shown.evaluate(`document.querySelector('[data-path="plan.md"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))`), 'no menu');
+    await shown.evaluate(`document.querySelector('[data-path="notes"]').click()`);
+    await waitFor(async () => (await rows()).includes('notes/b.md'), 10_000, 'the folder open');
+    await shown.evaluate(`document.querySelector('[data-path="notes/b.md"]').click()`);
+    await waitFor(async () => (await text().catch(() => '')).includes('Notes on the plan'), 30_000, 'the other doc');
+    assert.equal(new URL(await shown.evaluate('location.href')).searchParams.get('doc'), 'notes/b.md');
+    assert.equal(host.joins.length, 1, 'not asked again');
+    await waitFor(async () => (await rows()).includes('notes/b.md'), 10_000, 'the folder still open');
+    await shown.evaluate(`document.querySelector('[data-path="plan.md"]').click()`);
+    await waitFor(async () => (await text().catch(() => '')).includes('Then ask for feedback.'), 30_000, 'back');
+
     // A thread: a reader sees it, with nothing to reply, resolve or undo with.
     await host.request('call', { docId, call: 'comment', arg: { anchor: null, body: 'Shall we?' } });
     await waitFor(() => shown.evaluate(`document.querySelector('.od-margin').textContent.includes('Shall we?')`), 10_000, 'the comment');
     const visible = (selector) => shown.evaluate(`[...document.querySelectorAll('${selector}')].filter((node) => node.offsetParent).length`);
     for (const selector of ['.od-composer', '.od-resolve', '.od-toolbar [data-command]']) assert.equal(await visible(selector), 0, selector);
+
+    // The owner's cursor, named, in their colour; a writer's goes to the owner.
+    const now = await host.request('call', { docId, call: 'state' });
+    await host.request('call', { docId, call: 'cursor', arg: { at: 6, rev: now.rev, epoch: now.epoch } });
+    await waitFor(() => shown.evaluate(`document.querySelector('.od-cursor')?.textContent === 'owner'`), 10_000, 'the owner\'s cursor');
+    await asOwner(host, shared, 'setLevel', { id: pending[0].id, level: 'write' });
+    await waitFor(async () => (await shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.contentEditable`).catch(() => '')) === 'true', 30_000, 'the page at Edit');
+    await shown.evaluate(`{
+      const editor = document.querySelector('.od-stage [contenteditable]');
+      editor.focus();
+      const text = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then')).firstChild;
+      getSelection().collapse(text, 4);
+    }`);
+    await until(async () => (await host.request('call', { docId, call: 'state' })).cursors.some((c) => c.name === 'Noor'), 'Noor\'s cursor at the host');
 
     // Turned away, the page says why.
     await asOwner(host, shared, 'remove', { id: pending[0].id });

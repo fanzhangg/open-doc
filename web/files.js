@@ -9,6 +9,8 @@
 // of the doc.
 // The app keeps which subfolders are open, whether the sidebar shows and how
 // far it was scrolled, so the next page draws it just as this one left it.
+// A teammate's page has the same tree, from the host, with no app: see
+// browserFolder.
 
 import { api } from './api.js';
 import { icon } from './icons.js';
@@ -29,11 +31,13 @@ const NOT_SHOWN = {
 /**
  * Set up the sidebar; in a window with a single doc, it stays hidden. `onCarry(carry)` hears how the last page in this window left
  * things (`carry` from the app; `startTyping` when it made this doc), once; `onError(message)` hears what could
- * not be done. Returns `ready`, which resolves once the sidebar is drawn,
+ * not be done. `place` is the doc's in its project ({ name, path }), for a
+ * teammate's page. Returns `ready`, which resolves once the sidebar is drawn,
  * and `state()`, how this page leaves it.
  */
-export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) {
-  const desktop = window.ponjoDesktop;
+export function createFileList({ place = null, onError = () => {}, onCarry = () => {} } = {}) {
+  const owner = Boolean(window.ponjoDesktop); // only the owner changes files
+  const desktop = window.ponjoDesktop ?? (place && browserFolder(place));
   const aside = document.querySelector('.od-files');
   const head = aside.querySelector('.od-files-head');
   const tree = aside.querySelector('.od-files-tree');
@@ -622,7 +626,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   }
 
   tree.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || field) return;
+    if (event.button !== 0 || field || !owner) return;
     const node = event.target.closest('.od-files-row[data-path]');
     if (!node) return;
     drag = { node, path: node.dataset.path, kind: node.dataset.kind, x: event.clientX, y: event.clientY, pointerId: event.pointerId, started: false, target: null };
@@ -652,7 +656,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     activate(node);
   });
   aside.addEventListener('contextmenu', (event) => {
-    if (field || event.target.closest('input')) return;
+    if (field || !owner || event.target.closest('input')) return;
     const node = event.target.closest('.od-files-row[data-path]');
     if (!node && !event.target.closest('.od-files-tree')) return;
     event.preventDefault();
@@ -678,6 +682,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
       if (folder && open) setOpen(node, false);
       else focusRow(visibleRow(parentOf(node.dataset.path)));
     } else if (key === 'Enter' || key === ' ') activate(node);
+    else if (!owner) return;
     else if (key === 'F2') startRename(node);
     else if (key === 'Delete' || (isMac && key === 'Backspace' && event.metaKey)) trash(node);
     else if (key === 'ContextMenu' || (key === 'F10' && event.shiftKey)) {
@@ -777,6 +782,42 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
 
   desktop.onFolderChanged(refresh);
   return { ready: refresh(), state: () => ({ sidebarScroll: tree.scrollTop, startTyping: Boolean(created) }) };
+}
+
+// The sidebar's side of the app, in a teammate's page: which folders are
+// open and whether it shows are kept in this browser; a doc opens as the
+// page of the same link on it, which the host lets in at once; the tree is
+// read again when the page is back in front.
+function browserFolder({ name, path }) {
+  const KEY = 'ponjo.folder';
+  let kept = {};
+  try {
+    kept = JSON.parse(localStorage.getItem(KEY)) ?? {};
+  } catch {
+    // no storage: the sidebar as it starts
+  }
+  const keep = (patch) => {
+    kept = { ...kept, ...patch };
+    try {
+      localStorage.setItem(KEY, JSON.stringify(kept));
+    } catch {
+      // kept for this page only
+    }
+  };
+  return {
+    folder: async () => ({ name, current: path, expanded: kept.expanded ?? [], sidebar: kept.sidebar ?? true }),
+    folderExpand: async (rel, open) => keep({ expanded: [...(kept.expanded ?? []).filter((p) => p !== rel), ...(open ? [rel] : [])] }),
+    showSidebar: async (open) => keep({ sidebar: open }),
+    async openInFolder(rel) {
+      if ((await api.read(rel)).problem) return false;
+      const params = new URLSearchParams(location.search);
+      params.set('doc', rel);
+      location.search = params;
+      return true;
+    },
+    onFolderCommand() {},
+    onFolderChanged: (fn) => window.addEventListener('focus', fn),
+  };
 }
 
 const parentOf = (path) => path.split('/').slice(0, -1).join('/');

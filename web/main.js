@@ -151,6 +151,7 @@ async function start() {
   });
   window.ponjoDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
   files = createFileList({
+    place: initial.place,
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
       if (carry.commentsHidden) showComments(false);
@@ -190,7 +191,7 @@ async function start() {
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
-    getId: () => settings.get().id,
+    getId: () => myId,
     setName,
     getAbout: () => settings.get().about,
     setAbout: (about) => settings.set({ about }),
@@ -279,6 +280,18 @@ async function start() {
   document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
   events.on('ops', (data) => client.receive(data));
+  events.on('cursors', (data) => {
+    client.cursors(data);
+    if (data.by) movedAt.set(data.by, Date.now());
+    paintMarks();
+    clearTimeout(settleCarets);
+    settleCarets = setTimeout(paintMarks, CARET_WORKING_MS); // names go once they stop
+  });
+  events.on('here', (data) => people.render({ here: data }));
+  // Where you are in the text, for the others; a reader has no caret.
+  document.addEventListener('selectionchange', () => {
+    if (level !== 'read') client.moved();
+  });
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.on('history', () => {
     history.changed();
@@ -692,6 +705,11 @@ async function undoReply(id) {
 // the page, and with the buddy once it is no longer here.
 const cursors = new Map(); // buddy id -> anchor of the character before its cursor
 let working = new Set();
+// People's cursors are the host's (client.cursorsShown); each is named for
+// a while after it moves.
+const CARET_WORKING_MS = 3000;
+const movedAt = new Map(); // person id -> when their cursor last moved
+let settleCarets = null;
 
 function standAtWork(statuses) {
   const ids = new Set(statuses.map((a) => a.id));
@@ -794,6 +812,10 @@ function paintMarks() {
   for (const [by, anchor] of cursors) {
     const found = where(text, anchor);
     if (found) marks.push({ kind: 'cursor', at: found.end, by, working: working.has(by) });
+  }
+  // People's, named while they move or type.
+  for (const { id, name, at } of client?.cursorsShown() ?? []) {
+    if (id !== myId && at <= text.length) marks.push({ kind: 'cursor', at, by: name, working: Date.now() - (movedAt.get(id) ?? 0) < CARET_WORKING_MS });
   }
   editor.setMarks(marks);
   return marks;

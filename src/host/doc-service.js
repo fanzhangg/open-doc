@@ -9,14 +9,14 @@
 // through Team (team.js), at the same door.
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
-import { apply, diffOps, transform } from '../core/ot.js';
+import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
@@ -62,7 +62,7 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
- * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, team: object | null) => void, close: () => Promise<void> }>}
+ * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, leave: (id: string) => void, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, team: object | null) => void, close: () => Promise<void> }>}
  */
 export async function openDoc(docPath, { folder = null, team = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
@@ -122,6 +122,17 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // Whether the file, as `now` (a stat, or null) says, is still as this service wrote it.
   const ours = (now) => sameStat(now, writtenStat);
   let told = []; // landed edits not yet written and told to windows, as `ops` events
+  // Where each person has their cursor: id → { id, name, at },
+  // `at` an offset in the text at `toldRev`, the last rev windows were told
+  // of, so a window places it on its own text; told to every window as
+  // `cursors`, with `by`, whose cursor moved. Never queued behind writes.
+  const cursors = new Map();
+  let toldRev = 0;
+  const tellCursors = (by = null) => emit('cursors', { epoch, rev: toldRev, cursors: [...cursors.values()], by });
+  // The cursors on the text at `rev`.
+  const cursorsNow = () => [...cursors.values()].map((cursor) => ({
+    ...cursor, at: log.slice(toldRev - logStart, rev - logStart).reduce((at, landed) => mapOffset(at, landed.ops), cursor.at),
+  }));
   // Windows' edits the file holds that a service before this one may not
   // have told them of (noteWritten).
   const landedBefore = await writtenEdits(docPath, settingsDir, opened.hash);
@@ -168,7 +179,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       writtenStat = wrote;
       written = text;
     }
-    for (const event of told.splice(0)) emit('ops', event);
+    for (const event of told.splice(0)) {
+      for (const cursor of cursors.values()) cursor.at = mapOffset(cursor.at, event.ops);
+      toldRev = event.rev;
+      emit('ops', event);
+    }
   }
 
   // The doc's rules, as the settings are now.
@@ -254,6 +269,18 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     return {};
   }
 
+  // `who`'s cursor is at offset `at` of the text at rev `rev` of `epoch`;
+  // one from a rev windows are not all told of yet, or this service no
+  // longer has, is dropped (the next comes).
+  function cursor({ at, rev: from, epoch: of } = {}, who) {
+    if (!Number.isInteger(at) || at < 0 || !Number.isInteger(from)) throw new DocError('bad_input', 'expected { at, rev, epoch }');
+    if (of !== epoch || from < logStart || from > toldRev) return {};
+    const now = log.slice(from - logStart, toldRev - logStart).reduce((offset, landed) => mapOffset(offset, landed.ops), at);
+    cursors.set(who.id, { id: who.id, name: who.name, at: now });
+    tellCursors(who.id);
+    return {};
+  }
+
   // Put the doc back the way it was in an earlier version, as `who`'s
   // edit: a new version, so the restore can itself be undone. Comments
   // stay; readers find their anchors in the restored text.
@@ -284,7 +311,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       me: owner ? await me() : byOf(who),
       level: who.level,
       agents: agentStatuses(),
+      cursors: cursorsNow(),
       project: folder !== null, // whether buddies can be made here
+      // The project's name and the doc's path in it, for a teammate's sidebar.
+      place: folder && { name: basename(folder), path: relative(folder, await realpath(docPath).catch(() => docPath)).split(sep).join('/') },
     };
   }
 
@@ -657,6 +687,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   const calls = {
     read: {
       state: (body, who) => state(who),
+      cursor,
       async history() {
         await serial(flushTyping); // typing not paused yet is a version too
         await chronicle;
@@ -729,6 +760,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     },
     /** The owner of this machine, as a `who`. */
     owner: async () => ({ ...(await me()), level: 'owner' }),
+    /** Person `id` has no window or page on the doc any more: their cursor goes. */
+    leave(id) {
+      if (cursors.delete(id)) tellCursors();
+    },
     /** What a window hears first: whether the doc is missing, and who is at work. */
     hello: () => ({ missing, agents: agentStatuses() }),
     runner,

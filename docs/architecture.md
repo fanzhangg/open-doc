@@ -12,8 +12,8 @@ what it changed back in. (The code calls a turn a run: `Runner`,
 host.
 
 Sharing is built: teammates join from a link, are allowed by the owner,
-and read or edit. What is still designed and not built (people's cursors)
-is marked *planned*; everything else is what the code does.
+read or edit, and see who is here and where each person's cursor is.
+Everything here is what the code does.
 
 No backward compatibility with earlier formats: a version 1 sidecar is
 ignored, and a version 2 one is not converted. A sidecar this version must
@@ -305,9 +305,9 @@ does not yield: an undo must not give way to a buddy's edit.
 
 | Component | Its one thing | Interface |
 | --- | --- | --- |
-| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
+| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`, `mapOffset(at, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor(at)`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes |
+| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
 | Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
@@ -452,7 +452,8 @@ the same time; their merges are applied one at a time.
 
 A teammate joins the owner's project from a link, in a browser. Built: a
 page reads a doc through the relay (#226); joining, Allow and Team
-(#227); teammates who edit (#228); the relay deployed (#241).
+(#227); teammates who edit (#228); the relay deployed (#241); the
+project's tree and every doc in it (#242).
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -489,11 +490,21 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   `dist/web`) is the doc window on the relay; in the preview (`preview/`)
   `doc-stub.js` plays the host instead.
   A page names its doc by its path in the project, or none for the
-  project's first; the doc is open once however many windows and pages
-  have it. Anyone but the owner gets the default settings, not the
+  project's first; `state` tells it that path and the project's name
+  (`place`), for its sidebar (`web/files.js`), which reads the tree through
+  the door (`list`, `read`) and opens another doc as the page of the same
+  link on it, let in at once. The doc is open once however many windows
+  and pages have it. Anyone but the owner gets the default settings, not the
   owner's, and a path in the project, not its real path. A page the host
   turns away is told why (`not_found`, `name_taken`, `denied`, `removed`,
-  `link_replaced`), and says so.
+  `link_replaced`, `full`), and says so.
+- **Presence.** The host tells everyone on a project who has a window or
+  page on any of its docs (`here`), each person once and whether on the
+  same doc; a person not there is away, greyed. Each person's cursor goes
+  to the host once their typing has landed (`cursor`, on the rev they
+  have), and the host tells it to everyone on the doc (`cursors`); a page
+  moves it over the edits it hears of and its own typing not landed yet
+  (`web/client.js`), so it stays where its text is.
 - **Everyone is a participant**: `{ id, name, kind, level }`. The host sets
   `who` from the connection and never trusts one sent in a message. A
   teammate's id is the hash of a key made once in their browser, which
