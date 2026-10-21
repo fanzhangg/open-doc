@@ -50,8 +50,10 @@ edits and comments.
   (`~/Library/Application Support/OpenDoc/agents/` on macOS): `<name>` on
   macOS and Linux, `<name>.cmd` on Windows. Never in a project: a shared
   folder must not decide what runs here.
-- Claude Code and Codex ship as two, written once when missing; then they
-  are yours. Reset to Default writes one again.
+- Claude Code, Codex and the [OpenDoc agent](opendoc-agent.md) ship,
+  written once when missing; then they are yours. Reset to Default writes
+  one again. The OpenDoc agent's two scripts run `opendoc.mjs`, written
+  next to them.
 - One agent runs every buddy; Settings picks which. To give one buddy
   another program, branch on `OPENDOC_BUDDY` in the script.
 - Everything about the program (model, flags, cleaning up its output) is in

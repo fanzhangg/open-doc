@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs a buddy on the OpenDoc agent (docs/opendoc-agent.md): opendoc.mjs,
+# next to this script, on your own node. Yours to change.
+exec node "$(dirname "$0")/opendoc.mjs"
