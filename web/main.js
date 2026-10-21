@@ -18,7 +18,7 @@ import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { viewSettings } from '../src/core/settings.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
-import { diffEdits } from '../src/core/diff.js';
+import { diffEdits, findEdit } from '../src/core/diff.js';
 import { createClient } from './client.js';
 import { rulesOf } from '../src/rules/index.js';
 import { createHistory } from './history.js';
@@ -500,7 +500,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
   paintEmpty();
   if (edits?.[runLanded]) {
-    showRun(runLanded, { scroll: false });
+    showRun(runLanded, { scroll: false, stand: true });
     runLanded = null;
   }
 }
@@ -649,7 +649,8 @@ async function undoReply(id) {
 // ---- where each buddy stands in the text ----
 
 // A buddy asked to work in this window stays in the doc with its cursor, at
-// the passage it was asked about. The place is an anchor, so it follows the text; the cursor goes with
+// the end of its last edit, or at the passage it was asked about until it
+// edits. The place is an anchor, so it follows the text; the cursor goes with
 // the page, and with the buddy once it is no longer here.
 const cursors = new Map(); // buddy id -> anchor of the character before its cursor
 let working = new Set();
@@ -665,15 +666,23 @@ function standAtWork(statuses) {
   working = now;
 }
 
+function standAtLastEdit(by, before, after) {
+  const last = diffEdits(before, after).at(-1);
+  const text = editor.getText();
+  const range = last && findEdit(text, last.edit);
+  if (range && text) cursors.set(by, createAnchor(text, Math.max(range.end, 1) - 1, Math.max(range.end, 1)));
+}
+
 // ---- a buddy's run as a revision in the text ----
 
 // The edits of the run that wrote reply `id`, marked in the text until the
 // human types, presses Escape or toggles them off on the reply; `scroll`
-// brings the first into view. An edit changed since is left out.
+// brings the first into view, `stand` puts the buddy's cursor after the
+// last. An edit changed since is left out.
 let shownRun = null;
 let preview = null; // { edits, by, replay } of the run shown
 let replays = 0;
-async function showRun(id, { scroll = true } = {}) {
+async function showRun(id, { scroll = true, stand = false } = {}) {
   const run = comments?.edits?.[id];
   if (run?.state !== 'edited') return;
   shownRun = id;
@@ -681,6 +690,7 @@ async function showRun(id, { scroll = true } = {}) {
   const found = await api.version(run.version).catch(() => null);
   if (shownRun !== id) return;
   if (!found?.before) return hideRun();
+  if (stand) standAtLastEdit(run.by, found.before, found.text);
   const edits = diffEdits(found.before, found.text).map((change) => change.edit);
   preview = { edits, by: run.by, replay: ++replays };
   const marks = paintMarks().filter((m) => m.kind === 'edit');
