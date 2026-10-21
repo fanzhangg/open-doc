@@ -62,10 +62,10 @@ replaced (Reset to Default, a new version) without losing them.
 - Claude Code, Codex and the [OpenDoc agent](opendoc-agent.md) ship, written
   once when missing; then they are yours. Reset to Default writes one again.
 - An agent without a manifest is shown by its file name, with no settings.
-- One agent runs every buddy; Settings > Agents picks which, on the agent's
-  own page there, as a view has in Settings > Views. The page shows the
-  fields of its manifest, and for a shipped agent, Reset to Default. To give
-  one buddy another program, branch on `OPENDOC_BUDDY` in it.
+- One agent runs every buddy: Settings > Agents lists them, one picked. The
+  picked one shows the fields of its manifest under it, and for a shipped
+  agent, Reset to Default. To give one buddy another program, branch on
+  `OPENDOC_BUDDY` in it.
 
 ### Settings
 
