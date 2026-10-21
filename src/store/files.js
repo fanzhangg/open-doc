@@ -13,6 +13,9 @@ import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 export const SIDECAR_SUFFIX = '.opendoc.jsonl';
+// Room for the longest doc the Plain text view edits (5,000,000 characters,
+// web/views/plain/index.js), at up to 4 bytes a character.
+export const MAX_TEXT_BYTES = 20 * 1024 * 1024;
 const LOCK_STALE_MS = 2000;
 const LOCK_TIMEOUT_MS = 5000;
 
