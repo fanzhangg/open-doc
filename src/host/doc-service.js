@@ -4,7 +4,8 @@
 // @mentioned in the doc's comments (runner.js) and lands what each run
 // changed when it ends. It lives in the doc host; windows call it over a
 // message port (desktop/doc-host.js) and hear its events (ops, sidecar,
-// agents, settings, history, renamed, missing).
+// agents, settings, history, renamed, missing). In project mode its
+// project's files are read through ProjectService, at the same door.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -24,6 +25,7 @@ import { configDir, readSettings, settingsWithId, updateSettings, watchSettings 
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
+import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
 
 /** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale', 'forbidden'). */
@@ -581,6 +583,11 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   let stopWatching = watchDoc(docPath, onFilesChanged);
   const stopWatchingSettings = watchSettings(onSettingsChanged, settingsDir);
   let stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
+  let project = folder ? projectService(folder) : null;
+  const inProject = () => {
+    if (!project) throw new DocError('bad_input', 'a doc on its own has no project');
+    return project;
+  };
   const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
   await syncAgents();
 
@@ -599,6 +606,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         if (!found) throw new DocError('not_found', 'no such version');
         return found;
       },
+      // The project's files (project-service.js), `path` in the project.
+      list: (body) => inProject().list(body?.path),
+      read: (body) => inProject().read(body?.path),
+      open: (body) => inProject().open(body?.path),
     },
     write: {
       submit,
@@ -654,6 +665,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     moveTo,
     setFolder(next) {
       folder = next;
+      project = folder ? projectService(folder) : null;
       stopWatchingProjectBuddies();
       stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
       syncAgents();

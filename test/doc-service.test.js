@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { appendFile, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -191,6 +191,23 @@ test('the door: each call needs a level, and a comment is by whoever calls, neve
     assert.deepEqual((await threadOf(state, id)).comments[0].by, { id: 'Pilot', name: 'Pilot', kind: 'ai' });
     await doc.call('comment', { thread: id, body: '', resolved: true }, pilot);
     assert.equal((await threadOf(state, id)).resolved, true, 'a buddy that may write resolves');
+  });
+});
+
+test('the project\'s files, at the door: whoever may read lists, reads and opens what the project shows', async () => {
+  await withDoc(async ({ doc, docPath, settingsDir }) => {
+    const reader = { ...(await doc.owner()), level: 'read' };
+    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.opendoc is not shown');
+    assert.deepEqual(await doc.call('read', { path: 'plan.md' }, reader), { text: SAMPLE });
+    assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: await realpath(docPath) });
+    await assert.rejects(doc.call('read', { path: '.opendoc/buddies/Pilot.md' }, reader), refused('not_found'));
+    await assert.rejects(doc.call('list', { path: '' }), refused('forbidden'), 'no one may list');
+    const alone = await openTestDoc(await tempDoc(), { settingsDir });
+    try {
+      await assert.rejects(alone.call('list', { path: '' }), refused('bad_input'), 'a doc on its own has no project');
+    } finally {
+      await alone.doc.close();
+    }
   });
 });
 

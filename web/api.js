@@ -50,4 +50,8 @@ export const api = {
   /** Put the doc back to version `id`. */
   restoreVersion: (id) => call('restoreVersion', { id }),
   saveSettings: async (patch) => (await call('saveSettings', patch)).settings,
+  /** What the project's folder `path` ('' for the top) holds: [{ name, folder }], subfolders first. */
+  list: (path) => call('list', { path }),
+  /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
+  read: (path) => call('read', { path }),
 };

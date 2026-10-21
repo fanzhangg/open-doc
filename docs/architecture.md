@@ -122,12 +122,13 @@ flowchart TD
 | Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agent scripts in the config folder; buddy files (Clippy's there, a project's in its folder) |
 | DocService (`src/host/doc-service.js`) | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
+| ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
-| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, a project's files in the sidebar; starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`). An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
-| Team, ProjectService | *planned:* who is on a project and what each may do; the project's files, the same for everyone. See Sharing |
+| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`). An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
+| Team | *planned:* who is on a project and what each may do. See Sharing |
 
-DocService and Runner run in the doc host, the app's utility process.
+DocService, Runner and ProjectService run in the doc host, the app's utility process.
 Windows reach it over Electron message ports; a teammate's page, *planned*,
 over a relay.
 
@@ -225,8 +226,9 @@ with the views' side of them (#215; the code calls Undo on a reply
 `undoReply`, and a restore is still its own call, `restoreVersion`). Not
 yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
-teammates, Team, ProjectService and `cursor`. The door is built for the
-owner and AI buddies (#223).
+teammates, Team and `cursor`. The door is built for the owner and AI
+buddies (#223); ProjectService is behind it (#229), but an agent still reads
+more than it shows (#230).
 
 **Every writer comes through one door.** A page's call comes as
 `call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call

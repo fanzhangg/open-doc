@@ -13,6 +13,8 @@
 //     its sidecar, or, with `moved`, already there)
 //   running { docId } → the names of the doc's buddies at work
 //   setFolder { docId, folder }
+//   call { docId, call, arg } → the doc's answer to `call`, asked as the
+//     owner: the app's own calls, as the sidebar's `open`
 //   attach { docId }, with a message port: a window's page talks to the doc
 //     over it (`serve`)
 //   closeAll
@@ -66,6 +68,10 @@ const handlers = {
   moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameFile),
   running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
   setFolder: ({ docId, folder }) => docOf(docId).service.setFolder(folder),
+  async call({ docId, call, arg }) {
+    const { service } = docOf(docId);
+    return service.call(call, arg, await service.owner());
+  },
   attach({ docId }, ports) {
     serve(docOf(docId), ports[0]);
   },

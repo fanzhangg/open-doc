@@ -4,7 +4,7 @@
 // passes in how to start the host, so the tests run under `node --test`.
 
 /**
- * @typedef {{ attach: (port: object) => Promise<void>, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, running: () => Promise<string[]>, setFolder: (folder: string | null) => Promise<void>, onRestart: (() => void) | null }} HostedDoc
+ * @typedef {{ attach: (port: object) => Promise<void>, close: () => Promise<void>, moveTo: (toPath: string, options?: { moved?: boolean }) => Promise<string>, running: () => Promise<string[]>, call: (call: string, arg?: object) => Promise<object>, setFolder: (folder: string | null) => Promise<void>, onRestart: (() => void) | null }} HostedDoc
  */
 
 const SHUTDOWN_PATIENCE_MS = 5000;
@@ -22,7 +22,8 @@ const RESTART_WINDOW_MS = 60_000;
  * message port), `close()`, `moveTo(toPath, { moved })` (renames the doc
  * and its sidecar, never over another file, or with `moved` follows a doc
  * already there; resolves to the final path), `running()` (the names of
- * the doc's buddies at work), `setFolder(folder)`, and `onRestart`, called
+ * the doc's buddies at work), `call(call, arg)` (the doc's answer, asked
+ * as the owner), `setFolder(folder)`, and `onRestart`, called
  * once a host that stopped has the doc open again (its pages attach again).
  * `shutdown()` closes every doc and stops the host, for quitting.
  */
@@ -123,6 +124,11 @@ export function createDocHost({ fork, log = console.error }) {
       async running() {
         await started;
         return request('running', { docId });
+      },
+      // The doc's answer to `call` (doc-service.js), asked as the owner.
+      async call(call, arg) {
+        await started;
+        return request('call', { docId, call, arg });
       },
       async setFolder(next) {
         await started;
