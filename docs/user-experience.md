@@ -94,9 +94,10 @@ and the first line shows next to its name.
 
 Editing the files by hand works too: the app picks up changes at once. What
 runs every AI buddy is the agent picked in Settings > Agent (Claude Code,
-Codex, or the OpenDoc agent, which runs any model, a local one included): a
+Codex, or the OpenDoc agent, which runs a cloud model you pick): a
 script in `agents/` in your config folder that you may edit (see
-[agent config](agent-config.md)).
+[agent config](agent-config.md)). *Planned:* Settings > Agents, a page per
+agent with its settings (model, API key), kept apart from its script.
 
 ## Who asks whom
 
