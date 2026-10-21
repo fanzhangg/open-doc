@@ -474,7 +474,7 @@ function patchCard(card, fresh) {
  * click. Hidden when there is nothing to offer. The comment box and the doc's
  * text share it, so @ looks the same in both.
  */
-export function fillMentionMenu(menu, choices, selected, onPick) {
+function fillMentionMenu(menu, choices, selected, onPick) {
   const items = [];
   let group = null;
   choices.forEach((choice, i) => {
@@ -506,7 +506,7 @@ export function fillMentionMenu(menu, choices, selected, onPick) {
  * `text` as nodes, each @name of someone in `people` ([{ name, kind }]) a
  * chip that shows their name card on hover.
  */
-export function withMentions(text, people) {
+function withMentions(text, people) {
   const nodes = [];
   let at = 0;
   for (const { start, end, name } of mentionSpans(text, people.map((p) => p.name))) {

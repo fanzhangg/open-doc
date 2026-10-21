@@ -7,8 +7,8 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { sidecarPath } from './files.js';
 
-export const POLL_INTERVAL_MS = 500;
-export const DEBOUNCE_MS = 50;
+const POLL_INTERVAL_MS = 500;
+const DEBOUNCE_MS = 50;
 
 /**
  * Call `onChange()` (debounced) whenever the doc or its sidecar changes.

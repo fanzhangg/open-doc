@@ -9,10 +9,10 @@ import { isAbsolute, join, relative, sep } from 'node:path';
 import { SIDECAR_SUFFIX } from '../src/store/files.js';
 import { MAX_TEXT_BYTES, isDocName, isTextFile } from './files.js';
 
-export const MAX_DOCS = 2000;
-export const MAX_DEPTH = 12;
-export const DEBOUNCE_MS = 300;
-export const POLL_INTERVAL_MS = 3000;
+const MAX_DOCS = 2000;
+const MAX_DEPTH = 12;
+const DEBOUNCE_MS = 300;
+const POLL_INTERVAL_MS = 3000;
 
 // Never in the sidebar: git's own folder and Finder's leftovers.
 const HIDDEN = new Set(['.git', '.DS_Store']);

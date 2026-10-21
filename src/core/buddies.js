@@ -13,7 +13,7 @@ export const CLIPPY = Object.freeze({
   where: 'app',
 });
 
-export const BUDDY_RULES = Object.freeze({
+const BUDDY_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
   about: (v) => typeof v === 'string' && !v.includes('\0'),
 });

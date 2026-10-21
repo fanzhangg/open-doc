@@ -54,7 +54,7 @@ export function project(markdown) {
 }
 
 /** The markdown syntax tree (mdast) that the projection is built from. */
-export function parseMarkdown(markdown) {
+function parseMarkdown(markdown) {
   return fromMarkdown(markdown, {
     extensions: [gfm(), cjkFriendlyExtension()],
     mdastExtensions: [gfmFromMarkdown()],

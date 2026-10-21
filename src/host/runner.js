@@ -160,7 +160,7 @@ export class Runner {
  * Run `script` in `cwd` with `prompt` on stdin: { code, stdout, stderr,
  * timedOut, error } once it and its output end. `onChild` gets the process.
  */
-export function runScript(script, { cwd, prompt, env, timeoutMs = RUN_TIMEOUT_MS, onChild = () => {} }) {
+function runScript(script, { cwd, prompt, env, timeoutMs = RUN_TIMEOUT_MS, onChild = () => {} }) {
   return new Promise((resolve) => {
     const windows = process.platform === 'win32';
     // A .cmd runs only through the shell; its path is quoted for spaces.
@@ -227,7 +227,7 @@ export function buildPrompt({ buddy, buddies = [], docName, sidecarName = `${doc
  * The environment a script runs in. Inside a Claude Code session its
  * variables would make the agent use that session's auth, so they go.
  */
-export function agentEnv(env) {
+function agentEnv(env) {
   const clean = {};
   for (const [key, value] of Object.entries(env)) {
     if (key === 'CLAUDECODE' || key === 'ANTHROPIC_BASE_URL' || key === 'ELECTRON_RUN_AS_NODE' || /^CLAUDE_(CODE|AGENT_SDK|PID|PREVIEW)/.test(key)) continue;
@@ -237,7 +237,7 @@ export function agentEnv(env) {
 }
 
 /** End `child` and everything it started. */
-export function killTree(child) {
+function killTree(child) {
   if (!child || child.exitCode !== null || child.pid === undefined) return;
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }).on('error', () => {});

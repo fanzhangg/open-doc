@@ -5,10 +5,10 @@
 import search from 'approx-string-match';
 
 export const CONTEXT_LENGTH = 32;
-export const MIN_FUZZY_LENGTH = 4;
-export const SHORT_QUOTE_LENGTH = 8;
-export const MIN_BRACKET_CONTEXT = 8;
-export const TAIL_LENGTH = 16;
+const MIN_FUZZY_LENGTH = 4;
+const SHORT_QUOTE_LENGTH = 8;
+const MIN_BRACKET_CONTEXT = 8;
+const TAIL_LENGTH = 16;
 const WINDOW_SLACK = 2048;
 const WEIGHTS = { quote: 50, prefix: 20, suffix: 20, position: 2 };
 

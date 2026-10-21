@@ -8,7 +8,7 @@ import { NAME_PATTERN, parseMentions } from './mentions.js';
 import { createAnchor } from './anchor.js';
 
 export const FORMAT_VERSION = 3;
-export const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
+const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
 const AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
@@ -66,9 +66,6 @@ export function parseSidecar(text) {
 export function serializeSidecar(lines) {
   return [JSON.stringify({ opendoc: FORMAT_VERSION }), ...lines.map((l) => l.text ?? JSON.stringify(l.comment))].join('\n') + '\n';
 }
-
-/** An empty sidecar's lines. */
-export const emptyLines = () => [];
 
 // Why `c` is not a valid comment (§2), or null.
 function invalid(c) {

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { writeAtomic } from '../src/store/files.js';
 import { configDir } from '../src/store/settings.js';
 
-export const STATE_FILE = 'state.json';
+const STATE_FILE = 'state.json';
 export const MAX_RECENT = 10;
 export const MAX_FOLDER_DOCS = 50;
 

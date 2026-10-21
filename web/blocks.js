@@ -97,7 +97,7 @@ function diffSeq(n, m, eq) {
 
 // Equal blocks, ignoring heading ids: the live editor derives them from the
 // text after parsing, so a freshly parsed copy of the same heading lacks one.
-export function sameBlock(a, b) {
+function sameBlock(a, b) {
   if (a.eq(b)) return true;
   return a.type === b.type && a.content.eq(b.content) && Mark.sameSet(a.marks, b.marks) && sameAttrs(a, b);
 }
