@@ -69,6 +69,20 @@ exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-pe
 edits it without first spending a round trip to read it. The Windows script
 does not do this yet.
 
+The [OpenDoc agent](opendoc-agent.md) needs Node.js and a model server
+that speaks the OpenAI Chat Completions API. Its endpoint, model and key
+are at the top of `opendoc.mjs`:
+
+```js
+const ENDPOINT = 'http://localhost:11434/v1'; // Ollama, as it ships
+const MODEL = 'qwen3'; // a model that calls tools: ollama pull qwen3
+const KEY = process.env.OPENAI_API_KEY; // sent when set
+```
+
+For a cloud, set its endpoint and model, and `OPENAI_API_KEY` in your
+environment (your shell's profile on macOS and Linux). A run that fails
+says what failed and where these are.
+
 ## Permissions
 
 OpenDoc sets only what the contract needs: the working folder, the copy,

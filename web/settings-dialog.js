@@ -73,7 +73,7 @@ const DIALOG = `
       <div class="od-setting">
         <div class="od-setting-text">
           <label for="od-agent-script">Runs every buddy</label>
-          <span class="od-setting-hint">A script in <code class="od-agents-folder"></code>: the prompt on stdin, the reply on stdout. Edit it to change the program, model or flags.</span>
+          <span class="od-setting-hint">A script in <code class="od-agents-folder"></code>: the prompt on stdin, the reply on stdout. Edit it to change the program, model or flags; the OpenDoc agent's are at the top of <code>opendoc.mjs</code> next to it.</span>
         </div>
         <select id="od-agent-script" class="od-input"></select>
       </div>
@@ -92,6 +92,9 @@ const DIALOG = `
 `;
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+// The shipped agent scripts by what they run; the user's own, by file name.
+const AGENT_NAMES = { claude: 'Claude Code', codex: 'Codex', opendoc: 'OpenDoc agent (any model)' };
 
 /** "Mod+Shift+F" → "Ctrl+Shift+F", or "⌘⇧F" on a Mac. */
 export function keyLabel(keys) {
@@ -146,7 +149,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     shipped = found.shipped;
     dialog.querySelector('.od-agents-folder').textContent = found.folder;
     const names = found.agents.includes(store.get().agent) ? found.agents : [...found.agents, store.get().agent];
-    scriptSelect.replaceChildren(...names.map((name) => Object.assign(document.createElement('option'), { value: name, textContent: name })));
+    scriptSelect.replaceChildren(...names.map((name) => Object.assign(document.createElement('option'), { value: name, textContent: AGENT_NAMES[name] ?? name })));
     scriptSelect.value = store.get().agent;
     dialog.querySelector('[data-action="reset-agent"]').disabled = !shipped.includes(scriptSelect.value);
   }

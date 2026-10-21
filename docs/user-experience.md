@@ -93,8 +93,9 @@ and the first line shows next to its name.
   yellow, and up to seven project AI buddies get seven other colors.
 
 Editing the files by hand works too: the app picks up changes at once. What
-runs every AI buddy is the agent picked in Settings > Agent (Claude Code or
-Codex): a script in `agents/` in your config folder that you may edit (see
+runs every AI buddy is the agent picked in Settings > Agent (Claude Code,
+Codex, or the OpenDoc agent, which runs any model, a local one included): a
+script in `agents/` in your config folder that you may edit (see
 [agent config](agent-config.md)).
 
 ## Who asks whom
