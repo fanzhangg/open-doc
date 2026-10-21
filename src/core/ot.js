@@ -67,6 +67,21 @@ export function apply(text, ops) {
 }
 
 /**
+ * Where offset `at` of a text is once edit `ops` lands on it: after text
+ * inserted there, at the end of text that replaced it. A person's caret
+ * follows the others' edits so.
+ */
+export function mapOffset(at, ops) {
+  let shift = 0;
+  for (const op of ops) {
+    if (op.from > at || (op.from === at && op.to > at)) break;
+    if (op.to > at) return op.from + shift + op.insert.length;
+    shift += op.insert.length - (op.to - op.from);
+  }
+  return at + shift;
+}
+
+/**
  * Edit `ops` moved over edit `landed`, both on text `base`, so it applies
  * after `landed`: { ops, dropped }.
  *

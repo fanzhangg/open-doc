@@ -299,6 +299,59 @@ test('a teammate sees the owner\'s tree and opens any doc in it at once, nothing
   }
 });
 
+test('two writers see each other\'s cursor move, following the text, and who is here', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    await asOwner(host, shared, 'setLevel', { id: idOf(shared.sam.key), level: 'write' });
+    const noor = newTeammate('Noor');
+    const asking = page(shared.secret, noor);
+    asking.call('state');
+    await until(() => asking.lines.includes('waiting'), 'Noor waiting');
+    await asOwner(host, shared, 'allow', { id: idOf(noor.key), level: 'write' });
+    const sam = page(shared.secret, shared.sam);
+    const state = (await sam.call('state')).result;
+    assert.deepEqual(state.cursors, []);
+    await until(() => asking.events.some((e) => e.event === 'hello'), 'Noor in');
+
+    // Who is here: each person once, on this doc.
+    const here = (p) => p.events.filter((e) => e.event === 'here').at(-1)?.data.map(({ name, doc }) => `${name}${doc ? '' : ' (elsewhere)'}`).sort();
+    await until(() => here(asking)?.length === 2, 'Noor told who is here');
+    assert.deepEqual(here(asking), ['Noor', 'Sam']);
+
+    // Sam's cursor reaches Noor, at once, again and again.
+    const ms = [];
+    for (let k = 1; k <= 20; k++) {
+      const seen = asking.events.length;
+      const sent = performance.now();
+      await sam.call('cursor', { at: k, rev: state.rev, epoch: state.epoch });
+      const told = await until(() => asking.events.slice(seen).find((e) => e.event === 'cursors'), 'the cursor');
+      ms.push(performance.now() - sent);
+      assert.deepEqual(told.data.cursors, [{ id: idOf(shared.sam.key), name: 'Sam', at: k }]);
+      assert.equal(told.data.by, idOf(shared.sam.key));
+    }
+    ms.sort((a, b) => a - b);
+    assert.ok(ms[10] < 50 && ms[18] < 100, `a cursor seen within the typing promise: ${ms.map(Math.round)}`);
+
+    // The owner types before it: it moves with the text, at the host and in a page's state.
+    const owner = await asOwner(host, shared, 'state');
+    await asOwner(host, shared, 'submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev: owner.rev, epoch: owner.epoch, id: 'o.1' });
+    assert.equal((await asking.call('state')).result.cursors[0].at, 22);
+    // From a rev before the owner's edit, it is moved over it.
+    await sam.call('cursor', { at: 3, rev: state.rev, epoch: state.epoch });
+    assert.equal((await asking.call('state')).result.cursors[0].at, 5);
+    assert.equal((await sam.call('cursor', { at: -1, rev: state.rev, epoch: state.epoch })).error.code, 'bad_input');
+
+    // Sam goes, and so do their cursor and face.
+    const seen = asking.events.length;
+    await asOwner(host, shared, 'remove', { id: idOf(shared.sam.key) });
+    await until(() => asking.events.slice(seen).find((e) => e.event === 'cursors' && e.data.cursors.length === 0), 'the cursor gone');
+    await until(() => here(asking)?.length === 1, 'Sam gone');
+  } finally {
+    host.kill();
+  }
+});
+
 test('the relay serves the teammate\'s page from its own origin, and only it', async () => {
   const served = await fetch(`${relay.origin}/team?room=${'0'.repeat(64)}`);
   assert.equal(served.status, 200);
@@ -343,7 +396,7 @@ test('the relay limits pages, message sizes and rooms, so it is no free pipe', a
   }
 });
 
-test('the browser build asks a name, waits for Allow, then shows the doc read only, live', async () => {
+test('the browser build asks a name, waits for Allow, then shows the doc live: its tree, the owner\'s cursor, read only until Edit', async () => {
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-relay-page-'));
@@ -394,6 +447,20 @@ test('the browser build asks a name, waits for Allow, then shows the doc read on
     await waitFor(() => shown.evaluate(`document.querySelector('.od-margin').textContent.includes('Shall we?')`), 10_000, 'the comment');
     const visible = (selector) => shown.evaluate(`[...document.querySelectorAll('${selector}')].filter((node) => node.offsetParent).length`);
     for (const selector of ['.od-composer', '.od-resolve', '.od-toolbar [data-command]']) assert.equal(await visible(selector), 0, selector);
+
+    // The owner's cursor, named, in their colour; a writer's goes to the owner.
+    const now = await host.request('call', { docId, call: 'state' });
+    await host.request('call', { docId, call: 'cursor', arg: { at: 6, rev: now.rev, epoch: now.epoch } });
+    await waitFor(() => shown.evaluate(`document.querySelector('.od-cursor')?.textContent === 'owner'`), 10_000, 'the owner\'s cursor');
+    await asOwner(host, shared, 'setLevel', { id: pending[0].id, level: 'write' });
+    await waitFor(async () => (await shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.contentEditable`).catch(() => '')) === 'true', 30_000, 'the page at Edit');
+    await shown.evaluate(`{
+      const editor = document.querySelector('.od-stage [contenteditable]');
+      editor.focus();
+      const text = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then')).firstChild;
+      getSelection().collapse(text, 4);
+    }`);
+    await until(async () => (await host.request('call', { docId, call: 'state' })).cursors.some((c) => c.name === 'Noor'), 'Noor\'s cursor at the host');
 
     // Turned away, the page says why.
     await asOwner(host, shared, 'remove', { id: pending[0].id });
