@@ -139,6 +139,28 @@ export async function markConflict(docPath, root, reply) {
 }
 
 /**
+ * Note, before the doc is written, the edits the file will hold once it is:
+ * the ids of windows' edits, and the hash it will have. A doc host that
+ * starts again reads them (writtenEdits), so a window learns its edit is in
+ * the file though it never heard so.
+ */
+export async function noteWritten(docPath, root, hash, ids) {
+  const dir = historyDir(docPath, root);
+  await mkdir(dir, { recursive: true });
+  await writeAtomic(join(dir, 'written.json'), JSON.stringify({ hash, ids }));
+}
+
+/** The ids noteWritten noted, if the doc's file now has the `hash` it noted; else none. */
+export async function writtenEdits(docPath, root, hash) {
+  try {
+    const noted = JSON.parse(await readFile(join(historyDir(docPath, root), 'written.json'), 'utf8'));
+    return noted?.hash === hash && Array.isArray(noted.ids) ? noted.ids : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The doc was renamed from `fromPath` to `toPath`: its history follows. A
  * history left at the new path by an earlier doc is set aside, not deleted.
  */

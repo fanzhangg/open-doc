@@ -19,7 +19,7 @@ import { SettingsError } from '../core/settings.js';
 import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, markConflict, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
+import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
@@ -92,12 +92,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   let written = text;
   let writtenHash = opened.hash;
   let told = []; // landed edits not yet written and told to windows, as `ops` events
+  // Windows' edits the file holds that a service before this one may not
+  // have told them of (noteWritten).
+  const landedBefore = await writtenEdits(docPath, settingsDir, opened.hash);
 
   // Edit `ops` lands on the text, from a window (`id`, the window's name for
   // it) or from here: one that yields (a buddy's, with its `reply` and buddy
   // `by`; an outside change; an undo).
   function land(ops, meta = {}) {
-    log.push(meta.yields ? { ops, base: text, reply: meta.reply } : { ops });
+    log.push(meta.yields ? { ops, base: text, reply: meta.reply } : { ops, id: meta.id });
     if (log.length > LOG_SIZE) {
       log.shift();
       logStart++;
@@ -122,6 +125,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (disk && disk.hash !== writtenHash) await takeOutside(disk);
       if (disk && text !== written) {
         writtenHash = hashText(text);
+        // A window told nothing yet, should this service stop now, learns from it its edit is in.
+        await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
         await writeDoc(docPath, text, disk.form);
         written = text;
       }
@@ -197,6 +202,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (!missing) return {};
     await mkdir(dirname(docPath), { recursive: true });
     writtenHash = hashText(text);
+    await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
     await writeDoc(docPath, text);
     written = text;
     await noteVersion(text, { kind: 'edit', author: await me() });
@@ -223,6 +229,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       text,
       epoch,
       rev,
+      landed: landedBefore,
       ...(await commentsView(text)),
       settings,
       defaultName: defaultName(),
