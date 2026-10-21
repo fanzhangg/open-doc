@@ -8,34 +8,31 @@ import { lineMatches, sameEnd, sameStart } from './diff.js';
 
 /**
  * The edit that turns `base` into `text`, by character: what differs is
- * trimmed, and inside it each run that changed is its own operation. So when
- * two pages restyle a block the same way (`__x__` to `**x**`, a Markdown
- * view's first touch of it), they send the same operations, which land once.
+ * trimmed, then diffed by line, and inside each run of lines that changed
+ * each run of characters that changed is its own operation. So when two
+ * pages restyle a block the same way (`__x__` to `**x**`, a Markdown view's
+ * first touch of it), they send the same operations, which land once.
  * `caret`, an offset in `text`, is where the writer's edit ended: what
  * differs is not trimmed past it, so of two places an edit could be (a
  * deleted sentence that ends as the next one starts), it is at the caret.
  */
-export function diffOps(base, text, caret = text.length) {
+export function diffOps(base, text, caret) {
   if (base === text) return [];
   const max = Math.min(base.length, text.length);
-  let start = sameStart(base, text, Math.min(max, caret));
-  let end = sameEnd(base, text, Math.min(max - start, text.length - caret));
+  let start = sameStart(base, text, Math.min(max, caret ?? max));
+  let end = sameEnd(base, text, Math.min(max - start, caret === undefined ? max : text.length - caret));
   // Never split a surrogate pair.
   if (start > 0 && isHigh(base.charCodeAt(start - 1))) start--;
   if (end > 0 && isLow(base.charCodeAt(base.length - end))) end--;
   const a = base.slice(start, base.length - end);
   const b = text.slice(start, text.length - end);
-  const byCharacter = edits(a, b, start, Array.from);
-  if (byCharacter) return byCharacter;
-  // Too long a change to diff by character at once (two places far apart):
-  // by line, then by character inside each run of lines that changed.
   const byLine = edits(a, b, start, lines) ?? [{ from: start, to: start + a.length, insert: b }];
   return byLine.flatMap((op) => edits(base.slice(op.from, op.to), op.insert, op.from, Array.from) ?? [op]);
 }
 
 // The operations turning `a` into `b`, at `at` in the text, as `split` cuts
 // them into pieces: between two pieces both have, what `a` had is replaced by
-// what `b` has. Null when they are too long to diff.
+// what `b` has. Null when they have nothing in common to diff by.
 function edits(a, b, at, split) {
   const x = split(a);
   const y = split(b);

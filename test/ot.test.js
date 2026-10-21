@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apply, diffOps, transform } from '../src/core/ot.js';
-import { sameEnd, sameStart } from '../src/core/diff.js';
+import { lineMatches, sameEnd, sameStart } from '../src/core/diff.js';
 
 test('diffOps is trimmed to the edit, and apply makes the text', () => {
   assert.deepEqual(diffOps('Hello world.', 'Hello, world.'), [{ from: 5, to: 5, insert: ',' }]);
@@ -115,4 +115,39 @@ test('sameStart and sameEnd find what two texts share, past whole chunks too', (
   }
   assert.equal(sameStart(long, long, 7), 7, 'at most max');
   assert.equal(sameEnd('xyz', 'yz'), 2);
+});
+
+test('lineMatches is a longest common subsequence', () => {
+  let seed = 3;
+  const random = (n) => {
+    seed = (seed * 1103515245 + 12345) % 2 ** 31;
+    return seed % n;
+  };
+  const longest = (a, b) => {
+    const t = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+    return t[0][0];
+  };
+  for (let run = 0; run < 5000; run++) {
+    const letters = 'abcd'.slice(0, 1 + random(4));
+    const a = Array.from({ length: random(14) }, () => letters[random(letters.length)]);
+    const b = Array.from({ length: random(14) }, () => letters[random(letters.length)]);
+    const matched = lineMatches(a, b).map((j, i) => [i, j]).filter(([, j]) => j !== -1);
+    assert.ok(matched.every(([i, j], k) => a[i] === b[j] && (k === 0 || j > matched[k - 1][1])), `${a} / ${b}`);
+    assert.equal(matched.length, longest(a, b), `${a} / ${b}`);
+  }
+});
+
+test('a change spread over a long doc diffs place by place, and soon', () => {
+  const lines = Array.from({ length: 125_000 }, (_, k) => `Line ${k} of the doc, some words here.\n`);
+  const base = lines.join('');
+  for (const every of [50, 3]) { // a git pull touching 2% of the lines, or a third
+    const text = lines.map((line, k) => (k % every ? line : line.replace('.', ' pulled.'))).join('');
+    const started = performance.now();
+    const ops = diffOps(base, text);
+    const ms = performance.now() - started;
+    assert.equal(ops.length, Math.ceil(lines.length / every));
+    assert.ok(ops.every((op) => op.to === op.from && op.insert === ' pulled'));
+    assert.ok(ms < 1000, `${Math.round(ms)} ms for ${base.length} characters`);
+  }
 });

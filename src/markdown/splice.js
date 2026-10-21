@@ -3,9 +3,8 @@
 // wraps, list markers). Keep the original bytes of every top-level block whose
 // meaning did not change, so `git diff` shows only real edits.
 
+import { lineMatches } from '../core/diff.js';
 import { parseMarkdown } from './project.js';
-
-const MAX_DIFF_CELLS = 4_000_000;
 
 /** @returns {string} the doc to write */
 export function splice(oldSource, newSource) {
@@ -57,7 +56,7 @@ function keyOf(node) {
 
 // For each new block, the index of the old block it keeps, or -1. Common
 // prefix and suffix first (the usual edit touches few blocks), then a longest
-// common subsequence over the rest.
+// common subsequence over the rest (lineMatches).
 function align(oldKeys, newKeys) {
   const match = new Array(newKeys.length).fill(-1);
   let head = 0;
@@ -72,26 +71,9 @@ function align(oldKeys, newKeys) {
     newTail--;
     match[newTail] = oldTail;
   }
-  const a = oldKeys.slice(head, oldTail);
-  const b = newKeys.slice(head, newTail);
-  if (a.length === 0 || b.length === 0 || a.length * b.length > MAX_DIFF_CELLS) return match;
-
-  const lengths = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
-  for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--) {
-      lengths[i][j] = a[i] === b[j] ? lengths[i + 1][j + 1] + 1 : Math.max(lengths[i + 1][j], lengths[i][j + 1]);
-    }
-  }
-  for (let i = 0, j = 0; i < a.length && j < b.length;) {
-    if (a[i] === b[j]) {
-      match[head + j] = head + i;
-      i++;
-      j++;
-    } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
-      i++;
-    } else {
-      j++;
-    }
-  }
+  const matches = lineMatches(oldKeys.slice(head, oldTail), newKeys.slice(head, newTail)) ?? [];
+  matches.forEach((j, i) => {
+    if (j !== -1) match[head + j] = head + i;
+  });
   return match;
 }
