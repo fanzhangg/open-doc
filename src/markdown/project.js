@@ -24,7 +24,6 @@ const CONTAINERS = new Set([
 ]);
 const INLINE_PARENTS = new Set(['emphasis', 'strong', 'delete', 'link', 'linkReference']);
 const WHITESPACE = /\s/;
-const DEFINITION = /^ {0,3}\[[^\]\n]+\]:/m;
 
 /**
  * @param {string} markdown
@@ -42,11 +41,10 @@ export function project(markdown) {
  * project(markdown) worked out block by block, for a long doc that changes a
  * few blocks at a time: `blocks` are its top-level blocks (blockRanges), and
  * `cache` (a Map) keeps the lines of each block's text from one call to the
- * next. A link or footnote definition ties blocks together, so with one the
- * doc is projected whole.
+ * next. Only for a doc whose blocks read alone as they do in it (not
+ * definesLinks).
  */
 export function projectBlocks(markdown, blocks, cache) {
-  if (DEFINITION.test(markdown)) return project(markdown);
   const lines = [];
   const used = new Map();
   for (const { start, end } of blocks) {
@@ -60,6 +58,14 @@ export function projectBlocks(markdown, blocks, cache) {
   for (const [text, own] of used) cache.set(text, own);
   return joined(lines, markdown);
 }
+
+/**
+ * Whether `markdown` may define a link or footnote, at any depth (in a quote
+ * or a list too): a definition ties the blocks that use it to the one it is
+ * in, so such a doc is read whole, not block by block. A line that only
+ * looks like one counts too; it is read whole, as it would be.
+ */
+export const definesLinks = (markdown) => /^[ \t>*+\-\d.)]*\[[^\]\n]+\]:/m.test(markdown);
 
 /** The range { start, end } of each top-level block of `markdown`. */
 export function blockRanges(markdown) {

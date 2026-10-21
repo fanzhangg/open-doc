@@ -96,6 +96,16 @@ test('random concurrent edits from two pages end in the host\'s text on both', (
   }
 });
 
+test('an edit in two places far apart leaves what lies between to others', () => {
+  const lines = Array.from({ length: 1000 }, (_, k) => `line ${k}\n`);
+  const base = lines.join('');
+  const ours = diffOps(base, base.replace('line 0\n', 'line zero\n').replace('line 999\n', 'line last\n'));
+  assert.ok(ours.every((op) => op.to - op.from < 20 && op.insert.length < 20), JSON.stringify(ours).slice(0, 200));
+  const theirs = [{ from: base.indexOf('line 500\n'), to: base.indexOf('line 501\n'), insert: '' }];
+  const merged = apply(apply(base, theirs), transform(ours, theirs));
+  assert.ok(!merged.includes('line 500\n') && merged.includes('line zero') && merged.includes('line last'));
+});
+
 test('sameStart and sameEnd find what two texts share, past whole chunks too', () => {
   const long = 'abcdefghij'.repeat(500);
   for (const at of [0, 1, 1023, 1024, 1025, 2500, 4999]) {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Fragment, Node, Schema } from '@milkdown/kit/prose/model';
 import { EditorState, TextSelection } from '@milkdown/kit/prose/state';
-import { diffBlocks, pairRanges, parseRun, replaceBlocks, sameBlock, textOfDoc, typedInto } from '../web/blocks.js';
+import { blocksOf, diffBlocks, pairRanges, parseRun, replaceBlocks, sameBlock, textOfDoc, typedInto } from '../web/views/markdown/blocks.js';
 import { blockRanges, project, projectBlocks } from '../src/markdown/project.js';
 import { splice } from '../src/markdown/splice.js';
 import { projectDoc } from '../web/pm-text.js';
@@ -136,6 +136,20 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
   }
   assert.ok(wholes < runs / 5, `${wholes} of ${runs} worked out whole`);
   assert.ok(typedOwn > runs / 4, `${typedOwn} of ${runs} typed into in their own style`);
+});
+
+test('a doc that defines a link, at any depth, is read whole', async () => {
+  const parse = await editorParser();
+  for (const definition of ['[a]: https://x', '> [a]: https://x', '- [a]: https://x', '1. > [^a]: a note']) {
+    const text = `${definition}\n\nOne.\n\nTwo.\n\nSee [a] here.\n\nLast.\n`;
+    const doc = parse(text);
+    assert.equal(blocksOf(doc, text), null, definition);
+    // Even from a doc that paired up, a change that defines one is read whole.
+    const plain = text.replace(definition, 'Plain.');
+    const blocks = blocksOf(parse(plain), plain);
+    assert.ok(blocks);
+    assert.equal(parseRun(parse(plain), plain, blocks, text, parse), null, definition);
+  }
 });
 
 test('a block typed into keeps its own style; one formatted anew is written in the editor\'s', async () => {

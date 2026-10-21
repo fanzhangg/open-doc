@@ -173,7 +173,7 @@ paragraph is parsed whole on every edit in it):
 
 | View | Up to | Past it |
 | --- | --- | --- |
-| Markdown | 100,000 characters; no block over 10,000 | opens as plain text, and says so |
+| Markdown | 100,000 characters; no block over 10,000 | opens as plain text, and says so; the person may choose the Markdown view anyway, for that window |
 | Plain text | 5,000,000 characters | opens read-only, and says so |
 | Plain text's colour | no block over 10,000 characters | the doc opens without colour |
 
@@ -182,7 +182,8 @@ limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
 job on every pull request) opens each view at its limits, in the doc shape
 that costs it most, types while a teammate's edits arrive, and fails when
 the promise is missed twice running. Two dependencies are quadratic in one
-paragraph's length; the bundles patch them (`scripts/patch-deps.js`) until
+paragraph's length; installs and builds patch them in node_modules, for the
+page and the doc host alike (`scripts/patch-deps.js`), until
 they are fixed upstream.
 
 ### Interfaces

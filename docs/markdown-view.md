@@ -90,7 +90,7 @@ characters.
 | Schema | `web/markdown-schema.js` | how Markdown parses into the editor's document (Milkdown, ProseMirror) |
 | Rendered text | `src/markdown/project.js`, `web/pm-text.js` | what a reader sees, from the source and from the document, each mapped back |
 | Splice | `src/markdown/splice.js` | the text to save: changed blocks in the editor's style, the rest as written |
-| Blocks | `web/blocks.js` | which top-level blocks differ, and replacing only those |
+| Blocks | `web/views/markdown/blocks.js` | which top-level blocks differ, and replacing only those |
 | Revision | `web/review.js`, `web/marks.js` | edits found in the text now, drawn as a revision |
 | Diagrams | `web/diagrams.js` | a mermaid block as its diagram |
 
@@ -128,7 +128,7 @@ What every view has, in offsets on the doc's text (`test/views.test.js`):
 `getText`, `applyText`, `setMarks` (comments, a revision, cursors), the
 selection, `tops` and `scrollTo` (for the margin), `focus`, `undo` and
 `redo`, and a call when its settings change. Made with the text, whether it
-is editable, and the page's callbacks: `onChange`, `onMarkClick`,
+is editable, whether to colour its syntax (the plain view), and the page's callbacks: `onChange`, `onMarkClick`,
 `onLayout`, and, given a toolbar, `onComment`.
 
 ### What it does not know
@@ -141,8 +141,8 @@ and files.
 
 The view keeps the latency promise ([Latency](architecture.md#latency)) up
 to 100,000 characters, with no block over 10,000; a longer doc opens in the
-plain view. A parse or a serialize of a long doc takes hundreds of milliseconds, so the
-view works a few top-level blocks at a time (`web/blocks.js`): while each
+plain view, which offers this one anyway. A parse or a serialize of a long doc takes hundreds of milliseconds, so the
+view works a few top-level blocks at a time (`blocks.js`): while each
 block of the text it was given pairs with a block of its document,
 `getText` writes only the blocks changed since and splices them in, and
 `applyText` parses only the blocks where the new text differs, with a kept
@@ -205,10 +205,11 @@ more code, so only if plan A fails a must-pass case.
 - **Core** (`src/core/ot.js`): `diffOps`, `transform`, `apply`, kept if the
   prototype passes; tested for convergence (random concurrent operations
   from two pages end in the host's text on both).
-- **Harness** (`preview/collab.html`, thrown away): two Markdown views of one
-  doc side by side, joined by an in-memory host with 150 ms each way, and a
-  script that types into both. Built from `dist/web` like the rest of
-  `preview/`. No relay, permissions, files or AI buddies.
+- **Harness** (`test/collab/page.js`; by hand, `preview/collab.js`): two
+  views of one doc side by side, made as the app makes them (`viewFor`),
+  joined by an in-memory host with 150 ms each way, and a script that types
+  into both. No relay, permissions, files or AI buddies. Kept until the page
+  sends operations itself: the latency test (`test/perf/`) runs on it.
 
 | # | Must pass | When |
 | --- | --- | --- |

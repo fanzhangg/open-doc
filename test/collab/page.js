@@ -97,13 +97,15 @@ const collab = {
   async make(text, { view: kind = 'markdown' } = {}) {
     for (const c of collab.clients) await c.view.destroy();
     Object.assign(host, { text, log: [], clients: [] });
-    const chosen = kind === 'auto' ? viewFor('doc.md', resolveSettings({}), text) : { id: kind, editable: true };
+    // As the app makes it: its size judged by viewFor, named as a Markdown doc.
+    const sized = viewFor('doc.md', resolveSettings({}), text);
+    const chosen = kind === 'auto' ? sized : { id: kind, editable: true, color: sized.color };
     const declared = chosen.id === 'plain' ? plain : markdown;
     const create = chosen.id === 'plain' ? plain.createView : createMarkdownView;
     collab.clients = await Promise.all(stages.map(async (stage) => {
       let client;
       const toolbar = stage.closest('main').previousElementSibling;
-      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
+      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
       client = createClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
       client.last = text;
       return client;

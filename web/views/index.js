@@ -21,9 +21,10 @@
 // A view keeps its latency promise (docs/architecture.md, Latency) only up to
 // a size, its `limits`: { chars, the doc's length, and blockChars, the
 // longest run of text without a blank line }. A doc past them opens in the
-// Plain text view; past its limits too, it opens read-only.
+// Plain text view, unless the person chooses the view anyway; past the Plain
+// text view's limits too, it opens read-only. The Plain text view colours
+// syntax only while no run is past its colorBlockChars.
 
-import { longestBlock } from '../../src/core/diff.js';
 import { claims, viewSettings } from '../../src/core/settings.js';
 import { markdown } from './markdown/index.js';
 import { plain } from './plain/index.js';
@@ -49,16 +50,31 @@ export const VIEWS = [markdown, plain];
 
 /**
  * The view the doc named `name`, of text `text`, opens in under `settings`:
- * { id, createView, settings, editable, tooLong }, with its view's id and
- * settings; `tooLong` when a view that claims it was passed over for its size.
+ * { id, createView, settings, editable, color, tooLong }, with its view's id
+ * and settings; `color` when the Plain text view may colour its syntax (no
+ * run of it past colorBlockChars); `tooLong` when it is past the limits of
+ * the view that claims it. Such a doc opens as plain text unless `anySize`
+ * (the person chose that view anyway), while it is editable at all.
  */
-export function viewFor(name, settings, text = '') {
+export function viewFor(name, settings, text = '', { anySize = false } = {}) {
   const claiming = CLAIMING.filter((v) => claims(v, name) && viewSettings(settings, v).enabled);
-  const view = claiming.find((v) => fits(v, text)) ?? plain;
+  const editable = fits(plain, text);
+  const view = claiming.find((v) => (anySize && editable) || fits(v, text)) ?? plain;
   return {
     id: view.id, createView: view.createView, settings: viewSettings(settings, view),
-    editable: fits(plain, text), tooLong: view !== claiming[0] && claiming.length > 0,
+    editable, color: longestBlock(text) <= plain.limits.colorBlockChars, tooLong: claiming.length > 0 && !fits(claiming[0], text),
   };
 }
 
 const fits = ({ limits }, text) => !limits || (text.length <= limits.chars && (!limits.blockChars || longestBlock(text) <= limits.blockChars));
+
+// The longest run of `text` without a blank line in it.
+function longestBlock(text) {
+  let longest = 0;
+  let start = 0;
+  for (const blank of text.matchAll(/\n[ \t\r]*\n/g)) {
+    longest = Math.max(longest, blank.index - start);
+    start = blank.index + blank[0].length;
+  }
+  return Math.max(longest, text.length - start);
+}

@@ -7,6 +7,7 @@ import { patchDeps } from './patch-deps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist', 'web');
+patchDeps(); // node_modules may be from before a patch was added
 await mkdir(out, { recursive: true });
 
 // Split, so mermaid loads only with a doc's first diagram (web/diagrams.js).
@@ -22,7 +23,6 @@ await build({
   minify: true,
   legalComments: 'linked',
   logLevel: 'info',
-  plugins: [patchDeps],
 });
 // The desktop start window (desktop/start.html loads it from here), with the editor's faces.
 await build({

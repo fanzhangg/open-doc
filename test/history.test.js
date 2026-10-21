@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { COALESCE_MS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
+import { COALESCE_MS, MAX_HISTORY_CHARS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 const me = { name: 'fzhan', kind: 'human' };
@@ -64,6 +64,18 @@ test('a burst of changes by one author is one version', async () => {
   await recordVersion(doc2, root, 'a\n', edit(me), t0 + 2000);
   assert.equal((await readHistory(doc2, root)).length, 1);
   assert.equal((await readdir(historyDir(doc2, root))).filter((f) => f.endsWith('.md')).length, 1, 'unused text is removed');
+});
+
+test('of a very long doc, history keeps the latest versions that fit', { timeout: 60_000 }, async () => {
+  const root = await configRoot();
+  const doc = await tempDoc();
+  const t0 = Date.parse('2026-10-15T09:00:00Z');
+  const size = MAX_HISTORY_CHARS * 0.4;
+  for (const [k, ch] of ['a', 'b', 'c'].entries()) await recordVersion(doc, root, ch.repeat(size), edit(k === 1 ? bot : me), t0 + k * 1000);
+  const versions = await readHistory(doc, root);
+  assert.deepEqual(versions.map((v) => v.size), [size, size]);
+  assert.equal((await readVersion(doc, root, versions[0].id)).text[0], 'b', 'the oldest went');
+  assert.equal((await readdir(historyDir(doc, root))).filter((f) => f.endsWith('.md')).length, 2, 'and its text with it');
 });
 
 test('history follows a renamed doc', async () => {

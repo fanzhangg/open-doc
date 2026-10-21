@@ -14,7 +14,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
-import { patchDeps } from '../scripts/patch-deps.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const MOD = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
@@ -55,7 +54,7 @@ before(async () => {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-collab-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
-    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error', plugins: [patchDeps],
+    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   // Two pages side by side, each without the comment margin, as with comments hidden.

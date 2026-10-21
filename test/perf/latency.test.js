@@ -15,11 +15,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchElectron, waitFor } from '../../scripts/devtools.js';
-import { patchDeps } from '../../scripts/patch-deps.js';
 import { LATENCY } from '../../web/views/index.js';
 import { markdown } from '../../web/views/markdown/index.js';
 import { plain } from '../../web/views/plain/index.js';
-import { COLOR_BLOCK_CHARS } from '../../web/views/plain/view.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -67,7 +65,7 @@ const CASES = [
   ['markdown', 'one long block', verses(markdown.limits.blockChars)],
   ['plain', 'blocks', blocks(plain.limits.chars)],
   ['plain', 'verses', verses(plain.limits.chars)],
-  ['plain', 'one long coloured block', verses(COLOR_BLOCK_CHARS)],
+  ['plain', 'one long coloured block', verses(plain.limits.colorBlockChars)],
 ];
 
 let app;
@@ -77,7 +75,7 @@ before(async () => {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-perf-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
-    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error', plugins: [patchDeps],
+    bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   // One page as the app lays it out, with its comment margin.

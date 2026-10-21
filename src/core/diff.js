@@ -204,14 +204,3 @@ function lineStarts(lines) {
   for (const line of lines) starts.push(starts.at(-1) + line.length + 1);
   return starts;
 }
-
-// The longest run of `text` without a blank line in it.
-export function longestBlock(text) {
-  let longest = 0;
-  let start = 0;
-  for (const blank of text.matchAll(/\n[ \t\r]*\n/g)) {
-    longest = Math.max(longest, blank.index - start);
-    start = blank.index + blank[0].length;
-  }
-  return Math.max(longest, text.length - start);
-}

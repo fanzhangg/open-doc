@@ -5,10 +5,10 @@
 
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
-import { blockRanges, project } from '../src/markdown/project.js';
-import { projectDoc } from './pm-text.js';
-import { splice } from '../src/markdown/splice.js';
-import { sameEnd, sameStart } from '../src/core/diff.js';
+import { blockRanges, definesLinks, project } from '../../../src/markdown/project.js';
+import { projectDoc } from '../../pm-text.js';
+import { splice } from '../../../src/markdown/splice.js';
+import { sameEnd, sameStart } from '../../../src/core/diff.js';
 
 /**
  * Runs of children that differ between two nodes, aligned by a longest
@@ -219,11 +219,12 @@ export function typedInto(source, node, parse) {
  * only the blocks covering where the two differ, with a kept one on either
  * side: { from, to, nodes, blocks }, children [from, to) of `doc` to be
  * `nodes`, and the ranges of the new children in `next`. Null when that is
- * not sure to read as the whole text would: the change is outside every
- * block, or a kept block reads differently on its own (a fence opened in
- * the change runs on past it).
+ * not sure to read as the whole text would: `next` may define a link
+ * (definesLinks), the change is outside every block, or a kept block reads
+ * differently on its own (a fence opened in the change runs on past it).
  */
 export function parseRun(doc, text, blocks, next, parse) {
+  if (definesLinks(next)) return null;
   const head = sameStart(text, next);
   const tail = sameEnd(text, next, Math.min(text.length, next.length) - head);
   const changedEnd = text.length - tail;
@@ -247,6 +248,14 @@ export function parseRun(doc, text, blocks, next, parse) {
     from, to, nodes,
     blocks: [...blocks.slice(0, from), ...ranges.map((r) => moved(r, start)), ...blocks.slice(to).map((r) => moved(r, shift))],
   };
+}
+
+/**
+ * The ranges in `text` of the children of `doc`, its document, or null when
+ * they do not pair up or `text` may define a link (definesLinks).
+ */
+export function blocksOf(doc, text) {
+  return definesLinks(text) ? null : pairRanges(doc.content.content, blockRanges(text), true);
 }
 
 /**

@@ -7,7 +7,6 @@ import { build } from 'esbuild';
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { patchDeps } from '../scripts/patch-deps.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'dist', 'collab');
@@ -17,7 +16,7 @@ await cp(join(root, 'dist', 'web', 'app.css'), join(out, 'app.css'));
 await cp(join(root, 'dist', 'web', 'fonts'), join(out, 'fonts'), { recursive: true });
 await build({
   entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(out, 'page.js'),
-  bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'warning', plugins: [patchDeps],
+  bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'warning',
 });
 
 const SAMPLE = `# Launch plan

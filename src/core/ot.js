@@ -23,26 +23,40 @@ export function diffOps(base, text, caret = text.length) {
   // Never split a surrogate pair.
   if (start > 0 && isHigh(base.charCodeAt(start - 1))) start--;
   if (end > 0 && isLow(base.charCodeAt(base.length - end))) end--;
-  const a = Array.from(base.slice(start, base.length - end));
-  const b = Array.from(text.slice(start, text.length - end));
-  const matches = lineMatches(a, b);
-  if (!matches) return [{ from: start, to: base.length - end, insert: b.join('') }];
-  // Between two matched characters, what `base` had is replaced by what `text` has.
+  const a = base.slice(start, base.length - end);
+  const b = text.slice(start, text.length - end);
+  const byCharacter = edits(a, b, start, Array.from);
+  if (byCharacter) return byCharacter;
+  // Too long a change to diff by character at once (two places far apart):
+  // by line, then by character inside each run of lines that changed.
+  const byLine = edits(a, b, start, lines) ?? [{ from: start, to: start + a.length, insert: b }];
+  return byLine.flatMap((op) => edits(base.slice(op.from, op.to), op.insert, op.from, Array.from) ?? [op]);
+}
+
+// The operations turning `a` into `b`, at `at` in the text, as `split` cuts
+// them into pieces: between two pieces both have, what `a` had is replaced by
+// what `b` has. Null when they are too long to diff.
+function edits(a, b, at, split) {
+  const x = split(a);
+  const y = split(b);
+  const matches = lineMatches(x, y);
+  if (!matches) return null;
   const ops = [];
-  let at = start;
-  let x = 0;
-  let y = 0;
-  for (let k = 0; k <= a.length; k++) {
-    if (k < a.length && matches[k] === -1) continue;
-    const next = k < a.length ? matches[k] : b.length;
-    const gone = a.slice(x, k).join('');
-    if (gone || next > y) ops.push({ from: at, to: at + gone.length, insert: b.slice(y, next).join('') });
-    at += gone.length + (a[k]?.length ?? 0);
-    x = k + 1;
-    y = next + 1;
+  let i = 0;
+  let j = 0;
+  for (let k = 0; k <= x.length; k++) {
+    if (k < x.length && matches[k] === -1) continue;
+    const next = k < x.length ? matches[k] : y.length;
+    const gone = x.slice(i, k).join('');
+    if (gone || next > j) ops.push({ from: at, to: at + gone.length, insert: y.slice(j, next).join('') });
+    at += gone.length + (x[k]?.length ?? 0);
+    i = k + 1;
+    j = next + 1;
   }
   return ops;
 }
+
+const lines = (text) => (text ? text.split(/(?<=\n)/) : []);
 
 /** `text` with edit `ops` applied. */
 export function apply(text, ops) {

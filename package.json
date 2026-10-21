@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "icon:desktop": "electron scripts/make-icon.cjs",
+    "postinstall": "node scripts/patch-deps.js",
     "build": "node scripts/build.js",
     "desktop": "npm run build && electron desktop/main.js",
     "prepack": "npm run build",

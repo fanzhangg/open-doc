@@ -21,6 +21,15 @@ test('a doc opens in the Markdown view up to its limits, then as plain text, the
   assert.deepEqual(choose(crlf), { id: 'markdown', editable: true, tooLong: false }, 'blank lines ending in \\r\\n part blocks');
   assert.deepEqual(choose(paragraphs(plain.limits.chars)), { id: 'plain', editable: true, tooLong: true });
   assert.deepEqual(choose(paragraphs(plain.limits.chars + 1)), { id: 'plain', editable: false, tooLong: true });
+  const chosen = (text) => {
+    const { id, editable, tooLong } = viewFor('notes.md', settings, text, { anySize: true });
+    return { id, editable, tooLong };
+  };
+  assert.deepEqual(chosen(paragraphs(markdown.limits.chars + 1)), { id: 'markdown', editable: true, tooLong: true }, 'the Markdown view chosen anyway');
+  assert.deepEqual(chosen(paragraphs(plain.limits.chars + 1)), { id: 'plain', editable: false, tooLong: true }, 'but not past every view\'s limits');
+  const run = (chars) => 'word '.repeat(chars / 5);
+  assert.equal(viewFor('notes.md', settings, run(plain.limits.colorBlockChars)).color, true);
+  assert.equal(viewFor('notes.md', settings, run(plain.limits.colorBlockChars + 5)).color, false, 'no colour past one run\'s limit');
   const txt = viewFor('notes.txt', settings, paragraphs(plain.limits.chars + 1));
   assert.deepEqual([txt.id, txt.editable, txt.tooLong], ['plain', false, false], 'plain text was never the Markdown view\'s');
 });

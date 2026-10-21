@@ -34,13 +34,13 @@ import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { createAnchor, locate } from '../../../src/core/anchor.js';
-import { blockRanges, project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
+import { project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
 import { splice } from '../../../src/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
 import { editItems } from '../../review.js';
 import { markdownPlugins } from '../../markdown-schema.js';
 import { diagrams } from '../../diagrams.js';
-import { childPos, diffBlocks, pairRanges, parseRun, replaceBlocks, textOfDoc, textPos } from '../../blocks.js';
+import { blocksOf, childPos, diffBlocks, parseRun, replaceBlocks, textOfDoc, textPos } from './blocks.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
@@ -222,12 +222,12 @@ export async function createMarkdownView({
   // out once per doc, and projected once when asked. While each top-level
   // block of `given` pairs with a child of `base` (`base.blocks`, their
   // ranges; worked out when first asked, null when they do not pair up), a
-  // change in or out is worked out only where it is (web/blocks.js), so a
+  // change in or out is worked out only where it is (blocks.js), so a
   // long doc others write in stays quick; otherwise it is worked out whole.
   let given = text;
   let base = { doc: view().state.doc, blocks: undefined };
   const baseBlocks = () => {
-    if (base.blocks === undefined) base.blocks = pairRanges(base.doc.content.content, blockRanges(given), true);
+    if (base.blocks === undefined) base.blocks = blocksOf(base.doc, given);
     return base.blocks;
   };
   const serializeNodes = (nodes) => editor.ctx.get(serializerCtx)(base.doc.type.create(null, nodes));
