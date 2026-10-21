@@ -1,9 +1,9 @@
-// The M0 prototype (docs/markdown-view.md, Many writers, The prototype): two
-// Markdown views of one doc, joined by an in-memory host 150 ms away, typed
-// into over the DevTools protocol as test/views.test.js does. Each test is a
-// must-pass case of plan A, or a measurement it logs. Thrown away once the
-// plan is decided. COLLAB_SECONDS sets how long the random typing runs (300
-// for the five minutes of case 6); COLLAB_MEASURE=1 runs the measurements.
+// Many writers (docs/markdown-view.md, Many writers): two Markdown views of
+// one doc, each with the page's client, joined to a DocService 150 ms away,
+// typed into over the DevTools protocol as test/views.test.js does. Each
+// test is a must-pass case of plan A, or a measurement it logs.
+// COLLAB_SECONDS sets how long the random typing runs (300 for the five
+// minutes of case 6); COLLAB_MEASURE=1 runs the measurements.
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -195,6 +195,41 @@ test('6. random typing in both: both views equal the host; no error', { timeout:
   const text = await settled();
   const { drifts } = await run('collab.state()');
   console.log(`# case 6: ${actions} actions in ${SECONDS} s, ${text.length} characters; ${drifts.length} times a view rewrote the text it was given, first: ${JSON.stringify(drifts.slice(0, 3))}`);
+});
+
+test('8. one types while the doc changes outside (git pull): the typing stays, and the pull lands', async () => {
+  await make('Alpha one.\n\nBeta two.\n\nGamma three.\n');
+  await select(0, 'Alpha one.', 9);
+  await typeBoth(' typed', '');
+  const written = await settled();
+  // Pulled while a's typing goes on: in either order, merged by character where apart.
+  await run(`collab.pull(${JSON.stringify(written.replace('Gamma three.', 'Gamma pulled.').replace('Alpha one', 'Alpha ONE'))})`);
+  await typeBoth(' more', '');
+  await waitFor(() => run('collab.host.text.includes("pulled")'), 15_000, 'the doc host to take the pull');
+  assert.equal(await settled(), 'Alpha ONE typed more.\n\nBeta two.\n\nGamma pulled.\n');
+});
+
+test('9. a buddy\'s turn lands while one types: the typing stays; its edit lands where no one typed, and is dropped where it overlaps the typing', { timeout: 60_000 }, async () => {
+  await make('Alpha one.\n\nBeta two.\n\nGamma three.\n');
+  await run(`collab.ask('@Pilot hold replace "Gamma three." with "Gamma buddy."')`);
+  await select(0, 'Alpha one.', 9);
+  await typeBoth(' typed', '');
+  await settled();
+  await run('collab.release()');
+  await waitFor(() => run('collab.replies().then((r) => r.length === 1)'), 30_000, 'the reply');
+  assert.match(await settled(), /Alpha one typed\.[\s\S]*Gamma buddy\./);
+  assert.equal((await run('collab.replies()'))[0].conflict, undefined);
+
+  await run(`collab.ask('@Pilot hold replace "two." with "2!"')`);
+  await select(1, 'two', 1); // inside what the buddy rewrites
+  await typeBoth('', 'XY');
+  await settled();
+  await run('collab.release()');
+  await waitFor(() => run('collab.replies().then((r) => r.length === 2)'), 30_000, 'the second reply');
+  const text = await settled();
+  assert.match(text, /\nBeta [two]*XY[two]*\.\n/, 'the typing stays, in the word as it was');
+  assert.doesNotMatch(text, /2!/);
+  assert.equal((await run('collab.replies()'))[1].conflict, true);
 });
 
 // Both type in each block of `blocks` at once, the first edit there for

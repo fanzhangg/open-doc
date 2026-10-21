@@ -8,6 +8,7 @@
 // No history, no undo, no menus.
 
 import { createAnchor, locate } from '../src/core/anchor.js';
+import { apply } from '../src/core/ot.js';
 import { askedOf, newComment, newId, peopleOf, threadsOf } from '../src/core/comments.js';
 import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
@@ -109,12 +110,9 @@ const me = () => ({ id: s.settings.id, name: s.settings.name, kind: 'human' });
 const comments = () => (s.comments[current] ??= []);
 const buddies = () => buddiesHere(s.buddies.map((b) => ({ id: b.name, ...b })), s.clippy ? [{ name: CLIPPY.name, about: s.clippy }] : []);
 
-// FNV-1a, standing in for the file's sha256: only equality matters here.
-function hash(text) {
-  let h = 0x811c9dc5;
-  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
-  return (h >>> 0).toString(16);
-}
+// The page is the only writer: every edit is on the latest rev of this page load.
+const epoch = newId('e');
+let rev = 0;
 
 const running = new Map(); // buddy id → thread ids
 const agents = () => buddies().map((b) => ({ ...b, state: running.has(b.id) ? 'running' : 'ready', threadIds: running.get(b.id) ?? [] }));
@@ -177,13 +175,13 @@ function changedBuddies() {
 }
 
 const calls = {
-  state: () => ({ doc: name(current), text: s.files[current], docHash: hash(s.files[current]), ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
-  saveDoc({ text, baseHash }) {
-    const now = s.files[current];
-    if (baseHash !== hash(now)) return { conflict: true, text: now, docHash: hash(now) };
-    s.files[current] = text;
+  state: () => ({ doc: name(current), text: s.files[current], epoch, rev, ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
+  submit({ ops, rev: at, epoch: from, id }) {
+    if (from !== epoch || at !== rev) throw Object.assign(new Error('the doc has moved on'), { code: 'stale' });
+    s.files[current] = apply(s.files[current], ops);
     save();
-    return { docHash: hash(text), text };
+    emit('ops', { epoch, rev: ++rev, ops, id });
+    return { rev };
   },
   comment: ({ thread, anchor, body, resolved }) => add({ thread, anchor, body, resolved }),
   saveSettings(patch) {

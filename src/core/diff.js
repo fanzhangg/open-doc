@@ -26,55 +26,132 @@ export function sameEnd(a, b, max = Math.min(a.length, b.length)) {
   while (n < max && a.charCodeAt(a.length - 1 - n) === b.charCodeAt(b.length - 1 - n)) n++;
   return n;
 }
-const MAX_DIFF_CELLS = 4_000_000;
+// The edit distance past which Myers' diff gives up on a stretch of two
+// texts: its work grows with the square.
+const MAX_EDITS = 2_000;
 const WORD = /[\p{L}\p{N}_]/u;
 
 /**
- * For each line of `a`, the index of the matching line of `b` in a longest
- * common subsequence, or -1. Null when the inputs are too large to diff.
+ * For each item of `a` (lines, or characters), the index of the matching item
+ * of `b`, or -1: a longest common subsequence by Myers' O((N+M)·D) diff, in
+ * linear space. Past what differs at the start and the end, a stretch longer
+ * than MAX_EDITS items first matches the items found once in each, as
+ * patience diff does, and diffs each stretch between them alone; one still
+ * too changed to diff is taken as rewritten. Null when nothing past the
+ * start and the end matches and it could not be diffed.
  */
 export function lineMatches(a, b) {
   const map = new Array(a.length).fill(-1);
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) {
-    map[start] = start;
-    start++;
-  }
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-    map[endA] = endB;
-  }
-  const n = endA - start;
-  const m = endB - start;
-  if (n === 0 || m === 0) return map;
-  if ((n + 1) * (m + 1) > MAX_DIFF_CELLS) return null;
-
-  const width = m + 1;
-  const table = new Uint32Array((n + 1) * width);
-  for (let x = n - 1; x >= 0; x--) {
-    for (let y = m - 1; y >= 0; y--) {
-      table[x * width + y] = a[start + x] === b[start + y]
-        ? table[(x + 1) * width + y + 1] + 1
-        : Math.max(table[(x + 1) * width + y], table[x * width + y + 1]);
-    }
-  }
-  let x = 0;
-  let y = 0;
-  while (x < n && y < m) {
-    if (a[start + x] === b[start + y]) {
-      map[start + x] = start + y;
-      x++;
-      y++;
-    } else if (table[(x + 1) * width + y] >= table[x * width + y + 1]) {
-      x++;
-    } else {
-      y++;
-    }
+  let x0 = 0;
+  let y0 = 0;
+  let x1 = a.length;
+  let y1 = b.length;
+  while (x0 < x1 && y0 < y1 && a[x0] === b[y0]) map[x0++] = y0++;
+  while (x1 > x0 && y1 > y0 && a[x1 - 1] === b[y1 - 1]) map[--x1] = --y1;
+  const size = 2 * Math.ceil((x1 - x0 + y1 - y0) / 2) + 3;
+  const forward = new Int32Array(size);
+  const backward = new Int32Array(size);
+  const anchors = x1 - x0 + y1 - y0 > MAX_EDITS ? uniqueMatches(a, x0, x1, b, y0, y1) : [];
+  if (anchors.length === 0) return myers(a, x0, x1, b, y0, y1, map, forward, backward) ? map : null;
+  for (const [i, j] of [...anchors, [x1, y1]]) {
+    if (!myers(a, x0, i, b, y0, j, map, forward, backward)) map.fill(-1, x0, i);
+    if (i < x1) map[i] = j;
+    x0 = i + 1;
+    y0 = j + 1;
   }
   return map;
+}
+
+// Match a[x0, x1) to b[y0, y1) into `map`, or false past MAX_EDITS.
+function myers(a, x0, x1, b, y0, y1, map, forward, backward) {
+  let edits = 0;
+  const compare = (x0, x1, y0, y1) => {
+    while (x0 < x1 && y0 < y1 && a[x0] === b[y0]) map[x0++] = y0++;
+    while (x1 > x0 && y1 > y0 && a[x1 - 1] === b[y1 - 1]) map[--x1] = --y1;
+    if (x0 === x1 || y0 === y1) {
+      edits += x1 - x0 + y1 - y0;
+      return edits <= MAX_EDITS;
+    }
+    const snake = middleSnake(a, x0, x1 - x0, b, y0, y1 - y0, forward, backward);
+    if (!snake) return false;
+    const [sx, sy, ex] = snake;
+    for (let k = 0; k < ex - sx; k++) map[sx + k] = sy + k;
+    return compare(x0, sx, y0, sy) && compare(ex, x1, sy + ex - sx, y1);
+  };
+  return compare(x0, x1, y0, y1);
+}
+
+// The pairs [i, j] where a[i] and b[j] are each found once in a[x0, x1) and
+// b[y0, y1), the longest run of them in order in both.
+function uniqueMatches(a, x0, x1, b, y0, y1) {
+  const once = (items, from, to) => {
+    const at = new Map(); // item → its index, or -1 when found again
+    for (let k = from; k < to; k++) at.set(items[k], at.has(items[k]) ? -1 : k);
+    return at;
+  };
+  const inA = once(a, x0, x1);
+  const inB = once(b, y0, y1);
+  const pairs = [];
+  for (const [item, i] of inA) {
+    const j = inB.get(item);
+    if (i !== -1 && j !== undefined && j !== -1) pairs.push([i, j]);
+  }
+  // The longest increasing run of j, by patience sorting.
+  const tops = [];
+  const back = new Array(pairs.length);
+  for (let p = 0; p < pairs.length; p++) {
+    let lo = 0;
+    let hi = tops.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (pairs[tops[mid]][1] < pairs[p][1]) lo = mid + 1;
+      else hi = mid;
+    }
+    back[p] = lo > 0 ? tops[lo - 1] : -1;
+    tops[lo] = p;
+  }
+  const run = [];
+  for (let p = tops.at(-1) ?? -1; p !== -1; p = back[p]) run.push(pairs[p]);
+  return run.reverse();
+}
+
+// The middle snake of a[x0, x0+n) and b[y0, y0+m), which differ at both ends:
+// [x, y, end x] of the diagonal run halfway along a shortest edit, or null
+// past MAX_EDITS. Forward from the start and backward from the end, each
+// on diagonals k = x - y (backward: of the reversed texts).
+function middleSnake(a, x0, n, b, y0, m, forward, backward) {
+  const delta = n - m;
+  const odd = (delta & 1) !== 0;
+  const max = Math.min(Math.ceil((n + m) / 2), MAX_EDITS);
+  const off = Math.ceil((n + m) / 2) + 1;
+  forward[off + 1] = 0;
+  backward[off + 1] = 0;
+  for (let d = 0; d <= max; d++) {
+    for (let k = -d; k <= d; k += 2) {
+      let x = k === -d || (k !== d && forward[off + k - 1] < forward[off + k + 1]) ? forward[off + k + 1] : forward[off + k - 1] + 1;
+      let y = x - k;
+      const sx = x;
+      const sy = y;
+      while (x < n && y < m && a[x0 + x] === b[y0 + y]) {
+        x++;
+        y++;
+      }
+      forward[off + k] = x;
+      if (odd && delta - k >= -(d - 1) && delta - k <= d - 1 && x + backward[off + delta - k] >= n) return [x0 + sx, y0 + sy, x0 + x];
+    }
+    for (let k = -d; k <= d; k += 2) {
+      let x = k === -d || (k !== d && backward[off + k - 1] < backward[off + k + 1]) ? backward[off + k + 1] : backward[off + k - 1] + 1;
+      let y = x - k;
+      const sx = x;
+      while (x < n && y < m && a[x0 + n - x - 1] === b[y0 + m - y - 1]) {
+        x++;
+        y++;
+      }
+      backward[off + k] = x;
+      if (!odd && delta - k >= -d && delta - k <= d && x + forward[off + delta - k] >= n) return [x0 + n - x, y0 + m - y, x0 + n - sx];
+    }
+  }
+  return null;
 }
 
 /**
@@ -155,26 +232,6 @@ export function findEdit(doc, edit) {
     if (best === null || Math.abs(at - edit.start) < Math.abs(best - edit.start)) best = at;
   }
   return best === null ? null : { start: best, end: best };
-}
-
-/**
- * Undo by changes (docs/architecture.md, Undo): `doc` with each change
- * from `before` to `after` put back where its new text still is, as
- * findEdit finds it; a change anyone touched since is skipped.
- */
-export function revertEdits(doc, before, after) {
-  const spots = diffEdits(before, after)
-    .map(({ edit }) => ({ edit, at: findEdit(doc, edit) }))
-    .filter((s) => s.at)
-    .sort((x, y) => y.at.start - x.at.start);
-  let out = doc;
-  let limit = Infinity; // from the end, so earlier offsets hold; an overlap is skipped
-  for (const { edit, at } of spots) {
-    if (at.end > limit) continue;
-    out = out.slice(0, at.start) + edit.before + out.slice(at.end);
-    limit = at.start;
-  }
-  return out;
 }
 
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].

@@ -1,9 +1,10 @@
-// DocService (docs/architecture.md): every write to one doc and its
-// sidecar, one at a time; changes made outside the app; versions. It runs
-// the buddies @mentioned in the doc's comments (runner.js) and merges what
-// each run changed into the doc when it ends. It lives in the doc host;
-// windows call it over a message port (desktop/doc-host.js) and hear its
-// events (doc, sidecar, agents, settings, history, renamed, missing).
+// DocService (docs/architecture.md): orders every edit to one doc, as text
+// operations on a revision, and writes the doc and its sidecar, one at a
+// time; changes made outside the app; versions. It runs the buddies
+// @mentioned in the doc's comments (runner.js) and lands what each run
+// changed when it ends. It lives in the doc host; windows call it over a
+// message port (desktop/doc-host.js) and hear its events (ops, sidecar,
+// agents, settings, history, renamed, missing).
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -15,18 +16,17 @@ import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, s
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { SettingsError } from '../core/settings.js';
-import { merge3 } from '../core/merge.js';
+import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
-import { revertEdits } from '../core/diff.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
+import { VERSION_ID, markConflict, moveHistory, readHistory, readVersion, recordVersion } from '../store/history.js';
 import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, SHIPPED_AGENTS } from '../store/agents.js';
 import { Runner } from './runner.js';
 
-/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only'). */
+/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale'). */
 class DocError extends Error {
   constructor(code, message) {
     super(message);
@@ -48,11 +48,11 @@ class DocError extends Error {
  * @returns {Promise<{ call: (type: string, arg?: object) => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
  */
 export async function openDoc(docPath, { folder = null, settingsDir = configDir(), emit = () => {} } = {}) {
-  await readDoc(docPath); // fail early on a missing doc
+  const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
     asks: () => asks(),
-    doc: async () => ({ name: basename(docPath), text: (await readDoc(docPath)).text, comments: await readSidecarText(docPath) }),
+    doc: async () => ({ name: basename(docPath), text, comments: await readSidecarText(docPath) }),
     script: () => agentScript(currentAgent, settingsDir),
     folder: () => folder,
     human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
@@ -61,94 +61,169 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     log: (entry) => logRun(settingsDir, { doc: docPath, ...entry }),
   });
   let currentAgent = 'claude'; // the agent script that runs every buddy (settings.agent)
-  let lastDocHash = null;
   let lastSidecarHash = null;
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
-  // Writes to the doc and its sidecar run one at a time, so a rename never
-  // lands in the middle of a save.
+  // Writes to the doc and its sidecar, and the edits landing, run one at a
+  // time, so a rename never lands in the middle of a save.
   let writes = Promise.resolve();
   const serial = (fn) => {
     const run = writes.then(fn);
     writes = run.catch(() => {});
     return run;
   };
-  // Version history (src/store/history.js): the hash of the doc as this
-  // service last wrote it, so the watcher does not take that write for
-  // someone else's, and the queue that keeps versions in order.
-  let lastWritten = null;
-  let chronicle = Promise.resolve();
-  // The last few texts of the doc given to the page, by hash: a save based on
-  // one of them is merged into the doc if it has changed since.
-  const given = new Map();
-  const give = (hash, text) => {
-    given.set(hash, text);
-    if (given.size > 8) given.delete(given.keys().next().value);
-    return { docHash: hash, text };
-  };
-  // `ours` and `theirs`, both changed from `base`: where they changed the
-  // same text, `ours` stays (and what is lost is in the history).
-  async function mergeInto(base, ours, theirs) {
-    const { settings } = await readSettings(settingsDir);
-    return merge3(base, ours, theirs, { prefer: 'ours', rules: rulesOf(docPath, settings) });
+  let chronicle = Promise.resolve(); // the queue that keeps versions in order (src/store/history.js)
+
+  // ---- the doc: every edit is operations on a revision ----
+
+  // The doc's text, as edits have landed on it; `rev` counts them since
+  // this service started, `epoch` names that start (a window that sees a
+  // new one takes the text again). `log` holds the latest landed edits, the
+  // one that made rev `logStart + k + 1` at k, to move a window's edit from
+  // an older rev: { ops }, and the `base` text of one that yields, with a
+  // buddy's `reply`.
+  // `written` is the text the file holds as last written or read,
+  // `writtenHash` its hash: a file that is not that changed outside.
+  let text = opened.text;
+  let rev = 0;
+  const epoch = newId('e');
+  const log = [];
+  let logStart = 0;
+  let written = text;
+  let writtenHash = opened.hash;
+  let told = []; // landed edits not yet written and told to windows, as `ops` events
+
+  // Edit `ops` lands on the text, from a window (`id`, the window's name for
+  // it) or from here: one that yields (a buddy's, with its `reply` and buddy
+  // `by`; an outside change; an undo).
+  function land(ops, meta = {}) {
+    log.push(meta.yields ? { ops, base: text, reply: meta.reply } : { ops });
+    if (log.length > LOG_SIZE) {
+      log.shift();
+      logStart++;
+    }
+    text = apply(text, ops);
+    rev++;
+    told.push({ epoch, rev, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}), ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) });
   }
 
-  // ---- the doc ----
-
-  // The page's text, written as it is. `recreate: true` writes it back when
-  // the doc has gone missing from disk; otherwise a save needs the doc to be
-  // there.
-  async function saveDoc(body) {
-    if (typeof body.text !== 'string' || typeof body.baseHash !== 'string') {
-      throw new DocError('bad_input', 'expected { text, baseHash }');
+  // Write what landed, then tell every window: what a window has heard of is
+  // in the file. A file changed outside since it was last written is merged
+  // first. A missing doc is not written; its edits are still told. Run in
+  // `serial`.
+  async function commit() {
+    if (!missing && text !== written) {
+      let disk = null;
+      try {
+        disk = await readDoc(docPath);
+      } catch (error) {
+        if (error.code !== 'no_doc') throw error;
+      }
+      if (disk && disk.hash !== writtenHash) await takeOutside(disk);
+      if (disk && text !== written) {
+        writtenHash = hashText(text);
+        await writeDoc(docPath, text, disk.form);
+        written = text;
+      }
     }
-    let current;
-    try {
-      current = await readDoc(docPath);
-    } catch (error) {
-      if (body.recreate !== true || error.code !== 'no_doc') throw error;
-      await mkdir(dirname(docPath), { recursive: true });
-      lastWritten = hashText(body.text);
-      await writeDoc(docPath, body.text);
-      await noteVersion(body.text, { kind: 'edit', author: await me() });
-      return give(lastWritten, body.text);
-    }
-    let next = body.text;
-    if (current.hash !== body.baseHash) {
-      // Not a text this service gave the page (it started again since): the page merges.
-      const base = given.get(body.baseHash);
-      if (base === undefined) return { conflict: true, text: current.text, docHash: current.hash };
-      next = (await mergeInto(base, body.text, current.text)).text;
-    }
-    await writeChange(current, next, { kind: 'edit', author: await me() });
-    return give(hashText(next), next);
+    for (const event of told.splice(0)) emit('ops', event);
   }
 
-  // Put the doc back the way it was in an earlier version, as the human's
-  // change: a new version, so the restore can itself be undone. Comments
+  // The doc's rules, as the settings are now.
+  async function rules() {
+    return rulesOf(docPath, (await readSettings(settingsDir)).settings);
+  }
+
+  // A change made outside (another program, git pull), found on disk as
+  // `disk`: it is in history first, then lands, yielding to what landed
+  // since the file was last written. Where it was dropped, the person's text
+  // stays and the outside version is only in history. Run in `serial`.
+  async function takeOutside(disk) {
+    if (typing !== null) { // the typing the file held, a version before the outside one
+      clearTimeout(typing);
+      typing = null;
+      await noteVersion(written, { kind: 'edit', author: await me() });
+    }
+    await noteVersion(disk.text, { kind: 'external', author: null });
+    const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
+    written = disk.text;
+    writtenHash = disk.hash;
+    land(ops, { yields: true });
+    if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
+  }
+
+  // Typing is a version once it pauses (src/store/history.js joins a burst
+  // of it into one), and before any edit that is not the person's.
+  let typing = null;
+  function typed() {
+    clearTimeout(typing);
+    typing = setTimeout(() => serial(flushTyping), SAVE_DELAY_MS);
+  }
+  async function flushTyping() {
+    if (typing === null) return;
+    clearTimeout(typing);
+    typing = null;
+    await noteVersion(text, { kind: 'edit', author: await me() });
+  }
+
+  // A window's edit: operations `ops` on rev `rev` of epoch `epoch`, moved over
+  // what landed since, by character; an edit that yields, there since, yields
+  // to it too, and a buddy's turn that loses part of it so is marked
+  // `conflict` in history. `id` names it in the `ops` event that tells it.
+  // An epoch or rev this service no longer has is `stale`: the window takes
+  // the text again (state) and sends its edit on that.
+  async function submit({ ops, rev: at, epoch: from, id } = {}) {
+    if (!validOps(ops) || !Number.isInteger(at) || typeof id !== 'string') throw new DocError('bad_input', 'expected { ops, rev, epoch, id }');
+    return serial(async () => {
+      if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
+      const overridden = [];
+      for (const landed of log.slice(at - logStart)) {
+        const moved = transform(ops, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base, rules: await rules() });
+        if (moved.dropped && landed.reply) overridden.push(landed.reply);
+        ops = moved.ops;
+      }
+      if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
+      land(ops, { id });
+      typed();
+      await commit();
+      for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
+      if (overridden.length > 0) emit('history', {});
+      return { rev };
+    });
+  }
+
+  // A missing doc written back as it is here.
+  async function recreate() {
+    if (!missing) return {};
+    await mkdir(dirname(docPath), { recursive: true });
+    writtenHash = hashText(text);
+    await writeDoc(docPath, text);
+    written = text;
+    await noteVersion(text, { kind: 'edit', author: await me() });
+    return {};
+  }
+
+  // Put the doc back the way it was in an earlier version, as the person's
+  // edit: a new version, so the restore can itself be undone. Comments
   // stay; readers find their anchors in the restored text.
   async function restoreVersion(body) {
-    const id = versionId(body?.id);
-    if (typeof body.baseHash !== 'string') throw new DocError('bad_input', 'expected { id, baseHash }');
-    const current = await readDoc(docPath);
-    if (current.hash !== body.baseHash) {
-      return { conflict: true, text: current.text, docHash: current.hash };
-    }
-    const found = await readVersion(docPath, settingsDir, id);
+    const found = await readVersion(docPath, settingsDir, versionId(body?.id));
     if (!found) throw new DocError('not_found', 'no such version');
-    const next = found.text;
-    await writeChange(current, next, { kind: 'restore', author: await me(), restoredFrom: id });
-    return give(hashText(next), next);
+    await flushTyping();
+    land(diffOps(text, found.text));
+    await commit();
+    await noteVersion(text, { kind: 'restore', author: await me(), restoredFrom: body.id });
+    return {};
   }
 
   async function state() {
-    const doc = await readDoc(docPath);
     const { settings } = await readSettings(settingsDir);
-    const comments = await commentsView(doc.text);
     return {
       doc: basename(docPath),
-      ...give(doc.hash, doc.text),
-      ...comments,
+      text,
+      epoch,
+      rev,
+      ...(await commentsView(text)),
       settings,
       defaultName: defaultName(),
       me: await me(),
@@ -203,7 +278,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
       return [...lines, { comment: added }];
     }));
-    return { ...(await commentsView((await readDoc(docPath)).text)), id: added.id };
+    return { ...(await commentsView(text)), id: added.id };
   }
 
   // ---- the doc's buddies ----
@@ -252,30 +327,25 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     await runner.reconcile();
   }
 
-  // A run ended (runner.js): merge what it changed in its copy into the doc,
-  // three-way from the copy as it started, then post its reply. Where the
-  // human changed the same text meanwhile, theirs stays, the buddy's change
-  // there is dropped and the reply says `conflict`. A run whose thread was
-  // resolved meanwhile is dropped whole. Its reply and comments come just
-  // after the last comment it saw, so one written while it worked still
-  // asks. Run in `serial`.
+  // A run ended (runner.js): what it changed in its copy lands as an edit
+  // that yields to what landed since the copy was made, then its reply is
+  // posted. Where anyone changed the same line meanwhile, theirs stays, the
+  // buddy's change there is dropped and the reply says `conflict`. A run
+  // whose thread was resolved meanwhile is dropped whole. Its reply and
+  // comments come just after the last comment it saw, so one written while
+  // it worked still asks. Run in `serial`.
   async function finishRun({ threadId, id: buddyId, name, base, seen, edited, comments, body, failed }) {
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
     if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
     let conflict = false;
     const id = newId('c');
-    if (edited !== null && edited !== base) {
-      let current = null;
-      try {
-        current = await readDoc(docPath);
-      } catch {
-        // the doc is gone: nothing to merge into
-      }
-      if (current) {
-        const merged = await mergeInto(base, current.text, edited);
-        conflict = merged.dropped.length > 0;
-        await writeChange(current, merged.text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id });
-      }
+    if (edited !== null && edited !== base && !missing) { // a doc gone has nothing to land on
+      await flushTyping();
+      const edit = transform(diffOps(base, edited), diffOps(base, text), { yields: true, base, rules: await rules() });
+      conflict = edit.dropped;
+      land(edit.ops, { yields: true, reply: id, by: buddyId });
+      await commit();
+      await noteVersion(text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id });
     }
     const by = { id: buddyId, name, kind: 'ai' };
     const at = Date.parse(seen) + 1;
@@ -283,8 +353,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
       ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}),
     };
-    // Its comments are on the doc as it is now, its edit merged in.
-    const text = comments ? (await readDoc(docPath).catch(() => null))?.text ?? base : '';
+    // Its comments are on the doc as it is now, its edit landed.
     await changeComments((lines) => {
       if (!lines.some((l) => l.comment?.id === threadId)) return lines;
       const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
@@ -295,44 +364,36 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // ---- undo ----
 
-  // Undo a buddy's run (docs/architecture.md, Undo): each change from the
-  // version before it to the version after it is put back where its new
-  // text still is; text anyone changed since stays. Only on this machine,
-  // which has the versions.
+  // Undo a buddy's run (docs/architecture.md, Undoing changes): the edit
+  // from the version after it back to the version before it, as an edit
+  // that yields to everything landed since, so text anyone changed since
+  // stays. On the machine that has the versions.
   async function undoReply(body) {
     await chronicle;
     const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
     const found = edit && (await readVersion(docPath, settingsDir, edit.id));
     if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
-    const current = await readDoc(docPath);
-    const next = revertEdits(current.text, found.before, found.text);
-    await writeChange(current, next, { kind: 'undo', author: await me(), undid: body.id });
-    return { ...give(hashText(next), next), ...(await commentsView(next)) };
+    await flushTyping();
+    const after = found.text;
+    land(transform(diffOps(after, found.before), diffOps(after, text), { yields: true, base: after, rules: await rules() }).ops, { yields: true });
+    await commit();
+    await noteVersion(text, { kind: 'undo', author: await me(), undid: body.id });
+    return commentsView(text);
   }
 
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
-  // { state: 'edited' | 'undone', by, changes, hash, version } }, `changes` how
-  // many places the run changed, `hash` the doc's right after it and `version`
-  // the version that holds it.
+  // { state: 'edited' | 'undone', by, changes, version, conflict } },
+  // `changes` how many places the run changed, `version` the version that
+  // holds the doc right after it, and `conflict` whether a person's edit that
+  // started before it took part of it back.
   async function replyEdits() {
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
     for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, hash: v.hash, version: v.id };
+      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, version: v.id, conflict: Boolean(v.conflict) };
       if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
     }
     return edits;
-  }
-
-  // Write `next` over the doc, which read `current`, as `change`: the doc
-  // as it was is in history first (an outside change included), then this.
-  // The file keeps its byte order mark and line ends.
-  async function writeChange(current, next, change) {
-    if (next === current.text) return;
-    await noteDisk(current);
-    lastWritten = hashText(next);
-    await writeDoc(docPath, next, current.form);
-    await noteVersion(next, change);
   }
 
   // ---- buddy files ----
@@ -409,13 +470,6 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return chronicle;
   }
 
-  // The doc on disk changed and not by this service's hand: a change made
-  // outside OpenDoc (buddies edit only their copies).
-  function noteDisk(doc) {
-    if (doc.hash === lastWritten) return chronicle;
-    return noteVersion(doc.text, { kind: 'external', author: null });
-  }
-
   // This user, as their comments name them: their id (made once, kept when
   // the name changes) and name.
   async function me() {
@@ -458,10 +512,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       missing = false;
       emit('missing', { missing: false, doc: basename(docPath) });
     }
-    if (doc.hash !== lastDocHash) {
-      lastDocHash = doc.hash;
-      await noteDisk(doc);
-      emit('doc', { docHash: doc.hash });
+    if (doc.hash !== writtenHash) { // not this service's write: a change made outside
+      await takeOutside(doc);
+      await commit();
     }
     return true;
   }
@@ -501,9 +554,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   await installAgents(settingsDir).catch((error) => console.error('Could not write the agent scripts:', error));
-  const opened = await readDoc(docPath);
-  lastDocHash = opened.hash;
-  await noteDisk(opened); // the doc as first seen, or as changed while it was not open
+  await noteVersion(text, { kind: 'external', author: null }); // the doc as first seen, or as changed while it was not open
   lastSidecarHash = await fileHash(sidecarPath(docPath));
   lastSettings = JSON.stringify((await readSettings(settingsDir)).settings);
   let stopWatching = watchDoc(docPath, onFilesChanged);
@@ -515,7 +566,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // What a window may ask. Each returns what changed, for the window that asked.
   const calls = {
     state,
-    saveDoc: (body) => serial(() => saveDoc(body ?? {})),
+    submit,
+    recreate: () => serial(recreate),
     comment: (body) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }),
     async saveSettings(patch) {
       if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
@@ -539,6 +591,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       return { agents: await listAgents(settingsDir) };
     },
     async history() {
+      await serial(flushTyping); // typing not paused yet is a version too
       await chronicle;
       return { versions: await readHistory(docPath, settingsDir) };
     },
@@ -573,6 +626,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       syncAgents();
     },
     async close() {
+      await serial(async () => {
+        await commit();
+        await flushTyping();
+      });
       stopWatching();
       stopWatchingSettings();
       stopWatchingProjectBuddies();
@@ -581,6 +638,22 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       await runner.stop();
     },
   };
+}
+
+// How many landed edits the log keeps: a window's edit from an older rev is stale.
+const LOG_SIZE = 1000;
+// Typing is a version once it pauses this long.
+const SAVE_DELAY_MS = 800;
+
+// Whether `ops` is an edit: { from, to, insert } in order, not overlapping.
+function validOps(ops) {
+  if (!Array.isArray(ops)) return false;
+  let at = 0;
+  for (const op of ops) {
+    if (!Number.isInteger(op?.from) || !Number.isInteger(op.to) || typeof op.insert !== 'string' || op.from < at || op.to < op.from) return false;
+    at = op.to;
+  }
+  return true;
 }
 
 function versionId(id) {

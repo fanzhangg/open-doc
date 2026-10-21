@@ -2,7 +2,7 @@
 // renders as the same merge of the rendered lines, since merging next to
 // markup can pair a `*` from one side with a `*` from the other.
 
-import { mergeLine } from '../core/merge.js';
+import { mergeLine } from '../core/ot.js';
 import { project } from '../markdown/project.js';
 
 const rendered = (line) => project(line).text;

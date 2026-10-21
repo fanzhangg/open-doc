@@ -8,34 +8,31 @@ import { lineMatches, sameEnd, sameStart } from './diff.js';
 
 /**
  * The edit that turns `base` into `text`, by character: what differs is
- * trimmed, and inside it each run that changed is its own operation. So when
- * two pages restyle a block the same way (`__x__` to `**x**`, a Markdown
- * view's first touch of it), they send the same operations, which land once.
+ * trimmed, then diffed by line, and inside each run of lines that changed
+ * each run of characters that changed is its own operation. So when two
+ * pages restyle a block the same way (`__x__` to `**x**`, a Markdown view's
+ * first touch of it), they send the same operations, which land once.
  * `caret`, an offset in `text`, is where the writer's edit ended: what
  * differs is not trimmed past it, so of two places an edit could be (a
  * deleted sentence that ends as the next one starts), it is at the caret.
  */
-export function diffOps(base, text, caret = text.length) {
+export function diffOps(base, text, caret) {
   if (base === text) return [];
   const max = Math.min(base.length, text.length);
-  let start = sameStart(base, text, Math.min(max, caret));
-  let end = sameEnd(base, text, Math.min(max - start, text.length - caret));
+  let start = sameStart(base, text, Math.min(max, caret ?? max));
+  let end = sameEnd(base, text, Math.min(max - start, caret === undefined ? max : text.length - caret));
   // Never split a surrogate pair.
   if (start > 0 && isHigh(base.charCodeAt(start - 1))) start--;
   if (end > 0 && isLow(base.charCodeAt(base.length - end))) end--;
   const a = base.slice(start, base.length - end);
   const b = text.slice(start, text.length - end);
-  const byCharacter = edits(a, b, start, Array.from);
-  if (byCharacter) return byCharacter;
-  // Too long a change to diff by character at once (two places far apart):
-  // by line, then by character inside each run of lines that changed.
   const byLine = edits(a, b, start, lines) ?? [{ from: start, to: start + a.length, insert: b }];
   return byLine.flatMap((op) => edits(base.slice(op.from, op.to), op.insert, op.from, Array.from) ?? [op]);
 }
 
 // The operations turning `a` into `b`, at `at` in the text, as `split` cuts
 // them into pieces: between two pieces both have, what `a` had is replaced by
-// what `b` has. Null when they are too long to diff.
+// what `b` has. Null when they have nothing in common to diff by.
 function edits(a, b, at, split) {
   const x = split(a);
   const y = split(b);
@@ -70,15 +67,120 @@ export function apply(text, ops) {
 }
 
 /**
- * Edit `ops` moved over edit `landed`, both on one text, so it applies after
- * `landed`. Merged by character, and nothing typed is lost: what both
+ * Edit `ops` moved over edit `landed`, both on text `base`, so it applies
+ * after `landed`: { ops, dropped }.
+ *
+ * A person's edit merges by character, and nothing typed is lost: what both
  * deleted is deleted once, an insert inside a range the other deleted stays,
- * and of two inserts at one place `landed`'s goes first, unless `first`
- * says it is `ops` that reached the host first. A replacement both made
- * (the same range, the same text) lands once. For any a, b on one text:
- * apply(apply(t, a), transform(b, a)) === apply(apply(t, b), transform(a, b, { first: true })).
+ * and of two inserts at one place `landed`'s goes first, unless `first` says
+ * it is `ops` that reached the host first. A replacement both made (the same
+ * range, the same text) lands once. For any a, b on one text:
+ * apply(apply(t, a), transform(b, a).ops) === apply(apply(t, b), transform(a, b, { first: true }).ops).
+ *
+ * An edit that `yields` (a buddy's, an outside change, an undo) is dropped
+ * wherever `landed` changed a line it changes, and `dropped` says so; its
+ * operations that touch one line go or stay together. Where both changed
+ * one line, in places apart, it stays if every rule's `mergeLine` (rulesOf)
+ * allows the merged line. Where both made the same change, it goes, and
+ * nothing is dropped. When it is `landed` that yields (it reached the host
+ * first, but this edit started before it), the same holds the other way
+ * round: `ops` comes out as the edit from what `landed` made to `ops` with
+ * what stays of `landed` on it, and `dropped` says whether `landed` lost
+ * anything to it.
  */
-export function transform(ops, landed, { first = false } = {}) {
+export function transform(ops, landed, { first = false, yields = false, landedYields = false, base = '', rules = [] } = {}) {
+  if (landedYields) {
+    const kept = transform(landed, ops, { yields: true, base, rules });
+    return { ops: diffOps(apply(base, landed), apply(apply(base, ops), kept.ops)), dropped: kept.dropped };
+  }
+  let dropped = false;
+  if (yields && landed.length > 0) {
+    const kept = [];
+    for (const group of byLine(base, ops)) {
+      const verdict = overlaps(base, group, landed, rules);
+      if (verdict === 'kept') kept.push(...group.ops);
+      else if (verdict === 'dropped') dropped = true;
+    }
+    ops = kept;
+  }
+  return { ops: moved(ops, landed, first), dropped };
+}
+
+// The operations of `ops` grouped by the lines of `base` they touch: each
+// group { ops, from, to }, [from, to] the lines' span from the first's start
+// to the last's end (its newline, or the end of the text).
+function byLine(base, ops) {
+  const groups = [];
+  for (const op of ops) {
+    const [from, to] = lineSpan(base, op);
+    const last = groups.at(-1);
+    if (last && from <= last.to) {
+      last.ops.push(op);
+      last.to = Math.max(last.to, to);
+    } else groups.push({ ops: [op], from, to });
+  }
+  return groups;
+}
+
+// The span of the lines of `base` that `op` touches: an insert the line it
+// is in, a delete each line it deletes from.
+function lineSpan(base, op) {
+  const end = op.to > op.from ? op.to - 1 : op.from;
+  const next = base.indexOf('\n', end);
+  return [base.lastIndexOf('\n', op.from - 1) + 1, next === -1 ? base.length : next];
+}
+
+// Whether `group` of a yielding edit is 'kept', 'dropped' or 'same' (what
+// `landed` made of its lines already) over `landed`.
+function overlaps(base, group, landed, rules) {
+  const theirs = landed.filter((op) => {
+    const [from, to] = lineSpan(base, op);
+    return from <= group.to && group.from <= to;
+  });
+  if (theirs.length === 0) return 'kept';
+  if (theirs.some((op) => lineSpan(base, op)[0] < group.from || lineSpan(base, op)[1] > group.to)) return 'dropped';
+  // The group's lines, with the newline after them, as each side left them.
+  const end = Math.min(group.to + 1, base.length);
+  const shift = (op) => ({ from: op.from - group.from, to: op.to - group.from, insert: op.insert });
+  const was = base.slice(group.from, end);
+  const ours = apply(was, group.ops.map(shift));
+  const other = apply(was, theirs.map(shift));
+  if (ours === other) return 'same';
+  // One line both changed and kept as one line: merged by character, if apart.
+  const one = (text) => text.indexOf('\n') === (was.endsWith('\n') ? text.length - 1 : -1);
+  if (!one(was) || !one(ours) || !one(other)) return 'dropped';
+  const line = (text) => (was.endsWith('\n') ? text.slice(0, -1) : text);
+  const merged = mergeLine(line(was), line(ours), line(other));
+  if (merged === null || rules.some((rule) => rule.mergeLine?.(line(was), line(ours), line(other), merged) === false)) return 'dropped';
+  return 'kept';
+}
+
+/**
+ * Merge two edits of one line when they change separate parts of it, or
+ * null when they overlap (or one inserts where the other changes, from its
+ * start): either way round.
+ */
+export function mergeLine(base, ours, theirs) {
+  const a = changedSpan(base, ours);
+  const c = changedSpan(base, theirs);
+  const [first, second] = a.from < c.from || (a.from === c.from && a.to >= c.to) ? [a, c] : [c, a];
+  const bothInsertHere = first.from === first.to && second.from === second.to && first.from === second.from;
+  if (first.to > second.from || bothInsertHere) return null;
+  return base.slice(0, first.from) + first.text + base.slice(first.to, second.from) + second.text + base.slice(second.to);
+}
+
+// The one span of `base` that `next` replaced, by common prefix and suffix,
+// never splitting a surrogate pair: { from, to, text }.
+function changedSpan(base, next) {
+  let p = sameStart(base, next);
+  if (p > 0 && isHigh(base.charCodeAt(p - 1))) p--;
+  let s = sameEnd(base, next, Math.min(base.length, next.length) - p);
+  if (s > 0 && isLow(base.charCodeAt(base.length - s))) s--;
+  return { from: p, to: base.length - s, text: next.slice(p, next.length - s) };
+}
+
+// Edit `ops` moved over edit `landed` by character (see transform).
+function moved(ops, landed, first) {
   const a = parts(ops);
   const b = parts(landed);
   const out = [];

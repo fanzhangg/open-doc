@@ -58,6 +58,13 @@ const env = { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: work, OPENDO
 delete env.ELECTRON_RUN_AS_NODE;
 
 const step = (text) => console.log(`smoke: ${text}`);
+// In the page, the text of each element `selector` finds, as the person reads
+// it: a buddy's cursor, and the name it shows while it works, are not text.
+const textOf = (selector) => `[...document.querySelectorAll('${selector}')].map((node) => {
+  const copy = node.cloneNode(true);
+  for (const cursor of copy.querySelectorAll('.od-cursor')) cursor.remove();
+  return copy.textContent;
+})`;
 let failed = false;
 const check = (ok, text) => {
   console.log(`${ok ? '  ok' : '  FAIL'}  ${text}`);
@@ -88,7 +95,7 @@ step('a .js file, in the plain view');
 const plain = await app.page('app.js');
 const lines = await plain.evaluate(`(async () => {
   for (let i = 0; i < 100 && !document.querySelector('.cm-content'); i++) await new Promise((r) => setTimeout(r, 100));
-  return [...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n');
+  return ${textOf('.od-stage .cm-line')}.join('\\n');
 })()`);
 check(lines === CODE, 'the plain view shows app.js as it is');
 check(await commentShows(plain, CODE, 'greet'), 'a comment on its text is drawn over that text');
@@ -267,7 +274,7 @@ async function undoesOwnOnly(page, doc, from, to) {
   const onDisk = (text) => readFileSync(doc, 'utf8').includes(text);
   await waitFor(() => onDisk('Typed here.'), 15_000, 'the typing to be saved');
   if (!(await answers(page, from, to, doc))) return false;
-  await waitFor(() => page.evaluate(`document.querySelector('.od-stage .od-editor').textContent.includes('${to}')`), 15_000, 'the edit to show');
+  await waitFor(() => page.evaluate(`${textOf('.od-stage .od-editor')}[0].includes('${to}')`), 15_000, 'the edit to show');
   await new Promise((done) => setTimeout(done, 2000)); // its typing-in ends
   const modifiers = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
   for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90 });
@@ -291,7 +298,7 @@ async function undoesReply(page, doc, before) {
 // while a change from outside takes out its second `*`. The doc once the page
 // has merged the two and saved it.
 async function mergesOutside(page, doc) {
-  const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
+  const shown = `${textOf('.od-stage .cm-line')}.join('\\n')`;
   writeFileSync(doc, '1 *2* 3\n');
   await waitFor(async () => (await page.evaluate(shown)) === '1 *2* 3\n', 15_000, 'the doc from disk');
   await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
@@ -308,7 +315,7 @@ async function mergesOutside(page, doc) {
 // The doc is changed from outside right after ' A' is typed, and the save's answer is
 // held back while ' B' is typed: the page ends with all three, saved.
 async function typesDuringSave(page, doc) {
-  const shown = `[...document.querySelectorAll('.od-stage .cm-line')].map((line) => line.textContent).join('\\n')`;
+  const shown = `${textOf('.od-stage .cm-line')}.join('\\n')`;
   // The end of the first line: the caret may be anywhere after the doc was read from disk.
   const endOfFirstLine = async () => {
     const mac = process.platform === 'darwin';

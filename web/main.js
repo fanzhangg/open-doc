@@ -1,10 +1,10 @@
 // The opendoc page: wires the editor, the comment margin, the people (the
-// doc's buddies and you) and the doc in the doc host together. Saves are
-// debounced and conditional on the hash they were based on. Changes made on
-// disk (a buddy's merged edit, another program) arrive as events and are merged
-// into the page like a collaborator's edits, a buddy's typed in by its
-// caret. Where one overlaps what the human is typing, the human's text
-// stays: no one is asked to choose.
+// doc's buddies and you) and the doc in the doc host together. Typing goes
+// to the doc host as operations, which orders every edit and writes the doc
+// (web/client.js); others' edits (a buddy's, another program's) come back as
+// operations and show in the view, a buddy's as its revision. Where one
+// overlaps what the person is typing, the host keeps the person's text: no
+// one is asked to choose.
 
 import { api } from './api.js';
 import { markdown } from './views/markdown/index.js';
@@ -18,20 +18,18 @@ import { createSettings } from './settings.js';
 import { icon } from './icons.js';
 import { viewSettings } from '../src/core/settings.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
-import { merge3 } from '../src/core/merge.js';
-import { rulesOf } from '../src/rules/index.js';
 import { diffEdits, findEdit } from '../src/core/diff.js';
+import { createClient } from './client.js';
+import { rulesOf } from '../src/rules/index.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { FORMAT_VERSION } from '../src/core/comments.js';
 
-const SAVE_DELAY_MS = 800;
 const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have made
-// Changes from disk and comment updates wait for a pause in typing this long,
-// but never longer than WAIT_FOR_PAUSE_MS: taking them in while keys arrive
-// would stall the keys.
+// Comment updates wait for a pause in typing this long, but never longer
+// than WAIT_FOR_PAUSE_MS: taking them in while keys arrive would stall the keys.
 const TYPING_PAUSE_MS = 600;
 const WAIT_FOR_PAUSE_MS = 3000;
 const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
@@ -58,14 +56,10 @@ let inProject = false; // the doc was opened from a project folder
 let me; // your name
 let myId; // your id, which your comments carry
 let comments; // the doc's threads, who wrote in them, and a notice about its sidecar (state())
-let baseHash;
-let synced; // the doc's text as last loaded or saved
+let client; // the doc in the doc host's order (web/client.js)
+let asking = null; // what the page asked the doc host to change (Undo, Restore), while it does
+let runLanded = null; // the reply whose buddy's edit just landed: shown once its comments arrive
 let docName; // the doc's file name
-let dirty = false;
-let saving = false;
-let version = 0;
-let saveTimer;
-let pendingExternal = null;
 let pendingSelection = null; // an anchor on the doc's text while a comment is written on it
 let activeId = null; // the selected thread
 let hoverId = null; // the thread whose card is under the pointer
@@ -85,10 +79,7 @@ let startTyping = false; // the doc was just made in the sidebar: the cursor sta
 let markReady;
 window.opendocReady = new Promise((resolve) => { markReady = resolve; });
 window.opendocLeave = async () => {
-  if (editor) {
-    takeUnreportedTyping();
-    await flushSave();
-  }
+  if (editor) await client.landed();
   document.body.inert = true;
   return { ...files?.state(), commentsHidden: !commentsShown() };
 };
@@ -104,7 +95,6 @@ async function start() {
     document.body.textContent = `Could not load the doc: ${error.message}`;
     return;
   }
-  baseHash = initial.docHash;
   defaultName = initial.defaultName;
   myId = initial.me.id;
   inProject = initial.project;
@@ -122,7 +112,14 @@ async function start() {
   made = chooseView(openedText);
   showSize(made, openedText);
   editor = await makeView(made, initial.text);
-  synced = initial.text;
+  client = createClient({
+    view: { getText: () => editor.getText(), selection: () => editor.selection() },
+    call: (type, arg) => api[type](arg),
+    show: showLanded,
+    rules: () => rulesOf(docName, settings.get()),
+    onError: (error) => setStatus(`Not saved: ${error.message}`, 'error'),
+  });
+  client.start(initial);
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
@@ -253,9 +250,12 @@ async function start() {
 
   document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
-  events.on('doc', (data) => onDocEvent(data.docHash));
+  events.on('ops', (data) => client.receive(data));
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
-  events.on('history', () => history.changed());
+  events.on('history', () => {
+    history.changed();
+    afterTyping('sidecar', refreshThreads); // a buddy's turn may now be marked conflict
+  });
   events.on('agents', (data) => showAgents(data));
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
@@ -263,10 +263,12 @@ async function start() {
     followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
-  // First on the line: the doc may have gone missing, or runs started, since `state`.
+  // First on a new connection: the doc may have gone missing, or runs
+  // started, since `state`, and the doc host may have started again.
   events.on('hello', (data) => {
     if (Boolean(data.missing) !== missing) setMissing(!missing);
     showAgents(data.agents);
+    client.resync();
   });
   await files.ready;
   if (startTyping) editor.focus();
@@ -285,10 +287,7 @@ function makeView(chosen, text) {
     onChange: () => {
       hideRun();
       paintMarks();
-      dirty = true;
-      version++;
-      setStatus('Saving…', 'saving');
-      scheduleSave();
+      client.flush();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onMarkClick: (id) => {
@@ -326,12 +325,11 @@ function followViews() {
 }
 
 async function remakeView(chosen) {
-  takeUnreportedTyping();
-  await flushSave().catch(() => {}); // a missing doc keeps its typing in the page
+  await client.landed();
   const old = editor;
   const text = old.getText();
   const next = await makeView(chosen, text);
-  // A change from disk taken in while the new view was made.
+  // Another's edit taken in while the new view was made.
   if (old.getText() !== text) next.applyText(old.getText(), { by: ON_DISK });
   editor = next;
   await old.destroy();
@@ -340,88 +338,27 @@ async function remakeView(chosen) {
   await history.viewChanged();
 }
 
-// ---- saving ----
+// ---- others' edits ----
 
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(save, SAVE_DELAY_MS);
-}
-
-async function save() {
-  if (saving || !dirty || missing) return;
-  saving = true;
-  const savedVersion = version;
-  const text = editor.getText();
-  let behind = false; // the doc has changes this save did not have
-  setStatus('Saving…', 'saving');
-  try {
-    const { status: code, data } = await api.saveDoc(text, baseHash);
-    if (code === 409) {
-      behind = true;
-    } else if (data.text !== text) {
-      synced = text; // the doc host merged the doc's changes into this save: carry on from what was sent
-      behind = true;
-    } else {
-      baseHash = data.docHash;
-      synced = text;
-      if (version === savedVersion) dirty = false;
-      if (dirty) setStatus('Saving…', 'saving');
-      else setStatus('Saved');
-    }
-  } catch (error) {
-    setStatus(`Save failed: ${error.message}`, 'error');
-  } finally {
-    saving = false;
-  }
-  if (behind) {
-    await syncFromDisk(); // the file changed under us: merge it in, then save again
-    return;
-  }
-  if (dirty) scheduleSave();
-  if (pendingExternal) {
-    const hash = pendingExternal;
-    pendingExternal = null;
-    onDocEvent(hash);
-  }
-}
-
-async function flushSave() {
-  clearTimeout(saveTimer);
-  while (dirty || saving) {
-    if (missing) throw new Error('the doc is missing from disk');
-    if (!saving) await save();
-    else await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-}
-
-// Leaving with an edit not saved yet: hold the page and save it. A browser
-// asks before leaving; the desktop app retries closing until the save is in.
+// Leaving with typing that has not landed: hold the page until it has. A
+// browser asks before leaving; the desktop app retries closing until it is in.
 window.addEventListener('beforeunload', (event) => {
-  takeUnreportedTyping();
-  if (!dirty && !saving) return;
+  if (client.idle()) return;
   event.preventDefault();
   event.returnValue = true;
-  flushSave().catch(() => {});
+  client.landed();
 });
 
-// Typing the editor has not reported yet (it does so on a debounce) is an
-// edit to save too.
-function takeUnreportedTyping() {
-  if (editor && !dirty && editor.getText() !== synced) {
-    dirty = true;
-    version++;
+// Others' edits landed and the view's text is now `text` (web/client.js).
+// A buddy's show as its revision once its reply is in; anything else glows.
+function showLanded(text, ops, event) {
+  const reply = event?.reply;
+  editor.applyText(text, { by: reply ? event.by : asking ?? ON_DISK, buddy: Boolean(reply) });
+  paintMarks();
+  if (reply) {
+    runLanded = reply;
+    afterTyping('sidecar', refreshThreads);
   }
-}
-
-// ---- changes from disk ----
-
-function onDocEvent(hash) {
-  if (hash === baseHash) return; // our own save
-  if (saving) {
-    pendingExternal = hash;
-    return;
-  }
-  afterTyping('doc', syncFromDisk);
 }
 
 // Run `fn` once the human pauses typing (or WAIT_FOR_PAUSE_MS after it was
@@ -440,42 +377,6 @@ function afterTyping(key, fn) {
     return;
   }
   entry.timer = setTimeout(() => afterTyping(key, fn), Math.min(pause, left));
-}
-
-// `by` flags a change no buddy's run made: ON_DISK, or what the human did.
-let syncing = null;
-function syncFromDisk(by = ON_DISK) {
-  syncing ??= doSync(by).finally(() => { syncing = null; });
-  return syncing;
-}
-
-async function doSync(by) {
-  const fresh = await api.state();
-  if (fresh.docHash === baseHash) return;
-  // A buddy's run wrote this doc when its version is the doc on disk.
-  const [reply, run] = Object.entries(fresh.edits ?? {}).find(([, e]) => e.hash === fresh.docHash && e.state === 'edited') ?? [];
-  const theirs = fresh.text;
-  // Compare the live text, not `dirty`: the editor reports typing on a debounce.
-  // Where the change overlaps what the human typed since, the human's stays.
-  const merged = merge3(synced, editor.getText(), theirs, { prefer: 'ours', rules: rulesOf(docName, settings.get()) });
-  // A buddy's changes show as its revision; anything else glows.
-  editor.applyText(merged.text, { by: run?.by ?? by, buddy: Boolean(run) });
-  paintMarks();
-  synced = theirs;
-  baseHash = fresh.docHash;
-  applyComments(fresh);
-  if (run) {
-    standAtLastEdit(run.by, synced, theirs);
-    showRun(reply, { scroll: false });
-  }
-  if (merged.text === theirs) {
-    dirty = false;
-    setStatus('Saved');
-  } else {
-    dirty = true;
-    version++;
-    scheduleSave();
-  }
 }
 
 // The doc's agents changed (a status, or who is here).
@@ -499,37 +400,26 @@ function takeAgentResult(result) {
 
 // ---- the doc moved or deleted outside the app ----
 
-// Saving stops (a save would recreate the file where the user removed it);
-// the page keeps its text and offers to write it back. If the doc comes back
-// on its own (an undo in Explorer, a git checkout), saving resumes and any
-// difference arrives as a normal change from disk.
+// The doc host stops writing it (a write would recreate the file where the
+// user removed it) and keeps its text; the page offers to write it back. If
+// the doc comes back on its own (an undo in Explorer, a git checkout),
+// writing resumes and any difference arrives as a change from outside.
 function setMissing(on) {
   missing = on;
   missingBanner.hidden = !on;
   if (on) {
-    clearTimeout(saveTimer);
     const name = document.querySelector('.od-doc-name').textContent;
     missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside OpenDoc. Changes here are not being saved.`;
     setStatus('Not saved: the doc is missing', 'error');
     return;
   }
-  setStatus(dirty ? 'Saving…' : 'Saved', dirty ? 'saving' : 'saved');
-  if (dirty) scheduleSave();
+  setStatus('Saved');
 }
 
 missingBanner.querySelector('[data-action="recreate"]').addEventListener('click', async () => {
-  const savedVersion = version;
-  const text = editor.getText();
   try {
-    const { status: code, data } = await api.saveDoc(text, baseHash, { recreate: true });
-    if (code === 409) {
-      setMissing(false); // it is back already: merge what is there
-      await syncFromDisk();
-      return;
-    }
-    baseHash = data.docHash;
-    synced = text;
-    if (version === savedVersion) dirty = false;
+    await client.landed();
+    await api.recreate();
     setMissing(false);
   } catch (error) {
     setStatus(`Save failed: ${error.message}`, 'error');
@@ -612,6 +502,10 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
   paintEmpty();
+  if (edits?.[runLanded]) {
+    showRun(runLanded, { scroll: false, stand: true });
+    runLanded = null;
+  }
 }
 
 // A sidecar this app must not write (spec/SPEC.md §2): its comments show,
@@ -715,9 +609,9 @@ function requestComment() {
 }
 
 async function createThread(body) {
-  await flushSave();
-  // The selection on the doc's text that is now on disk; if it is gone, the
-  // comment is on the whole doc.
+  await client.landed();
+  // The selection on the doc's text as the doc host has it; if it is gone,
+  // the comment is on the whole doc.
   const text = editor.getText();
   const found = locate(text, pendingSelection);
   const { id } = await send(api.comment({ anchor: found && createAnchor(text, found.start, found.end), body }));
@@ -739,18 +633,20 @@ async function send(request) {
   }
 }
 
-// Undo a buddy's edit. What you typed is saved first; the doc host merges
-// the undo into it, and the page takes the result as any change on disk.
+// Undo a buddy's edit. What you typed lands first; the undo comes back as
+// an edit from the doc host.
 async function undoReply(id) {
   if (shownRun === id) hideRun();
-  await flushSave();
+  await client.landed();
+  asking = 'Undo';
   try {
     applyComments(await api.undoReply(id));
   } catch (error) {
     setStatus(`Could not undo: ${error.message}`, 'error');
     throw error;
+  } finally {
+    asking = null;
   }
-  await syncFromDisk('Undo');
 }
 
 // ---- where each buddy stands in the text ----
@@ -784,11 +680,12 @@ function standAtLastEdit(by, before, after) {
 
 // The edits of the run that wrote reply `id`, marked in the text until the
 // human types, presses Escape or toggles them off on the reply; `scroll`
-// brings the first into view. An edit changed since is left out.
+// brings the first into view, `stand` puts the buddy's cursor after the
+// last. An edit changed since is left out.
 let shownRun = null;
 let preview = null; // { edits, by, replay } of the run shown
 let replays = 0;
-async function showRun(id, { scroll = true } = {}) {
+async function showRun(id, { scroll = true, stand = false } = {}) {
   const run = comments?.edits?.[id];
   if (run?.state !== 'edited') return;
   shownRun = id;
@@ -796,6 +693,7 @@ async function showRun(id, { scroll = true } = {}) {
   const found = await api.version(run.version).catch(() => null);
   if (shownRun !== id) return;
   if (!found?.before) return hideRun();
+  if (stand) standAtLastEdit(run.by, found.before, found.text);
   const edits = diffEdits(found.before, found.text).map((change) => change.edit);
   preview = { edits, by: run.by, replay: ++replays };
   const marks = paintMarks().filter((m) => m.kind === 'edit');
@@ -810,37 +708,16 @@ function hideRun() {
   paintMarks();
 }
 
-// Put the doc back the way it was in an earlier version (web/history.js). The
-// server writes that version's exact bytes; the page then shows them,
-// holding back the change event of the restore itself as it does for a save.
+// Put the doc back the way it was in an earlier version (web/history.js):
+// what you typed lands first, and the restore comes back as an edit from
+// the doc host.
 async function restoreVersion(id) {
-  await flushSave();
-  if ((await api.state()).docHash !== baseHash) {
-    await syncFromDisk();
-    await flushSave();
-  }
-  saving = true;
-  let result;
+  await client.landed();
+  asking = 'Restore';
   try {
-    result = await api.restoreVersion(id, baseHash);
+    await api.restoreVersion(id);
   } finally {
-    saving = false;
-  }
-  if (result.status === 409) {
-    await syncFromDisk();
-    throw new Error('the doc changed just now. Try again.');
-  }
-  const { text, docHash } = result.data;
-  editor.applyText(text, { by: 'Restore' });
-  paintMarks();
-  synced = text;
-  baseHash = docHash;
-  dirty = false;
-  setStatus('Saved');
-  if (pendingExternal) {
-    const hash = pendingExternal;
-    pendingExternal = null;
-    onDocEvent(hash);
+    asking = null;
   }
 }
 

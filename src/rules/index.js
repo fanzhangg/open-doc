@@ -1,6 +1,6 @@
 // The built-in rules: what a format adds to plain text where a doc's edits
-// merge, in the doc host (a buddy's edit) and in the page (a change from
-// outside), whatever view the doc is in. A rule knows nothing of views, and a
+// merge, for an edit that yields (a buddy's, an outside change, an undo), in
+// the doc host and in the page alike, whatever view the doc is in. A rule knows nothing of views, and a
 // view nothing of rules: they share only the doc's text. They live in src/,
 // not with the views in web/views/, since the doc host runs src/ only.
 //

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDoc } from '../src/host/doc-service.js';
+import { diffOps } from '../src/core/ot.js';
 
 // Keep tests away from the real user's settings file.
 process.env.OPENDOC_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'opendoc-config-'));
@@ -37,8 +38,9 @@ const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fa
 export async function fakeConfig(settings = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
   await mkdir(join(dir, 'agents'));
-  await writeFile(join(dir, 'agents', 'fake'), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
-  await writeFile(join(dir, 'agents', 'fake.cmd'), `@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
+  // On this process's binary, as Node when it is Electron's (test/views/main.js).
+  await writeFile(join(dir, 'agents', 'fake'), `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
+  await writeFile(join(dir, 'agents', 'fake.cmd'), `@set ELECTRON_RUN_AS_NODE=1\r\n@"${process.execPath}" "${FAKE_AGENT}"\r\n`);
   await writeFile(join(dir, 'settings.json'), JSON.stringify({ name: 'fzhan', agent: 'fake', ...settings }));
   process.env.FAKE_DIR = dir;
   return dir;
@@ -49,10 +51,15 @@ export async function fakeRuns(dir) {
   return (await readFile(join(dir, 'runs.log'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
+let edits = 0;
+
 /**
  * Open `docPath` as a window would: `call(type, arg)` asks the doc,
- * `events` holds what it said ([name, data], oldest first). With `buddies`
- * ({ name: file text }), the doc's folder is a project holding them.
+ * `events` holds what it said ([name, data], oldest first), and
+ * `edit(next, from)` types the doc's text into `next` from state `from`
+ * (default: the doc as it is now), landed and written once it resolves.
+ * With `buddies` ({ name: file text }), the doc's folder is a project
+ * holding them.
  */
 export async function openTestDoc(docPath, { buddies = null, ...options } = {}) {
   const events = [];
@@ -62,7 +69,11 @@ export async function openTestDoc(docPath, { buddies = null, ...options } = {}) 
     for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.opendoc', 'buddies', `${name}.md`), text);
   }
   const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
-  return { doc, events, call: (type, arg) => doc.call(type, arg), state: () => doc.call('state') };
+  const edit = async (next, from) => {
+    const at = from ?? await doc.call('state');
+    return doc.call('submit', { ops: diffOps(at.text, next), rev: at.rev, epoch: at.epoch, id: `test.${++edits}` });
+  };
+  return { doc, events, edit, call: (type, arg) => doc.call(type, arg), state: () => doc.call('state') };
 }
 
 /** Wait until `check()` resolves to a truthy value, which it returns. */

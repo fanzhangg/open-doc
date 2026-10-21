@@ -28,7 +28,7 @@ const channel = process.parentPort
   : { listen: (fn) => process.on('message', (message) => fn(message, [])), send: (message) => process.send(message) };
 
 // For the smoke test: while the file `OPENDOC_HOLD_SAVES` names exists, the answer
-// to a save waits, so the test can type while a save is on its way.
+// to an edit waits, so the test can type while one is on its way.
 const holdSaves = process.env.OPENDOC_HOLD_SAVES;
 const held = async () => {
   while (holdSaves && existsSync(holdSaves)) await new Promise((done) => setTimeout(done, 50));
@@ -86,7 +86,7 @@ function serve(entry, port) {
   port.on('message', async ({ data: { id, type, arg } }) => {
     try {
       const result = (await entry.service.call(type, arg)) ?? null;
-      if (type === 'saveDoc') await held();
+      if (type === 'submit') await held();
       port.postMessage({ id, result });
     } catch (error) {
       if (!error.code) console.error(error);
