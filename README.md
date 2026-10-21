@@ -53,3 +53,7 @@ npm run dist:desktop          # installer in release/
 ## Contributing
 
 Issues and pull requests are welcome on [GitHub](https://github.com/fanzhangg/open-doc). Before opening a pull request, run `npm run lint` and `npm test`.
+
+## License
+
+[MIT](LICENSE)
