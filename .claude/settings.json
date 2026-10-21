@@ -6,16 +6,5 @@
       "Edit(/knip.config.js)",
       "Edit(/.claude/settings.json)"
     ]
-  },
-  "sandbox": {
-    "enabled": true,
-    "filesystem": {
-      "denyWrite": [
-        "./eslint.config.js",
-        "./.dependency-cruiser.js",
-        "./knip.config.js",
-        "./.claude/settings.json"
-      ]
-    }
   }
 }
