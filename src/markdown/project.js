@@ -32,29 +32,64 @@ const WHITESPACE = /\s/;
  *   is the source length.
  */
 export function project(markdown) {
-  const tree = parseMarkdown(markdown);
-
   const lines = [];
-  collectBlocks(tree, markdown, lines);
+  collectBlocks(parseMarkdown(markdown), markdown, lines);
+  return joined(lines.map((line) => [line, 0]), markdown);
+}
 
-  let text = '';
-  const offsets = [];
-  for (const line of lines) {
-    if (text.length > 0) {
-      // The separator maps to the start of the next block.
-      text += '\n';
-      offsets.push(line.offsets[0]);
-    }
-    text += line.text;
-    for (const offset of line.offsets) offsets.push(offset);
+/**
+ * project(markdown) worked out block by block, for a long doc that changes a
+ * few blocks at a time: `blocks` are its top-level blocks (blockRanges), and
+ * `cache` (a Map) keeps the lines of each block's text from one call to the
+ * next. Only for a doc whose blocks read alone as they do in it (not
+ * definesLinks).
+ */
+export function projectBlocks(markdown, blocks, cache) {
+  const lines = [];
+  const used = new Map();
+  for (const { start, end } of blocks) {
+    const text = markdown.slice(start, end);
+    let own = used.get(text) ?? cache.get(text);
+    if (!own) collectBlocks(parseMarkdown(text), text, (own = []));
+    used.set(text, own);
+    for (const line of own) lines.push([line, start]);
   }
-  offsets.push(markdown.length);
+  cache.clear();
+  for (const [text, own] of used) cache.set(text, own);
+  return joined(lines, markdown);
+}
 
-  return { text, offsets: Int32Array.from(offsets), source: markdown };
+/**
+ * Whether `markdown` may define a link or footnote, at any depth (in a quote
+ * or a list too): a definition ties the blocks that use it to the one it is
+ * in, so such a doc is read whole, not block by block. A line that only
+ * looks like one counts too; it is read whole, as it would be.
+ */
+export const definesLinks = (markdown) => /^[ \t>*+\-\d.)]*\[[^\]\n]+\]:/m.test(markdown);
+
+/** The range { start, end } of each top-level block of `markdown`. */
+export function blockRanges(markdown) {
+  return parseMarkdown(markdown).children
+    .filter((node) => node.position)
+    .map((node) => ({ start: node.position.start.offset, end: node.position.end.offset }));
+}
+
+// Lines [line, shift] joined by `\n`, each offset moved by its line's shift.
+function joined(lines, markdown) {
+  const text = lines.map(([line]) => line.text).join('\n');
+  const offsets = new Int32Array(text.length + 1);
+  let i = 0;
+  lines.forEach(([line, shift], k) => {
+    // The separator maps to the start of the next block.
+    if (k > 0) offsets[i++] = line.offsets[0] + shift;
+    for (const offset of line.offsets) offsets[i++] = offset + shift;
+  });
+  offsets[i] = markdown.length;
+  return { text, offsets, source: markdown };
 }
 
 /** The markdown syntax tree (mdast) that the projection is built from. */
-function parseMarkdown(markdown) {
+export function parseMarkdown(markdown) {
   return fromMarkdown(markdown, {
     extensions: [gfm(), cjkFriendlyExtension()],
     mdastExtensions: [gfmFromMarkdown()],

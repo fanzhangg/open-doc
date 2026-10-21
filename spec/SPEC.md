@@ -41,8 +41,8 @@ MUST keep fields it does not understand.
 | `anchor` | object or null, optional | First comments only: the text it is about (§3). Absent or `null` for a comment on the whole doc. |
 | `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. The `id` is random and stays when the name changes: a human's is in their settings, a buddy's in its file ([PROJECT §2](PROJECT.md)); a buddy file without one is a buddy whose `id` is its name. Clippy's is `Clippy`. The `name` is only what it was called then. |
 | `at` | string | When it was written, RFC 3339 UTC. A buddy's reply and comments: just after the latest comment of the thread it answered, as its run saw it. |
-| `body` | string | Plain text; may be empty on a reply (a human's resolves or reopens), or when `resolved` is set. |
-| `resolved` | `true`, optional | Humans only: resolves the thread. |
+| `body` | string | Plain text; may be empty on a reply (it resolves or reopens), or when `resolved` is set. |
+| `resolved` | `true`, optional | Resolves the thread. Who may is not in the file: the app that writes it decides. |
 | `conflict` | `true`, optional | Buddies only: part of its edit was dropped because a human changed the same text meanwhile. |
 | `failed` | `true`, optional | Buddies only: its run failed; `body` is the end of the program's output. |
 
@@ -122,8 +122,9 @@ score = 50 * quoteSim
 2. A thread is its first comment and the comments whose `thread` is its id,
    ordered by `at`, then `id`. A reply whose first comment is missing is
    hidden.
-3. A thread is resolved when its latest human comment has `resolved`:
-   only people resolve and reopen.
+3. A thread is resolved when the latest comment that is by a human or has
+   `resolved` has `resolved`: a human's comment without it reopens the
+   thread; a buddy's without it changes nothing.
 4. A human is shown by the name in their latest comment; a buddy, by the name of its file now (the `name` in its comment when it has none here).
 5. A line that is not valid JSON or not a valid comment is reported, skipped
    and kept as it is.

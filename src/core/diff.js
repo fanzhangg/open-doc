@@ -5,6 +5,27 @@
 import { locate } from './anchor.js';
 
 const EDIT_CONTEXT = 32;
+const CHUNK = 1024;
+
+// The common start and end of two texts. A long doc changes in a few places,
+// so these are compared a chunk at a time (a string compare is a memory
+// compare), and only the chunk that differs a character at a time.
+
+/** How many characters `a` and `b` start with in common, at most `max`. */
+export function sameStart(a, b, max = Math.min(a.length, b.length)) {
+  let n = 0;
+  while (n + CHUNK <= max && a.slice(n, n + CHUNK) === b.slice(n, n + CHUNK)) n += CHUNK;
+  while (n < max && a.charCodeAt(n) === b.charCodeAt(n)) n++;
+  return n;
+}
+
+/** How many characters `a` and `b` end with in common, at most `max`. */
+export function sameEnd(a, b, max = Math.min(a.length, b.length)) {
+  let n = 0;
+  while (n + CHUNK <= max && a.slice(a.length - n - CHUNK, a.length - n) === b.slice(b.length - n - CHUNK, b.length - n)) n += CHUNK;
+  while (n < max && a.charCodeAt(a.length - 1 - n) === b.charCodeAt(b.length - 1 - n)) n++;
+  return n;
+}
 const MAX_DIFF_CELLS = 4_000_000;
 const WORD = /[\p{L}\p{N}_]/u;
 

@@ -20,7 +20,7 @@ import {
   toggleInlineCodeCommand, wrapInBlockquoteCommand, createCodeBlockCommand, insertHrCommand, liftListItemCommand,
   listItemKeymap,
 } from '@milkdown/kit/preset/commonmark';
-import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/kit/preset/gfm';
+import { toggleStrikethroughCommand, insertTableCommand, remarkGFMPlugin } from '@milkdown/kit/preset/gfm';
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history';
 import { undoDepth, redoDepth } from '@milkdown/kit/prose/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
@@ -30,16 +30,17 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { $prose, $shortcut, callCommand } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
 import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
+import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { createAnchor, locate } from '../../../src/core/anchor.js';
-import { project, renderedRange, sourceRange } from '../../../src/markdown/project.js';
+import { project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
 import { splice } from '../../../src/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
 import { editItems } from '../../review.js';
 import { markdownPlugins } from '../../markdown-schema.js';
 import { diagrams } from '../../diagrams.js';
-import { childPos, diffBlocks, replaceBlocks } from '../../blocks.js';
+import { blocksOf, childPos, diffBlocks, parseRun, replaceBlocks, textOfDoc, textPos } from './blocks.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
@@ -175,6 +176,10 @@ export async function createMarkdownView({
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options, bullet: '-', emphasis: '*', strong: '*', rule: '-', fences: true, listItemIndent: 'one',
       }));
+      // A table row is written as its own cells say, not padded to line up
+      // with the others: an edit in one cell then changes only its row, and
+      // two people typing in one table do not both re-pad it.
+      ctx.set(remarkGFMPlugin.options.key, { tablePipeAlign: false });
       // `updated` is debounced (200 ms) and fires only when the doc changed.
       ctx.get(listenerCtx).updated(() => {
         if (edited) {
@@ -211,23 +216,41 @@ export async function createMarkdownView({
     if (md === undefined) serialized.set(doc, (md = editor.ctx.get(serializerCtx)(doc)));
     return md;
   };
-  // The doc's text as this view was last given it. Its text is that, with
-  // each block the human changed in this editor's style and every other
-  // block as it was; worked out once per doc, and projected once when asked.
+  // The doc's text as this view was last given it, and the document it was
+  // given to (`base`). A document's text is that, with each block the human
+  // changed in this editor's style and every other block as it was; worked
+  // out once per doc, and projected once when asked. While each top-level
+  // block of `given` pairs with a child of `base` (`base.blocks`, their
+  // ranges; worked out when first asked, null when they do not pair up), a
+  // change in or out is worked out only where it is (blocks.js), so a
+  // long doc others write in stays quick; otherwise it is worked out whole.
   let given = text;
-  const texts = new WeakMap(); // doc → { given, text, projection }
+  let base = { doc: view().state.doc, blocks: undefined };
+  const baseBlocks = () => {
+    if (base.blocks === undefined) base.blocks = blocksOf(base.doc, given);
+    return base.blocks;
+  };
+  const serializeNodes = (nodes) => editor.ctx.get(serializerCtx)(base.doc.type.create(null, nodes));
+  // { text, blocks }: the doc's text for `doc`, and its children's ranges in it, or null.
+  const textOf = (doc) => {
+    const blocks = baseBlocks();
+    if (doc === base.doc) return { text: given, blocks };
+    const found = blocks && textOfDoc(doc, base.doc, given, blocks, serializeNodes, parse);
+    if (found) return found;
+    const ours = serialize(doc);
+    return { text: ours === serialize(parse(given)) ? given : splice(given, ours), blocks: null };
+  };
+  const texts = new WeakMap(); // doc → { given, text, blocks, projection }
   const sourceOf = (doc) => {
     let source = texts.get(doc);
-    if (source?.given !== given) {
-      const ours = serialize(doc);
-      texts.set(doc, (source = { given, text: ours === serialize(parse(given)) ? given : splice(given, ours), projection: null }));
-    }
+    if (source?.given !== given) texts.set(doc, (source = { given, ...textOf(doc), projection: null }));
     return source;
   };
   const currentText = () => sourceOf(view().state.doc).text;
+  const projectionCache = new Map(); // a block's text → its rendered lines
   const projected = (doc) => {
     const source = sourceOf(doc);
-    return (source.projection ??= project(source.text));
+    return (source.projection ??= source.blocks ? projectBlocks(source.text, source.blocks, projectionCache) : project(source.text));
   };
 
   // Rendered ranges of the doc's text and of the editor's document are the
@@ -347,7 +370,12 @@ export async function createMarkdownView({
     const list = ancestor(state, (node) => node.type.name === 'bullet_list' || node.type.name === 'ordered_list');
     if (!list) return editor.action(callCommand(wrap.key));
     if (list.node.type.name === type) return editor.action(callCommand(liftListItemCommand.key));
-    dispatch(state.tr.setNodeMarkup(list.pos, state.schema.nodes[type]));
+    // The items say which kind of list they are in, too: Milkdown turns a
+    // bulleted list whose items still say ordered back into a numbered one.
+    const tr = state.tr.setNodeMarkup(list.pos, state.schema.nodes[type], { spread: list.node.attrs.spread });
+    const listType = type === 'bullet_list' ? 'bullet' : 'ordered';
+    list.node.forEach((item, offset) => tr.setNodeMarkup(list.pos + 1 + offset, null, { ...item.attrs, listType }));
+    dispatch(tr);
     return true;
   };
   const headingCommand = (level) => (state) => editor.action(blockType(state) === `h${level}`
@@ -504,17 +532,36 @@ export async function createMarkdownView({
    * but a buddy's change (`buddy`) also glows.
    */
   function applyText(next, { by = null, buddy = false } = {}) {
-    given = next;
     const v = view();
     const current = v.state.doc;
-    const target = parse(next);
-    const hunks = diffBlocks(current, target);
-    if (hunks.length === 0) return;
-    v.dispatch(replaceBlocks(v.state.tr, current, target, hunks).setMeta('addToHistory', false).setMeta(FROM_DISK, true));
-    if (by) flash(hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by, buddy);
+    // Only the blocks that differ from the text now are parsed, when that is known.
+    const source = sourceOf(current);
+    const run = source.blocks && parseRun(current, source.text, source.blocks, next, parse);
+    let target;
+    let hunks;
+    if (run) {
+      const kept = current.content.content;
+      target = current.copy(Fragment.from([...kept.slice(0, run.from), ...run.nodes, ...kept.slice(run.to)]));
+      hunks = diffBlocks(Fragment.from(kept.slice(run.from, run.to)), Fragment.from(run.nodes))
+        .map((h) => ({ a0: h.a0 + run.from, a1: h.a1 + run.from, b0: h.b0 + run.from, b1: h.b1 + run.from }));
+    } else {
+      target = parse(next);
+      hunks = diffBlocks(current, target);
+    }
+    const blocks = run ? run.blocks : undefined;
+    given = next;
+    if (hunks.length === 0) {
+      base = { doc: current, blocks };
+      return;
+    }
+    const tr = replaceBlocks(v.state.tr, current, target, hunks).setMeta('addToHistory', false).setMeta(FROM_DISK, true);
+    base = { doc: tr.doc, blocks };
+    if (by) flash(tr, hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by, buddy);
+    v.dispatch(tr);
   }
 
-  function flash(ranges, by, buddy) {
+  // Glow `ranges` of the doc `tr` makes, in the same transaction, so the page is drawn once.
+  function flash(tr, ranges, by, buddy) {
     if (ranges.length === 0) return;
     const flashId = Symbol('flash');
     const decorations = buddy ? [] : ranges.map((r) => (r.node
@@ -522,14 +569,13 @@ export async function createMarkdownView({
       : Decoration.inline(r.from, r.to, { class: 'od-flash' }, { flashId })));
     const first = ranges[0];
     decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
-    updateFlashes((set, doc) => set.add(doc, decorations));
+    tr.setMeta(flashKey, flashKey.getState(view().state).map(tr.mapping, tr.doc).add(tr.doc, decorations));
     setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flashId === flashId))), FLASH_MS);
   }
 
   function updateFlashes(change) {
     const v = view();
-    const next = change(flashKey.getState(v.state), v.state.doc);
-    v.dispatch(v.state.tr.setMeta(flashKey, next).setMeta('addToHistory', false));
+    v.dispatch(v.state.tr.setMeta(flashKey, change(flashKey.getState(v.state))).setMeta('addToHistory', false));
   }
 
   // The selection: { from, to }, or null when it is not in the text.
@@ -717,21 +763,4 @@ function changedRange(oldDoc, newDoc, h) {
   }
   if (h.b1 - h.b0 === 1) return { from, to, node: true };
   return { from: from + 1, to: to - 1 }; // several blocks: glow their text
-}
-
-// Document position of text offset `offset` inside top-level `node` at `nodePos`.
-function textPos(node, nodePos, offset) {
-  let seen = 0;
-  let result = null;
-  node.descendants((child, pos) => {
-    if (result !== null) return false;
-    if (!child.isText) return true;
-    if (offset <= seen + child.text.length) {
-      result = nodePos + 1 + pos + (offset - seen);
-      return false;
-    }
-    seen += child.text.length;
-    return true;
-  });
-  return result ?? nodePos + node.nodeSize - 1;
 }

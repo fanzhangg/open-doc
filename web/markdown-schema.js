@@ -2,8 +2,11 @@
 // document. The editor and the rendered-text conformance tests both use this
 // list, so the tests check the document the page really builds.
 
-import { $remark } from '@milkdown/kit/utils';
-import { commonmark, imageSchema, linkSchema } from '@milkdown/kit/preset/commonmark';
+import { $prose, $remark } from '@milkdown/kit/utils';
+import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
+import {
+  bulletListSchema, commonmark, imageSchema, linkSchema, listItemSchema, orderedListSchema, syncHeadingIdPlugin, syncListOrderPlugin,
+} from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
 
@@ -30,7 +33,50 @@ const image = imageSchema.extendSchema((schema) => (ctx) => {
 // Text typed right after a link is not part of it.
 const link = linkSchema.extendSchema((schema) => (ctx) => ({ ...schema(ctx), inclusive: false }));
 
-const swapped = new Map([[imageSchema.ctx, image.ctx], [imageSchema.node, image.node], [linkSchema.ctx, link.ctx], [linkSchema.mark, link.mark]]);
+// On every change Milkdown walks the whole doc twice: to give each heading
+// an id, and to keep ordered list items' labels in step. In a long doc that
+// is most of a keystroke. Ids are not used (a `#heading` link is found by the
+// heading's text), so they are left out; labels are kept in step as
+// Milkdown does, but only in the top-level blocks a change touched.
+const listOrder = $prose((ctx) => new Plugin({
+  key: new PluginKey('opendoc-list-order'),
+  appendTransaction(transactions, oldState, { doc, tr }) {
+    if (transactions.some((t) => t.getMeta('addToHistory') === false || !t.isGeneric)) return null;
+    const start = oldState.doc.content.findDiffStart(doc.content);
+    if (start === null) return null;
+    const end = Math.max(start, oldState.doc.content.findDiffEnd(doc.content).b);
+    const [ordered, bullet, item] = [orderedListSchema, bulletListSchema, listItemSchema].map((schema) => schema.type(ctx));
+    const labelled = (attrs, index, order = 1) => {
+      const changed = attrs.label !== `${index + order}.`;
+      attrs.label = `${index + order}.`;
+      return changed;
+    };
+    const visit = (node, pos, parent, index) => {
+      if (node.type === bullet && node.maybeChild(0)?.type === item && node.child(0).attrs.listType === 'ordered') {
+        tr.setNodeMarkup(pos, ordered, { spread: true });
+        node.forEach((child, offset, i) => {
+          const attrs = { ...child.attrs };
+          if (child.type === item && labelled(attrs, i)) tr.setNodeMarkup(pos + 1 + offset, undefined, attrs);
+        });
+      } else if (node.type === item && parent.type === ordered) {
+        const attrs = { ...node.attrs, listType: 'ordered' };
+        if (labelled(attrs, index, parent.attrs.order ?? 1) || node.attrs.listType !== 'ordered') tr.setNodeMarkup(pos, undefined, attrs);
+      }
+    };
+    const [from, to] = [start, end].map((pos) => doc.resolve(pos).index(0));
+    doc.forEach((node, pos, i) => {
+      if (i < from || i > to) return;
+      visit(node, pos, doc, i);
+      node.descendants((child, at, parent, index) => visit(child, pos + 1 + at, parent, index));
+    });
+    return tr.docChanged ? tr.setMeta('addToHistory', false) : null;
+  },
+}));
+
+const swapped = new Map([
+  [imageSchema.ctx, image.ctx], [imageSchema.node, image.node], [linkSchema.ctx, link.ctx], [linkSchema.mark, link.mark],
+  [syncListOrderPlugin, listOrder], [syncHeadingIdPlugin, []],
+]);
 
 // Typed Markdown stays text and the toolbar is the one formatting entry, so
 // the preset's input rules and formatting shortcuts are left out. Lists and

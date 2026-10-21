@@ -26,6 +26,10 @@ const HISTORY_VERSION = 1;
 export const COALESCE_MS = 2 * 60 * 1000;
 export const MAX_SPAN_MS = 30 * 60 * 1000;
 const MAX_VERSIONS = 500;
+// The characters of text kept, besides: of a doc of millions of characters
+// (up to 5,000,000 are edited, web/views/plain/index.js), the latest versions
+// that fit; of an ordinary doc, all MAX_VERSIONS.
+export const MAX_HISTORY_CHARS = 100_000_000;
 export const VERSION_ID = /^v_[a-z0-9]{6,}$/;
 
 /** The folder holding the history of `docPath`, under the config folder `root`. */
@@ -37,7 +41,7 @@ export function historyDir(docPath, root) {
 
 /**
  * The versions of the doc, oldest first:
- *   { id, kind, author, startedAt, at, hash, added, removed, thread?, reply?, undid?, restoredFrom? }
+ *   { id, kind, author, startedAt, at, hash, size, added, removed, thread?, reply?, undid?, restoredFrom? }
  * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
  * 'external' (changed outside OpenDoc); `author` is { id?, name, kind } or null
  * when unknown; `added` and `removed` count the characters changed since
@@ -105,10 +109,11 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
       };
     }
     const before = versions.length > 0 ? await readBlob(dir, versions.at(-1).hash) : null;
-    Object.assign(version, countChanges(before, text));
+    Object.assign(version, countChanges(before, text), { size: text.length });
     await writeBlob(dir, hash, text);
     versions.push(version);
-    while (versions.length > MAX_VERSIONS) dropped.push(versions.shift().hash);
+    const kept = () => versions.reduce((n, v) => n + (v.size ?? 0), 0);
+    while (versions.length > MAX_VERSIONS || (versions.length > 1 && kept() > MAX_HISTORY_CHARS)) dropped.push(versions.shift().hash);
     await saveIndex(dir, index, docPath, dropped);
     return version;
   } finally {
