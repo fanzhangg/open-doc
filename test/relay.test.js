@@ -5,13 +5,11 @@
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { createClient } from '../web/client.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
 import { until } from './helpers.js';
@@ -259,7 +257,7 @@ test('Remove turns a teammate\'s page away at once; a new link ends every old on
     const { link } = await asOwner(host, shared, 'link');
     const room = new URL(link).searchParams.get('room');
     assert.notEqual(room, roomOf(shared.secret));
-    assert.equal(new URL(link).searchParams.get('relay'), relay.url);
+    assert.equal(link, `${relay.origin}/team?room=${room}`, 'the page at the relay\'s own origin');
     await until(() => before.lines.includes('refused'), 'the old link\'s page turned away');
     assert.equal((await before.call('state')).error.code, 'link_replaced');
     const old = page(shared.secret, noor);
@@ -273,16 +271,57 @@ test('Remove turns a teammate\'s page away at once; a new link ends every old on
   }
 });
 
+test('the relay serves the teammate\'s page from its own origin, and only it', async () => {
+  const served = await fetch(`${relay.origin}/team?room=${'0'.repeat(64)}`);
+  assert.equal(served.status, 200);
+  const html = await served.text();
+  assert.match(html, /connect-src 'self';/, 'the page may reach the relay at its origin, nothing else');
+  assert.match(html, /src="app.js"/);
+  assert.equal((await fetch(`${relay.origin}/app.js`)).status, 200);
+  assert.equal((await fetch(`${relay.origin}/`)).status, 404, 'not the app\'s own window');
+  assert.equal((await fetch(`${relay.origin}/rooms/${'0'.repeat(64)}`)).status, 404, 'a room is reached only by a WebSocket');
+});
+
+test('the relay limits pages, message sizes and rooms, so it is no free pipe', async () => {
+  const limited = await startRelay(); // its own, for the rooms an address opens a minute
+  const sockets = [];
+  const connect = (path) => new Promise((done) => {
+    const socket = new WebSocket(`${limited.url}${path}`);
+    sockets.push(socket);
+    const closed = new Promise((gone) => socket.addEventListener('close', ({ code, reason }) => gone({ code, reason })));
+    socket.addEventListener('open', () => done({ socket, closed }));
+    socket.addEventListener('error', () => done({ socket, closed, refused: true }));
+  });
+  try {
+    const secret = 'a-secret';
+    const host = await connect(`/rooms/${roomOf(secret)}?secret=${secret}`);
+    const pages = [];
+    for (let k = 0; k < 20; k++) pages.push(await connect(`/rooms/${roomOf(secret)}?name=p${k}`));
+    const over = await connect(`/rooms/${roomOf(secret)}?name=late`);
+    assert.deepEqual(await over.closed, { code: 4001, reason: 'full' });
+
+    pages[0].socket.send('x'.repeat(8 * 2 ** 20 + 1));
+    assert.equal((await pages[0].closed).code, 1009);
+    host.socket.send(JSON.stringify({ peer: 1, data: 'x'.repeat(8 * 2 ** 20) }));
+    assert.equal((await host.closed).code, 1009, 'a host too');
+    assert.equal((await pages[1].closed).code, 4000, 'its pages told the host is gone');
+
+    let refused = 0;
+    for (let k = 0; k < 60; k++) if ((await connect(`/rooms/${roomOf(`s${k}`)}?secret=s${k}`)).refused) refused++;
+    assert.ok(refused > 0, 'an address opens at most 60 rooms a minute');
+  } finally {
+    for (const socket of sockets) socket.close();
+    await limited.stop();
+  }
+});
+
 test('the browser build asks a name, waits for Allow, then shows the doc read only, live', async () => {
-  await promisify(execFile)(process.execPath, [join(root, 'preview', 'build.js')]);
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'opendoc-relay-page-'));
-  const room = roomOf(shared.secret);
-  const url = new URL(`file://${join(root, 'dist', 'preview', 'team.html')}`);
-  url.search = new URLSearchParams({ relay: relay.url, room }).toString(); // as the Invite link names it
+  const { link } = await asOwner(host, shared, 'team');
   const electron = createRequire(import.meta.url)('electron');
-  const env = { ...process.env, RELAY_PAGE: url.href };
+  const env = { ...process.env, RELAY_PAGE: link }; // the page as the Invite link opens it, from the relay
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   try {

@@ -4,7 +4,7 @@
 // on, the network aside. The owner's view is the collab harness's
 // (test/collab/page.js) in Electron, on a doc host started as the app starts
 // it, with no delay of its own; the teammate's page is the browser build
-// (dist/preview/team.html) in another Electron, whose line to the relay is
+// (team.html, served by the relay) in another Electron, whose line to the relay is
 // LINE_MS slower each way, as over the internet: its client, applyText and
 // marks are timed with the rest, up to the character in its page. Both in
 // a small Markdown doc and in the plain view's longest, which the host
@@ -43,8 +43,8 @@ let page;
 const teammates = [];
 
 before(async () => {
+  await promisify(execFile)(process.execPath, [join(root, 'scripts', 'build.js')]); // the page the relay serves
   relay = await startRelay();
-  for (const script of [join(root, 'scripts', 'build.js'), join(root, 'preview', 'build.js')]) await promisify(execFile)(process.execPath, [script]);
   dir = await mkdtemp(join(tmpdir(), 'opendoc-typing-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
@@ -85,9 +85,7 @@ const slowLine = (ms) => `{
 
 // The teammate Sam's page, in a browser of its own, on the doc `make` opened.
 async function teammatePage({ room, key }) {
-  const url = new URL(`file://${join(root, 'dist', 'preview', 'team.html')}`);
-  url.search = new URLSearchParams({ relay: relay.url, room }).toString();
-  const env = { ...process.env, RELAY_PAGE: url.href };
+  const env = { ...process.env, RELAY_PAGE: `${relay.origin}/team?room=${room}` };
   delete env.ELECTRON_RUN_AS_NODE;
   const browser = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${await mkdtemp(join(dir, 'teammate-'))}`], { env });
   teammates.push(browser);

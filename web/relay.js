@@ -1,26 +1,31 @@
 // The page's line to the doc host in a plain browser: through the relay
 // (relay/worker.js; docs/architecture.md, Sharing), with the same
 // `{ call, onEvent }` the app's preload gives a window (window.opendocHost),
-// and `onLine`, how the line is. The page's address names the relay, the
-// room and maybe the doc: `?relay=<ws: or wss: URL>&room=<room>&doc=<path in
-// the project>`; the line names who the page is, as `identity()` says when
-// the first call makes it. Calls wait for the host's `hello`, which comes
-// once the owner lets the teammate in; one on its way when the line drops
-// fails as `offline`. The line is made again every few seconds, and the
-// host's `hello` on it resyncs the page, unless the host turned the page
-// away: then every call fails with the host's reason.
+// and `onLine`, how the line is. The relay is at the page's own origin,
+// which serves it; the page's address names the room and maybe the doc:
+// `?room=<room>&doc=<path in the project>`; the line names who the page is,
+// as `identity()` says when the first call makes it. Calls wait for the
+// host's `hello`, which comes once the owner lets the teammate in; one on
+// its way when the line drops fails as `offline`. The line is made again,
+// after 2 seconds and twice as long each time up to 30 (a page left open
+// while the host sleeps costs the relay little), and the host's `hello` on
+// it resyncs the page, unless the host turned the page away: then every
+// call fails with the host's reason.
 
 const RETRY_MS = 2000;
+const MAX_RETRY_MS = 30_000;
 const HOST_AWAY = 4000; // the relay: no host in the room (relay/worker.js)
 const TURNED_AWAY = 4001; // the host, with its reason
 
 /**
- * The doc host reached through the relay the page's `params` name, as
- * `identity()`: { key, made once in this browser; name }.
+ * The doc host reached through the relay at `relay` (a ws: or wss: URL),
+ * in the room the page's `params` name, as `identity()`: { key, made once
+ * in this browser; name }.
  */
-export function relayHost(params, identity) {
+export function relayHost(relay, params, identity) {
   let url = null;
   let socket = null;
+  let retry = RETRY_MS;
   let online = false; // the host said hello on this line
   let served = false; // and on some line before
   let refused = null; // the host's reason for turning the page away
@@ -37,13 +42,14 @@ export function relayHost(params, identity) {
   };
 
   function connect() {
-    url ??= `${params.get('relay')}/rooms/${params.get('room')}?${new URLSearchParams({ ...(params.get('doc') ? { doc: params.get('doc') } : {}), ...identity() })}`;
+    url ??= `${relay}/rooms/${params.get('room')}?${new URLSearchParams({ ...(params.get('doc') ? { doc: params.get('doc') } : {}), ...identity() })}`;
     socket = new WebSocket(url);
     socket.addEventListener('message', ({ data }) => {
       const message = JSON.parse(data);
       if (message.event === 'waiting') return setLine({ reason: 'waiting' });
       if (message.event === 'hello') {
         online = served = true;
+        retry = RETRY_MS;
         setLine(null);
         for (const request of unsent.splice(0)) send(request);
       }
@@ -66,7 +72,8 @@ export function relayHost(params, identity) {
       for (const done of calls.values()) done({ error: { message: 'The host is offline', code: 'offline' } });
       calls.clear();
       setLine({ reason: code === HOST_AWAY ? (served ? 'host' : 'nohost') : 'relay' });
-      setTimeout(connect, RETRY_MS);
+      setTimeout(connect, retry);
+      retry = Math.min(2 * retry, MAX_RETRY_MS);
     };
     socket.addEventListener('error', () => setTimeout(() => lost({}), 100)); // its `close`, if one comes, says more
     socket.addEventListener('close', lost);
@@ -112,4 +119,5 @@ const REFUSED = {
   denied: 'The owner did not let you in',
   removed: 'The owner removed you from this project',
   link_replaced: 'This link no longer works: ask the owner for the new one',
+  full: 'Too many people are on this project at once',
 };

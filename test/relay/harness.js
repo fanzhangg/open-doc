@@ -15,13 +15,17 @@ import { relayHost } from '../../web/relay.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
-/** The relay, started: { url, room(secret), stop() }. */
+/**
+ * The relay, started, serving the teammate's page from dist/web (`npm run
+ * build` first): { url, its ws: URL; origin, its http: one; stop() }.
+ */
 export async function startRelay() {
   const wrangler = createRequire(join(root, 'relay', 'package.json')).resolve('wrangler');
   process.env.WRANGLER_LOG ??= 'error'; // not every request
   const { unstable_startWorker } = await import(pathToFileURL(wrangler).href);
   const worker = await unstable_startWorker({ config: join(root, 'relay', 'wrangler.toml'), dev: { server: { hostname: '127.0.0.1', port: 0 }, inspector: false, watch: false } });
-  return { url: `ws://${(await worker.url).host}`, stop: () => worker.dispose() };
+  const { host } = await worker.url;
+  return { url: `ws://${host}`, origin: `http://${host}`, stop: () => worker.dispose() };
 }
 
 /** The room of `secret`, as a link names it. */
@@ -89,7 +93,7 @@ export const page = (relay, secret, who, doc = null) => pageAt(relay, roomOf(sec
 
 /** The same, in room `room`. */
 export function pageAt(relay, room, who, doc = null) {
-  const host = relayHost(new URLSearchParams({ relay, room, ...(doc ? { doc } : {}) }), () => who);
+  const host = relayHost(relay, new URLSearchParams({ room, ...(doc ? { doc } : {}) }), () => who);
   const events = [];
   const lines = [];
   const listeners = [];

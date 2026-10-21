@@ -51,7 +51,7 @@ const callOn = (line) => (type, arg) => new Promise((resolve, reject) => later(a
 let teammate = null;
 async function teammateLine() {
   const { room, key } = await bridge.share();
-  const line = relayHost(new URLSearchParams({ relay: RELAY, room }), () => ({ key, name: 'Sam' }));
+  const line = relayHost(RELAY, new URLSearchParams({ room }), () => ({ key, name: 'Sam' }));
   line.onEvent((name, data) => {
     if (name === 'ops' && line === teammate) for (const c of collab.clients) if (c.teammate) later(() => c.client.receive(data));
   });

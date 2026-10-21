@@ -5,7 +5,7 @@
 import { identity } from './join.js';
 import { relayHost } from './relay.js';
 
-const host = window.opendocHost ?? relayHost(new URLSearchParams(location.search), identity);
+const host = window.opendocHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
 
 async function call(type, arg) {
   const { result, error } = await host.call(type, arg);
