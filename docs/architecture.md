@@ -235,8 +235,8 @@ yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
 teammates who edit, and `cursor`. The door is built for the owner, AI
 buddies and a teammate's page that reads (#223, #226); ProjectService
-(#229) and Team (#227) are behind it, but an agent still reads more than
-it shows (#230).
+(#229) and Team (#227) are behind it, and an agent reads only the
+project's mirror, what ProjectService shows (#230).
 
 **Every writer comes through one door.** A page's call comes as
 `call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call
@@ -372,6 +372,7 @@ written only by the app.
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
+| `mirrors/` | each project's mirror: a copy of what the project shows, for agents to read (`src/host/mirror.js`) |
 | `team/` | each project's link (the secret its room is made from) and teammates, `{ id, name, level }`, in a file named by the SHA-256 of the project folder's real path: a project that moves must allow its teammates again |
 
 ## A buddy's turn
@@ -389,7 +390,11 @@ buddies run only on docs open in a window.
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
-   `OPENDOC_BUDDY` (the name is for the script; the app goes by id).
+   `OPENDOC_BUDDY` (the name is for the script; the app goes by id). In
+   project mode the project is its mirror, brought up to date first: a copy
+   in the config folder of what ProjectService shows, but `node_modules`
+   and files that are not text or are over 20 MB, so an agent never learns
+   the real path or reads what a teammate may not.
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.
 3. On exit 0, DocService saves versions before and after, lands the doc

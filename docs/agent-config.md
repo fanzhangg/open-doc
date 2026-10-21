@@ -14,7 +14,7 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | stdin | the prompt: who the buddy is, the thread, the rules |
 | `OPENDOC_DOC` | the doc copy's path |
 | `OPENDOC_COMMENTS` | the sidecar copy's path |
-| `OPENDOC_PROJECT` | the project folder; empty in doc mode |
+| `OPENDOC_PROJECT` | the project's mirror (see [Permissions](#permissions)); empty in doc mode |
 | `OPENDOC_BUDDY` | the buddy's name |
 | `OPENDOC_SETTING_<KEY>` | each of the agent's [settings](#settings) |
 | stdout | the reply; may be empty |
@@ -100,10 +100,20 @@ does not do this yet.
 ## Permissions
 
 OpenDoc sets only what the contract needs: the working folder, the copy,
-the project folder in project mode. The script makes the run unattended and
-lets it edit the copy. The shipped scripts keep the project read only: its
-files are the user's, and an edit there would skip the merge, the receipt
-and Undo.
+the project's mirror in project mode. The script makes the run unattended
+and lets it edit the copy. The shipped scripts keep the project read only:
+an edit there would skip the merge, the receipt and Undo.
+
+The mirror is a copy of what the project shows to everyone on it
+(ProjectService: no name starting with `.`, no link out of the project),
+without `node_modules` and holding only text files of 20 MB or less. It is
+in the config folder, brought up to date before each run by size and
+mtime, with copy-on-write clones where the file system has them. What an
+agent reads can land in a doc teammates read, so the agent is never told
+the real project folder. That fully limits Claude Code, which reads only
+its working folder and the `--add-dir` it is given. Codex is not
+sandboxed: its `workspace-write` sandbox reads the whole disk, and the
+mirror only keeps the real path from it.
 
 Everything else (web, shell, which files it may read or write) is the CLI's
 own config (`~/.claude/settings.json`, `~/.codex/config.toml`), as when you

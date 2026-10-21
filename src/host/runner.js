@@ -24,8 +24,8 @@ export class Runner {
    * comments }, `comments` the sidecar's text or null.
    * `agent()` resolves to the agent that runs every buddy: { script (its
    * path), settings ({ <key>: value }, each handed to the run as
-   * OPENDOC_SETTING_<KEY>) }. `folder()` is the project
-   * folder or null, `human()` the user, { name, about }. `finish(result)` takes a run
+   * OPENDOC_SETTING_<KEY>) }. `folder()` resolves to the project folder
+   * the agent is given (its mirror, mirror.js) or null, `human()` the user, { name, about }. `finish(result)` takes a run
    * that ended: { threadId, id, name, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
@@ -124,7 +124,7 @@ export class Runner {
       const before = comments ?? `${JSON.stringify({ opendoc: FORMAT_VERSION })}\n`;
       await writeFile(sidecar, before);
       const { script, settings } = await this.agent();
-      const folder = this.folder();
+      const folder = await this.folder();
       const prompt = buildPrompt({ buddy, buddies, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
       const at = Date.now();
       const result = await runScript(script, { cwd: dir, prompt, timeoutMs: this.timeoutMs, env: {
