@@ -3,9 +3,9 @@
 // `opendoc` (`opendoc.cmd` on Windows) next to it, on your own node, under
 // the contract of docs/agent-config.md. Yours to change.
 
-import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { text } from 'node:stream/consumers';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 const ENDPOINT = 'http://localhost:11434/v1';
 const MODEL = 'qwen3';
 const KEY = process.env.OPENAI_API_KEY;
+
+// Each turn's messages, a line each, next to the app's own logs.
+const LOG = fileURLToPath(new URL('../logs/opendoc.jsonl', import.meta.url));
 
 const STEPS = 20;
 const MAX_READ = 20_000; // characters a read without `lines` returns
@@ -207,20 +210,27 @@ async function infer(messages, tools) {
 }
 
 // The contract: the prompt on stdin, the copies' paths in the environment,
-// the edits applied to the copies, the reply on stdout.
+// the edits applied to the copies, the reply on stdout. Then the log.
 async function main() {
-  const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: project } = process.env;
+  const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: project, OPENDOC_BUDDY: buddy } = process.env;
   const readable = files({ doc, sidecar, project });
+  const at = new Date().toISOString();
+  let messages = []; // the turn's, which it goes on adding to after each step
+  let error = null;
   try {
-    const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer, readFile: readable });
+    const step = (sent, tools) => infer((messages = sent), tools);
+    const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer: step, readFile: readable });
     const texts = apply(edits, { doc, sidecar }, { doc: await readable(doc), sidecar: await readable(sidecar) });
     await writeFile(doc, texts.doc);
     await writeFile(sidecar, texts.sidecar);
     process.stdout.write(reply);
-  } catch (error) {
-    process.stderr.write(`${error.message}\n`);
+  } catch (failure) {
+    error = failure.message;
+    process.stderr.write(`${error}\n`);
     process.exitCode = 1;
   }
+  await mkdir(dirname(LOG), { recursive: true });
+  await appendFile(LOG, `${JSON.stringify({ at, buddy, error, messages })}\n`);
 }
 
 if (realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) await main(); // run, not imported by a test

@@ -1,5 +1,5 @@
 // The OpenDoc agent (docs/opendoc-agent.md): `turn` with a fake `infer`, and
-// the shipped script once, on a fake Chat Completions server.
+// the shipped script once, on a fake Chat Completions server, with its log.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -158,6 +158,12 @@ test('the shipped script runs a turn under the contract, on a Chat Completions s
     const failed = await run();
     assert.equal(failed.code, 1);
     assert.match(failed.stderr, /400 {"error":"no such model"}/);
+
+    const log = (await readFile(join(config, 'logs', 'opendoc.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    assert.deepEqual(log.map((entry) => [entry.buddy, entry.messages.map((m) => m.role), entry.error]), [
+      ['Ada', ['user', 'assistant'], null],
+      ['Ada', ['user'], failed.stderr.trim()],
+    ], 'each turn\'s messages are logged');
   } finally {
     server.close();
   }
