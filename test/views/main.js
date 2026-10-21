@@ -10,7 +10,7 @@
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
 // `collab:release` hold Pilot's turns and let them go. The project has a
 // link and Sam, a teammate who can edit; `collab:share` shares it through
-// the relay at OPENDOC_RELAY and answers the link's secret and room and
+// the relay at PONJO_RELAY and answers the link's secret and room and
 // Sam's key (test/collab.test.js, test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
 // `?delay=0`.
 
@@ -30,7 +30,7 @@ app.whenReady().then(async () => {
   window.loadFile(process.env.VIEWS_PAGE, { search: process.env.VIEWS_SEARCH ?? '' });
 
   const config = await fakeConfig();
-  const host = utilityProcess.fork(join(here, '..', '..', 'desktop', 'doc-host.js'), [], { env: { OPENDOC_RELAY: '', ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: config } });
+  const host = utilityProcess.fork(join(here, '..', '..', 'desktop', 'doc-host.js'), [], { env: { PONJO_RELAY: '', ...process.env, PONJO_CONFIG_DIR: config, FAKE_DIR: config } });
   const ready = new Promise((done) => host.once('message', done)); // { type: 'ready' }
   const asked = new Map();
   let nextId = 0;

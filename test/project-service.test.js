@@ -16,8 +16,8 @@ const notFound = (error) => error.code === 'not_found';
 
 // A project (its real path) holding `files` ({ path: text }), and a folder outside it.
 async function project(files) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
-  const outside = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-outside-')));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
+  const outside = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-outside-')));
   await writeFile(join(outside, 'secret.md'), 'outside\n');
   for (const [path, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, path)), { recursive: true });

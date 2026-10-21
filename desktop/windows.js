@@ -227,7 +227,7 @@ async function leave(view) {
     timer = setTimeout(() => reject(new Error('the last edit is still being saved')), CLOSE_PATIENCE_MS);
   });
   try {
-    return await Promise.race([view.webContents.executeJavaScript('window.opendocLeave ? window.opendocLeave() : null', true), late]);
+    return await Promise.race([view.webContents.executeJavaScript('window.ponjoLeave ? window.ponjoLeave() : null', true), late]);
   } catch (error) {
     stay(view);
     throw new Error(`The last edit is not saved yet: ${String(error.message ?? error).replace(/^.*Error: /, '')}.`);
@@ -238,7 +238,7 @@ async function leave(view) {
 
 // The page keeps its doc after all: it takes input again.
 function stay(view) {
-  if (!view.webContents.isDestroyed()) view.webContents.executeJavaScript('window.opendocStay?.()', true).catch(() => {});
+  if (!view.webContents.isDestroyed()) view.webContents.executeJavaScript('window.ponjoStay?.()', true).catch(() => {});
 }
 
 // Wait until the page in `view` has drawn its doc and sidebar; a page that
@@ -246,7 +246,7 @@ function stay(view) {
 async function drawn(view) {
   let timer;
   await Promise.race([
-    view.webContents.executeJavaScript('window.opendocReady ?? null', true).catch(() => {}),
+    view.webContents.executeJavaScript('window.ponjoReady ?? null', true).catch(() => {}),
     new Promise((resolve) => { timer = setTimeout(resolve, READY_PATIENCE_MS); }),
   ]);
   clearTimeout(timer);
@@ -290,7 +290,7 @@ export function setExpanded(win, rel, open) {
  */
 export function relist(entry) {
   if (!entry.folder || entry.win.isDestroyed()) return;
-  for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.send('opendoc:folder-changed');
+  for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.send('ponjo:folder-changed');
 }
 
 /**
@@ -332,7 +332,7 @@ export async function closeDocWindow(entry) {
 async function attachFolder(entry, folder) {
   await entry.hosted.setFolder(folder);
   watch(entry, folder);
-  entry.view.webContents.send('opendoc:folder-changed');
+  entry.view.webContents.send('ponjo:folder-changed');
 }
 
 function watch(entry, folder) {
@@ -400,12 +400,12 @@ export function showStartWindow() {
 
 /** Tell the start window its recent list changed. */
 export function refreshStartWindow() {
-  startWindow?.webContents.send('opendoc:recent-changed');
+  startWindow?.webContents.send('ponjo:recent-changed');
 }
 
 /** Tell the start window the user's settings changed (how it looks). */
 export function refreshSettings() {
-  startWindow?.webContents.send('opendoc:settings-changed');
+  startWindow?.webContents.send('ponjo:settings-changed');
 }
 
 function closeStartWindow() {
@@ -438,7 +438,7 @@ export async function connectPage(contents) {
   if (!hosted) return;
   const { port1, port2 } = new MessageChannelMain();
   await hosted.attach(port1);
-  if (!contents.isDestroyed()) contents.postMessage('opendoc:port', null, [port2]);
+  if (!contents.isDestroyed()) contents.postMessage('ponjo:port', null, [port2]);
 }
 
 // A page stays on its own file (`page`); links elsewhere open in the

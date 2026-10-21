@@ -68,7 +68,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 ### Runner — integration, fake script
 
 - The script runs in a new folder holding only the copy, gets the prompt on
-  stdin and `OPENDOC_DOC`, `OPENDOC_PROJECT` and `OPENDOC_BUDDY`, and its stdout becomes the
+  stdin and `PONJO_DOC`, `PONJO_PROJECT` and `PONJO_BUDDY`, and its stdout becomes the
   reply; the folder is gone after.
 - **The human edits during a run**: the human's text stays and the reply is
   marked `conflict`; nothing asks the user.
@@ -88,7 +88,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - Clippy's text is the user's `buddies/Clippy.md`, the same in every doc
   and in its runs; empty or missing, Clippy is as it ships; it keeps its
   name and cannot be deleted.
-- One agent script runs every buddy, with `OPENDOC_BUDDY` set;
+- One agent script runs every buddy, with `PONJO_BUDDY` set;
   **nothing in `.opendoc/` or a sidecar chooses a program**.
 - The same project's buddies have the same faces and colors everywhere;
   Clippy and up to seven buddies all have different colors.
@@ -104,7 +104,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 ### Sharing — two machines, by hand
 
 After each deploy of the relay (README, Deploying the relay). The owner on
-machine A runs the app from `main` with no `OPENDOC_RELAY`; the teammate is
+machine A runs the app from `main` with no `PONJO_RELAY`; the teammate is
 on machine B, on another network (a phone's hotspot will do), in a browser.
 
 1. **Invite.** A opens a project, Team > Invite link. The link is

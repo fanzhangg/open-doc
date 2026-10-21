@@ -450,7 +450,7 @@ function setSettings(patch) {
 // Ask the doc page in `win` to open part of its own UI.
 function pageCommand(win, name) {
   const page = windows.docFor(win)?.view ?? (windows.isStartWindow(win) ? win : null);
-  page?.webContents.send('opendoc:command', name);
+  page?.webContents.send('ponjo:command', name);
 }
 
 // Someone asks to join the project in `folder`: a notification, whose click
@@ -780,7 +780,7 @@ const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
   const entry = sidebarOf(win);
   const path = await checkInFolder(entry, rel, kind);
-  const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
+  const command = (action) => () => contents.send('ponjo:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
   const newFile = { label: 'New File', click: command('newFile') };
   const template = kind === 'root' ? [newFile] : [
@@ -803,12 +803,12 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
 // ---- requests from pages (preload.cjs) ----
 
 // A doc page asks for a message port to its doc (windows.connectPage).
-ipcMain.on('opendoc:connect', (event) => {
+ipcMain.on('ponjo:connect', (event) => {
   if (event.senderFrame !== event.sender.mainFrame) return;
   windows.connectPage(event.sender).catch((error) => console.error(error));
 });
 
-ipcMain.handle('opendoc:action', async (event, action, arg) => {
+ipcMain.handle('ponjo:action', async (event, action, arg) => {
   // A doc's page is in a view of its window; the start window's is the window's own.
   const win = windows.windowForContents(event.sender) ?? BrowserWindow.fromWebContents(event.sender);
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');

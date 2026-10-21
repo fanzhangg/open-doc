@@ -43,11 +43,11 @@ export const idOf = (key) => `p_${roomOf(key).slice(0, 24)}`;
  * (`secret`) and `sam`, a teammate who can read.
  */
 export async function project(text, doc = 'plan.md') {
-  const folder = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
+  const folder = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
   await writeFile(join(folder, doc), text);
   await mkdir(join(folder, '.opendoc'));
   await writeFile(join(folder, '.opendoc', 'secret.md'), 'hidden\n');
-  const config = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const config = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(config, 'settings.json'), JSON.stringify({ name: 'owner', agents: [] }));
   const secret = `s-${Math.random().toString(36).slice(2)}`;
   const sam = teammate('Sam');
@@ -61,7 +61,7 @@ export async function project(text, doc = 'plan.md') {
  * holds who asked to join, as the app hears it.
  */
 export async function startHost({ folder, config }, relay) {
-  const child = fork(join(root, 'desktop', 'doc-host.js'), [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config, OPENDOC_RELAY: relay }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+  const child = fork(join(root, 'desktop', 'doc-host.js'), [], { env: { ...process.env, PONJO_CONFIG_DIR: config, PONJO_RELAY: relay }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
   const joins = [];
   const asked = new Map();
   let nextId = 0;

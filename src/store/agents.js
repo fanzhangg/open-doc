@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { agentOf } from '../core/settings.js';
 import { configDir } from './settings.js';
 
-export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex', 'opendoc']);
+export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex', 'ponjo']);
 // The files a shipped script runs, written next to it: one for both platforms.
-const PROGRAMS = { opendoc: ['opendoc.mjs'] };
+const PROGRAMS = { ponjo: ['ponjo.mjs'] };
 const SHIPPED_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents');
 const extension = (platform) => (platform === 'win32' ? '.cmd' : '');
 

@@ -57,7 +57,7 @@ let relay;
 
 before(async () => {
   relay = await startRelay();
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-collab-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-collab-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
     bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
@@ -69,7 +69,7 @@ before(async () => {
 <div style="display:flex;height:100vh">${column}${column}</div>
 <script src="page.js"></script>`);
   const electron = createRequire(import.meta.url)('electron');
-  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), OPENDOC_RELAY: relay.url, VIEWS_SEARCH: `?${new URLSearchParams({ relay: relay.url })}` };
+  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), PONJO_RELAY: relay.url, VIEWS_SEARCH: `?${new URLSearchParams({ relay: relay.url })}` };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchElectron(electron, [join(root, 'test', 'views', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   page = await app.page('collab');

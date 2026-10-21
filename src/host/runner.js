@@ -25,7 +25,7 @@ export class Runner {
    * comments }, `comments` the sidecar's text or null.
    * `agent()` resolves to the agent that runs every buddy: { script (its
    * path), settings ({ <key>: value }, each handed to the run as
-   * OPENDOC_SETTING_<KEY>) }. `folder()` resolves to the project folder
+   * PONJO_SETTING_<KEY>) }. `folder()` resolves to the project folder
    * the agent is given (its mirror, mirror.js) or null, `human()` the user, { name, about }. `finish(result)` takes a run
    * that ended: { threadId, id, name, asker, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
@@ -117,7 +117,7 @@ export class Runner {
 
   async #run(run, thread, buddy, buddies) {
     const { name: docName, text: base, comments } = await this.doc();
-    const dir = await mkdtemp(join(tmpdir(), 'opendoc-run-'));
+    const dir = await mkdtemp(join(tmpdir(), 'ponjo-run-'));
     try {
       const copy = join(dir, docName);
       await writeFile(copy, base);
@@ -129,11 +129,11 @@ export class Runner {
       const prompt = buildPrompt({ buddy, buddies, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
       const at = Date.now();
       const result = await runScript(script, { cwd: dir, prompt, timeoutMs: this.timeoutMs, env: {
-        OPENDOC_DOC: copy,
-        OPENDOC_COMMENTS: sidecar,
-        OPENDOC_PROJECT: folder ?? '',
-        OPENDOC_BUDDY: buddy.name,
-        ...Object.fromEntries(Object.entries(settings).map(([key, value]) => [`OPENDOC_SETTING_${key.toUpperCase()}`, String(value ?? '')])),
+        PONJO_DOC: copy,
+        PONJO_COMMENTS: sidecar,
+        PONJO_PROJECT: folder ?? '',
+        PONJO_BUDDY: buddy.name,
+        ...Object.fromEntries(Object.entries(settings).map(([key, value]) => [`PONJO_SETTING_${key.toUpperCase()}`, String(value ?? '')])),
       }, onChild: (child) => {
         run.child = child;
         if (run.cancelled) killTree(child);

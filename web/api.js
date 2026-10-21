@@ -1,11 +1,11 @@
 // Talks to the doc in the doc host (src/host/doc-service.js) through the
-// line the desktop app's preload gives the page (window.opendocHost), or in
+// line the desktop app's preload gives the page (window.ponjoHost), or in
 // a plain browser through the relay (relay.js).
 
 import { identity } from './join.js';
 import { relayHost } from './relay.js';
 
-const host = window.opendocHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
+const host = window.ponjoHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
 
 async function call(type, arg) {
   const { result, error } = await host.call(type, arg);

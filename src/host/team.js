@@ -116,7 +116,7 @@ export function createTeam(folder, { settingsDir = configDir(), linkOf = null } 
     },
     /** A new link: every one before it ends. */
     async link() {
-      if (!linkOf) throw new TeamError('no_relay', 'sharing needs a relay: set OPENDOC_RELAY');
+      if (!linkOf) throw new TeamError('no_relay', 'sharing needs a relay: set PONJO_RELAY');
       await change((team) => {
         team.secret = randomBytes(24).toString('base64url');
       });

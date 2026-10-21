@@ -2,7 +2,7 @@
 # https://opendoc.ponjo.app. Deploy from here, after `npm ci && npm run build`
 # at the root: `cf deploy --dry-run`, then `cf deploy` (README.md, Sharing).
 # The tests run it locally with wrangler (test/relay/harness.js).
-name = "opendoc"
+name = "ponjo-relay"
 main = "worker.js"
 compatibility_date = "2026-07-01"
 workers_dev = false

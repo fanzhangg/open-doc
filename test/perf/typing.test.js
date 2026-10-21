@@ -45,7 +45,7 @@ const teammates = [];
 before(async () => {
   await promisify(execFile)(process.execPath, [join(root, 'scripts', 'build.js')]); // the page the relay serves
   relay = await startRelay();
-  dir = await mkdtemp(join(tmpdir(), 'opendoc-typing-'));
+  dir = await mkdtemp(join(tmpdir(), 'ponjo-typing-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
     bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
@@ -55,7 +55,7 @@ before(async () => {
 <div style="display:flex;flex-direction:column;height:100vh"><div class="od-toolbar"><span class="od-spacer"></span></div>
 <main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main></div>
 <script src="page.js"></script>`);
-  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), VIEWS_SEARCH: '?delay=0', OPENDOC_RELAY: relay.url };
+  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), VIEWS_SEARCH: '?delay=0', PONJO_RELAY: relay.url };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchElectron(electron, [join(root, 'test', 'views', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   page = await app.page('typing');
@@ -93,7 +93,7 @@ async function teammatePage({ room, key }) {
   // Sam, on this browser, as the page keeps them; then the page again, on a slow line.
   await shown.send('Page.enable'); // for the script below
   await shown.send('Page.addScriptToEvaluateOnNewDocument', { source: slowLine(LINE_MS) });
-  await shown.evaluate(`localStorage.setItem('opendoc.key', ${JSON.stringify(key)}); localStorage.setItem('opendoc.name', 'Sam'); location.reload()`);
+  await shown.evaluate(`localStorage.setItem('ponjo.key', ${JSON.stringify(key)}); localStorage.setItem('ponjo.name', 'Sam'); location.reload()`);
   await waitFor(async () => (await shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.innerText ?? ''`).catch(() => '')).includes('Ship the preview'), 30_000, 'the teammate\'s page');
   // When each x is shown there.
   await shown.evaluate(`{

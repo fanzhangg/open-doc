@@ -318,7 +318,7 @@ test('the relay limits pages, message sizes and rooms, so it is no free pipe', a
 test('the browser build asks a name, waits for Allow, then shows the doc read only, live', async () => {
   const shared = await project();
   const host = await startHost(shared);
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-relay-page-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-relay-page-'));
   const { link } = await asOwner(host, shared, 'team');
   const electron = createRequire(import.meta.url)('electron');
   const env = { ...process.env, RELAY_PAGE: link }; // the page as the Invite link opens it, from the relay

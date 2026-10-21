@@ -400,7 +400,7 @@ buddies run only on docs open in a window.
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
-   `OPENDOC_BUDDY` (the name is for the script; the app goes by id). In
+   `PONJO_BUDDY` (the name is for the script; the app goes by id). In
    project mode the project is its mirror, brought up to date first: a copy
    in the config folder of what ProjectService shows, but `node_modules`
    and files that are not text or are over 20 MB, so an agent never learns
@@ -474,7 +474,7 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   the room, lets no one pose as the host. The app's own doc host shares a
   project, at its link, once a doc of it opens, so a teammate's page gets
   the owner's edits straight from the host that orders them. The app's
-  relay is `wss://opendoc.ponjo.app` unless `OPENDOC_RELAY` names another
+  relay is `wss://opendoc.ponjo.app` unless `PONJO_RELAY` names another
   (empty: nothing is shared).
 - **Limits**, so the relay is no free pipe and stays within the Workers
   free plan: at most 20 pages in a room (one more is turned away, `full`),

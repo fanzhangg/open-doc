@@ -6,7 +6,7 @@
 ; picks that in Windows. Uninstalling removes only what was added here.
 
 !define OPENDOC_PROGID "OpenDoc.md"
-!define OPENDOC_MARK "OpenDoc"
+!define PONJO_MARK "OpenDoc"
 
 !macro openDocRegisterType EXT
   WriteRegNone SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${OPENDOC_PROGID}"
@@ -36,7 +36,7 @@
   EnumRegValue $0 SHCTX "Software\Classes\.md\ShellNew" 0
   ${If} ${Errors}
     WriteRegStr SHCTX "Software\Classes\.md\ShellNew" "NullFile" ""
-    WriteRegStr SHCTX "Software\Classes\.md\ShellNew" "${OPENDOC_MARK}" "1"
+    WriteRegStr SHCTX "Software\Classes\.md\ShellNew" "${PONJO_MARK}" "1"
   ${EndIf}
 
   ; Tell Explorer the file types changed.
@@ -50,7 +50,7 @@
   DeleteRegKey SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}"
 
   ClearErrors
-  ReadRegStr $0 SHCTX "Software\Classes\.md\ShellNew" "${OPENDOC_MARK}"
+  ReadRegStr $0 SHCTX "Software\Classes\.md\ShellNew" "${PONJO_MARK}"
   ${IfNot} ${Errors}
   ${AndIf} $0 == "1"
     DeleteRegKey SHCTX "Software\Classes\.md\ShellNew"

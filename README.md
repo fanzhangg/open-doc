@@ -29,7 +29,7 @@ npm install
 npm run build                 # bundle the editor into dist/web
 npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
-OPENDOC_RELAY=ws://127.0.0.1:8787 npm run desktop   # share through the relay run locally (`npx wrangler dev` in relay/, after the build), not wss://opendoc.ponjo.app
+PONJO_RELAY=ws://127.0.0.1:8787 npm run desktop   # share through the relay run locally (`npx wrangler dev` in relay/, after the build), not wss://opendoc.ponjo.app
 
 npm run lint
 npm ci --prefix relay         # once: wrangler, which runs the relay locally for the tests

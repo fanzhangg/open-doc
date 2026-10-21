@@ -135,7 +135,7 @@ export function agentOf(id, manifest) {
   return valid ? { id, name, about, settings } : { id, name: id, about: '', settings: [] };
 }
 
-// A field a manifest may declare. Its key names its variable, OPENDOC_SETTING_<KEY>.
+// A field a manifest may declare. Its key names its variable, PONJO_SETTING_<KEY>.
 function validField(field) {
   if (!isObject(field) || !/^[a-z][a-z0-9_]*$/.test(field.key) || !Object.hasOwn(FIELD_RULES, field.type) || typeof field.label !== 'string') return false;
   if (!['hint', 'group'].every((key) => typeof (field[key] ?? '') === 'string') || !isObject(field.when ?? {})) return false;

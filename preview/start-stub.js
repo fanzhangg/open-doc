@@ -16,7 +16,7 @@
     return Promise.resolve();
   };
 
-  window.opendocDesktop = {
+  window.ponjoDesktop = {
     openFolder: () => log('Open project…'),
     agentScripts: () => Promise.resolve({ agents: [{ id: 'claude', name: 'Claude Code', about: '', settings: [] }, { id: 'codex', name: 'Codex', about: '', settings: [] }], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents', secrets: {} }),
     resetAgentScript: (name) => log(`Reset ${name}`),

@@ -1,4 +1,4 @@
-// The Ponjo agent (docs/opendoc-agent.md): `turn` with a fake `infer`;
+// The Ponjo agent (docs/ponjo-agent.md): `turn` with a fake `infer`;
 // each provider's `infer` on a fake server of its API; and the shipped
 // script once, with its settings and its log.
 
@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { text } from 'node:stream/consumers';
-import { INFER, files, turn } from '../agents/opendoc.mjs';
+import { INFER, files, turn } from '../agents/ponjo.mjs';
 import { agentScript, installAgents } from '../src/store/agents.js';
 import { SAMPLE } from './helpers.js';
 
@@ -18,7 +18,7 @@ const HEADER = '{"opendoc":1}\n';
 
 /** A working folder holding copies of a doc and its sidecar: { dir, doc, sidecar }. */
 async function copies(content = SAMPLE) {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-agent-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-agent-'));
   const doc = join(dir, 'plan.md');
   const sidecar = `${doc}.opendoc.jsonl`;
   await writeFile(doc, content);
@@ -101,8 +101,8 @@ test('a long file reads as its outline, and in parts by line number', async () =
 
 test('in project mode the turn reads the project as the app shows it, and nothing hidden or outside', async () => {
   const { doc, sidecar } = await copies();
-  const project = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
-  const outside = await mkdtemp(join(tmpdir(), 'opendoc-outside-'));
+  const project = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
+  const outside = await mkdtemp(join(tmpdir(), 'ponjo-outside-'));
   await mkdir(join(project, 'notes'));
   await mkdir(join(project, '.git'));
   await writeFile(join(project, 'notes', 'a.md'), 'A\n');
@@ -191,14 +191,14 @@ test('the shipped script runs a turn under the contract, with its settings from 
   const answers = [];
   const api = await fakeApi(answers);
   try {
-    const config = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+    const config = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
     await installAgents(config, { platform: 'linux' });
     const { dir, doc, sidecar } = await copies();
     const settings = { PROVIDER: 'openai', ENDPOINT: api.url, MODEL: 'gpt-5', KEY: 'sk-secret-test', EFFORT: 'low' };
     const run = (PATH = `${dirname(process.execPath)}${delimiter}${process.env.PATH}`, own = settings) => new Promise((resolve) => {
-      const env = { ...process.env, PATH, OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: '', OPENDOC_BUDDY: 'Ada' };
-      for (const [key, value] of Object.entries(own)) env[`OPENDOC_SETTING_${key}`] = value;
-      const child = execFile(agentScript('opendoc', config, 'linux'), { cwd: dir, env }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr }));
+      const env = { ...process.env, PATH, PONJO_DOC: doc, PONJO_COMMENTS: sidecar, PONJO_PROJECT: '', PONJO_BUDDY: 'Ada' };
+      for (const [key, value] of Object.entries(own)) env[`PONJO_SETTING_${key}`] = value;
+      const child = execFile(agentScript('ponjo', config, 'linux'), { cwd: dir, env }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr }));
       child.stdin.on('error', () => {}); // a run that fails early need not read its prompt
       child.stdin.end('the prompt');
     });
@@ -217,7 +217,7 @@ test('the shipped script runs a turn under the contract, with its settings from 
     assert.equal(failed.stderr, `${api.url}/chat/completions: 404 {"error":"model \\"gpt-5\\" not found"}\nCheck the endpoint and the model.\nThe provider, endpoint, model and key are in Settings > Agents > Ponjo agent.\n`);
     assert.deepEqual(await run(undefined, { ...settings, KEY: '' }), { code: 1, stdout: '', stderr: 'No API key: set one in Settings > Agents > Ponjo agent.\n' });
 
-    const log = await readFile(join(config, 'logs', 'opendoc.jsonl'), 'utf8');
+    const log = await readFile(join(config, 'logs', 'ponjo.jsonl'), 'utf8');
     assert.deepEqual(log.trim().split('\n').map((l) => JSON.parse(l)).map((entry) => [entry.buddy, entry.messages.map((m) => m.role), entry.error]), [
       ['Ada', ['user', 'assistant'], null],
       ['Ada', ['user'], failed.stderr.trim()],

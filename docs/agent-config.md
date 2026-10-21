@@ -12,11 +12,11 @@ An agent is a filter ([architecture](architecture.md#a-run)):
 | --- | --- |
 | Working folder | new and private; holds only copies of the doc and its sidecar, under their names |
 | stdin | the prompt: who the buddy is, the thread, the rules |
-| `OPENDOC_DOC` | the doc copy's path |
-| `OPENDOC_COMMENTS` | the sidecar copy's path |
-| `OPENDOC_PROJECT` | the project's mirror (see [Permissions](#permissions)); empty in doc mode |
-| `OPENDOC_BUDDY` | the buddy's name |
-| `OPENDOC_SETTING_<KEY>` | each of the agent's [settings](#settings) |
+| `PONJO_DOC` | the doc copy's path |
+| `PONJO_COMMENTS` | the sidecar copy's path |
+| `PONJO_PROJECT` | the project's mirror (see [Permissions](#permissions)); empty in doc mode |
+| `PONJO_BUDDY` | the buddy's name |
+| `PONJO_SETTING_<KEY>` | each of the agent's [settings](#settings) |
 | stdout | the reply; may be empty |
 | Exit 0 | success; the app merges the doc copy's edits into the doc and adds the appended comments. Otherwise the reply is marked `failed`, with the end of the output. |
 
@@ -59,13 +59,13 @@ replaced (Reset to Default, a new version) without losing them.
 
 - The config folder is `~/Library/Application Support/OpenDoc/` on macOS.
   Never in a project: a shared folder must not decide what runs here.
-- Claude Code, Codex and the [Ponjo agent](opendoc-agent.md) ship, written
+- Claude Code, Codex and the [Ponjo agent](ponjo-agent.md) ship, written
   once when missing; then they are yours. Reset to Default writes one again.
 - An agent without a manifest is shown by its file name, with no settings.
 - One agent runs every buddy: Settings > Agents lists them, one picked. The
   picked one shows the fields of its manifest under it, and for a shipped
   agent, Reset to Default. To give one buddy another program, branch on
-  `OPENDOC_BUDDY` in it.
+  `PONJO_BUDDY` in it.
 
 ### Settings
 
@@ -82,15 +82,15 @@ A key is lower case letters, digits and `_`. Only the app's main process
 can decrypt a secret; it hands the secrets to the doc host, which runs the
 agents. A manifest that is not valid
 is ignored, as if there were none. A run gets each field as
-`OPENDOC_SETTING_<KEY>` (`model` → `OPENDOC_SETTING_MODEL`): the stored
+`PONJO_SETTING_<KEY>` (`model` → `PONJO_SETTING_MODEL`): the stored
 value or the default, a secret decrypted, empty when there is none. A shell
 script needs nothing to read them:
 
 ```sh
 #!/bin/sh
-exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-persistence \
-  ${OPENDOC_SETTING_MODEL:+--model "$OPENDOC_SETTING_MODEL"} \
-  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
+exec claude -p "@\"$PONJO_DOC\"" --permission-mode acceptEdits --no-session-persistence \
+  ${PONJO_SETTING_MODEL:+--model "$PONJO_SETTING_MODEL"} \
+  ${PONJO_PROJECT:+--add-dir "$PONJO_PROJECT" --disallowedTools "Edit(/$PONJO_PROJECT/**)"}
 ```
 
 `@"…"` attaches the doc copy to the prompt as already read, so Claude Code

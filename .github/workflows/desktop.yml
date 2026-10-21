@@ -113,7 +113,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: opendoc-${{ runner.os }}
+          name: ponjo-${{ runner.os }}
           path: |
             release/*.dmg
             release/*.exe

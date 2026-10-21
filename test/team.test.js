@@ -9,9 +9,9 @@ import { join } from 'node:path';
 import { createTeam } from '../src/host/team.js';
 
 async function newTeam() {
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fan' }));
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
+  const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
   await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
   await writeFile(join(folder, '.opendoc', 'buddies', 'Editor.md'), 'Edits.\n');
   const linkOf = (secret) => `page?room=${secret}`;

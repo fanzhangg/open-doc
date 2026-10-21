@@ -277,7 +277,7 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
   // `#heading` scrolls this doc; anything else is the app's to open.
   function follow(href) {
     if (href.startsWith('#')) editor.scrollToAnchor(href.slice(1));
-    else if (window.opendocDesktop) window.opendocDesktop.openLink(href).catch(() => {});
+    else if (window.ponjoDesktop) window.ponjoDesktop.openLink(href).catch(() => {});
     else window.open(href, '_blank', 'noopener');
   }
 
