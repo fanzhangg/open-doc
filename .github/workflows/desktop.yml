@@ -4,7 +4,8 @@
 # (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
 # that cannot open a doc never replaces a working one. The unit tests run
 # once, on Linux, and report without holding back the nightly; the buddy
-# concurrency stress test (npm run test:stress) does hold it back.
+# concurrency stress test (npm run test:stress) and the latency promise
+# (npm run test:perf) do hold it back.
 #
 # A pull request that changes only docs (docs/ or a top-level *.md) skips the
 # installers, the tests and the stress test: the `changes` job decides, and
@@ -133,6 +134,22 @@ jobs:
       - run: npm run build
       - run: xvfb-run -a npm test # the view contract tests open an Electron window
 
+  perf:
+    # The latency promise (docs/architecture.md, Latency): each view at its
+    # limits, typed in while a teammate's edits arrive. A few minutes.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: xvfb-run -a npm run test:perf # opens an Electron window
+
   stress:
     # The buddy concurrency stress test: deterministic, a couple of minutes.
     needs: changes
@@ -149,7 +166,7 @@ jobs:
       - run: npm run test:stress
 
   release:
-    needs: [build, stress] # not test: flaky unit tests show on the PR but do not hold back the nightly
+    needs: [build, stress, perf] # not test: flaky unit tests show on the PR but do not hold back the nightly
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

@@ -10,7 +10,7 @@ import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemi
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits } from '../../../src/core/diff.js';
+import { diffEdits, sameEnd, sameStart } from '../../../src/core/diff.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
@@ -53,10 +53,10 @@ const flashField = StateField.define({
  * view's (web/views/plain/index.js), changed through `saveSettings`; an editable
  * view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, color?: boolean, onChange?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, color = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
@@ -109,7 +109,8 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   });
 
   // The file's language, by its name, loads after the text is shown; no language, no colour.
-  const language = LanguageDescription.matchFilename(languages, name);
+  // Not `color`, no colour either (web/views/index.js: a long run is parsed again on each key).
+  const language = color ? LanguageDescription.matchFilename(languages, name) : null;
   language?.load().then((support) => {
     if (!destroyed) view.dispatch({ effects: syntax.reconfigure([support, syntaxHighlighting(defaultHighlightStyle)]) });
   }, () => {});
@@ -156,8 +157,14 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
    * buddy's change (`buddy`) also glows.
    */
   function applyText(next, { by = null, buddy = false } = {}) {
+    const before = crlf ? view.state.doc.toString() : currentText();
     crlf = isCrlf(next);
-    const edits = diffEdits(view.state.doc.toString(), next.replaceAll('\r\n', '\n'));
+    const after = next.replaceAll('\r\n', '\n');
+    // Only the lines between what the two texts start and end with are diffed:
+    // a long doc changes a few lines at a time.
+    const [head, tail] = sameLines(before, after);
+    const edits = diffEdits(before.slice(head, before.length - tail), after.slice(head, after.length - tail))
+      .map(({ from, to, edit }) => ({ from: from + head, to: to + head, start: edit.start + head, insert: edit.after }));
     if (edits.length === 0) {
       textOf = { doc: view.state.doc, text: next };
       return;
@@ -165,12 +172,12 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
     const flashId = Symbol('flash');
     const flashes = [];
     if (by) {
-      const added = edits.map(({ edit }) => [edit.start, edit.start + edit.after.length]);
+      const added = edits.map(({ start, insert }) => [start, start + insert.length]);
       if (!buddy) flashes.push(...added.filter(([from, to]) => from < to).map(([from, to]) => Decoration.mark({ class: 'od-flash', flashId }).range(from, to)));
       flashes.push(Decoration.widget({ widget: new Flag(by, buddy ? buddyColor(by) : null), side: -1, flashId }).range(added[0][0]));
     }
     view.dispatch({
-      changes: edits.map(({ from, to, edit }) => ({ from, to, insert: edit.after })),
+      changes: edits.map(({ from, to, insert }) => ({ from, to, insert })),
       effects: flashes.length > 0 ? addFlash.of(flashes) : [],
       annotations: [Transaction.addToHistory.of(false), fromDisk.of(true)],
     });
@@ -370,6 +377,15 @@ class Flag extends WidgetType {
     wrap.append(label);
     return wrap;
   }
+}
+
+// How many characters `a` and `b` share at the start and at the end, in whole lines.
+function sameLines(a, b) {
+  let head = sameStart(a, b);
+  head = head && a.lastIndexOf('\n', head - 1) + 1;
+  const tail = sameEnd(a, b, Math.min(a.length, b.length) - head);
+  const end = a.indexOf('\n', a.length - tail);
+  return [head, end === -1 ? 0 : a.length - end];
 }
 
 // Whether every line break of `text` is "\r\n".

@@ -5,6 +5,7 @@
 import { createMarkdownView } from '../../web/views/markdown/view.js';
 import { viewSettings } from '../../src/core/settings.js';
 import { plain } from '../../web/views/plain/index.js';
+import { markdown } from '../../web/views/markdown/index.js';
 
 const VIEWS = { markdown: createMarkdownView, plain: plain.createView };
 const stage = document.querySelector('.od-stage');
@@ -13,13 +14,20 @@ let view = null;
 const contract = {
   clicked: [],
   saved: [], // the settings changes the view asked to save
-  async make(name, text, options = {}) {
+  // `toolbar: true` gives a Markdown view its toolbar, with that view's settings.
+  async make(name, text, { toolbar = false, ...options } = {}) {
     await view?.destroy();
+    document.querySelector('.od-toolbar')?.remove();
     contract.clicked = [];
     contract.saved = [];
-    view = await VIEWS[name]({ stage, text, settings: viewSettings({ views: {} }, plain), ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
+    const bar = toolbar ? Object.assign(document.createElement('div'), { className: 'od-toolbar', innerHTML: '<span class="od-spacer"></span>' }) : null;
+    if (bar) document.body.prepend(bar);
+    const settings = viewSettings({ views: {} }, toolbar ? markdown : plain);
+    view = await VIEWS[name]({ stage, text, settings, toolbar: bar, ...options, onMarkClick: (id) => contract.clicked.push(id), saveSettings: (patch) => contract.saved.push(patch) });
     window.view = view;
   },
+  // Press toolbar button `command`, as a click does.
+  tool: (command) => document.querySelector(`.od-toolbar [data-command="${command}"]`).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })),
   // Put the selection on characters [start, end) of the first piece of text holding `quote`.
   async select(quote, start = 0, end = quote.length) {
     const editable = stage.querySelector('[contenteditable]');

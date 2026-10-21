@@ -7,7 +7,9 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { SIDECAR_SUFFIX, decodeText, moveDoc, sidecarPath } from '../src/store/files.js';
 
 export const DOC_EXTENSIONS = ['.md', '.markdown'];
-export const MAX_TEXT_BYTES = 1024 * 1024;
+// Room for the longest doc the Plain text view edits (5,000,000 characters,
+// web/views/plain/index.js), at up to 4 bytes a character.
+export const MAX_TEXT_BYTES = 20 * 1024 * 1024;
 const UNTITLED = 'Untitled';
 const MAX_UNTITLED = 10_000;
 

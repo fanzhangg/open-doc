@@ -17,6 +17,13 @@
 // test/views.test.js. To add a view, write one in a folder here and list it in
 // VIEWS. A doc opens in the view that is on and claims its extension, else in
 // the Plain text view, for any text file.
+//
+// A view keeps its latency promise (docs/architecture.md, Latency) only up to
+// a size, its `limits`: { chars, the doc's length, and blockChars, the
+// longest run of text without a blank line }. A doc past them opens in the
+// Plain text view, unless the person chooses the view anyway; past the Plain
+// text view's limits too, it opens read-only. The Plain text view colours
+// syntax only while no run is past its colorBlockChars.
 
 import { claims, viewSettings } from '../../src/core/settings.js';
 import { markdown } from './markdown/index.js';
@@ -24,10 +31,50 @@ import { plain } from './plain/index.js';
 
 const CLAIMING = [markdown];
 
+/**
+ * The latency promise every view keeps for a doc within its `limits`, while
+ * a teammate types too (docs/architecture.md, Latency), in milliseconds:
+ * from the text to an editable view; from a key to its character in the
+ * doc; from a teammate's edit arriving to it shown, the network aside; and
+ * the longest the page is ever busy at once after it opens.
+ * test/perf/latency.test.js holds every view to it at its limits.
+ */
+export const LATENCY = Object.freeze({
+  open: 3000,
+  keystroke: { median: 30, p95: 100 },
+  teammate: { median: 50, p95: 100 },
+  task: 500,
+});
+
 export const VIEWS = [markdown, plain];
 
-/** The view the doc named `name` opens in under `settings`: { id, createView, settings }, with its view's id and settings. */
-export function viewFor(name, settings) {
-  const view = CLAIMING.find((v) => claims(v, name) && viewSettings(settings, v).enabled) ?? plain;
-  return { id: view.id, createView: view.createView, settings: viewSettings(settings, view) };
+/**
+ * The view the doc named `name`, of text `text`, opens in under `settings`:
+ * { id, createView, settings, editable, color, tooLong }, with its view's id
+ * and settings; `color` when the Plain text view may colour its syntax (no
+ * run of it past colorBlockChars); `tooLong` when it is past the limits of
+ * the view that claims it. Such a doc opens as plain text unless `anySize`
+ * (the person chose that view anyway), while it is editable at all.
+ */
+export function viewFor(name, settings, text = '', { anySize = false } = {}) {
+  const claiming = CLAIMING.filter((v) => claims(v, name) && viewSettings(settings, v).enabled);
+  const editable = fits(plain, text);
+  const view = claiming.find((v) => (anySize && editable) || fits(v, text)) ?? plain;
+  return {
+    id: view.id, createView: view.createView, settings: viewSettings(settings, view),
+    editable, color: longestBlock(text) <= plain.limits.colorBlockChars, tooLong: claiming.length > 0 && !fits(claiming[0], text),
+  };
+}
+
+const fits = ({ limits }, text) => !limits || (text.length <= limits.chars && (!limits.blockChars || longestBlock(text) <= limits.blockChars));
+
+// The longest run of `text` without a blank line in it.
+function longestBlock(text) {
+  let longest = 0;
+  let start = 0;
+  for (const blank of text.matchAll(/\n[ \t\r]*\n/g)) {
+    longest = Math.max(longest, blank.index - start);
+    start = blank.index + blank[0].length;
+  }
+  return Math.max(longest, text.length - start);
 }

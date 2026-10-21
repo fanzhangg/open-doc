@@ -130,6 +130,7 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
 
   let frame = 0;
   function update() {
+    fade();
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
@@ -221,7 +222,13 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
     if (next.wordCount) recount();
     root.toggleAttribute('data-focus', next.focus);
     root.toggleAttribute('data-no-outline', !next.outline);
+    fade();
   }
+  // Focus mode fades the other blocks while the editor has focus. The page
+  // marks that itself, not by the editor's focus class: a style keyed on that
+  // would restyle every block of a long doc each time the editor gains or
+  // loses focus, focus mode or not.
+  const fade = () => host.toggleAttribute('data-fade', settings.focus && host.matches(':focus-within'));
   document.addEventListener('keydown', (event) => {
     const mod = mac ? event.metaKey : event.ctrlKey;
     if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'f') {
@@ -245,6 +252,7 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
       delete root.dataset.width;
       root.removeAttribute('data-focus');
       root.removeAttribute('data-no-outline');
+      host.removeAttribute('data-fade');
     },
   };
 }

@@ -118,7 +118,9 @@ async function start() {
   offerRename();
   paintNameChip();
 
-  made = viewFor(docName, settings.get());
+  openedText = initial.text;
+  made = chooseView(openedText);
+  showSize(made, openedText);
   editor = await makeView(made, initial.text);
   synced = initial.text;
   chrome = createChrome({
@@ -226,7 +228,7 @@ async function start() {
   });
   history = createHistory({
     api,
-    chooseView: () => viewFor(docName, settings.get()),
+    chooseView: (text) => viewFor(docName, settings.get(), text),
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
     onClose: () => editor.focus(),
@@ -298,6 +300,8 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
+    editable: chosen.editable,
+    color: chosen.color,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),
   });
@@ -310,8 +314,9 @@ function makeView(chosen, text) {
 let following = Promise.resolve();
 function followViews() {
   following = following.then(async () => {
-    const chosen = viewFor(docName, settings.get());
-    if (chosen.id !== made.id) await remakeView(chosen);
+    const chosen = chooseView(openedText);
+    showSize(chosen, openedText);
+    if (chosen.id !== made.id || chosen.editable !== made.editable) await remakeView(chosen);
     else if (chosen.settings && JSON.stringify(chosen.settings) !== JSON.stringify(made.settings)) {
       editor.applySettings(chosen.settings);
       await history.viewChanged(); // an open history view follows too
@@ -554,6 +559,39 @@ async function refreshThreads() {
   return refreshing;
 }
 
+// A doc too long for the view that claims it opens as plain text, with a
+// choice of that view anyway (for this window), and one too long for any,
+// read-only (web/views/index.js): the banner says so, unless the comments
+// have a notice of their own. The size is judged on the text the doc opened
+// with, so the view changes only when the person changes it, not as the doc
+// grows.
+let anySize = false;
+let openedText = '';
+let sizeNotice = null;
+const chooseView = (text) => viewFor(docName, settings.get(), text, { anySize });
+function showSize(chosen, text) {
+  const size = `${text.length.toLocaleString()} characters`;
+  sizeNotice = !chosen.editable ? { text: `This doc is too long to edit here (${size}), so it opens read-only.` }
+    : !chosen.tooLong ? null
+    : chosen.id === 'plain' ? { text: `This doc is long for the Markdown view (${size}), so it opens as plain text.`, action: 'Use the Markdown view' }
+    : { text: `This doc is long for the Markdown view (${size}): typing may lag.`, action: 'Open as plain text' };
+  paintNotice();
+}
+
+function paintNotice() {
+  const notice = comments?.notice ? { text: comments.notice } : sizeNotice;
+  noticeBanner.hidden = !notice;
+  noticeBanner.querySelector('.od-banner-text').textContent = notice?.text ?? '';
+  const action = noticeBanner.querySelector('[data-action="any-size"]');
+  action.hidden = !notice?.action;
+  action.textContent = notice?.action ?? '';
+}
+
+noticeBanner.querySelector('[data-action="any-size"]').addEventListener('click', () => {
+  anySize = !anySize;
+  followViews();
+});
+
 // Show the doc's comments (from state() or a comment request). Redrawing
 // every card for the same ones would stall typing.
 let failedShown = null; // ids of the failed replies on screen; null until the first update
@@ -570,8 +608,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   paintMarks();
   margin.update(threads, { id: myId, name: me }, edits);
   people?.render({ people: writers });
-  noticeBanner.hidden = !notice;
-  noticeBanner.querySelector('.od-banner-text').textContent = notice ?? '';
+  paintNotice();
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
   paintEmpty();

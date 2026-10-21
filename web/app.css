@@ -369,7 +369,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 /* focus mode: no toolbar or outline, everything but the current block recedes */
 [data-focus] .od-toolbar, [data-focus] .od-outline, [data-no-outline] .od-outline { display: none !important; }
 [data-focus] .od-editor .ProseMirror > * { transition: opacity 0.2s ease; }
-[data-focus] .od-editor .ProseMirror-focused > :not(.od-current) { opacity: 0.28; }
+[data-focus] .od-editor[data-fade] .ProseMirror > :not(.od-current) { opacity: 0.28; }
 [data-focus] .od-margin:not(:hover):not(:focus-within) { opacity: 0.4; }
 
 /* comment highlights */

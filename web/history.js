@@ -16,9 +16,9 @@ const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'shor
 const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 /**
- * `api` is web/api.js; `chooseView()` is the view the doc opens in (viewFor
- * in web/views/index.js); `commentOf(threadId)` is the text of the comment
- * a buddy's version answered, or null; `onRestore(id)` puts the doc back to
+ * `api` is web/api.js; `chooseView(text)` is the view a version of text
+ * `text` is shown in (viewFor in web/views/index.js); `commentOf(threadId)`
+ * is the text of the comment a buddy's version answered, or null; `onRestore(id)` puts the doc back to
  * version `id` and resolves once the page shows it.
  */
 export function createHistory({ api, chooseView, commentOf, onRestore, onClose }) {
@@ -69,7 +69,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   }
 
   async function remakeView() {
-    const chosen = chooseView();
+    const chosen = chooseView(shown?.text ?? '');
     if (view && chosen.id === viewId) return view.applySettings?.(chosen.settings);
     const old = view;
     view = await chosen.createView({ stage, text: '', editable: false, settings: chosen.settings });
@@ -189,6 +189,8 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
     }
     if (load !== loads) return; // another version was picked meanwhile
     shown = data;
+    await makeView(); // the view for this version's length
+    if (load !== loads) return;
     view.applyText(data.text);
     showChanges({ replay: true });
     showHeading();

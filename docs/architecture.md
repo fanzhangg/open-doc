@@ -113,8 +113,8 @@ or off alone (`settings.json`: `views` and `rules`, each by id).
 | --- | --- | --- |
 | Is | the doc's editor | how a format's edits merge, whoever made them: a buddy, another program |
 | Shape | has state (caret, undo, marks), so it is built in and not an extension point | a declaration of pure hooks: text in, verdict out; no state, no lifecycle, no I/O, no handle to the app |
-| Declared | `{ id, name, about, extensions, always?, createView, settings }` | `{ id, name, about, extensions, ...hooks }` |
-| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 1 MB) | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
+| Declared | `{ id, name, about, extensions, always?, limits?, createView, settings }` | `{ id, name, about, extensions, ...hooks }` |
+| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 20 MB); a view only for a doc within its `limits`, see Latency | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
 | Runs in | the page | the doc host (a buddy's edit) and the page (a change from outside), whatever the view |
 | Its settings | an ordered list of fields `{ key, type: 'switch' \| 'choice' \| 'number', label, hint?, default, group?, when? }`, rendered as its page in Settings > Views; `viewSettings` keeps a stored value only if its field allows it | the switch only: Settings > Rules; `ruleSettings` |
 | Must satisfy | the view contract, `test/views.test.js` | each hook's contract, below |
@@ -153,6 +153,38 @@ the core checks only that shape (values boolean, string or number) and keeps
 ids it does not know. Switching a view makes the affected views again from
 the same text in every window, the history's too, after saving pending
 typing; its own settings reach its view as they are.
+
+### Latency
+
+Writing feels natural only while the page keeps up, a teammate typing too.
+Every view keeps one promise (`LATENCY` in `web/views/index.js`) for any doc
+within its limits:
+
+| From | To | Within |
+| --- | --- | --- |
+| the doc's text | an editable view | 3 s |
+| a key | its character in the doc | 30 ms median, 100 ms p95 |
+| a teammate's edit arriving | it shown (the network aside) | 50 ms median, 100 ms p95 |
+| the doc opened | the end of any one task that keeps the page busy | 500 ms |
+
+A view keeps it only up to a size, its `limits`: how long the doc is, and
+for the Markdown view how long a run of text without a blank line is (one
+paragraph is parsed whole on every edit in it):
+
+| View | Up to | Past it |
+| --- | --- | --- |
+| Markdown | 100,000 characters; no block over 10,000 | opens as plain text, and says so; the person may choose the Markdown view anyway, for that window |
+| Plain text | 5,000,000 characters | opens read-only, and says so |
+| Plain text's colour | no block over 10,000 characters | the doc opens without colour |
+
+The desktop app opens text files up to 20 MB, room for the plain view's
+limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
+job on every pull request) opens each view at its limits, in the doc shape
+that costs it most, types while a teammate's edits arrive, and fails when
+the promise is missed twice running. Two dependencies are quadratic in one
+paragraph's length; installs and builds patch them in node_modules, for the
+page and the doc host alike (`scripts/patch-deps.js`), until
+they are fixed upstream.
 
 ### Interfaces
 

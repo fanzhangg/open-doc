@@ -158,6 +158,33 @@ test('markdown view: typed Markdown stays text and saves escaped', async () => {
   assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
 });
 
+test('markdown view: a block someone else makes a list or a heading keeps the caret at its character', async () => {
+  await make('markdown', 'Alpha beta gamma.\n\nOther.\n');
+  await select('Alpha beta', 10, 10);
+  await run(`view.applyText('- Alpha beta gamma.\\n\\nOther.\\n')`);
+  await type('X');
+  assert.equal(await getText(), '- Alpha betaX gamma.\n\nOther.\n');
+  await run(`view.applyText('## Alpha betaX gamma.\\n\\nOther.\\n')`);
+  await type('Y');
+  assert.equal(await getText(), '## Alpha betaXY gamma.\n\nOther.\n');
+});
+
+test('markdown view: the toolbar switches a numbered list to bullets and back', async () => {
+  await make('markdown', '1. one\n2. two\n', { toolbar: true });
+  await select('two', 3, 3);
+  await run(`contract.tool('bullets')`);
+  assert.equal(await getText(), '- one\n- two\n');
+  await run(`contract.tool('numbers')`);
+  assert.equal(await getText(), '1. one\n2. two\n');
+});
+
+test('markdown view: a change applied with who made it glows, with their name', async () => {
+  await make('markdown', 'Alpha.\n\nBeta.\n');
+  await run(`view.applyText('Alpha.\\n\\nBeta two.\\n', { by: 'Ana' })`);
+  assert.equal(await run(`contract.drawn('.od-flash')`), ' two');
+  assert.equal(await run(`contract.drawn('.od-flag')`), 'Ana');
+});
+
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);

@@ -29,10 +29,12 @@ npm install
 npm run build                 # bundle the editor into dist/web
 npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
+node preview/collab.js        # two people writing in one doc, to try by hand (after build)
 
 npm run lint
 npm test                      # unit and integration tests
 npm run test:stress           # stress tests
+npm run test:perf             # each view keeps its latency promise at its limits
 npm run smoke:desktop         # launch the built app and check it
 
 npm run pack:desktop          # unpacked app in release/
