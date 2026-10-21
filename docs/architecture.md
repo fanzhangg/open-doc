@@ -268,7 +268,9 @@ for its own edit; `yields`, and a buddy's `reply` and `by`): a window
 rebases what it has typed and not yet heard back (`web/client.js`). The
 epoch changes when the doc host starts: a window that sees a new one takes
 `diffOps(the text it last heard, the new text)` as what landed and rebases
-on that, the same function again. A window's edit on a rev the log no
+on that, the same function again; its edit on its way is in that text if
+the new host lists it as `landed`, read from what the one before noted, in
+the doc's history folder, just before it last wrote the file. A window's edit on a rev the log no
 longer holds is refused as `stale`, and the window does the same. The log
 holds the last 1,000 edits, for windows' edits only: a buddy's turn, an
 outside change and an undo each have their base text (the turn's copy, the
@@ -358,7 +360,7 @@ written only by the app.
 | `settings.json` | the user's id and name; editor preferences; views' and rules' settings; which agent runs buddies |
 | `agents/` | agent scripts; Claude Code, Codex and the OpenDoc agent ship |
 | `state.json` | recent docs and folders, window bounds |
-| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore |
+| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
 | `team/` | *planned:* each project's teammates and their access |
 
 ## A buddy's turn
