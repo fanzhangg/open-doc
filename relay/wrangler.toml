@@ -1,12 +1,13 @@
 # The relay and the teammate's page (docs/architecture.md, Sharing), at
-# https://opendoc.ponjo.app. Deploy from here, after `npm ci && npm run build`
-# at the root: `cf deploy --dry-run`, then `cf deploy` (README.md, Sharing).
+# https://ponjo.app. Deploy from here, after `npm ci && npm run build`
+# at the root: `npx wrangler deploy --dry-run`, then `npx wrangler deploy`
+# (README.md, Sharing).
 # The tests run it locally with wrangler (test/relay/harness.js).
-name = "opendoc"
+name = "ponjo"
 main = "worker.js"
 compatibility_date = "2026-07-01"
 workers_dev = false
-routes = [{ pattern = "opendoc.ponjo.app", custom_domain = true }]
+routes = [{ pattern = "ponjo.app", custom_domain = true }]
 
 # The teammate's page, team.html, and what it loads (scripts/build.js).
 [assets]

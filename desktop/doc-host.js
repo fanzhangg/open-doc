@@ -39,7 +39,7 @@ import { createTeam } from '../src/host/team.js';
 import { renameFile } from './files.js';
 import { firstDoc, listDocs } from './folder.js';
 
-const RELAY = process.env.OPENDOC_RELAY ?? 'wss://opendoc.ponjo.app';
+const RELAY = process.env.OPENDOC_RELAY ?? 'wss://ponjo.app';
 
 // An Electron utility process; plain Node's child_process.fork in the tests.
 const channel = process.parentPort
