@@ -172,7 +172,17 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 
 /* the People panel: who is in the doc, like a shared doc's people list */
-.od-panel[data-card="buddies"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.od-panel[data-card="team"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.od-people-list .od-setting-group { margin: 12px 0 2px; }
+.od-people-none { padding: 4px 0; color: var(--text-faint); font-size: 12px; }
+.od-people-invite { display: flex; gap: 6px; }
+.od-people-invite .od-icon { width: 14px; height: 14px; }
+.od-people-pending { padding: 4px 0 8px; }
+.od-people-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.od-teammate-row { margin-top: 12px; }
+.od-join { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; gap: 12px; width: 320px; height: fit-content; margin: auto; padding: 24px; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow-raised); }
+.od-join-text { margin: 0; color: var(--text-soft); font-size: 13px; }
+.od-join .od-input { width: auto; }
 .od-people-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .od-people-row { display: flex; align-items: center; gap: 8px; margin: 0 -8px; }
 .od-people-row:not(.od-people-new):hover { background: var(--hover); }

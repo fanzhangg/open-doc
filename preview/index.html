@@ -35,7 +35,7 @@
     <div class="od-people">
       <button class="od-me" type="button" title="You"></button>
       <div class="od-agents" aria-label="Buddies in this doc"></div>
-      <button class="od-invite" type="button" data-icon="users" data-tip="Buddies in this doc" aria-label="Buddies" aria-haspopup="dialog"></button>
+      <button class="od-invite" type="button" data-icon="users" data-tip="Team" aria-label="Team" aria-haspopup="dialog"></button>
     </div>
     <button class="od-icon-btn od-settings-toggle" type="button" data-icon="settings" data-tip="Settings" data-keys="Mod+," aria-label="Settings" aria-haspopup="dialog"></button>
   </header>
@@ -94,6 +94,14 @@
   </main>
 
   <div class="od-tip" role="tooltip" hidden></div>
+
+  <form class="od-join" hidden>
+    <div class="od-card-title">Join this project</div>
+    <p class="od-join-text">Pick the name others see you by. The owner then lets you in.</p>
+    <input class="od-input" type="text" maxlength="64" spellcheck="false" autocomplete="nickname" aria-label="Your name" placeholder="Your name">
+    <div class="od-input-error" hidden></div>
+    <button class="od-primary" type="submit">Join</button>
+  </form>
 
 </body>
 </html>
