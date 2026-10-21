@@ -189,19 +189,22 @@ export function threadsOf(comments, mentionable = []) {
  * what was asked before it, so reopening asks no one.
  */
 export function askedOf(thread, askers) {
-  if (thread.resolved) return [];
-  const add = (list, id) => { if (!list.includes(id) && !askers.includes(id)) list.push(id); };
-  const theirs = [];
-  add(theirs, thread.comments[0].by.id);
-  const asked = [];
+  return [...askedBy(thread, askers).keys()];
+}
+
+/** The same, each with who asked it: Map(buddy id → the id of the latest of `askers` who asks it). */
+export function askedBy(thread, askers) {
+  const asked = new Map();
+  if (thread.resolved) return asked;
+  const theirs = [thread.comments[0].by.id].filter((id) => !askers.includes(id));
   thread.comments.forEach((c, i) => {
-    if (c.resolved) asked.length = 0;
+    if (c.resolved) asked.clear();
     if (!askers.includes(c.by.id) || c.body.trim() === '') return;
     for (const id of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.id === id);
-      if (!answered) add(asked, id);
+      if (!answered && !askers.includes(id)) asked.set(id, c.by.id);
     }
-    for (const id of c.mentions) add(theirs, id);
+    for (const id of c.mentions) if (!theirs.includes(id) && !askers.includes(id)) theirs.push(id);
   });
   return asked;
 }

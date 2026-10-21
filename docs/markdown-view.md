@@ -65,7 +65,7 @@ The view's settings, on its page in Settings > Views:
   with who made them.
 - **Cursors:** an AI buddy's, at the passage it was asked about, with its
   name while it works. A teammate's, where they type (*planned*).
-- **Two people typing** (*planned*): see [Many writers](#many-writers).
+- **Two people typing:** see [Many writers](#many-writers).
 
 ### Earlier versions
 
@@ -162,9 +162,9 @@ change. The word count runs a few times a second at most.
 The host orders every edit as text operations on a revision
 ([Interfaces](architecture.md#interfaces)). Since the view already takes and
 gives text, the operations live in the page (`web/client.js`), with the
-contract as it is: plan A, in both views. Teammates typing at once are
-*planned* ([Sharing](architecture.md#sharing)); today the writers are the
-person, AI buddies and changes from outside.
+contract as it is: plan A, in both views. The writers are the owner,
+teammates who can edit ([Sharing](architecture.md#sharing)), AI buddies
+and changes from outside.
 
 ### Plan A: the view stays as it is
 

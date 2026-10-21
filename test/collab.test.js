@@ -3,7 +3,9 @@
 // typed into over the DevTools protocol as test/views.test.js does. Each
 // test is a must-pass case of plan A, or a measurement it logs.
 // COLLAB_SECONDS sets how long the random typing runs (300 for the five
-// minutes of case 6); COLLAB_MEASURE=1 runs the measurements.
+// minutes of case 6); COLLAB_MEASURE=1 runs the measurements. With
+// COLLAB_RELAY (a relay's URL, test/collab-team.test.js) the second view is
+// a teammate's page reaching the doc host through the relay.
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -63,7 +65,8 @@ before(async () => {
 <div style="display:flex;height:100vh">${column}${column}</div>
 <script src="page.js"></script>`);
   const electron = createRequire(import.meta.url)('electron');
-  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html') };
+  const relay = process.env.COLLAB_RELAY;
+  const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), ...(relay ? { OPENDOC_RELAY: relay, VIEWS_SEARCH: `?${new URLSearchParams({ relay })}` } : {}) };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchElectron(electron, [join(root, 'test', 'views', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   page = await app.page('collab');

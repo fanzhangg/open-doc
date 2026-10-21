@@ -216,6 +216,25 @@ test('a name taken on the project is refused, a request turned down is told so',
   }
 });
 
+test('a teammate set to Edit writes through the relay; a page is told when its level changes', async () => {
+  const shared = await project();
+  const host = await startHost(shared);
+  try {
+    const sam = page(shared.secret, shared.sam);
+    const { result: state } = await sam.call('state');
+    const edit = { ops: [{ from: 0, to: 0, insert: 'Sam: ' }], rev: state.rev, epoch: state.epoch, id: 'sam.1' };
+    assert.equal((await sam.call('submit', edit)).error.code, 'forbidden');
+    await asOwner(host, shared, 'setLevel', { id: idOf(shared.sam.key), level: 'write' });
+    await until(() => sam.events.find((e) => e.event === 'level'), 'the page told');
+    assert.deepEqual(sam.events.find((e) => e.event === 'level').data, { level: 'write' });
+    assert.equal((await sam.call('state')).result.level, 'write');
+    assert.ok((await sam.call('submit', edit)).result);
+    assert.equal(await readFile(join(shared.folder, 'plan.md'), 'utf8'), `Sam: ${TEXT}`);
+  } finally {
+    host.kill();
+  }
+});
+
 test('Remove turns a teammate\'s page away at once; a new link ends every old one', async () => {
   const shared = await project();
   const host = await startHost(shared);

@@ -290,6 +290,11 @@ async function start() {
     followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
+  // The owner set this teammate to Read or Edit: the page opens again as that.
+  events.on('level', () => {
+    reloading = true;
+    location.reload();
+  });
   // First on a new connection: the doc may have gone missing, or runs
   // started, since `state`, and the doc host may have started again.
   events.on('hello', (data) => {
@@ -369,8 +374,9 @@ async function remakeView(chosen) {
 
 // Leaving with typing that has not landed: hold the page until it has. A
 // browser asks before leaving; the desktop app retries closing until it is in.
+let reloading = false; // the page opens again as told: typing not landed is refused anyway
 window.addEventListener('beforeunload', (event) => {
-  if (client.idle()) return;
+  if (reloading || !client || client.idle()) return;
   event.preventDefault();
   event.returnValue = true;
   client.landed();

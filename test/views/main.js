@@ -9,9 +9,9 @@
 // text in a project folder and hands the page a port to it, as a window
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
 // `collab:release` hold Pilot's turns and let them go. The project has a
-// link and Sam, a teammate who can read; `collab:share` shares it through
-// the relay at OPENDOC_RELAY and answers the link's secret and Sam's key
-// (test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
+// link and Sam, a teammate who can edit; `collab:share` shares it through
+// the relay at OPENDOC_RELAY and answers the link's secret and room and
+// Sam's key (test/perf/typing.test.js, test/collab-team.test.js). VIEWS_SEARCH is the page's query, such as
 // `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';
@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeTeam } from '../../src/store/team.js';
 import { fakeConfig, tempDoc } from '../helpers.js';
-import { idOf } from '../relay/harness.js';
+import { idOf, roomOf } from '../relay/harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -53,8 +53,9 @@ app.whenReady().then(async () => {
     const path = await tempDoc(text);
     await mkdir(join(dirname(path), '.opendoc', 'buddies'), { recursive: true });
     const folder = await realpath(dirname(path));
-    const team = { secret: `s-${Math.random().toString(36).slice(2)}`, key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
-    await writeTeam(folder, { secret: team.secret, members: [{ id: idOf(team.key), name: 'Sam', level: 'read' }] }, config);
+    const secret = `s-${Math.random().toString(36).slice(2)}`;
+    const team = { secret, room: roomOf(secret), key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
+    await writeTeam(folder, { secret, members: [{ id: idOf(team.key), name: 'Sam', level: 'write' }] }, config);
     await writeFile(join(dirname(path), '.opendoc', 'buddies', 'Pilot.md'), '\n');
     const { docId } = await request('open', { docPath: path, folder });
     doc = { docId, path, folder, team };

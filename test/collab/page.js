@@ -5,7 +5,9 @@
 // (docs/markdown-view.md, Many writers): typing goes out as operations as
 // it is typed, one edit on its way at a time; before taking
 // the host's edits a view's text is read once more, the edits moved over
-// what it has not landed, and shown with applyText.
+// what it has not landed, and shown with applyText. With `?relay=<URL>`
+// the second view is a teammate who can edit, reaching the doc host through
+// the relay at URL (web/relay.js), as a browser page does.
 
 import { createMarkdownView } from '../../web/views/markdown/view.js';
 import { markdown } from '../../web/views/markdown/index.js';
@@ -15,8 +17,11 @@ import { resolveSettings, viewSettings } from '../../src/core/settings.js';
 import { apply } from '../../src/core/ot.js';
 import { createClient } from '../../web/client.js';
 import { rulesOf } from '../../src/rules/index.js';
+import { relayHost } from '../../web/relay.js';
 
-const DELAY = Number(new URLSearchParams(location.search).get('delay') ?? 150); // ms each way
+const params = new URLSearchParams(location.search);
+const DELAY = Number(params.get('delay') ?? 150); // ms each way
+const RELAY = params.get('relay');
 let inTransit = 0;
 const later = (fn) => {
   inTransit++;
@@ -33,16 +38,27 @@ bridge.onEvent((name, data) => {
   if (name !== 'ops' || data.epoch !== host.epoch) return;
   host.text = apply(host.text, data.ops);
   host.rev = data.rev;
-  for (const c of collab.clients) later(() => c.client.receive(data));
+  for (const c of collab.clients) if (!c.teammate) later(() => c.client.receive(data));
 });
 
-// A call to the doc host, 150 ms there and 150 ms back.
-const call = (type, arg) => new Promise((resolve, reject) => later(async () => {
-  const { result, error } = await bridge.call(type, arg);
+// A call to the doc host on `line`, 150 ms there and 150 ms back.
+const callOn = (line) => (type, arg) => new Promise((resolve, reject) => later(async () => {
+  const { result, error } = await line.call(type, arg);
   later(() => (error ? reject(Object.assign(new Error(error.message), { code: error.code })) : resolve(result)));
 }));
 
-function createHarnessClient(view, name) {
+// The teammate's line to the doc of `make`, through the relay, and the clients that hear it.
+let teammate = null;
+async function teammateLine() {
+  const { room, key } = await bridge.share();
+  const line = relayHost(new URLSearchParams({ relay: RELAY, room }), () => ({ key, name: 'Sam' }));
+  line.onEvent((name, data) => {
+    if (name === 'ops' && line === teammate) for (const c of collab.clients) if (c.teammate) later(() => c.client.receive(data));
+  });
+  return line;
+}
+
+function createHarnessClient(view, name, call) {
   const harness = {
     view, name,
     errors: [],
@@ -105,17 +121,20 @@ const collab = {
     await bridge.make(text);
     const { result: state } = await bridge.call('state');
     Object.assign(host, { text: state.text, rev: state.rev, epoch: state.epoch });
+    teammate = RELAY ? await teammateLine() : null;
     // As the app makes it: its size judged by viewFor, named as a Markdown doc.
     const sized = viewFor('doc.md', resolveSettings({}), text);
     const chosen = kind === 'auto' ? sized : { id: kind, editable: true, color: sized.color };
     const declared = chosen.id === 'plain' ? plain : markdown;
     const create = chosen.id === 'plain' ? plain.createView : createMarkdownView;
-    collab.clients = await Promise.all(stages.map(async (stage) => {
+    collab.clients = await Promise.all(stages.map(async (stage, i) => {
       let harness;
+      const line = i === 1 && teammate ? teammate : bridge;
       const toolbar = stage.closest('main').previousElementSibling;
       const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onEdit: () => harness.client.edited() });
-      harness = createHarnessClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
-      harness.client.start(state);
+      harness = createHarnessClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other', callOn(line));
+      harness.teammate = line === teammate;
+      harness.client.start(line === bridge ? state : (await line.call('state')).result);
       return harness;
     }));
     return { id: chosen.id, editable: chosen.editable };
