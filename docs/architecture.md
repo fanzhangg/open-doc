@@ -11,9 +11,10 @@ what it changed back in. (The code calls a turn a run: `Runner`,
 `runs.jsonl`.) [Sharing](#sharing): how a teammate's browser joins the same
 host.
 
-Sharing, and the revisions every edit goes through with it, are designed,
-not built. What they change is marked *planned*; everything else is what
-the code does.
+Sharing is built only as far as a teammate's page reading a doc through
+the relay; joining, Team and teammates who edit are designed, not built.
+What they change is marked *planned*; everything else is what the code
+does.
 
 No backward compatibility with earlier formats: a version 1 sidecar is
 ignored, and a version 2 one is not converted. A sidecar this version must
@@ -126,11 +127,12 @@ flowchart TD
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
+| Relay (`relay/`) | a Cloudflare Worker that joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team | *planned:* who is on a project and what each may do. See Sharing |
 
 DocService, Runner and ProjectService run in the doc host, the app's utility process.
-Windows reach it over Electron message ports; a teammate's page, *planned*,
-over a relay.
+Windows reach it over Electron message ports; a teammate's page over the
+relay.
 
 ### Views and rules
 
@@ -226,9 +228,10 @@ with the views' side of them (#215; the code calls Undo on a reply
 `undoReply`, and a restore is still its own call, `restoreVersion`). Not
 yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
-teammates, Team and `cursor`. The door is built for the owner and AI
-buddies (#223); ProjectService is behind it (#229), but an agent still reads
-more than it shows (#230).
+teammates who join and edit, Team and `cursor`. The door is built for the
+owner, AI buddies and a teammate's page that reads (#223, #226);
+ProjectService is behind it (#229), but an agent still reads more than it
+shows (#230).
 
 **Every writer comes through one door.** A page's call comes as
 `call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call
@@ -428,7 +431,9 @@ the same time; their merges are applied one at a time.
 
 ## Sharing
 
-*Planned.* A teammate joins the owner's project from a link, in a browser.
+A teammate joins the owner's project from a link, in a browser. Built: a
+page reads a doc through the relay, as a teammate who can read (#226).
+*Planned:* joining, Allow, Team and teammates who edit.
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -437,18 +442,29 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   keeps only what it shows, and a reload resyncs it from the host. While the
   host is offline no one edits; the app keeps the computer awake while
   teammates are in, and a page waits and reconnects by itself.
-- **A relay** (a Cloudflare Worker, one Durable Object per room) joins the
-  host's outgoing WebSocket to each teammate's, over TLS, and stores
-  nothing. There is no encryption of our own: the relay is ours, and it
-  could read what passes.
+- **A relay** (`relay/worker.js`, a Cloudflare Worker, one Durable Object
+  per room) joins the host's outgoing WebSocket to each teammate's, over
+  TLS, and stores nothing. There is no encryption of our own: the relay is
+  ours, and it could read what passes. The host has one connection for all
+  its pages: the relay numbers each page as a peer, which a page cannot
+  forge. A room is the SHA-256 of a secret only the host knows; the host
+  proves it holds the secret when it connects, so a link, which names only
+  the room, lets no one pose as the host. The doc host shares a project
+  when asked (`share`); *planned*, the app asks it from the Team panel.
 - **One seam.** A page talks to the host through `{ call, onEvent }`: in the
-  app a message port, in a browser the relay. The host serves both the same
-  way, adding a `who` to every call. The browser build already exists in
-  `preview/`, where `doc-stub.js` plays the host; the relay replaces it.
+  app a message port, in a browser the relay (`web/relay.js`). The host
+  serves both the same way (`serve` in `desktop/doc-host.js`), adding a
+  `who` to every call. The browser build is `preview/`: `team.html` is the
+  doc window on the relay, where the preview's `doc-stub.js` plays the host.
+  A page names its doc by its path in the project; the doc is open once
+  however many windows and pages have it. Anyone but the owner gets the
+  default settings, not the owner's, and a path in the project, not its
+  real path.
 - **Everyone is a participant**: `{ id, name, kind, level }`. The host sets
   `who` from the connection (a
   teammate's id is made once in their browser; an AI buddy's is in its file)
-  and never trusts one sent in a message. Names are unique on a project,
+  and never trusts one sent in a message. Until joining is built, every
+  page is `Teammate`, numbered by its peer, at read. Names are unique on a project,
   people's and AI buddies' together. `can(who, level)` is the one place
   that decides:
   - *Owner:* rename, move, delete and create files; settings, AI buddies

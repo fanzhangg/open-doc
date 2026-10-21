@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+.wrangler/
 .DS_Store
 .claude/*
 !.claude/skills/

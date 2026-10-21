@@ -51,6 +51,7 @@ let margin;
 let people;
 let history;
 let settings;
+let level; // what this page may do: 'read', 'write' or 'owner' (state())
 let defaultName;
 let inProject = false; // the doc was opened from a project folder
 let me; // your name
@@ -98,8 +99,10 @@ async function start() {
   defaultName = initial.defaultName;
   myId = initial.me.id;
   inProject = initial.project;
+  level = initial.level;
+  // The settings are the owner's: anyone else's stay in this page.
   settings = createSettings(initial.settings, {
-    save: api.saveSettings,
+    save: level === 'owner' ? api.saveSettings : async () => settings.get(),
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
   me = settings.get().name ?? defaultName;
@@ -265,7 +268,15 @@ async function start() {
   events.on('missing', (data) => setMissing(data.missing));
   // First on a new connection: the doc may have gone missing, or runs
   // started, since `state`, and the doc host may have started again.
+  // The host is away (a teammate's page, web/relay.js): its `hello` says it is back.
+  let offline = false;
+  events.on('offline', () => {
+    offline = true;
+    setStatus('The host is offline: waiting for it to come back', 'error');
+  });
   events.on('hello', (data) => {
+    if (offline) setStatus('');
+    offline = false;
     if (Boolean(data.missing) !== missing) setMissing(!missing);
     showAgents(data.agents);
     client.resync();
@@ -299,7 +310,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
-    editable: chosen.editable,
+    editable: chosen.editable && level !== 'read',
     color: chosen.color,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),

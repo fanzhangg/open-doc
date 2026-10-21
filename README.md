@@ -31,6 +31,7 @@ npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
 
 npm run lint
+npm ci --prefix relay         # once: wrangler, which runs the relay locally for the tests
 npm test                      # unit and integration tests
 npm run test:stress           # stress tests
 npm run test:perf             # each view keeps its latency promise at its limits

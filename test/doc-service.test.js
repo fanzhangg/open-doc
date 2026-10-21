@@ -199,7 +199,8 @@ test('the project\'s files, at the door: whoever may read lists, reads and opens
     const reader = { ...(await doc.owner()), level: 'read' };
     assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.opendoc is not shown');
     assert.deepEqual(await doc.call('read', { path: 'plan.md' }, reader), { text: SAMPLE });
-    assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: await realpath(docPath) });
+    assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: 'plan.md' }, 'the real path is the owner\'s');
+    assert.deepEqual(await doc.call('open', { path: 'plan.md' }, await doc.owner()), { path: await realpath(docPath) });
     await assert.rejects(doc.call('read', { path: '.opendoc/buddies/Pilot.md' }, reader), refused('not_found'));
     await assert.rejects(doc.call('list', { path: '' }), refused('forbidden'), 'no one may list');
     const alone = await openTestDoc(await tempDoc(), { settingsDir });

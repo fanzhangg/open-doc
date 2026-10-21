@@ -131,6 +131,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix relay # wrangler, for the relay test (test/relay.test.js)
       - run: npm run build
       - run: xvfb-run -a npm test # the view contract tests open an Electron window
 
