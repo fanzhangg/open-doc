@@ -198,14 +198,23 @@ export function files({ doc, sidecar, project }) {
   };
 }
 
+// Where a failed run's reply sends the user: the failure, then what to change.
+const SETTINGS = `The endpoint, model and key are at the top of ${fileURLToPath(import.meta.url)}.`;
+const HINTS = {
+  401: 'Check the key.',
+  404: `Check the endpoint, and that the model ${MODEL} is there (with Ollama: ollama pull ${MODEL}).`,
+};
+
 // One step of the model, over the Chat Completions API: its message.
 async function infer(messages, tools) {
   const response = await fetch(`${ENDPOINT}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(KEY && { authorization: `Bearer ${KEY}` }) },
     body: JSON.stringify({ model: MODEL, messages, tools, tool_choice: 'auto' }), // a forced tool call some models refuse
+  }).catch((error) => {
+    throw new Error(`Cannot reach ${ENDPOINT} (${error.cause?.code ?? error.message}): is the model's server running?\n${SETTINGS}`);
   });
-  if (!response.ok) throw new Error(`${ENDPOINT}: ${response.status} ${await response.text()}`);
+  if (!response.ok) throw new Error([`${ENDPOINT}: ${response.status} ${await response.text()}`, HINTS[response.status], SETTINGS].filter(Boolean).join('\n'));
   return (await response.json()).choices[0].message;
 }
 

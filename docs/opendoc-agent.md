@@ -1,6 +1,6 @@
 # OpenDoc Agent
 
-*Planned.* An agent of our own, run like Claude Code and Codex: a script in
+An agent of our own, run like Claude Code and Codex: a script in
 `agents/` under the same [contract](agent-config.md#the-contract). Inside,
 an LLM reads and proposes; the program checks and applies.
 

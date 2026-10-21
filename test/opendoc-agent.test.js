@@ -139,10 +139,11 @@ test('the shipped script runs a turn under the contract, on a Chat Completions s
     const config = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
     await installAgents(config, { platform: 'linux' });
     const program = join(config, 'agents', 'opendoc.mjs');
-    await writeFile(program, (await readFile(program, 'utf8')).replace('http://localhost:11434/v1', `http://127.0.0.1:${server.address().port}/v1`));
+    const endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+    await writeFile(program, (await readFile(program, 'utf8')).replace('http://localhost:11434/v1', endpoint));
     const { dir, doc, sidecar } = await copies();
-    const run = () => new Promise((resolve) => {
-      const env = { ...process.env, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH}`, OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: '', OPENDOC_BUDDY: 'Ada' };
+    const run = (PATH = `${dirname(process.execPath)}${delimiter}${process.env.PATH}`) => new Promise((resolve) => {
+      const env = { ...process.env, PATH, OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: '', OPENDOC_BUDDY: 'Ada' };
       execFile(agentScript('opendoc', config, 'linux'), { cwd: dir, env }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr })).stdin.end('the prompt');
     });
 
@@ -154,16 +155,21 @@ test('the shipped script runs a turn under the contract, on a Chat Completions s
     assert.equal(url, '/v1/chat/completions');
     assert.deepEqual([body.model, body.tool_choice, body.messages], ['qwen3', 'auto', [{ role: 'user', content: 'the prompt' }]]);
 
-    answers.push([400, { error: 'no such model' }]);
+    // A failed run's reply says what failed, then what to change and where.
+    answers.push([404, { error: 'model "qwen3" not found' }]);
     const failed = await run();
     assert.equal(failed.code, 1);
-    assert.match(failed.stderr, /400 {"error":"no such model"}/);
+    assert.equal(failed.stderr, `${endpoint}: 404 {"error":"model \\"qwen3\\" not found"}\nCheck the endpoint, and that the model qwen3 is there (with Ollama: ollama pull qwen3).\nThe endpoint, model and key are at the top of ${program}.\n`);
 
     const log = (await readFile(join(config, 'logs', 'opendoc.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
     assert.deepEqual(log.map((entry) => [entry.buddy, entry.messages.map((m) => m.role), entry.error]), [
       ['Ada', ['user', 'assistant'], null],
       ['Ada', ['user'], failed.stderr.trim()],
     ], 'each turn\'s messages are logged');
+
+    await new Promise((r) => server.close(r));
+    assert.match((await run()).stderr, new RegExp(`^Cannot reach ${endpoint} \\(ECONNREFUSED\\): is the model's server running\\?\nThe endpoint, model and key are at the top of ${program}\\.`));
+    assert.deepEqual(await run('/nowhere'), { code: 1, stdout: '', stderr: 'The OpenDoc agent runs on Node.js: install it from https://nodejs.org, with node on PATH.\n' });
   } finally {
     server.close();
   }
