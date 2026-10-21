@@ -1,16 +1,19 @@
-// The page the two-writer harness (test/collab.test.js) drives: two Markdown
-// views of one doc, joined by an in-memory host that orders edits, 150 ms
-// away each way. Each view's page side is plan A (docs/markdown-view.md,
-// Many writers): typing goes out as diffOps when it pauses; before taking the
-// host's edits it reads getText once more, transforms, and shows the result
-// with applyText. Thrown away once the plan is decided.
+// The page the two-writer harness (test/collab.test.js) drives: two views of
+// one doc, each with the page's side of the doc host's order
+// (web/client.js), joined to the doc host the harness starts as the app does
+// (test/views/main.js), 150 ms away each way. Plan A (docs/markdown-view.md,
+// Many writers): typing goes out as operations when it pauses; before taking
+// the host's edits a view's text is read once more, the edits moved over
+// what it has not landed, and shown with applyText.
 
 import { createMarkdownView } from '../../web/views/markdown/view.js';
 import { markdown } from '../../web/views/markdown/index.js';
 import { plain } from '../../web/views/plain/index.js';
 import { viewFor } from '../../web/views/index.js';
 import { resolveSettings, viewSettings } from '../../src/core/settings.js';
-import { apply, diffOps, transform } from '../../src/core/ot.js';
+import { apply } from '../../src/core/ot.js';
+import { createClient } from '../../web/client.js';
+import { rulesOf } from '../../src/rules/index.js';
 
 const DELAY = Number(new URLSearchParams(location.search).get('delay') ?? 150); // ms each way
 let inTransit = 0;
@@ -21,51 +24,40 @@ const later = (fn) => {
     fn();
   }, DELAY);
 };
+const bridge = window.collabHost;
 
-const host = { text: '', log: [], clients: [] };
-function submit(client, ops, rev) {
-  for (const landed of host.log.slice(rev)) ops = transform(ops, landed).ops;
-  host.text = apply(host.text, ops);
-  host.log.push(ops);
-  for (const c of host.clients) later(() => (c === client ? c.ack() : c.receive(ops, client?.name ?? 'outside')));
-}
+// The doc host's text, as its `ops` events tell it.
+const host = { text: '', rev: 0, epoch: null };
+bridge.onEvent((name, data) => {
+  if (name !== 'ops' || data.epoch !== host.epoch) return;
+  host.text = apply(host.text, data.ops);
+  host.rev = data.rev;
+  for (const c of collab.clients) later(() => c.client.receive(data));
+});
 
-function createClient(view, name) {
-  const client = {
-    view, name, last: '', rev: 0, pending: [], // pending[0] is at the host or on its way
+// A call to the doc host, 150 ms there and 150 ms back.
+const call = (type, arg) => new Promise((resolve, reject) => later(async () => {
+  const { result, error } = await bridge.call(type, arg);
+  later(() => (error ? reject(Object.assign(new Error(error.message), { code: error.code })) : resolve(result)));
+}));
+
+function createHarnessClient(view, name) {
+  const harness = {
+    view, name,
     errors: [],
     drifts: [], // where getText after applyText was not the text given
-    batches: [], // per batch from the host: ms in the getText before it, in applyText and setMarks, and in the getText after
-    flush() {
-      const text = view.getText();
-      if (text === client.last) return;
-      client.pending.push(diffOps(client.last, text, view.selection()?.to));
-      client.last = text;
-      if (client.pending.length === 1) client.send();
-    },
-    send() {
-      const [ops] = client.pending;
-      const rev = client.rev;
-      later(() => submit(client, ops, rev));
-    },
-    ack() {
-      client.rev++;
-      client.pending.shift();
-      if (client.pending.length) client.send();
-    },
-    receive(ops, by) {
+    batches: [], // per batch from the host: ms in the getText before it and the move over pending, in applyText and setMarks, and in the getText after
+  };
+  let received = 0;
+  harness.client = createClient({
+    view,
+    call,
+    rules: () => rulesOf('doc.md', resolveSettings({})),
+    onError: (error) => harness.errors.push({ kind: 'error', message: String(error.stack) }),
+    show(text, ops, event) {
       try {
-        const start = performance.now();
-        client.flush();
-        const flushed = performance.now();
-        client.rev++;
-        client.pending = client.pending.map((mine) => {
-          const moved = transform(mine, ops).ops;
-          ops = transform(ops, mine, { first: true }).ops;
-          return moved;
-        });
-        client.last = apply(client.last, ops);
-        view.applyText(client.last, { by });
+        const shown = performance.now();
+        view.applyText(text, { by: event?.id ? 'other' : 'outside' });
         // The other's cursor, after what they typed, is a mark (plan A, 3).
         let at = 0;
         let shift = 0;
@@ -73,18 +65,30 @@ function createClient(view, name) {
           at = op.from + shift + op.insert.length;
           shift += op.insert.length - (op.to - op.from);
         }
-        view.setMarks([{ kind: 'cursor', at, by, working: false }]);
+        view.setMarks([{ kind: 'cursor', at, by: 'other', working: false }]);
         const applied = performance.now();
-        const shown = view.getText();
-        client.batches.push({ before: flushed - start, applyText: applied - flushed, after: performance.now() - applied });
+        const after = view.getText();
+        harness.batches.push({ before: shown - received, applyText: applied - shown, after: performance.now() - applied });
         // The view rewrote what it was given: the next pause sends that as an edit.
-        if (shown !== client.last) client.drifts.push(diffOps(client.last, shown).map((op) => client.last.slice(op.from - 40, op.to + 40)));
+        if (after !== text) harness.drifts.push(diffs(text, after));
       } catch (error) {
-        client.errors.push({ kind: 'error', message: String(error.stack) });
+        harness.errors.push({ kind: 'error', message: String(error.stack) });
       }
     },
+  });
+  const receive = harness.client.receive;
+  harness.client.receive = (event) => {
+    received = performance.now();
+    receive(event);
   };
-  return client;
+  return harness;
+}
+
+// Where `a` and `b` differ, with some text around it.
+function diffs(a, b) {
+  let start = 0;
+  while (start < a.length && a[start] === b[start]) start++;
+  return a.slice(Math.max(0, start - 40), start + 40);
 }
 
 const stages = [...document.querySelectorAll('.od-stage')];
@@ -96,21 +100,23 @@ const collab = {
   // past every view's limits). Resolves to that view's id and whether it edits.
   async make(text, { view: kind = 'markdown' } = {}) {
     for (const c of collab.clients) await c.view.destroy();
-    Object.assign(host, { text, log: [], clients: [] });
+    collab.clients = [];
+    await bridge.make(text);
+    const { result: state } = await bridge.call('state');
+    Object.assign(host, { text: state.text, rev: state.rev, epoch: state.epoch });
     // As the app makes it: its size judged by viewFor, named as a Markdown doc.
     const sized = viewFor('doc.md', resolveSettings({}), text);
     const chosen = kind === 'auto' ? sized : { id: kind, editable: true, color: sized.color };
     const declared = chosen.id === 'plain' ? plain : markdown;
     const create = chosen.id === 'plain' ? plain.createView : createMarkdownView;
     collab.clients = await Promise.all(stages.map(async (stage) => {
-      let client;
+      let harness;
       const toolbar = stage.closest('main').previousElementSibling;
-      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onChange: () => client.flush() });
-      client = createClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
-      client.last = text;
-      return client;
+      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onChange: () => harness.client.flush() });
+      harness = createHarnessClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
+      harness.client.start(state);
+      return harness;
     }));
-    host.clients = collab.clients;
     return { id: chosen.id, editable: chosen.editable };
   },
   // Put the caret (or a selection) in view i on characters [start, end) of
@@ -158,9 +164,9 @@ const collab = {
   // Flush both views and wait until nothing is on its way: every view and the host agree.
   async settle() {
     for (;;) {
-      for (const c of collab.clients) c.flush();
+      for (const c of collab.clients) c.client.flush();
       await new Promise((done) => setTimeout(done, DELAY * 2 + 50));
-      if (inTransit === 0 && collab.clients.every((c) => c.pending.length === 0)) return collab.state();
+      if (inTransit === 0 && collab.clients.every((c) => c.client.idle())) return collab.state();
     }
   },
   state: () => ({
@@ -176,6 +182,19 @@ const collab = {
   focus: (i) => collab.clients[i].view.focus(),
   batches: () => collab.clients.flatMap((c) => c.batches),
   // An edit from a third writer, landing at the host now.
-  inject: (ops) => submit(null, ops, host.log.length),
+  async inject(ops) {
+    const { result } = await bridge.call('state');
+    return bridge.call('submit', { ops, rev: result.rev, epoch: result.epoch, id: 'third' });
+  },
+  // The doc changed outside (git pull), to `text`.
+  pull: (text) => bridge.write(text),
+  // A comment asking the doc's buddy; `release` lets one that holds go on.
+  async ask(body) {
+    await bridge.hold();
+    return bridge.call('comment', { anchor: null, body });
+  },
+  release: () => bridge.release(),
+  // The replies of the doc's buddy.
+  replies: async () => (await bridge.call('state')).result.threads.flatMap((t) => t.comments).filter((c) => c.by.kind === 'ai'),
 };
 window.collab = collab;

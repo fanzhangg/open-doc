@@ -95,19 +95,18 @@ test('history follows a renamed doc', async () => {
 async function withDoc(fn) {
   const docPath = await tempDoc(SAMPLE);
   const settingsDir = await fakeConfig();
-  const { doc, call, state } = await openTestDoc(docPath, { settingsDir, buddies: { histbot: '\n' } });
+  const { doc, call, edit, state } = await openTestDoc(docPath, { settingsDir, buddies: { histbot: '\n' } });
   try {
-    await fn({ call, state, docPath, versions: async () => (await call('history')).versions });
+    await fn({ call, edit, state, docPath, versions: async () => (await call('history')).versions });
   } finally {
     await doc.close();
   }
 }
 
 test('the doc service records saves, changes on disk and restores', async () => {
-  await withDoc(async ({ call, state, docPath, versions }) => {
+  await withDoc(async ({ call, edit, state, docPath, versions }) => {
     assert.deepEqual((await versions()).map((v) => v.kind), ['opened']);
-    const before = await state();
-    assert.ok(!(await call('saveDoc', { text: SAMPLE.replace('six', 'seven'), baseHash: before.docHash })).conflict);
+    await edit(SAMPLE.replace('six', 'seven'));
 
     // Written by another program: noticed by the watcher. Atomically, as an
     // in-place write can be read half done and is then a version of its own.
@@ -120,10 +119,8 @@ test('the doc service records saves, changes on disk and restores', async () => 
     assert.equal(shown.text, SAMPLE.replace('six', 'seven'));
     assert.equal(shown.before, SAMPLE);
 
-    // Restoring needs the doc the page last saw.
-    assert.equal((await call('restoreVersion', { id: list[0].id, baseHash: before.docHash })).conflict, true);
-    const restored = await call('restoreVersion', { id: list[0].id, baseHash: (await state()).docHash });
-    assert.equal(restored.text, SAMPLE);
+    await call('restoreVersion', { id: list[0].id });
+    assert.equal((await state()).text, SAMPLE);
     assert.equal(await readFile(docPath, 'utf8'), SAMPLE);
     const last = (await versions()).at(-1);
     assert.equal(last.kind, 'restore');

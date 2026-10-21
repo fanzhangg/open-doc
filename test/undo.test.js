@@ -1,11 +1,11 @@
-// Undo and history (docs/architecture.md, Undo): a buddy's edit is
-// undone from its reply; an outside change never beats typing; every undo
-// and restore is a version. Buddies run the fake agent script.
+// Undo and history (docs/architecture.md, Undoing changes): a buddy's edit
+// is undone from its reply; an outside change never beats typing; every
+// undo and restore is a version. Buddies run the fake agent script.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { writeAtomic } from '../src/store/files.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 async function withDoc(fn, content = SAMPLE) {
@@ -20,11 +20,11 @@ async function withDoc(fn, content = SAMPLE) {
     const thread = await until(async () => (await opened.state()).threads.find((t) => t.id === id && t.comments.length === 2), 'the reply');
     return thread.comments[1];
   };
-  // Save as the page does: on the doc as last read.
+  // Type as the page does: on the doc as last read.
   const type = async (from, to) => {
     const now = await opened.state();
     assert.ok(now.text.includes(from), from);
-    await opened.call('saveDoc', { text: now.text.replace(from, to), baseHash: now.docHash });
+    await opened.edit(now.text.replace(from, to), now);
   };
   try {
     await fn({ ...opened, docPath, versions, disk, ask, type });
@@ -47,8 +47,7 @@ test('Undo on a reply removes that buddy\'s edit and keeps later edits, yours an
   await withDoc(async ({ call, state, ask, type, disk, versions }) => {
     const ada = await ask('@Ada replace "extra load" with "extra peak load"');
     const run = (await state()).edits[ada.id];
-    assert.deepEqual({ ...run, hash: undefined, version: undefined }, { state: 'edited', by: 'Ada', changes: 1, hash: undefined, version: undefined }, 'the receipt: who, how many places');
-    assert.equal(run.hash, (await state()).docHash, 'the page tells the run that wrote the doc by its hash');
+    assert.deepEqual({ ...run, version: undefined }, { state: 'edited', by: 'Ada', changes: 1, version: undefined }, 'the receipt: who, how many places');
     assert.equal((await call('version', { id: run.version })).version.reply, ada.id, 'the page shows the run\'s edits from its version');
     await type('week one', 'week 1');
     await ask('@Ben replace "beta cohort" with "beta group"');
@@ -93,16 +92,15 @@ test('where another buddy changed the run\'s text since, Undo leaves that change
   });
 });
 
-test('an outside change (git pull) to the paragraph being typed: the typing stays, the pulled version is in history', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ call, state, docPath, disk, versions }) => {
+test('an outside change (git pull) while typing: it merges into the typed line where they are apart; where they overlap, the typing stays and the pulled version is in history', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, edit, state, docPath, disk, versions }) => {
     const before = await state();
     const typed = before.text.replace('extra load.', 'extra load at launch.');
     const pulled = SAMPLE.replace('The main risk is', 'The risk we see is');
-    // Atomically: an in-place write can be read half done (test/history.test.js).
-    await writeAtomic(docPath, pulled);
-    const saved = await call('saveDoc', { text: typed, baseHash: before.docHash });
-    assert.ok(!saved.conflict, 'the doc host merges the pulled version into the save');
-    assert.match(saved.text, /The risk we see is .* extra load at launch\./);
+    const typing = edit(typed, before);
+    writeFileSync(docPath, pulled); // before the typing lands
+    await typing;
+    assert.match((await state()).text, /The risk we see is .* extra load at launch\./);
     assert.match(await disk(), /The risk we see is .* extra load at launch\./);
     const external = (await versions()).filter((v) => v.kind === 'external');
     assert.equal(external.length, 1);
@@ -112,9 +110,10 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
     const now = await state();
     const mine = now.text.replace('beta cohort', 'beta testers');
     const theirs = now.text.replace('beta cohort', 'early users');
-    await writeAtomic(docPath, theirs);
-    const again = await call('saveDoc', { text: mine, baseHash: now.docHash });
-    assert.equal(again.text, mine);
+    const again = edit(mine, now);
+    writeFileSync(docPath, theirs);
+    await again;
+    assert.equal((await state()).text, mine);
     assert.match(await disk(), /beta testers/);
     const history = await Promise.all((await versions()).map(async (v) => (await call('version', { id: v.id })).text));
     assert.ok(history.includes(theirs), 'the pulled version is saved');
@@ -122,7 +121,7 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
 });
 
 test('every undo and restore can itself be restored', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ call, state, ask, disk, versions }) => {
+  await withDoc(async ({ call, ask, disk, versions }) => {
     const ada = await ask('@Ada replace "extra load" with "extra peak load"');
     const edited = await disk();
     await call('undoReply', { id: ada.id });
@@ -133,7 +132,7 @@ test('every undo and restore can itself be restored', { timeout: 30_000 }, async
       const list = await versions();
       const found = [];
       for (const v of list) if ((await call('version', { id: v.id })).text === text) found.push(v);
-      await call('restoreVersion', { id: found.at(-1).id, baseHash: (await state()).docHash });
+      await call('restoreVersion', { id: found.at(-1).id });
     };
     await restore(edited); // undo the undo
     assert.equal(await disk(), edited);

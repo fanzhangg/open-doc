@@ -234,26 +234,6 @@ export function findEdit(doc, edit) {
   return best === null ? null : { start: best, end: best };
 }
 
-/**
- * Undo by changes (docs/architecture.md, Undo): `doc` with each change
- * from `before` to `after` put back where its new text still is, as
- * findEdit finds it; a change anyone touched since is skipped.
- */
-export function revertEdits(doc, before, after) {
-  const spots = diffEdits(before, after)
-    .map(({ edit }) => ({ edit, at: findEdit(doc, edit) }))
-    .filter((s) => s.at)
-    .sort((x, y) => y.at.start - x.at.start);
-  let out = doc;
-  let limit = Infinity; // from the end, so earlier offsets hold; an overlap is skipped
-  for (const { edit, at } of spots) {
-    if (at.end > limit) continue;
-    out = out.slice(0, at.start) + edit.before + out.slice(at.end);
-    limit = at.start;
-  }
-  return out;
-}
-
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].
 function changedRegions(map, n, m) {
   const regions = [];

@@ -4,6 +4,8 @@ import { apply, diffOps, transform } from '../src/core/ot.js';
 import { lineMatches, sameEnd, sameStart } from '../src/core/diff.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
 import { rulesOf } from '../src/rules/index.js';
+import { SAMPLE as SAMPLE_PLAN } from './helpers.js';
+import { createClient } from '../web/client.js';
 
 test('diffOps is trimmed to the edit, and apply makes the text', () => {
   assert.deepEqual(diffOps('Hello world.', 'Hello, world.'), [{ from: 5, to: 5, insert: ',' }]);
@@ -35,11 +37,11 @@ test('two people merge by character and lose nothing', () => {
   assert.equal(merge(styled, diffOps(styled, '- Some **bold** wordsA.'), diffOps(styled, '- Some **bold** Bwords.')), '- Some **bold** BwordsA.', 'restyled by both, restyled once');
 });
 
-test('random concurrent edits from two pages and buddies\' turns end in the host\'s text on both', () => {
+test('random concurrent edits from two pages and buddies\' turns end in the host\'s text on both', async () => {
   let seed = 7;
-  const random = (n) => {
+  const random = (n) => { // by the high bits: the low ones of this generator repeat every few draws
     seed = (seed * 1103515245 + 12345) % 2 ** 31;
-    return seed % n;
+    return Math.floor((seed / 2 ** 31) * n);
   };
   const edit = (text) => {
     let next = text;
@@ -50,65 +52,55 @@ test('random concurrent edits from two pages and buddies\' turns end in the host
     }
     return random(3) ? next : next.replaceAll('xy', '_y'); // as a restyle does
   };
-  for (let run = 0; run < 2000; run++) {
-    // The host's log, and two pages, each with its text, rev and pending
-    // edits (the first sent, the rest waiting for it), and what the host sent it.
-    let host = 'ab\ncd\nef';
-    const log = [];
-    const pages = [0, 1].map(() => ({ text: host, rev: 0, pending: [], inbox: [] }));
-    const sent = []; // [page, ops, rev] on their way to the host
-    const land = () => {
-      let [from, ops, rev] = sent.shift();
-      for (const landed of log.slice(rev)) ops = transform(ops, landed).ops;
-      host = apply(host, ops);
-      log.push(ops);
-      for (const p of pages) p.inbox.push(p === from ? null : ops);
+  for (let run = 0; run < 1000; run++) {
+    // A host as DocService orders edits, and two pages (web/client.js) on
+    // views the test types into. Calls and events wait in queues.
+    const host = { text: 'ab\ncd\nef', rev: 0, log: [] };
+    const sent = [];
+    const land = (ops, meta = {}) => {
+      host.log.push(meta.yields ? { ops, base: host.text } : { ops });
+      host.text = apply(host.text, ops);
+      const event = { epoch: 'e', rev: ++host.rev, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}) };
+      for (const p of pages) p.inbox.push(event);
     };
-    const receive = (page) => {
-      let ops = page.inbox.shift();
-      page.rev++;
-      if (ops === null) { // its own, landed
-        page.pending.shift();
-        if (page.pending.length) sent.push([page, page.pending[0], page.rev]);
-        return;
-      }
-      page.pending = page.pending.map((mine) => {
-        const moved = transform(mine, ops).ops;
-        ops = transform(ops, mine, { first: true }).ops;
-        return moved;
-      });
-      page.text = apply(page.text, ops);
+    const pages = [0, 1].map(() => {
+      const view = { text: host.text, getText: () => view.text, selection: () => null };
+      const client = createClient({ view, call: (type, arg) => new Promise(() => sent.push(arg)), show: (text) => { view.text = text; }, rules: () => [] });
+      client.start({ text: host.text, epoch: 'e', rev: 0 });
+      return { view, client, inbox: [] };
+    });
+    const submit = () => {
+      const { ops, rev, id } = sent.shift();
+      let moved = ops;
+      for (const landed of host.log.slice(rev)) moved = transform(moved, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base }).ops;
+      land(moved, { id });
     };
-    // A buddy's turn: an edit of the host's text as it was, landed later,
-    // yielding to what landed since.
-    let turn = null;
-    const yieldNow = () => {
-      const { ops } = transform(diffOps(turn.base, turn.edited), diffOps(turn.base, host), { yields: true, base: turn.base });
-      host = apply(host, ops);
-      log.push(ops);
-      for (const p of pages) p.inbox.push(ops);
+    let turn = null; // a buddy's: the host's text as it was, and its edit of it
+    const finish = () => {
+      land(transform(diffOps(turn.base, turn.edited), diffOps(turn.base, host.text), { yields: true, base: turn.base }).ops, { yields: true });
       turn = null;
     };
     for (let step = 0; step < 40; step++) {
       const page = pages[random(2)];
-      const pick = random(3);
-      if (random(10) === 0) {
-        if (turn) yieldNow();
-        else turn = { base: host, edited: edit(host) };
-      } else if (pick === 0) {
-        const next = edit(page.text);
-        page.pending.push(diffOps(page.text, next));
-        page.text = next;
-        if (page.pending.length === 1) sent.push([page, page.pending[0], page.rev]);
-      } else if (pick === 1 && sent.length) land();
-      else if (page.inbox.length) receive(page);
+      const pick = random(4);
+      if (pick === 0) {
+        page.view.text = edit(page.view.text);
+        page.client.flush();
+      } else if (pick === 1 && sent.length) submit();
+      else if (pick === 2) {
+        if (turn) finish();
+        else turn = { base: host.text, edited: edit(host.text) };
+      } else if (page.inbox.length) page.client.receive(page.inbox.shift());
     }
-    if (turn) yieldNow();
+    if (turn) finish();
     while (sent.length || pages.some((p) => p.inbox.length)) {
-      if (sent.length) land();
-      for (const page of pages) while (page.inbox.length) receive(page);
+      while (sent.length) submit();
+      for (const page of pages) while (page.inbox.length) page.client.receive(page.inbox.shift());
     }
-    for (const page of pages) assert.equal(page.text, host, `run ${run}`);
+    for (const page of pages) {
+      assert.equal(page.view.text, host.text, `run ${run}`);
+      assert.ok(page.client.idle());
+    }
   }
 });
 
@@ -156,9 +148,27 @@ test('an edit that yields merges by character in a line both changed apart, if e
   const off = { ...DEFAULT_SETTINGS, rules: { 'markdown-rule': { enabled: false } } };
   assert.deepEqual(yielded('1 *2* 3', '1 *2 3', '1 *2* 3 4*', rulesOf('plan.md', DEFAULT_SETTINGS)), { text: '1 *2 3', dropped: true });
   for (const rules of [rulesOf('plan.md', off), rulesOf('notes.txt', DEFAULT_SETTINGS)]) assert.deepEqual(yielded('1 *2* 3', '1 *2 3', '1 *2* 3 4*', rules), { text: '1 *2 3 4*', dropped: false });
+  assert.deepEqual(yielded('extra load.', 'extra traffic.', 'extra peak load.'), { text: 'extra traffic.', dropped: true }, 'an insert where the other changed from');
+  assert.deepEqual(yielded('extra load.', 'extra peak load.', 'extra traffic.'), { text: 'extra peak load.', dropped: true }, 'either way round');
   const rules = [{ mergeLine: () => true }, { mergeLine: () => false }];
   assert.deepEqual(yielded('a b', 'x b', 'a y', rules), { text: 'x b', dropped: true }, 'any rule refuses');
   assert.deepEqual(yielded('a b', 'x b', 'a y', [rules[0]]), { text: 'x y', dropped: false });
+});
+
+test('an undo is the inverse of a turn, yielding: each change still in place is put back; one changed since stays', () => {
+  const run = SAMPLE_PLAN.replace('Q4 Launch', 'Q1 Launch').replace('week one', 'week two').replace('extra load', 'extra peak load');
+  const undo = (now) => apply(now, transform(diffOps(run, SAMPLE_PLAN), diffOps(run, now), { yields: true, base: run }).ops);
+  assert.equal(undo(run), SAMPLE_PLAN);
+  const later = run.replace('week two', 'week three').replace('## Risks', '## Open risks');
+  assert.equal(undo(later), SAMPLE_PLAN.replace('week one', 'week three').replace('## Risks', '## Open risks'), 'the touched change stays, the rest go, later edits stay');
+});
+
+test('a doc\'s rules are found by extension, any case, and only while they are on', () => {
+  assert.deepEqual(rulesOf('a/README.MD', DEFAULT_SETTINGS), rulesOf('b.markdown', DEFAULT_SETTINGS));
+  assert.equal(rulesOf('b.markdown', DEFAULT_SETTINGS).length, 1);
+  assert.deepEqual(rulesOf('b.markdown', { ...DEFAULT_SETTINGS, views: { markdown: { enabled: false } } }), rulesOf('b.markdown', DEFAULT_SETTINGS), 'the view is another switch');
+  assert.deepEqual(rulesOf('main.js', DEFAULT_SETTINGS), []);
+  assert.deepEqual(rulesOf('Makefile', DEFAULT_SETTINGS), []);
 });
 
 test('random edits: one that yields keeps every line the other changed, lands whole elsewhere, and says what it dropped', () => {
@@ -259,4 +269,16 @@ test('a change spread over a long doc diffs place by place, and soon', () => {
     assert.ok(ops.every((op) => op.to === op.from && op.insert === ' pulled'));
     assert.ok(ms < 1000, `${Math.round(ms)} ms for ${base.length} characters`);
   }
+});
+
+test('an edit that yields yields to one that started before it, too, though it reached the host first', () => {
+  const base = 'gather feedback from the beta cohort before\nthe launch.\n';
+  const buddy = base.replace('beta cohort', 'beta group').replace('launch', 'public launch');
+  const person = base.replace('beta cohort', 'beta testers');
+  const landed = diffOps(base, buddy);
+  const { ops } = transform(diffOps(base, person), landed, { landedYields: true, base });
+  assert.equal(apply(buddy, ops), person.replace('launch', 'public launch'), 'the person\'s line stays; the buddy\'s lands elsewhere');
+  assert.equal(apply(buddy, transform(diffOps(base, base.replace('launch', 'start')), landed, { landedYields: true, base }).ops), buddy.replace('public launch', 'start'));
+  const apart = base.replace('gather', 'collect');
+  assert.equal(apply(buddy, transform(diffOps(base, apart), landed, { landedYields: true, base }).ops), buddy.replace('gather', 'collect'), 'apart in one line: merged by character');
 });

@@ -28,6 +28,7 @@ async function withDoc(fn, { buddies = null, folder = null, content = SAMPLE, se
     await fn({
       docPath, settingsDir, release, restart,
       call: (type, arg) => opened.call(type, arg),
+      edit: opened.edit,
       state: () => opened.state(),
       runs: () => fakeRuns(settingsDir),
     });
@@ -65,12 +66,10 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
 });
 
 test('the human edits the same text during a run: theirs stays, the buddy\'s change there is dropped, the reply says conflict', { timeout: 30_000 }, async () => {
-  await withDoc(async ({ docPath, call, state, runs, release }) => {
+  await withDoc(async ({ docPath, call, edit, state, runs, release }) => {
     const id = await comment(call, '@Clippy hold replace "extra load" with "extra peak load"');
     await until(async () => (await runs()).length === 1, 'the run to start');
-    const now = await state();
-    const saved = await call('saveDoc', { text: now.text.replace('extra load', 'extra traffic'), baseHash: now.docHash });
-    assert.ok(!saved.conflict);
+    await edit((await state()).text.replace('extra load', 'extra traffic'));
     await release('Clippy');
     const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
     assert.equal(answer.conflict, true);
@@ -83,11 +82,10 @@ test('the human edits the same text during a run: theirs stays, the buddy\'s cha
 test('a buddy\'s edit to a line the human changed too: the Markdown rule refuses a character merge that changes how it renders; switched off, it merges', { timeout: 30_000 }, async () => {
   // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
   for (const on of [true, false]) {
-    await withDoc(async ({ docPath, call, state, runs, release }) => {
+    await withDoc(async ({ docPath, call, edit, state, runs, release }) => {
       const id = await comment(call, '@Clippy hold replace "1 *2* 3" with "1 *2* 3 4*"');
       await until(async () => (await runs()).length === 1, 'the run to start');
-      const now = await state();
-      assert.ok(!(await call('saveDoc', { text: '1 *2 3\n', baseHash: now.docHash })).conflict);
+      await edit('1 *2 3\n');
       await release('Clippy');
       const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
       assert.equal(Boolean(answer.conflict), on);

@@ -82,9 +82,16 @@ export function apply(text, ops) {
  * operations that touch one line go or stay together. Where both changed
  * one line, in places apart, it stays if every rule's `mergeLine` (rulesOf)
  * allows the merged line. Where both made the same change, it goes, and
- * nothing is dropped.
+ * nothing is dropped. When it is `landed` that yields (it reached the host
+ * first, but this edit started before it), the same holds the other way
+ * round: `ops` comes out as the edit from what `landed` made to `ops` with
+ * what stays of `landed` on it.
  */
-export function transform(ops, landed, { first = false, yields = false, base = '', rules = [] } = {}) {
+export function transform(ops, landed, { first = false, yields = false, landedYields = false, base = '', rules = [] } = {}) {
+  if (landedYields) {
+    const kept = transform(landed, ops, { yields: true, base, rules });
+    return { ops: diffOps(apply(base, landed), apply(apply(base, ops), kept.ops)), dropped: false };
+  }
   let dropped = false;
   if (yields && landed.length > 0) {
     const kept = [];
@@ -149,12 +156,13 @@ function overlaps(base, group, landed, rules) {
 
 /**
  * Merge two edits of one line when they change separate parts of it, or
- * null when they overlap (or both insert at the same place).
+ * null when they overlap (or one inserts where the other changes, from its
+ * start): either way round.
  */
 export function mergeLine(base, ours, theirs) {
   const a = changedSpan(base, ours);
   const c = changedSpan(base, theirs);
-  const [first, second] = a.from <= c.from ? [a, c] : [c, a];
+  const [first, second] = a.from < c.from || (a.from === c.from && a.to >= c.to) ? [a, c] : [c, a];
   const bothInsertHere = first.from === first.to && second.from === second.to && first.from === second.from;
   if (first.to > second.from || bothInsertHere) return null;
   return base.slice(0, first.from) + first.text + base.slice(first.to, second.from) + second.text + base.slice(second.to);
