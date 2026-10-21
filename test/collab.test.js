@@ -251,6 +251,9 @@ for (const [prefix, teammate] of [['', false], ['through the relay: ', true]]) {
   async function bothTouch(blocks, touches) {
     await make(blocks.join('\n\n') + '\n');
     for (const [quote, at] of touches) {
+      // The other's typing in the block before is in both views first: one
+      // arriving while a caret is put elsewhere would put it back.
+      await settled();
       await select(0, quote, at);
       await select(1, quote, 0);
       await typeBoth('A', 'B');
