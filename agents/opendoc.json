@@ -1,0 +1,11 @@
+{
+  "name": "OpenDoc agent",
+  "about": "Our own: a cloud model reads and proposes, and the program checks and applies. Runs on Node.js.",
+  "settings": [
+    { "key": "provider", "type": "choice", "label": "Provider", "options": [["anthropic", "Anthropic"], ["openai", "OpenAI-compatible"]], "default": "anthropic" },
+    { "key": "endpoint", "type": "text", "label": "Endpoint", "hint": "The API's address: OpenAI's, OpenRouter's or another.", "default": "https://api.openai.com/v1", "when": { "provider": "openai" } },
+    { "key": "model", "type": "text", "label": "Model", "default": "claude-opus-5-5" },
+    { "key": "key", "type": "secret", "label": "API key", "hint": "Kept encrypted by your system keychain." },
+    { "key": "effort", "type": "choice", "label": "Effort", "hint": "Low for scoped edits; higher thinks longer before it answers.", "options": [["low", "Low"], ["medium", "Medium"], ["high", "High"]], "default": "low" }
+  ]
+}

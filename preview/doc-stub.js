@@ -12,7 +12,10 @@ import { apply } from '../src/core/ot.js';
 import { askedOf, newComment, newId, peopleOf, threadsOf } from '../src/core/comments.js';
 import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
-import { DEFAULT_SETTINGS, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, agentOf, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
+import claude from '../agents/claude.json' with { type: 'json' };
+import codex from '../agents/codex.json' with { type: 'json' };
+import opendoc from '../agents/opendoc.json' with { type: 'json' };
 
 const params = new URLSearchParams(location.search);
 const inFolder = params.has('folder');
@@ -63,6 +66,7 @@ const THREADS = inFolder
   ]
   : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: CLIPPY.name, answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
 
+const AGENTS = Object.entries({ claude, codex, opendoc }).map(([id, manifest]) => agentOf(id, manifest));
 const ai = (name) => ({ id: name, name, kind: 'ai' });
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -133,7 +137,7 @@ const emit = (event, data) => listener?.(event, data);
 // The buddies this user's comments ask, as the runner would start them.
 function answer() {
   for (const thread of threadsOf(comments(), buddies().map(({ id, name }) => ({ id, name })))) {
-    for (const asked of askedOf(thread, s.settings.id)) {
+    for (const asked of askedOf(thread, [s.settings.id])) {
       if (running.get(asked)?.includes(thread.id)) continue;
       running.set(asked, [...(running.get(asked) ?? []), thread.id]);
       emit('agents', agents());
@@ -191,8 +195,8 @@ const calls = {
     emit('settings', s.settings);
     return { settings: s.settings };
   },
-  scripts: () => ({ agents: ['claude', 'codex', 'opendoc'], shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)' }),
-  resetScript: () => ({ agents: ['claude', 'codex'] }),
+  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)', secrets: {} }),
+  resetScript: () => ({ agents: AGENTS }),
   createBuddy({ buddy }) {
     if (!inFolder) refuse('buddies other than Clippy belong to a project');
     const fields = { about: '', ...buddy };
@@ -257,6 +261,18 @@ if (inFolder) {
     onChanged();
   }
 
+  // The doc's ProjectService.
+  calls.list = ({ path }) => {
+    const names = new Map();
+    for (const file of Object.keys(s.files).filter((f) => inside(f, path) && f !== path)) {
+      const [first, ...rest] = (path ? file.slice(path.length + 1) : file).split('/');
+      names.set(first, rest.length > 0 || names.get(first) === true);
+    }
+    return [...names].map(([n, folder]) => ({ name: n, folder }))
+      .sort((a, b) => (b.folder - a.folder) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  };
+  calls.read = ({ path }) => ({ text: s.files[path] ?? '' });
+
   window.opendocDesktop = {
     folder() {
       const carry = s.carry;
@@ -264,16 +280,6 @@ if (inFolder) {
       save();
       return Promise.resolve({ name: 'Sample Project', current, expanded: s.expanded, sidebar: s.sidebar, carry });
     },
-    folderList(path) {
-      const names = new Map();
-      for (const file of Object.keys(s.files).filter((f) => inside(f, path) && f !== path)) {
-        const [first, ...rest] = (path ? file.slice(path.length + 1) : file).split('/');
-        names.set(first, rest.length > 0 || names.get(first) === true);
-      }
-      return Promise.resolve([...names].map(([n, folder]) => ({ name: n, folder }))
-        .sort((a, b) => (b.folder - a.folder) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
-    },
-    folderRead: (path) => Promise.resolve({ text: s.files[path] ?? '' }),
     openInFolder: (path) => open(path),
     folderRename(from, kind, to) {
       if (exists(to)) return Promise.resolve({ error: `${name(to)} is already here.` });

@@ -83,32 +83,34 @@ function invalid(c) {
 /**
  * A new comment as the sidecar holds it (§2), whoever writes it: a first
  * comment on `anchor` (null for the whole doc) or a reply in `thread`, by
- * `by` at `at`. Only a human's `resolved` is kept, and then the body is
- * empty; the id is made here.
+ * `by` at `at`, resolving its thread with `resolved`. Who may resolve is
+ * the doc host's to decide; the id is made here.
  */
 export function newComment({ thread, anchor = null, body, resolved }, { by, at }) {
-  const resolves = resolved === true && by.kind === 'human';
   return {
     id: newId('c'),
     ...(thread !== undefined ? { thread } : { anchor }),
     by,
     at,
-    body: resolves ? '' : body,
-    ...(resolves ? { resolved: true } : {}),
+    body,
+    ...(resolved === true ? { resolved: true } : {}),
   };
 }
 
 /**
- * The comments a buddy's run appended to its copy of the sidecar
+ * What a buddy's run appended to its copy of the sidecar
  * (docs/agent-config.md, Comments): lines in `after` that were not in
- * `before` and have no `id` (a changed comment has one), each `{ anchor: { exact }, body }`, `{ body }` or `{ thread,
- * body }`, made comments `by` the buddy `at` a time. A reply needs a thread
- * of `threads`; a quote found other than once in `text` (the doc's text) is
- * on the whole doc. Anything else is ignored.
+ * `before` and have no `id` (a changed comment has one). `comments` are the
+ * lines `{ anchor: { exact }, body }`, `{ body }` or `{ thread, body }`,
+ * made comments `by` the buddy `at` a time; a reply needs a thread of
+ * `threads`, and a quote found other than once in `text` (the doc's text) is
+ * on the whole doc. `resolves` is whether a line `{ thread: own, resolved:
+ * true }` resolves the thread of the run, `own`. Anything else is ignored.
  */
-export function appendedComments(before, after, { text, by, at, threads }) {
+export function appendedComments(before, after, { text, by, at, threads, own }) {
   const had = new Set(before.split('\n'));
-  const added = [];
+  const comments = [];
+  let resolves = false;
   for (const raw of after.split('\n')) {
     if (!raw.trim() || had.has(raw)) continue;
     let line;
@@ -117,16 +119,17 @@ export function appendedComments(before, after, { text, by, at, threads }) {
     } catch {
       continue;
     }
-    if (!isObject(line) || line.id !== undefined || typeof line.body !== 'string' || !line.body.trim()) continue;
+    if (!isObject(line) || line.id !== undefined) continue;
+    if (line.resolved === true && line.thread === own) resolves = true;
+    if (typeof line.body !== 'string' || !line.body.trim()) continue;
     if (line.thread !== undefined && !threads.has(line.thread)) continue;
-    added.push(newComment({
+    comments.push(newComment({
       thread: line.thread,
       anchor: line.thread === undefined ? quoted(text, line.anchor?.exact) : undefined,
       body: line.body.trim(),
-      resolved: line.resolved,
     }, { by, at }));
   }
-  return added;
+  return { comments, resolves };
 }
 
 // The anchor of `exact` when it is in `text` once, else null. An agent may
@@ -162,9 +165,9 @@ const byTime = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 
 /**
  * The threads in `comments` (§4): each `{ id, anchor, resolved, comments }`,
  * its first comment then its replies, ordered by `at`, then `id`; threads in
- * the order of their first comments. Only people resolve and reopen: a
- * thread is resolved when its latest human comment says so. A reply whose first comment is missing
- * is left out. `mentionable` ([{ id, name }]) is who an @name can mean (§6); each comment
+ * the order of their first comments. A thread is resolved when its latest
+ * comment says so: any comment without `resolved` reopens it. A reply whose
+ * first comment is missing is left out. `mentionable` ([{ id, name }]) is who an @name can mean (§6); each comment
  * gets `mentions`, the ids it mentions.
  */
 export function threadsOf(comments, mentionable = []) {
@@ -172,29 +175,30 @@ export function threadsOf(comments, mentionable = []) {
   return firsts.map((first) => {
     const all = [first, ...comments.filter((c) => c.thread === first.id).sort(byTime)]
       .map((c) => ({ ...c, mentions: parseMentions(c.body, mentionable) }));
-    const human = all.findLast((c) => c.by.kind === 'human');
-    return { id: first.id, anchor: first.anchor ?? null, resolved: human?.resolved === true, comments: all };
+    return { id: first.id, anchor: first.anchor ?? null, resolved: all.at(-1).resolved === true, comments: all };
   });
 }
 
 /**
- * The buddies (ids) the open `thread` (from threadsOf) waits on: each X that a
- * comment by user `me` (an id) asks, newer than X's last comment there. A
- * comment asks whom it @mentions; one that mentions no one asks the
- * thread's buddies, unless it is empty (it resolved or reopened the thread): the one that opened it and each that `me` @mentioned
- * there before (docs/architecture.md, Who answers). Resolving drops what
- * was asked before it, so reopening asks no one.
+ * The ids the open `thread` (from threadsOf) waits on: each X that a comment
+ * by one of `askers` (the ids that may ask) asks, newer than X's last
+ * comment there. A comment asks whom it @mentions; one that mentions no one
+ * asks the thread's others: the one that opened it and each that an asker
+ * @mentioned there before, never an asker. An empty one (it reopened the
+ * thread) asks no one (docs/architecture.md, Who answers). Resolving drops
+ * what was asked before it, so reopening asks no one.
  */
-export function askedOf(thread, me) {
+export function askedOf(thread, askers) {
   if (thread.resolved) return [];
-  const add = (list, id) => { if (!list.includes(id)) list.push(id); };
-  const theirs = thread.comments[0].by.kind === 'ai' ? [thread.comments[0].by.id] : [];
+  const add = (list, id) => { if (!list.includes(id) && !askers.includes(id)) list.push(id); };
+  const theirs = [];
+  add(theirs, thread.comments[0].by.id);
   const asked = [];
   thread.comments.forEach((c, i) => {
-    if (c.by.kind === 'human' && c.resolved) asked.length = 0;
-    if (c.by.kind !== 'human' || c.by.id !== me || c.body.trim() === '') return;
+    if (c.resolved) asked.length = 0;
+    if (!askers.includes(c.by.id) || c.body.trim() === '') return;
     for (const id of c.mentions.length > 0 ? c.mentions : theirs) {
-      const answered = thread.comments.slice(i + 1).some((r) => r.by.kind === 'ai' && r.by.id === id);
+      const answered = thread.comments.slice(i + 1).some((r) => r.by.id === id);
       if (!answered) add(asked, id);
     }
     for (const id of c.mentions) add(theirs, id);

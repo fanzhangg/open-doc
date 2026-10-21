@@ -116,7 +116,8 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
      * Take the host's text again: on a new connection (only if the host
      * started again, a new epoch), on an edit refused as `stale`, or when an
      * `ops` event was `missed`. What landed since is the difference from the
-     * text last confirmed, with the edit on its way if it landed meanwhile;
+     * text last confirmed, with the edit on its way if it landed meanwhile
+     * (a host started again says so in `landed`, when it is in the file);
      * the typing not landed is moved over it and sent as one edit.
      */
     resync({ stale = false, missed = false } = {}) {
@@ -127,6 +128,10 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
           sent = null;
         }
         const state = await call('state');
+        if (state.epoch !== epoch && sent !== null && state.landed?.includes(sent)) { // in the file, never told
+          base = apply(confirmed, pending.shift());
+          sent = null;
+        }
         if (stale || missed || state.epoch !== epoch) {
           flush();
           const landed = diffOps(base, state.text);

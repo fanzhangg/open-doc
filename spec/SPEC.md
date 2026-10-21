@@ -122,9 +122,10 @@ score = 50 * quoteSim
 2. A thread is its first comment and the comments whose `thread` is its id,
    ordered by `at`, then `id`. A reply whose first comment is missing is
    hidden.
-3. A thread is resolved when the latest comment that is by a human or has
-   `resolved` has `resolved`: a human's comment without it reopens the
-   thread; a buddy's without it changes nothing.
+3. A thread is resolved when its latest comment has `resolved`: any comment
+   without it reopens the thread, whoever writes it. (Before, only a
+   human's comment counted, so in an older file a buddy's reply in a
+   resolved thread now reopens it.)
 4. A human is shown by the name in their latest comment; a buddy, by the name of its file now (the `name` in its comment when it has none here).
 5. A line that is not valid JSON or not a valid comment is reported, skipped
    and kept as it is.

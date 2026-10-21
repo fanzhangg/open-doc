@@ -4,7 +4,7 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, SettingsError, checkSettingsPatch, resolveSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, agentOf, agentSettings, checkSettingsPatch, resolveSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
 import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
 import { markdown } from '../web/views/markdown/index.js';
 import { markdownRule } from '../src/rules/markdown.js';
@@ -188,6 +188,47 @@ test('views and rules: on by default, the Markdown view and its rule included, a
 test('views: an always-on view stays enabled whatever is stored', () => {
   const plain = { id: 'plain', always: true, settings: [] };
   assert.equal(viewSettings(resolveSettings({ views: { plain: { enabled: false } } }), plain).enabled, true);
+});
+
+test('agents: a manifest declares the fields; one that is not valid leaves the agent its file name and no settings', () => {
+  const settings = [
+    { key: 'model', type: 'text', label: 'Model', default: '' },
+    { key: 'key', type: 'secret', label: 'API key' },
+    { key: 'effort', type: 'choice', label: 'Effort', options: [['low', 'Low'], ['high', 'High']], default: 'low', when: { model: { not: '' } } },
+  ];
+  assert.deepEqual(agentOf('bot', { name: 'Bot', about: 'Mine.', settings }), { id: 'bot', name: 'Bot', about: 'Mine.', settings });
+  assert.deepEqual(agentOf('bot', { name: 'Bot' }), { id: 'bot', name: 'Bot', about: '', settings: [] });
+  const none = { id: 'bot', name: 'bot', about: '', settings: [] };
+  for (const bad of [null, [], 'Bot', { name: '' }, { name: 'Bot', about: 3 }, { name: 'Bot', settings: {} }]) assert.deepEqual(agentOf('bot', bad), none, JSON.stringify(bad));
+  for (const field of [
+    { key: 'Model', type: 'text', label: 'Model', default: '' }, // a key names OPENDOC_SETTING_<KEY>: lower case only
+    { key: 'a-b', type: 'text', label: 'A', default: '' },
+    { key: 'model', type: 'url', label: 'Model', default: '' },
+    { key: 'model', type: 'text', default: '' },
+    { key: 'model', type: 'text', label: 'Model', default: 'two\nlines' },
+    { key: 'model', type: 'text', label: 'Model' },
+    { key: 'key', type: 'secret', label: 'Key', default: 'sk-shipped' }, // a secret has no default
+    { key: 'mode', type: 'choice', label: 'Mode', options: ['a'], default: 'a' },
+    { key: 'n', type: 'number', label: 'N', default: 1 },
+    { key: 'model', type: 'text', label: 'Model', default: '', when: 'always' },
+  ]) assert.deepEqual(agentOf('bot', { name: 'Bot', settings: [field] }), none, JSON.stringify(field));
+  assert.deepEqual(agentOf('bot', { name: 'Bot', settings: [settings[0], settings[0]] }), none, 'keys are unique');
+});
+
+test('agents: settings by agent id, stored as a view\'s; a secret only from the keychain, never from settings.json', () => {
+  const agent = agentOf('bot', { name: 'Bot', settings: [
+    { key: 'model', type: 'text', label: 'Model', default: 'big' },
+    { key: 'key', type: 'secret', label: 'API key' },
+    { key: 'fast', type: 'switch', label: 'Fast', default: false },
+  ] });
+  assert.doesNotThrow(() => checkSettingsPatch({ agents: { bot: { model: 'small' } } }));
+  assert.throws(() => checkSettingsPatch({ agents: { bot: { model: null } } }), SettingsError);
+  assert.deepEqual(agentSettings(resolveSettings(null), agent), { model: 'big', key: undefined, fast: false });
+  const stored = resolveSettings({ agents: { bot: { model: 'small', key: 'sk-in-the-file', fast: 'yes' }, other: { x: 1 } } });
+  assert.deepEqual(stored.agents.other, { x: 1 }, 'ids this version does not know are kept');
+  assert.deepEqual(agentSettings(stored, agent), { model: 'small', key: undefined, fast: false });
+  assert.deepEqual(agentSettings(stored, agent, { key: 'sk-secret' }), { model: 'small', key: 'sk-secret', fast: false });
+  assert.equal(agentSettings(resolveSettings({ agents: { bot: { model: 'a\nb' } } }), agent).model, 'big', 'a line of text');
 });
 
 test('a version 2 file is read as it is', async () => {

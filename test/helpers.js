@@ -54,7 +54,7 @@ export async function fakeRuns(dir) {
 let edits = 0;
 
 /**
- * Open `docPath` as a window would: `call(type, arg)` asks the doc,
+ * Open `docPath` as a window would: `call(type, arg)` asks the doc as its owner,
  * `events` holds what it said ([name, data], oldest first), and
  * `edit(next, from)` types the doc's text into `next` from state `from`
  * (default: the doc as it is now), landed and written once it resolves.
@@ -70,10 +70,11 @@ export async function openTestDoc(docPath, { buddies = null, ...options } = {}) 
   }
   const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
   const edit = async (next, from) => {
-    const at = from ?? await doc.call('state');
-    return doc.call('submit', { ops: diffOps(at.text, next), rev: at.rev, epoch: at.epoch, id: `test.${++edits}` });
+    const at = from ?? await call('state');
+    return call('submit', { ops: diffOps(at.text, next), rev: at.rev, epoch: at.epoch, id: `test.${++edits}` });
   };
-  return { doc, events, edit, call: (type, arg) => doc.call(type, arg), state: () => doc.call('state') };
+  const call = async (type, arg) => doc.call(type, arg, await doc.owner());
+  return { doc, events, edit, call, state: () => call('state') };
 }
 
 /** Wait until `check()` resolves to a truthy value, which it returns. */

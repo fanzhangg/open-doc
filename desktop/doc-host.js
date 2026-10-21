@@ -13,6 +13,10 @@
 //     its sidecar, or, with `moved`, already there)
 //   running { docId } → the names of the doc's buddies at work
 //   setFolder { docId, folder }
+//   secrets { secrets }: the agents' secrets for the runs, decrypted by the
+//     app, whose main process alone has the keychain: { <agent>: { <key>: value } }
+//   call { docId, call, arg } → the doc's answer to `call`, asked as the
+//     owner: the app's own calls, as the sidebar's `open`
 //   attach { docId }, with a message port: a window's page talks to the doc
 //     over it (`serve`)
 //   closeAll
@@ -36,6 +40,7 @@ const held = async () => {
 
 const docs = new Map(); // docId → { service, ports: Set }
 let nextId = 0;
+let secrets = {};
 
 const docOf = (docId) => {
   const found = docs.get(docId);
@@ -49,7 +54,7 @@ const handlers = {
     const entry = { service: null, ports: new Set() };
     docs.set(docId, entry);
     try {
-      entry.service = await openDoc(docPath, { folder, emit: (event, data) => { for (const port of entry.ports) port.postMessage({ event, data }); } });
+      entry.service = await openDoc(docPath, { folder, secrets: () => secrets, emit: (event, data) => { for (const port of entry.ports) port.postMessage({ event, data }); } });
     } catch (error) {
       docs.delete(docId);
       throw error;
@@ -66,6 +71,13 @@ const handlers = {
   moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameFile),
   running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
   setFolder: ({ docId, folder }) => docOf(docId).service.setFolder(folder),
+  secrets({ secrets: next }) {
+    secrets = next;
+  },
+  async call({ docId, call, arg }) {
+    const { service } = docOf(docId);
+    return service.call(call, arg, await service.owner());
+  },
   attach({ docId }, ports) {
     serve(docOf(docId), ports[0]);
   },
@@ -77,7 +89,8 @@ const handlers = {
 };
 
 /**
- * A page's requests over `port`: `{ id, type, arg }`, answered with
+ * A page's requests over `port`, each as the owner (a window is theirs):
+ * `{ id, type, arg }`, answered with
  * `{ id, result }` or `{ id, error: { message, code } }`. Events go to it as
  * `{ event, data }`, starting with `hello`.
  */
@@ -85,7 +98,7 @@ function serve(entry, port) {
   entry.ports.add(port);
   port.on('message', async ({ data: { id, type, arg } }) => {
     try {
-      const result = (await entry.service.call(type, arg)) ?? null;
+      const result = (await entry.service.call(type, arg, await entry.service.owner())) ?? null;
       if (type === 'submit') await held();
       port.postMessage({ id, result });
     } catch (error) {

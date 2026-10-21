@@ -31,9 +31,12 @@ export const api = {
     }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
-  /** The agent scripts: { agents: names, shipped: the names OpenDoc comes with, folder }. */
+  /**
+   * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
+   * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   */
   scripts: () => call('scripts'),
-  /** Write shipped agent script `name` again as it came. */
+  /** Write shipped agent `name` (its program and manifest) again as it came. */
   resetScript: (name) => call('resetScript', { name }),
   /** A new buddy, the project's: { agents }. */
   createBuddy: (buddy) => call('createBuddy', { buddy }),
@@ -50,4 +53,8 @@ export const api = {
   /** Put the doc back to version `id`. */
   restoreVersion: (id) => call('restoreVersion', { id }),
   saveSettings: async (patch) => (await call('saveSettings', patch)).settings,
+  /** What the project's folder `path` ('' for the top) holds: [{ name, folder }], subfolders first. */
+  list: (path) => call('list', { path }),
+  /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
+  read: (path) => call('read', { path }),
 };

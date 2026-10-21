@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { readSidecarText, sidecarPath } from '../src/store/files.js';
+import { MAX_TEXT_BYTES, readSidecarText, sidecarPath } from '../src/store/files.js';
 import {
-  MAX_TEXT_BYTES, cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
+  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
   nameParts, nameProblem, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
-  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, readFolder, readText, relativeDoc, watchFolder,
+  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
@@ -177,30 +177,14 @@ test('listDocs: the docs in a folder and its subfolders, subfolders first, hidde
     await writeFile(join(dir, file), '');
   }
   await symlink(join(dir, 'guides'), join(dir, 'linked'), 'junction'); // a junction on Windows, which needs no admin rights
+  const outside = await tempDir();
+  await writeFile(join(outside, 'secret.md'), '');
+  await symlink(join(outside, 'secret.md'), join(dir, 'out.md')).catch(() => {}); // needs admin rights on Windows
   assert.deepEqual(await listDocs(dir), ['guides/deep/more.md', 'guides/intro.md', 'a 2.md', 'a 10.md', 'b.markdown', 'README.md']);
   assert.deepEqual(await listDocs(dir, { max: 2 }), ['guides/deep/more.md', 'guides/intro.md']);
   assert.deepEqual(await listDocs(join(dir, 'empty'), { isDoc: () => true }), ['nothing.txt'], 'any file, when isDoc says so');
   assert.deepEqual(await listDocs(join(dir, 'missing')), []);
   assert.equal(docInFolder(dir, 'guides/deep/more.md'), join(dir, 'guides', 'deep', 'more.md'));
-});
-
-test('readFolder: every file and folder, folders first, without .git, .DS_Store or a file\'s sidecar', async () => {
-  const dir = await tempDir();
-  const files = [
-    'b.md', 'b.md.opendoc.jsonl', 'gone.md.opendoc.jsonl', 'a 10.txt', 'a 2.txt', '.env', '.DS_Store',
-    '.git/HEAD', 'node_modules/pkg/index.js', 'src/main.js', 'empty/.keep',
-  ];
-  for (const file of files) {
-    await mkdir(dirname(join(dir, file)), { recursive: true });
-    await writeFile(join(dir, file), '');
-  }
-  await symlink(join(dir, 'src'), join(dir, 'linked'), 'junction');
-  assert.deepEqual(await readFolder(dir), [
-    { name: 'empty', folder: true }, { name: 'linked', folder: true }, { name: 'node_modules', folder: true }, { name: 'src', folder: true },
-    { name: '.env', folder: false }, { name: 'a 2.txt', folder: false }, { name: 'a 10.txt', folder: false }, { name: 'b.md', folder: false },
-    { name: 'gone.md.opendoc.jsonl', folder: false },
-  ]);
-  assert.deepEqual(await readFolder(join(dir, 'missing')), []);
 });
 
 test('firstTextFile: a text file at the top before one below, never a sidecar or binary', async () => {
@@ -213,16 +197,6 @@ test('firstTextFile: a text file at the top before one below, never a sidecar or
   await writeFile(join(dir, 'c.json'), '{}\n');
   assert.equal(await firstTextFile(dir), 'c.json');
   assert.equal(await firstTextFile(join(dir, 'missing')), null);
-});
-
-test('readText: a text file\'s text, but not a large or binary one', async () => {
-  const dir = await tempDir();
-  await writeFile(join(dir, 'a.js'), 'let x = 1;\n');
-  await writeFile(join(dir, 'pic.png'), Buffer.from([0x89, 0x50, 0x00, 0x47]));
-  await writeFile(join(dir, 'big.log'), 'x'.repeat(MAX_TEXT_BYTES + 1));
-  assert.deepEqual(await readText(join(dir, 'a.js')), { text: 'let x = 1;\n' });
-  assert.deepEqual(await readText(join(dir, 'pic.png')), { problem: 'binary' });
-  assert.deepEqual(await readText(join(dir, 'big.log')), { problem: 'large' });
 });
 
 test('neighbourDoc: the next doc in the same folder, else the one above, else the first', () => {

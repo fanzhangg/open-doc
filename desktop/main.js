@@ -5,22 +5,25 @@
 // talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, session, shell, utilityProcess } from 'electron';
+import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
+import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents, readAgent } from '../src/store/agents.js';
+import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
+import { NAME_PATTERN } from '../src/core/mentions.js';
 import { moveHistory } from '../src/store/history.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
   moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
-import { docInFolder, firstDoc, firstTextFile, isHiddenName, listDocs, neighbourDoc, readFolder, readText, relativeDoc } from './folder.js';
+import { resolve as resolveInProject } from '../src/host/project-service.js';
+import { docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -168,7 +171,8 @@ async function openFolder(path, parent = null) {
   // A doc another window has open stays there; start with one that is free.
   const free = docs.filter((rel) => !windows.windowOf(docInFolder(folder, rel)));
   const remembered = Object.hasOwn(state.folderDocs, folder) ? state.folderDocs[folder] : null;
-  const last = remembered && docInFolder(folder, remembered); // any doc, Markdown or not
+  // Any doc, Markdown or not, the project still shows.
+  const last = remembered && (await resolveInProject(folder, remembered).then(() => docInFolder(folder, remembered), () => null));
   const lastFree = last && isFile(last) && !windows.windowOf(last) && (await docPathFor(last)) === last;
   let rel = (lastFree ? remembered : firstDoc(free)) ?? firstDoc(docs) ?? (await firstTextFile(folder));
   if (!rel) {
@@ -449,7 +453,7 @@ function pageCommand(win, name) {
   page?.webContents.send('opendoc:command', name);
 }
 
-// Settings > Agent > Show folder: where the agent scripts are, to edit them.
+// Settings > Agents > Show folder: where the agents are, to edit them.
 function showAgents() {
   shell.openPath(agentsDir()).catch(() => {});
 }
@@ -481,11 +485,11 @@ function recentMenu() {
 // ---- the start window's settings ----
 
 // The settings the start window shows and changes (its Settings dialog, a
-// doc's but Views and Rules): your name, how things look and the agent, never buddies.
-const PAGE_SETTING_KEYS = ['name', 'theme', 'agent'];
+// doc's but Views and Rules): your name, how things look and the agents, never buddies.
+const PAGE_SETTING_KEYS = ['name', 'theme', 'agent', 'agents'];
 
-// Settings > Agent: the agent scripts, as a doc's page gets them from its doc host.
-const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir() });
+// Settings > Agents: the agents, as a doc's page gets them from its doc host.
+const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir(), secrets: secretsSet(secrets) });
 
 async function resetAgentScript(name) {
   if (!SHIPPED_AGENTS.includes(name)) throw new Error('not a shipped agent');
@@ -499,11 +503,32 @@ async function saveStartSettings(patch) {
   return pageSettings(await updateSettings(patch));
 }
 
+// ---- the agents' secrets ----
+
+// API keys and the like (src/store/secrets.js), decrypted here, the one
+// process with the keychain, and handed to the doc host for the runs. A
+// page learns only which are set.
+let secrets = {};
+
+// Set agent `agent`'s secret `key`, one its manifest declares, or clear it with ''.
+async function saveSecret({ agent, key, value }) {
+  const declared = NAME_PATTERN.test(agent) && (await readAgent(agent)).settings.some((field) => field.key === key && field.type === 'secret');
+  if (!declared) throw new Error('not allowed');
+  const own = { ...secrets[agent], [key]: value };
+  if (!value) delete own[key];
+  const next = { ...secrets, [agent]: own };
+  await writeSecrets(safeStorage, next);
+  secrets = next;
+  await docHost.setSecrets(secrets); // before the page asks the doc host which are set
+}
+
 // ---- the sidebar's file operations ----
 
 // A folder window's sidebar names files and folders by their place in the
 // folder (`/` between folders, '' for the folder itself); the app checks
-// that each is inside the folder, shown there, and of its kind.
+// that the project shows each (src/host/project-service.js) and its kind.
+// The sidebar reads them through the doc's ProjectService; these are only
+// the owner's.
 
 function sidebarOf(win) {
   const entry = windows.docFor(win);
@@ -511,14 +536,22 @@ function sidebarOf(win) {
   return entry;
 }
 
-// The path of `rel`: a 'file' or 'folder' of the sidebar of `entry`, or its 'root'.
-function checkInFolder(entry, rel, kind) {
-  const path = typeof rel === 'string' ? docInFolder(entry.folder, rel) : null;
-  const ok = path !== null && (kind === 'root' ? rel === ''
-    : relativeDoc(entry.folder, path) === rel && !rel.split('/').some(isHiddenName)
-      && (kind === 'file' ? isFile(path) : kind === 'folder' && isDirectory(path)));
+// The path of `rel`: a 'file' or 'folder' of the sidebar of `entry`, or its
+// 'root'. The path itself, not where a link there leads: renaming or
+// deleting a link is the link's.
+async function checkInFolder(entry, rel, kind) {
+  const real = await resolveInProject(entry.folder, rel).catch(() => null);
+  const ok = real !== null && (kind === 'root' ? rel === ''
+    : rel !== '' && (kind === 'file' ? isFile(real) : kind === 'folder' && isDirectory(real)));
   if (!ok) throw new Error('not allowed');
-  return path;
+  return docInFolder(entry.folder, rel);
+}
+
+// A name typed in the sidebar (nameParts), but none the sidebar would not show.
+function sidebarName(typed) {
+  const named = nameParts(String(typed ?? ''));
+  if (!named.problem && named.parts.some((part) => part.startsWith('.'))) return { problem: 'Names starting with . are hidden here; pick another.' };
+  return named;
 }
 
 const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
@@ -530,8 +563,8 @@ const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
  */
 async function sidebarCreate(win, { parent, name } = {}) {
   const entry = sidebarOf(win);
-  const dir = checkInFolder(entry, parent, parent ? 'folder' : 'root');
-  const named = nameParts(String(name ?? ''));
+  const dir = await checkInFolder(entry, parent, parent ? 'folder' : 'root');
+  const named = sidebarName(name);
   if (named.problem) return { error: named.problem };
   let path;
   try {
@@ -556,8 +589,8 @@ async function sidebarCreate(win, { parent, name } = {}) {
 async function sidebarRename(win, { from, kind, to } = {}) {
   const entry = sidebarOf(win);
   if (kind !== 'file' && kind !== 'folder') throw new Error('not allowed');
-  const fromPath = checkInFolder(entry, from, kind);
-  const named = nameParts(String(to ?? ''));
+  const fromPath = await checkInFolder(entry, from, kind);
+  const named = sidebarName(to);
   if (named.problem) return { error: named.problem };
   const toPath = join(entry.folder, ...named.parts);
   if (toPath === fromPath) return { rel: from };
@@ -653,7 +686,7 @@ async function countComments(path) {
 async function sidebarTrash(win, { rel, kind } = {}) {
   const entry = sidebarOf(win);
   if (kind !== 'file' && kind !== 'folder') throw new Error('not allowed');
-  const path = checkInFolder(entry, rel, kind);
+  const path = await checkInFolder(entry, rel, kind);
   const name = basename(path);
   const real = await realpath(path);
   const gone = (docPath) => (kind === 'file' ? docPath === real : isInside(real, docPath));
@@ -727,7 +760,7 @@ const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.
  */
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
   const entry = sidebarOf(win);
-  const path = checkInFolder(entry, rel, kind);
+  const path = await checkInFolder(entry, rel, kind);
   const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
   const newFile = { label: 'New File', click: command('newFile') };
@@ -774,8 +807,6 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'rename' && fromDoc) return void (await renameDialog(win));
   if (action === 'revealSidecar' && fromDoc) return void shell.showItemInFolder(sidecarPath(windows.docFor(win).docPath));
   if (action === 'trashSidecar' && fromDoc) return void (await shell.trashItem(sidecarPath(windows.docFor(win).docPath)));
-  if (action === 'folderList' && fromDoc) return readFolder(checkInFolder(sidebarOf(win), arg, arg ? 'folder' : 'root'));
-  if (action === 'folderRead' && fromDoc) return readText(checkInFolder(sidebarOf(win), arg, 'file'));
   if (action === 'folderCreate' && fromDoc) return sidebarCreate(win, arg);
   if (action === 'folderRename' && fromDoc) return sidebarRename(win, arg);
   if (action === 'folderTrash' && fromDoc) return sidebarTrash(win, arg);
@@ -783,6 +814,7 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
   if (action === 'showAgents' && (fromStart || fromDoc)) return void showAgents();
   if (action === 'agentScripts' && fromStart) return agentScripts();
   if (action === 'resetAgentScript' && fromStart) return void (await resetAgentScript(arg));
+  if (action === 'saveSecret' && (fromStart || fromDoc)) return void (await saveSecret(arg));
   if (action === 'recent' && fromStart) {
     return recentProjects().map((path) => ({ name: basename(path), folder: shortFolder(path) }));
   }
@@ -804,9 +836,10 @@ ipcMain.handle('opendoc:action', async (event, action, arg) => {
 });
 
 // The sidebar of a folder window names one of its files (`/` between
-// folders); a doc opens, and false says the file is not one.
+// folders), which its doc's ProjectService opens; a doc opens, and false
+// says the file is not one.
 async function openInFolder(win, rel) {
-  const path = checkInFolder(sidebarOf(win), rel, 'file');
+  const { path } = await sidebarOf(win).hosted.call('open', { path: String(rel) });
   if ((await docPathFor(path)) !== path) return false;
   await openPath(path, { parent: win });
   return true;
@@ -859,6 +892,11 @@ async function start() {
   // environment from this process, so the login shell's goes in first.
   Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
   docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
+  secrets = await readSecrets(safeStorage).catch((error) => {
+    console.error('Could not read the agents\' secrets:', error.message);
+    return {};
+  });
+  docHost.setSecrets(secrets).catch((error) => console.error(error.message));
   // Clipboard writes are the only permission a page gets.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(permission === 'clipboard-sanitized-write');

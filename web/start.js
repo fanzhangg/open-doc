@@ -36,7 +36,7 @@ desktop.settings().then((initial) => {
       if (next !== store.get().name) store.set({ name: next });
       return true;
     },
-    scripts: { list: desktop.agentScripts, reset: desktop.resetAgentScript, showFolder: desktop.showAgents },
+    scripts: { list: desktop.agentScripts, reset: desktop.resetAgentScript, saveSecret: desktop.saveSecret, showFolder: desktop.showAgents },
   });
 });
 desktop.onCommand((name) => settings?.toggle(name === 'shortcuts' ? 'shortcuts' : 'general'));
