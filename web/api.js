@@ -1,8 +1,13 @@
 // Talks to the doc in the doc host (src/host/doc-service.js) through the
-// line the desktop app's preload gives the page (window.opendocHost).
+// line the desktop app's preload gives the page (window.opendocHost), or in
+// a plain browser through the relay (relay.js).
+
+import { relayHost } from './relay.js';
+
+const host = window.opendocHost ?? relayHost(new URLSearchParams(location.search));
 
 async function call(type, arg) {
-  const { result, error } = await window.opendocHost.call(type, arg);
+  const { result, error } = await host.call(type, arg);
   if (error) throw Object.assign(new Error(error.message), { code: error.code });
   return result;
 }
@@ -26,11 +31,13 @@ export const api = {
    */
   events() {
     const handlers = new Map();
-    queueMicrotask(() => window.opendocHost.onEvent((name, data) => {
+    queueMicrotask(() => host.onEvent((name, data) => {
       for (const fn of handlers.get(name) ?? []) fn(data);
     }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
+  /** How the line to the host is, for a page in a browser (relay.js `onLine`); the app's is always there. */
+  line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
    * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.

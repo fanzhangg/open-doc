@@ -1,0 +1,13 @@
+# The relay (docs/architecture.md, Sharing). `npx wrangler dev` runs it
+# locally, as the tests do; where it is deployed is not decided yet.
+name = "opendoc-relay"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

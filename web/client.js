@@ -1,9 +1,10 @@
 // The page's side of the order the doc host keeps (docs/architecture.md,
 // Interfaces; docs/markdown-view.md, Many writers, plan A): the view's typing
 // goes to the host as operations on the rev it started from, one edit at a
-// time, and others' edits come back as operations, moved over the typing not
-// landed yet and shown with the view's applyText. The same for every view,
-// and for the two-writer harness (test/collab/page.js).
+// time: at once when none is on its way, else all typed meanwhile once the
+// host answers. Others' edits come back as operations, moved over the typing
+// not landed yet and shown with the view's applyText. The same for every
+// view, and for the two-writer harness (test/collab/page.js).
 
 import { apply, diffOps, transform } from '../src/core/ot.js';
 
@@ -13,8 +14,9 @@ import { apply, diffOps, transform } from '../src/core/ot.js';
  * shows others' edits, `ops` as they changed the view's text, `event` the
  * host's `ops` event (null for the edits of a host that started again);
  * `rules()`, the doc's rules (rulesOf), as the host judges an edit that
- * yields. Start it with the host's `state`; give it each `ops` event, and
- * `resync()` on a new connection.
+ * yields. Start it with the host's `state`; call `edited()` on every change
+ * the person makes in the view; give it each `ops` event, and `resync()` on
+ * a new connection.
  */
 export function createClient({ view, call, show, rules, onError = () => {} }) {
   const name = Math.random().toString(36).slice(2);
@@ -68,8 +70,11 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
     if (ours) {
       pending.shift();
       sent = null;
-      if (pending.length > 0) send();
-      else settle();
+      flush(); // what was typed while it was on its way
+      if (sent === null) {
+        if (pending.length > 0) send();
+        else settle();
+      }
       return;
     }
     if (event.yields && pending.length > 0) {
@@ -107,6 +112,10 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
       confirmed = last = state.text;
     },
     flush,
+    /** The person changed the view: their typing goes out now, or once the edit on its way is answered. */
+    edited() {
+      if (sent === null && !syncing) flush();
+    },
     /** An `ops` event: an edit landed. */
     receive(event) {
       if (syncing) held.push(event);
@@ -152,6 +161,7 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
       })().catch(onError).finally(() => {
         syncing = null;
         for (const event of held.splice(0)) client.receive(event);
+        if (sent === null) flush(); // typed meanwhile
       });
       return syncing;
     },

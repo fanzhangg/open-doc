@@ -19,7 +19,7 @@ import { createStatusBar } from './status.js';
 import { indentGuides, whitespaceMarks } from './whitespace.js';
 
 const FLASH_MS = 6000;
-const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does
+const CHANGE_MS = 200; // onChange waits for a pause in typing this long, as the Markdown view's does; onEdit does not
 const fromDisk = Annotation.define();
 const setMarks = StateEffect.define();
 const addFlash = StateEffect.define();
@@ -53,10 +53,10 @@ const flashField = StateField.define({
  * view's (web/views/plain/index.js), changed through `saveSettings`; an editable
  * view also has a status bar.
  *
- * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, color?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, name: string, settings: object, saveSettings?: (patch: object) => void, editable?: boolean, color?: boolean, onChange?: () => void, onEdit?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
-export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, color = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
+export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, color = true, onChange = () => {}, onEdit = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
   const host = stage.querySelector('.od-editor');
   stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
@@ -96,6 +96,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
+            onEdit();
             clearTimeout(changeTimer);
             changeTimer = setTimeout(onChange, CHANGE_MS);
           }

@@ -198,7 +198,9 @@ test('the shipped script runs a turn under the contract, with its settings from 
     const run = (PATH = `${dirname(process.execPath)}${delimiter}${process.env.PATH}`, own = settings) => new Promise((resolve) => {
       const env = { ...process.env, PATH, OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: '', OPENDOC_BUDDY: 'Ada' };
       for (const [key, value] of Object.entries(own)) env[`OPENDOC_SETTING_${key}`] = value;
-      execFile(agentScript('opendoc', config, 'linux'), { cwd: dir, env }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr })).stdin.end('the prompt');
+      const child = execFile(agentScript('opendoc', config, 'linux'), { cwd: dir, env }, (error, stdout, stderr) => resolve({ code: error?.code ?? 0, stdout, stderr }));
+      child.stdin.on('error', () => {}); // a run that fails early need not read its prompt
+      child.stdin.end('the prompt');
     });
 
     const edits = [{ path: doc, old: 'week one', new: 'week two' }, { path: sidecar, old: '', new: '{"body":"Two weeks?"}' }];

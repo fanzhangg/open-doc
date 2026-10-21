@@ -51,6 +51,7 @@ let margin;
 let people;
 let history;
 let settings;
+let level; // what this page may do: 'read', 'write' or 'owner' (state())
 let defaultName;
 let inProject = false; // the doc was opened from a project folder
 let me; // your name
@@ -87,7 +88,19 @@ window.opendocStay = () => {
   document.body.inert = false;
 };
 
+// How the line to the host is, in a teammate's page (web/relay.js).
+const LINE = {
+  host: 'The host is offline: waiting for it to come back',
+  nohost: 'No one is sharing at this link now. It may be from an earlier time: ask for a new one. Waiting…',
+  relay: 'Cannot reach the relay: trying again',
+};
+function showLine(line) {
+  if (!line) setStatus('');
+  else setStatus(line.message ?? LINE[line.reason], 'error');
+}
+
 async function start() {
+  api.line(showLine);
   let initial;
   try {
     initial = await api.state();
@@ -98,8 +111,10 @@ async function start() {
   defaultName = initial.defaultName;
   myId = initial.me.id;
   inProject = initial.project;
+  level = initial.level;
+  // The settings are the owner's: anyone else's stay in this page.
   settings = createSettings(initial.settings, {
-    save: api.saveSettings,
+    save: level === 'owner' ? api.saveSettings : async () => settings.get(),
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
   me = settings.get().name ?? defaultName;
@@ -284,10 +299,10 @@ function makeView(chosen, text) {
     name: docName,
     toolbar: document.querySelector('.od-toolbar'),
     onComment: requestComment,
+    onEdit: () => client.edited(),
     onChange: () => {
       hideRun();
       paintMarks();
-      client.flush();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onMarkClick: (id) => {
@@ -299,7 +314,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
-    editable: chosen.editable,
+    editable: chosen.editable && level !== 'read',
     color: chosen.color,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),

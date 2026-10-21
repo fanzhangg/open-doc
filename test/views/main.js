@@ -8,7 +8,9 @@
 // agent (test/fixtures/fake-agent.js). `collab:make` opens a doc of that
 // text in a project folder and hands the page a port to it, as a window
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
-// `collab:release` hold Pilot's turns and let them go.
+// `collab:release` hold Pilot's turns and let them go; `collab:share` shares
+// that project through a relay (test/perf/typing.test.js). VIEWS_SEARCH is
+// the page's query, such as `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -21,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 app.commandLine.appendSwitch('disable-smooth-scrolling');
 app.whenReady().then(async () => {
   const window = new BrowserWindow({ width: 1000, height: 700, show: false, webPreferences: { backgroundThrottling: false, preload: join(here, 'preload.cjs') } });
-  window.loadFile(process.env.VIEWS_PAGE);
+  window.loadFile(process.env.VIEWS_PAGE, { search: process.env.VIEWS_SEARCH ?? '' });
 
   const config = await fakeConfig();
   const host = utilityProcess.fork(join(here, '..', '..', 'desktop', 'doc-host.js'), [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: config } });
@@ -56,4 +58,5 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:write', (event, text) => writeFile(doc.path, text));
   ipcMain.handle('collab:hold', () => rm(join(config, 'release-Pilot'), { force: true }));
   ipcMain.handle('collab:release', () => writeFile(join(config, 'release-Pilot'), ''));
+  ipcMain.handle('collab:share', (event, relay, secret) => request('share', { folder: dirname(doc.path), relay, secret }));
 });

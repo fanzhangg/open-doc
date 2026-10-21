@@ -1,8 +1,9 @@
 // The page the two-writer harness (test/collab.test.js) drives: two views of
 // one doc, each with the page's side of the doc host's order
 // (web/client.js), joined to the doc host the harness starts as the app does
-// (test/views/main.js), 150 ms away each way. Plan A (docs/markdown-view.md,
-// Many writers): typing goes out as operations when it pauses; before taking
+// (test/views/main.js), 150 ms away each way (`?delay=` sets it). Plan A
+// (docs/markdown-view.md, Many writers): typing goes out as operations as
+// it is typed, one edit on its way at a time; before taking
 // the host's edits a view's text is read once more, the edits moved over
 // what it has not landed, and shown with applyText.
 
@@ -112,7 +113,7 @@ const collab = {
     collab.clients = await Promise.all(stages.map(async (stage) => {
       let harness;
       const toolbar = stage.closest('main').previousElementSibling;
-      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onChange: () => harness.client.flush() });
+      const view = await create({ stage, text, name: 'doc.md', toolbar, editable: chosen.editable, color: chosen.color, settings: viewSettings({ views: {} }, declared), onEdit: () => harness.client.edited() });
       harness = createHarnessClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
       harness.client.start(state);
       return harness;

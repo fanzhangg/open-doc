@@ -16,7 +16,7 @@ import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
-import { SettingsError, agentSettings } from '../core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
 import { apply, diffOps, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
@@ -239,8 +239,11 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return {};
   }
 
-  async function state() {
-    const { settings } = await readSettings(settingsDir);
+  // The doc as `who` sees it, and their `level`. The owner's settings and
+  // name are theirs alone: anyone else gets the default settings, and is
+  // `me` themselves.
+  async function state(who) {
+    const owner = can(who, 'owner');
     return {
       doc: basename(docPath),
       text,
@@ -248,9 +251,10 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       rev,
       landed: landedBefore,
       ...(await commentsView(text)),
-      settings,
-      defaultName: defaultName(),
-      me: await me(),
+      settings: owner ? (await readSettings(settingsDir)).settings : DEFAULT_SETTINGS,
+      defaultName: owner ? defaultName() : who.name,
+      me: owner ? await me() : byOf(who),
+      level: who.level,
       agents: agentStatuses(),
       project: folder !== null, // whether buddies can be made here
     };
@@ -599,7 +603,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // changed, for the window that asked.
   const calls = {
     read: {
-      state,
+      state: (body, who) => state(who),
       async history() {
         await serial(flushTyping); // typing not paused yet is a version too
         await chronicle;
@@ -611,9 +615,13 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         return found;
       },
       // The project's files (project-service.js), `path` in the project.
+      // Its real path is the owner's alone.
       list: (body) => inProject().list(body?.path),
       read: (body) => inProject().read(body?.path),
-      open: (body) => inProject().open(body?.path),
+      async open(body, who) {
+        const opened = await inProject().open(body?.path);
+        return can(who, 'owner') ? opened : { path: body.path };
+      },
     },
     write: {
       submit,
