@@ -4,7 +4,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { writeAtomic } from '../src/store/files.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 async function withDoc(fn, content = SAMPLE) {
@@ -97,7 +98,8 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
     const before = await state();
     const typed = before.text.replace('extra load.', 'extra load at launch.');
     const pulled = SAMPLE.replace('The main risk is', 'The risk we see is');
-    await writeFile(docPath, pulled);
+    // Atomically: an in-place write can be read half done (test/history.test.js).
+    await writeAtomic(docPath, pulled);
     const saved = await call('saveDoc', { text: typed, baseHash: before.docHash });
     assert.ok(!saved.conflict, 'the doc host merges the pulled version into the save');
     assert.match(saved.text, /The risk we see is .* extra load at launch\./);
@@ -110,7 +112,7 @@ test('an outside change (git pull) to the paragraph being typed: the typing stay
     const now = await state();
     const mine = now.text.replace('beta cohort', 'beta testers');
     const theirs = now.text.replace('beta cohort', 'early users');
-    await writeFile(docPath, theirs);
+    await writeAtomic(docPath, theirs);
     const again = await call('saveDoc', { text: mine, baseHash: now.docHash });
     assert.equal(again.text, mine);
     assert.match(await disk(), /beta testers/);
