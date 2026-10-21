@@ -130,7 +130,7 @@ test('the shipped script runs a turn under the contract, on a Chat Completions s
   const answers = [];
   const server = createServer(async (req, res) => {
     requests.push({ url: req.url, body: JSON.parse(await text(req)) });
-    const [status, body] = answers.shift();
+    const [status, body] = answers.shift() ?? [500, { error: 'no answer queued' }];
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -166,6 +166,15 @@ test('the shipped script runs a turn under the contract, on a Chat Completions s
       ['Ada', ['user', 'assistant'], null],
       ['Ada', ['user'], failed.stderr.trim()],
     ], 'each turn\'s messages are logged');
+
+    // A CRLF doc reads without its \r, and an edit quoting more than a line keeps its line breaks.
+    await writeFile(doc, SAMPLE.replace(/\n/g, '\r\n'));
+    const quote = 'We plan to **ship all six features** in week one, then gather feedback from the\nbeta cohort';
+    answers.push([200, { choices: [{ message: calling(['read', { path: doc, lines: [3, 4] }]) }] }]);
+    answers.push([200, { choices: [{ message: calling(['propose', { edits: [{ path: doc, old: quote, new: 'We ship\nin week two' }], reply: '' }]) }] }]);
+    assert.equal((await run()).code, 0);
+    assert.equal(requests.at(-1).body.messages.at(-1).content, '3\tWe plan to **ship all six features** in week one, then gather feedback from the\n4\tbeta cohort before the public release.');
+    assert.equal(await readFile(doc, 'utf8'), SAMPLE.replace(quote, 'We ship\nin week two').replace(/\n/g, '\r\n'));
 
     await new Promise((r) => server.close(r));
     assert.match((await run()).stderr, new RegExp(`^Cannot reach ${endpoint} \\(ECONNREFUSED\\): is the model's server running\\?\nThe endpoint, model and key are at the top of ${program}\\.`));

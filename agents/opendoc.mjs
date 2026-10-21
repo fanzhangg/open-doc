@@ -109,7 +109,7 @@ async function read({ path, lines }, readFile) {
   const found = typeof path === 'string' ? await readFile(path) : null;
   if (found === null) return `${path}: no such file, or not one you can read.`;
   if (Array.isArray(found)) return found.join('\n') || '(an empty folder)';
-  const all = found.replace(/\n$/, '').split('\n');
+  const all = found.replace(/\r?\n$/, '').split(/\r?\n/);
   if (!lines && found.length > MAX_READ) return outline(path, all);
   const from = Math.max(1, lines?.[0] ?? 1);
   return all.slice(from - 1, lines?.[1] ?? all.length).map((line, i) => `${from + i}\t${line}`).join('\n');
@@ -145,6 +145,8 @@ const isComment = (line) => {
  * to fix. `paths` are the copies' paths.
  */
 function apply(edits, paths, texts) {
+  // read shows a CRLF doc's lines without their \r: a quote and its edit get them back.
+  const eol = (text) => (texts.doc.includes('\r\n') ? text.replace(/\r?\n/g, '\r\n') : text);
   const spans = [];
   const appended = [];
   for (const [i, edit] of edits.entries()) {
@@ -158,10 +160,11 @@ function apply(edits, paths, texts) {
       if (bad) throw new Error(`${which}: not a comment line: ${bad}. Each line is {"anchor":{"exact":"…"},"body":"…"}, {"body":"…"} or {"thread":"c_…","body":"…"}.`);
       appended.push(...lines);
     } else if (resolve(path) === paths.doc) {
-      const start = old ? texts.doc.indexOf(old) : -1;
+      const quote = eol(old);
+      const start = quote ? texts.doc.indexOf(quote) : -1;
       if (start < 0) throw new Error(`${which}: old ${old ? 'is not in the doc: read it and quote it exactly' : 'is empty: quote the text to replace'}.`);
-      if (texts.doc.includes(old, start + 1)) throw new Error(`${which}: old is in the doc more than once: quote more of it.`);
-      spans.push({ start, end: start + old.length, by, which });
+      if (texts.doc.includes(quote, start + 1)) throw new Error(`${which}: old is in the doc more than once: quote more of it.`);
+      spans.push({ start, end: start + quote.length, by: eol(by), which });
     } else {
       throw new Error(`${which}: ${path} cannot change: only ${paths.doc} and ${paths.sidecar} can.`);
     }

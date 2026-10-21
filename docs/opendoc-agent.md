@@ -26,7 +26,7 @@ data never leaves the computer.
 | Interface | Called by |
 | --- | --- |
 | `turn({ prompt, doc, sidecar }, { infer, readFile }) → { edits, reply }` | the program's `main` |
-| `infer(messages, tools) → { name, args }` | `turn`, for each step |
+| `infer(messages, tools) → message` | `turn`, for each step |
 | `read`, `propose` | the model, as tools |
 
 **`main`** is all the I/O, and all of the contract: it reads the prompt on
