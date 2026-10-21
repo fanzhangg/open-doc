@@ -2,8 +2,7 @@
 
 How people and AI buddies write together in OpenDoc. For why, see the
 [product vision](product-vision.md); for how it is built, see
-[architecture](architecture.md). What is marked *planned* is designed, not
-built: today one person writes with AI buddies.
+[architecture](architecture.md).
 
 ## Teammates
 
@@ -162,12 +161,14 @@ shows only as set or not.
 ## Seeing teammates work
 
 - **Presence.** People's avatars are circles; each AI buddy's is a soft blob
-  with a face. They sit side by side in the header. A face shows its state
-  wherever it appears, the same for everyone: while an AI buddy works it
-  grows and its body rolls, where an AI buddy cannot answer or a person is
-  offline it is greyed out, and when a run fails it shakes and flashes red
-  once. No dots or badges.
-- **Cursor.** Every teammate in the doc (people: *planned*) has a cursor in their color, with
+  with a face. They sit side by side in the header: the people in the doc
+  with you, then the AI buddies. A face shows its state wherever it
+  appears, the same for everyone: while an AI buddy works it grows and its
+  body rolls, where an AI buddy cannot answer or a person is away (not in
+  the project now) it is greyed out, and when a run fails it shakes and
+  flashes red once. No dots or badges. In the Team panel you see which
+  teammates are here; a teammate sees who is here with them.
+- **Cursor.** Every teammate in the doc has a cursor in their color, with
   their name beside it while they work or type; otherwise it is a plain line.
   A person's stands where they are typing. An AI buddy asked to work stays
   in the doc until it is closed or the AI buddy is gone: at the passage it was

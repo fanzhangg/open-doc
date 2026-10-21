@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, diffOps, transform } from '../src/core/ot.js';
+import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
 import { lineMatches, sameEnd, sameStart } from '../src/core/diff.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
 import { rulesOf } from '../src/rules/index.js';
@@ -18,6 +18,19 @@ test('diffOps is trimmed to the edit, and apply makes the text', () => {
   assert.deepEqual(diffOps(deleted, 'First. Third.'), [{ from: 9, to: 31, insert: '' }], 'without the caret, after the repeated "Th"');
   assert.deepEqual(diffOps(deleted, 'First. Third.', 7), [{ from: 7, to: 29, insert: '' }], 'at the caret: the sentence itself');
   for (const caret of [0, 3, 7, 13]) assert.equal(apply(deleted, diffOps(deleted, 'First. Third.', caret)), 'First. Third.');
+});
+
+test('a caret follows others\' edits: after text inserted at it, at the end of text that replaced it', () => {
+  const text = 'Hello world.'; // a caret after "Hello" is at 5
+  const at = (ops) => mapOffset(5, ops);
+  assert.equal(at([{ from: 0, to: 0, insert: '> ' }]), 7, 'an insert before');
+  assert.equal(at([{ from: 11, to: 12, insert: '!' }]), 5, 'an edit after');
+  assert.equal(at([{ from: 5, to: 5, insert: ',' }]), 6, 'an insert at it');
+  assert.equal(at([{ from: 5, to: 11, insert: '' }]), 5, 'a deletion from it');
+  assert.equal(at([{ from: 0, to: 5, insert: 'Hi' }]), 2, 'a replacement up to it');
+  assert.equal(at([{ from: 2, to: 8, insert: 'y' }]), 3, 'a replacement around it');
+  assert.equal(at([{ from: 0, to: 1, insert: 'J' }, { from: 6, to: 11, insert: 'there' }]), 5, 'several');
+  for (const ops of [[{ from: 0, to: 0, insert: '> ' }], [{ from: 2, to: 8, insert: 'y' }]]) assert.ok(mapOffset(5, ops) <= apply(text, ops).length);
 });
 
 // Both edits on `text`; `a` reached the host first. Each side ends in one text.

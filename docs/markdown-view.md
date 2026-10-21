@@ -64,7 +64,8 @@ The view's settings, on its page in Settings > Views:
 - **Changes from outside** (`git pull`, another editor) glow for a moment,
   with who made them.
 - **Cursors:** an AI buddy's, at the passage it was asked about, with its
-  name while it works. A teammate's, where they type (*planned*).
+  name while it works. A person's, where they type, with their name while
+  they move or type.
 - **Two people typing:** see [Many writers](#many-writers).
 
 ### Earlier versions

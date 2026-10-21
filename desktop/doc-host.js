@@ -53,7 +53,7 @@ const held = async () => {
   while (holdSaves && existsSync(holdSaves)) await new Promise((done) => setTimeout(done, 50));
 };
 
-// docId → { service, ports: Map(port → its who's level), opens: how many
+// docId → { service, folder, ports: Map(port → its who), opens: how many
 // times the app has it open }. A doc is open once however many reach it:
 // the app's windows and teammates' pages share it, and it closes when
 // neither has it.
@@ -81,9 +81,9 @@ function docAt(docPath, folder) {
       if (await realpath(entry.service.docPath()).catch(() => null) === real) return docId;
     }
     const docId = ++nextId;
-    const entry = { service: null, ports: new Map(), opens: 0 };
+    const entry = { service: null, folder, ports: new Map(), opens: 0 };
     entry.service = await openDoc(docPath, { folder, team: folder && teamOf(folder), secrets: () => secrets, emit: (event, data) => {
-      for (const [port, level] of entry.ports) if ((event !== 'settings' && event !== 'team') || level === 'owner') port.postMessage({ event, data });
+      for (const [port, { level }] of entry.ports) if ((event !== 'settings' && event !== 'team') || level === 'owner') port.postMessage({ event, data });
     } });
     docs.set(docId, entry);
     if (folder) startSharing(folder).catch((error) => console.error(error));
@@ -143,7 +143,7 @@ const handlers = {
   async close({ docId }) {
     const found = docs.get(docId);
     if (!found || --found.opens > 0) return;
-    for (const [port, level] of found.ports) {
+    for (const [port, { level }] of found.ports) {
       if (level !== 'owner') continue;
       found.ports.delete(port);
       port.close();
@@ -154,6 +154,7 @@ const handlers = {
   moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameFile),
   running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
   setFolder({ docId, folder }) {
+    docOf(docId).folder = folder;
     docOf(docId).service.setFolder(folder, folder && teamOf(folder));
     if (folder) startSharing(folder).catch((error) => console.error(error));
   },
@@ -187,10 +188,12 @@ const handlers = {
  * the connection (a window's is the owner): `{ id, type, arg }`, answered
  * with `{ id, result }` or `{ id, error: { message, code } }`. Events go to
  * it as `{ event, data }`, starting with `hello`; the settings, only to the
- * owner's.
+ * owner's. Everyone on the project hears who is here (`here`) as it changes.
  */
 async function serve(entry, port, who) {
-  entry.ports.set(port, (await who()).level);
+  const person = await who();
+  entry.ports.set(port, person);
+  tellHere(entry.folder);
   port.on('message', async ({ data: { id, type, arg } }) => {
     try {
       const result = (await entry.service.call(type, arg, await who())) ?? null;
@@ -201,9 +204,34 @@ async function serve(entry, port, who) {
       port.postMessage({ id, error: { message: String(error?.message ?? error), code: error?.code } });
     }
   });
-  port.on('close', () => entry.ports.delete(port));
+  port.on('close', () => {
+    entry.ports.delete(port);
+    if (![...entry.ports.values()].some((p) => p.id === person.id)) entry.service.leave(person.id);
+    tellHere(entry.folder);
+  });
   port.start();
   port.postMessage({ event: 'hello', data: entry.service.hello() });
+}
+
+/**
+ * Tell everyone on the project in `folder` (none: a doc on its own) who has
+ * a window or page on any of its docs: [{ id, name, owner, doc: whether on
+ * the doc they are on }], each person once.
+ */
+function tellHere(folder) {
+  if (!folder) return;
+  const entries = [...docs.values()].filter((entry) => entry.folder === folder);
+  for (const entry of entries) {
+    for (const port of entry.ports.keys()) {
+      const here = new Map();
+      for (const other of entries) {
+        for (const { id, name, level } of other.ports.values()) {
+          here.set(id, { id, name, owner: level === 'owner', doc: here.get(id)?.doc || other === entry });
+        }
+      }
+      port.postMessage({ event: 'here', data: [...here.values()] });
+    }
+  }
 }
 
 /**

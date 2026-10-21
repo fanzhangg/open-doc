@@ -17,6 +17,8 @@ export const api = {
   state: () => call('state'),
   /** An edit: operations `ops` on rev `rev` of `epoch`, named `id` in the `ops` event that tells it landed. */
   submit: ({ ops, rev, epoch, id }) => call('submit', { ops, rev, epoch, id }),
+  /** The person's cursor is at offset `at` of the text at rev `rev` of `epoch`. */
+  cursor: ({ at, rev, epoch }) => call('cursor', { at, rev, epoch }),
   /** Write a doc that went missing back as it is in the doc host. */
   recreate: () => call('recreate'),
   /**
