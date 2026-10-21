@@ -122,12 +122,13 @@ flowchart TD
 | Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agents (programs and their manifests) in the config folder; buddy files (Clippy's there, a project's in its folder) |
 | DocService (`src/host/doc-service.js`) | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
+| ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
-| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, a project's files in the sidebar; starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
-| Team, ProjectService | *planned:* who is on a project and what each may do; the project's files, the same for everyone. See Sharing |
+| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
+| Team | *planned:* who is on a project and what each may do. See Sharing |
 
-DocService and Runner run in the doc host, the app's utility process.
+DocService, Runner and ProjectService run in the doc host, the app's utility process.
 Windows reach it over Electron message ports; a teammate's page, *planned*,
 over a relay.
 
@@ -224,25 +225,33 @@ calls to rename an open doc), and every edit as operations on a revision,
 with the views' side of them (#215; the code calls Undo on a reply
 `undoReply`, and a restore is still its own call, `restoreVersion`). Not
 yet: Config, History and Store as the components below (today they are the
-modules of `src/store/`), and all that [Sharing](#sharing) needs: the door,
-Team, ProjectService and `cursor`. Until the door, DocService knows which
-edits yield from where they come from: a window's never, a buddy's turn,
-an outside change and an undo always.
+modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
+teammates, Team and `cursor`. The door is built for the owner and AI
+buddies (#223); ProjectService is behind it (#229), but an agent still reads
+more than it shows (#230).
 
-**Every writer comes through one door.** A page's call, a buddy's finished
-turn and a change from outside each arrive as `call(type, arg, who)`. The
-door asks `Team.can(who, action)` once, for the action the call is, and lets
-it through or refuses it; nothing behind it checks again. The door also says
-whether an edit **yields**: a buddy's and an outside change's do, a
-person's never. Behind the door DocService sees `yields`, and `who` only to
+**Every writer comes through one door.** A page's call comes as
+`call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call
+needs a level, `read < write < owner`, and the door lets it through only
+when `who`'s level is at least that: `can(who, level)`, asked once; nothing
+behind it checks again. A buddy's finished turn lands as the buddy, with
+the level of whoever asked it. That is all
+a permission is. What a writer does with it is behavior, decided elsewhere:
+when an AI buddy resolves is its prompt's business, and whether an edit
+**yields** is its path's (a window's never; a buddy's turn, an outside
+change and an undo always). Behind the door DocService uses `who` only to
 put in a comment's `by`. A connection is bound to one doc at a time, as a
 window's port is, so no call names a doc.
 
-| Calls | Action |
+| Calls | Level |
 | --- | --- |
 | `state`, `history`, `version`, `cursor`; ProjectService's `list`, `read`, `open` | read |
-| `submit`, `undo`, `comment` (resolving and reopening too) | edit; an AI buddy resolves only with its switch on |
-| everything else: `move`, settings, AI buddies, agent scripts, Team's own calls | owner only |
+| `submit`, `undo`, `comment` (resolving and reopening too) | write |
+| everything else: `move`, settings, AI buddies, agent scripts, Team's own calls | owner |
+
+The owner's level is owner. An AI buddy's turn acts with the level of
+whoever asked it, at most write, as a Unix program runs as the user who
+started it; a teammate's is read or write.
 
 **Every edit is operations on a revision.** A submission is insert and delete
 operations (offsets in UTF-16 code units of the doc's text) on
@@ -287,7 +296,7 @@ does not yield: an undo must not give way to a buddy's edit.
 | DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor(at)`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
-| Team | who is on the project and what each may do | `can(who, action)`; for the owner `allow(id, access)`, `remove(id)`, `set(id, { access })` with `access` `read` or `edit`, `set(buddy, { resolve })`, `link()`; a request to join comes from the relay as `join({ id, name })` |
+| Team | who is on the project and what each may do | for the owner `allow(id, access)`, `remove(id)`, `set(id, { access })` with `access` `read` or `edit`, `link()`; the door asks it a `who`'s level; a request to join comes from the relay as `join({ id, name })` |
 | ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agents | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
 | Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
@@ -355,7 +364,7 @@ written only by the app.
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
-| `team/` | *planned:* each project's teammates, their access, and which AI buddies may resolve |
+| `team/` | *planned:* each project's teammates and their access |
 
 ## A buddy's turn
 
@@ -380,7 +389,7 @@ buddies run only on docs open in a window.
    Interfaces), adds the appended comments as the buddy's, and writes the
    reply as the buddy's comment. Where a person changed the same line
    meanwhile, the buddy's change there is dropped and the reply is marked
-   `conflict` (*planned:* the edit comes through the door as the buddy's).
+   `conflict`. The turn lands as the buddy's.
    The reply and comments are dated just after the last comment the turn
    was given, so a comment the user wrote meanwhile still waits on X.
 4. The private folder is deleted, and the turn gets a line in the config
@@ -391,8 +400,8 @@ Resolving a thread ends its turns at once, with no answer; a turn that
 ended but is not merged yet is dropped. Deleting a buddy ends its turns too.
 
 An AI buddy comments as a person does: new threads, replies in any thread.
-It never reopens, and resolves only with its switch on (*planned*; today it
-cannot); anything but appended comments is ignored
+It resolves the thread it answers when the comment asks it to: its reply
+carries `resolved`. Anything else is ignored
 ([agent config](agent-config.md#comments)). Its comments start no turns
 (principle 6).
 
@@ -436,21 +445,20 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   app a message port, in a browser the relay. The host serves both the same
   way, adding a `who` to every call. The browser build already exists in
   `preview/`, where `doc-stub.js` plays the host; the relay replaces it.
-- **Everyone is a participant**: `{ id, name, role }`, the role `owner`,
-  `teammate` or `buddy`. The host sets `who` from the connection (a
+- **Everyone is a participant**: `{ id, name, kind, level }`. The host sets
+  `who` from the connection (a
   teammate's id is made once in their browser; an AI buddy's is in its file)
   and never trusts one sent in a message. Names are unique on a project,
-  people's and AI buddies' together. `can(who, action)` is the one place
+  people's and AI buddies' together. `can(who, level)` is the one place
   that decides:
-  - *Owner only:* rename, move, delete and create files; settings, AI
-    buddies and agent scripts.
-  - *A teammate's access*, Read or Edit, set when the owner allows them and
-    changed in the Team panel. Edit is everything the owner does in a doc:
-    edit, comment, resolve, ask AI buddies.
-  - *An AI buddy* always edits and comments; it resolves only with its
-    switch on.
+  - *Owner:* rename, move, delete and create files; settings, AI buddies
+    and agent scripts; and all a teammate who can edit may.
+  - *A teammate's access*, Read or Edit (write), set when the owner allows
+    them and changed in the Team panel. Edit is everything the owner does in
+    a doc: edit, comment, resolve, ask AI buddies.
+  - *An AI buddy* acts with the level of whoever asked it, at most write.
   - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
-    it; it decides no permission.
+    it; it decides nothing.
 - **Joining.** The link is one per project, permanent until the owner makes a
   new one, and grants nothing by itself. A first join asks the owner, with a
   notification, and waits for Allow, where the owner picks Read or Edit;

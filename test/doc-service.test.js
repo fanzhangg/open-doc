@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { appendFile, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -173,6 +173,55 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
     await pause(2);
     assert.equal((await call('comment', { thread: id, body: '' })).threads[0].resolved, false);
     assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['Fix this', '', 'Not yet', '', ''], 'reopening is an empty reply');
+  });
+});
+
+test('the door: each call needs a level, and a comment is by whoever calls, never by what the call says', async () => {
+  await withDoc(async ({ doc, state }) => {
+    const owner = await doc.owner();
+    const at = (level) => ({ ...owner, level });
+    assert.equal((await doc.call('state', undefined, at('read'))).rev, 0);
+    await assert.rejects(doc.call('comment', { anchor: null, body: 'x' }, at('read')), refused('forbidden'));
+    await assert.rejects(doc.call('saveSettings', { theme: 'dark' }, at('write')), refused('forbidden'));
+    await assert.rejects(doc.call('state'), refused('forbidden'), 'no one may do anything');
+    const pilot = { id: 'Pilot', name: 'Pilot', kind: 'ai', level: 'write' };
+    const { rev, epoch } = await state();
+    await doc.call('submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev, epoch, id: 'p.1' }, pilot);
+    const { id } = await doc.call('comment', { anchor: null, body: 'Mine.', by: owner }, pilot);
+    assert.deepEqual((await threadOf(state, id)).comments[0].by, { id: 'Pilot', name: 'Pilot', kind: 'ai' });
+    await doc.call('comment', { thread: id, body: '', resolved: true }, pilot);
+    assert.equal((await threadOf(state, id)).resolved, true, 'a buddy that may write resolves');
+  });
+});
+
+test('the project\'s files, at the door: whoever may read lists, reads and opens what the project shows', async () => {
+  await withDoc(async ({ doc, docPath, settingsDir }) => {
+    const reader = { ...(await doc.owner()), level: 'read' };
+    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.opendoc is not shown');
+    assert.deepEqual(await doc.call('read', { path: 'plan.md' }, reader), { text: SAMPLE });
+    assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: await realpath(docPath) });
+    await assert.rejects(doc.call('read', { path: '.opendoc/buddies/Pilot.md' }, reader), refused('not_found'));
+    await assert.rejects(doc.call('list', { path: '' }), refused('forbidden'), 'no one may list');
+    const alone = await openTestDoc(await tempDoc(), { settingsDir });
+    try {
+      await assert.rejects(alone.call('list', { path: '' }), refused('bad_input'), 'a doc on its own has no project');
+    } finally {
+      await alone.doc.close();
+    }
+  });
+});
+
+test('a buddy asked to resolve resolves its thread with its reply; the other buddies there stop', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Clippy @Pilot hold;; resolve' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 2, 'both runs');
+    await writeFile(join(settingsDir, 'release-Clippy'), '');
+    await until(async () => (await threadOf(state, id)).resolved, 'the thread resolved');
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'Pilot to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(500);
+    const { comments } = await threadOf(state, id);
+    assert.deepEqual(comments.map((c) => [c.by.name, c.body, c.resolved ?? false]), [['fzhan', '@Clippy @Pilot hold;; resolve', false], ['Clippy', 'Nothing to change.', true]]);
   });
 });
 

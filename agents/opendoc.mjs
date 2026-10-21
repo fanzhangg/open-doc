@@ -130,6 +130,7 @@ function outline(path, all) {
 const isComment = (line) => {
   try {
     const c = JSON.parse(line);
+    if (Object.keys(c).sort().join() === 'resolved,thread') return c.resolved === true && typeof c.thread === 'string';
     return ['body', 'anchor,body', 'body,thread'].includes(Object.keys(c).sort().join()) && typeof c.body === 'string'
       && (!('anchor' in c) || typeof c.anchor?.exact === 'string') && (!('thread' in c) || typeof c.thread === 'string');
   } catch {
@@ -152,7 +153,7 @@ function apply(edits, paths, texts) {
       if (old) throw new Error(`${which}: on ${paths.sidecar}, old must be empty: new is appended.`);
       const lines = by.split('\n').filter((line) => line.trim());
       const bad = lines.find((line) => !isComment(line));
-      if (bad) throw new Error(`${which}: not a comment line: ${bad}. Each line is {"anchor":{"exact":"…"},"body":"…"}, {"body":"…"} or {"thread":"c_…","body":"…"}.`);
+      if (bad) throw new Error(`${which}: not a comment line: ${bad}. Each line is {"anchor":{"exact":"…"},"body":"…"}, {"body":"…"}, {"thread":"c_…","body":"…"} or {"thread":"c_…","resolved":true}.`);
       appended.push(...lines);
     } else if (resolve(path) === paths.doc) {
       const start = old ? texts.doc.indexOf(old) : -1;

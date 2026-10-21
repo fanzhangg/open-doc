@@ -8,6 +8,7 @@
 //   quiet                               reply nothing
 //   append <json>                       append a line to the sidecar's copy
 //   reply-first <text>                  append a reply in the sidecar's first thread
+//   resolve                             append the line the prompt gives to resolve the run's thread
 //   tamper                              change the first comment's line, and append one that resolves its thread
 // Commands after the first may follow `;;`.
 // Each run logs one JSON line to $FAKE_DIR/runs.log when it starts, with
@@ -42,6 +43,7 @@ for (const command of ask.split(';;').map((c) => c.trim())) {
   if (json) appendFileSync(comments, `${json}\n`);
   const answer = command.match(/\breply-first (.*)$/)?.[1];
   if (answer) appendFileSync(comments, `${JSON.stringify({ thread: JSON.parse(first).id, body: answer })}\n`);
+  if (/\bresolve$/.test(command)) appendFileSync(comments, `${prompt.match(/\{"thread":"c_[^"]+","resolved":true\}/)[0]}\n`);
   if (/\btamper$/.test(command)) {
     const changed = lines.map((l) => (l === first ? JSON.stringify({ ...JSON.parse(l), body: 'Tampered.' }) : l)).join('\n');
     writeFileSync(comments, `${changed}${JSON.stringify({ thread: JSON.parse(first).id, body: 'Closing.', resolved: true })}\n`);

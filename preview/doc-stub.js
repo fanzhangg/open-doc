@@ -137,7 +137,7 @@ const emit = (event, data) => listener?.(event, data);
 // The buddies this user's comments ask, as the runner would start them.
 function answer() {
   for (const thread of threadsOf(comments(), buddies().map(({ id, name }) => ({ id, name })))) {
-    for (const asked of askedOf(thread, s.settings.id)) {
+    for (const asked of askedOf(thread, [s.settings.id])) {
       if (running.get(asked)?.includes(thread.id)) continue;
       running.set(asked, [...(running.get(asked) ?? []), thread.id]);
       emit('agents', agents());
@@ -261,6 +261,18 @@ if (inFolder) {
     onChanged();
   }
 
+  // The doc's ProjectService.
+  calls.list = ({ path }) => {
+    const names = new Map();
+    for (const file of Object.keys(s.files).filter((f) => inside(f, path) && f !== path)) {
+      const [first, ...rest] = (path ? file.slice(path.length + 1) : file).split('/');
+      names.set(first, rest.length > 0 || names.get(first) === true);
+    }
+    return [...names].map(([n, folder]) => ({ name: n, folder }))
+      .sort((a, b) => (b.folder - a.folder) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  };
+  calls.read = ({ path }) => ({ text: s.files[path] ?? '' });
+
   window.opendocDesktop = {
     folder() {
       const carry = s.carry;
@@ -268,16 +280,6 @@ if (inFolder) {
       save();
       return Promise.resolve({ name: 'Sample Project', current, expanded: s.expanded, sidebar: s.sidebar, carry });
     },
-    folderList(path) {
-      const names = new Map();
-      for (const file of Object.keys(s.files).filter((f) => inside(f, path) && f !== path)) {
-        const [first, ...rest] = (path ? file.slice(path.length + 1) : file).split('/');
-        names.set(first, rest.length > 0 || names.get(first) === true);
-      }
-      return Promise.resolve([...names].map(([n, folder]) => ({ name: n, folder }))
-        .sort((a, b) => (b.folder - a.folder) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
-    },
-    folderRead: (path) => Promise.resolve({ text: s.files[path] ?? '' }),
     openInFolder: (path) => open(path),
     folderRename(from, kind, to) {
       if (exists(to)) return Promise.resolve({ error: `${name(to)} is already here.` });

@@ -1,13 +1,16 @@
 // The sidebar of a desktop folder window: the folder's files as a tree, read
 // a folder at a time as it opens, the open one marked, and light file
-// management: new file, rename and delete (from its menu), and move (drag). The app does each
-// on disk and checks it; the page only names files and folders by their
-// place in the folder. Clicking a file asks the app to show it in this
-// window as a doc (the page is replaced by that doc's); a file that is not
-// one (not text, or too large) shows here, read only, in place of the doc.
+// management: new file, rename and delete (from its menu), and move (drag).
+// The tree is read from the doc's ProjectService (api.list, api.read); the
+// app does each change on disk and checks it; the page only names files and
+// folders by their place in the folder. Clicking a file asks the app to show
+// it in this window as a doc (the page is replaced by that doc's); a file
+// that is not one (not text, or too large) shows here, read only, in place
+// of the doc.
 // The app keeps which subfolders are open, whether the sidebar shows and how
 // far it was scrolled, so the next page draws it just as this one left it.
 
+import { api } from './api.js';
 import { icon } from './icons.js';
 
 const DRAG_SLOP_PX = 4;
@@ -112,7 +115,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   async function load(expanded) {
     const loaded = new Map();
     async function read(path) {
-      const entries = await desktop.folderList(path).catch(() => []);
+      const entries = await api.list(path).catch(() => []);
       loaded.set(path, entries);
       await Promise.all(entries.filter(({ name, folder }) => folder && expanded.has(join(path, name)))
         .map(({ name }) => read(join(path, name))));
@@ -126,7 +129,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   async function allFiles() {
     const paths = [];
     async function read(path) {
-      const entries = await desktop.folderList(path).catch(() => []);
+      const entries = await api.list(path).catch(() => []);
       await Promise.all(entries.map(({ name, folder }) => (folder ? read(join(path, name)) : paths.push(join(path, name)))));
     }
     await read('');
@@ -304,7 +307,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
     if (filter.value || node.getAttribute('aria-expanded') === String(open)) return; // a filter keeps every folder open
     desktop.folderExpand(path, open).catch(() => {});
     if (open && !lists.has(path)) {
-      lists.set(path, await desktop.folderList(path).catch(() => []));
+      lists.set(path, await api.list(path).catch(() => []));
       node.nextElementSibling.replaceChildren(...items(path, Number(node.getAttribute('aria-level')) + 1));
     }
     node.setAttribute('aria-expanded', String(open));
@@ -333,7 +336,7 @@ export function createFileList({ onError = () => {}, onCarry = () => {} } = {}) 
   async function showFile(path) {
     previewing = path;
     markShown();
-    const result = await desktop.folderRead(path).catch((error) => ({ error: reason(error) }));
+    const result = await api.read(path).catch((error) => ({ error: reason(error) }));
     if (previewing !== path) return;
     if (result.error) {
       closePreview();

@@ -180,9 +180,9 @@ test('a run gets each of its agent\'s settings as OPENDOC_SETTING_<KEY>: the sto
     { key: 'fast', type: 'switch', label: 'Fast', default: false },
     { key: 'key', type: 'secret', label: 'Key' },
   ] }));
-  const { doc } = await openTestDoc(docPath, { settingsDir });
+  const { doc, call } = await openTestDoc(docPath, { settingsDir });
   try {
-    await doc.call('comment', { anchor: null, body: '@Clippy quiet' });
+    await call('comment', { anchor: null, body: '@Clippy quiet' });
     const [run] = await until(async () => (await fakeRuns(settingsDir)).length && fakeRuns(settingsDir), 'the run');
     assert.deepEqual(run.settings, {
       OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_EFFORT: 'high', OPENDOC_SETTING_ENDPOINT: '', OPENDOC_SETTING_TRIES: '3', OPENDOC_SETTING_FAST: 'false', OPENDOC_SETTING_KEY: '',
@@ -210,11 +210,11 @@ test('a secret is kept encrypted in the config folder, reaches its agent\'s run,
   const secrets = await readSecrets(cipher, settingsDir);
   assert.deepEqual(secrets, { fake: { key: 'sk-fake-123' }, other: { key: 'sk-other-456' } });
   assert.deepEqual(secretsSet(secrets), { fake: ['key'], other: ['key'] }, 'Settings learns only which are set');
-  const { doc } = await openTestDoc(docPath, { settingsDir, secrets: () => secrets });
+  const { doc, call } = await openTestDoc(docPath, { settingsDir, secrets: () => secrets });
   try {
-    assert.deepEqual((await doc.call('scripts')).secrets, { fake: ['key'], other: ['key'] });
-    const id = (await doc.call('comment', { anchor: null, body: '@Clippy say done' })).id;
-    await until(async () => (await doc.call('state')).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
+    assert.deepEqual((await call('scripts')).secrets, { fake: ['key'], other: ['key'] });
+    const id = (await call('comment', { anchor: null, body: '@Clippy say done' })).id;
+    await until(async () => (await call('state')).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
     assert.deepEqual(run.settings, { OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_KEY: 'sk-fake-123' }, 'its own agent\'s only');
   } finally {
@@ -274,13 +274,13 @@ test('the shipped agents are written when missing, then left alone; Reset writes
 });
 
 test('the prompt tells a buddy who the other members are, as the app shows them', () => {
-  const thread = { anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
+  const thread = { id: 'c_thread01', anchor: null, comments: [{ by: { name: 'fzhan', kind: 'human' }, body: 'hi' }] };
   const buddies = [{ id: 'b_ada', name: 'Ada', about: 'Edits for tone.' }, { id: 'b_bo', name: 'Bo', about: '' }, { id: 'b_cy', name: 'Cy', about: 'Checks facts.' }];
   const prompt = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread });
   assert.match(prompt, /The other members of the doc:\n\nBo\n\nCy: Checks facts\./);
   assert.doesNotMatch(prompt, /Ada: /, 'not itself');
   const withUser = buildPrompt({ buddy: buddies[0], buddies, docName: 'a.md', thread, human: { name: 'fzhan', about: 'I write novels.' } });
   assert.match(withUser, /The other members of the doc:\n\nfzhan \(owner\): I write novels\.\n\nBo/);
-  assert.match(withUser, /Only fzhan resolves threads/);
+  assert.match(withUser, /Resolve this thread only when the last comment asks you to: append \{"thread":"c_thread01","resolved":true\}/);
   assert.doesNotMatch(prompt, /I write novels/, 'nothing about an owner who wrote nothing');
 });

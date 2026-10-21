@@ -94,10 +94,6 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
    * carry }, or null in a window with a single doc.
    */
   folder: () => ipcRenderer.invoke('opendoc:action', 'folder'),
-  /** What the sidebar folder `path` ('' for the top) holds: [{ name, folder }], subfolders first. */
-  folderList: (path) => ipcRenderer.invoke('opendoc:action', 'folderList', String(path)),
-  /** The sidebar's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
-  folderRead: (path) => ipcRenderer.invoke('opendoc:action', 'folderRead', String(path)),
   /** Show the folder's file `path` in this window if it is a doc; false if it is not. */
   openInFolder: (path) => act('openInFolder', String(path)),
   /** Follow a link in this doc: a URL, or a path from the doc's folder. */
