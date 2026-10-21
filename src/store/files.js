@@ -26,7 +26,7 @@ export class StoreError extends Error {
 
 export const sidecarPath = (docPath) => docPath + SIDECAR_SUFFIX;
 
-export function hashBytes(bytes) {
+function hashBytes(bytes) {
   return 'sha256:' + createHash('sha256').update(bytes).digest('hex');
 }
 
@@ -165,7 +165,7 @@ export async function writeAtomic(path, content) {
   }
 }
 
-export async function exists(path) {
+async function exists(path) {
   try {
     await stat(path);
     return true;

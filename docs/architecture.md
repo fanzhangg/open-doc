@@ -87,16 +87,44 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 
 ### Components
 
+A solid arrow is an import: `npm run lint` allows no others
+(`.dependency-cruiser.js`), and no imports that go in a circle. A dotted
+line is a message between processes.
+
+```mermaid
+flowchart TD
+  subgraph web["web/"]
+    windows["Windows"]
+    views["Views<br>web/views/"]
+  end
+  shell["Shell<br>desktop/"]
+  host["DocService, Runner<br>src/host/"]
+  rules["Rules<br>src/rules/"]
+  markdown["Markdown library<br>src/markdown/"]
+  store["Store<br>src/store/"]
+  core["Core<br>src/core/"]
+  shell --> host & store & core
+  host --> rules & store & core
+  web --> rules & markdown & core
+  rules --> markdown & core
+  markdown --> core
+  store --> core
+  web -. IPC .- shell
+  web -. message port .- host
+```
+
 | Component | Owns |
 | --- | --- |
 | Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
-| Model (`src/core`) | anchors, diff and three-way merge on text (*planned:* operations on revisions instead), reading the sidecar, the inbox. No I/O, and no file format. |
-| Markdown library (`src/markdown`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
-| DocService | every write to a doc and its sidecar, one at a time; outside changes; versions |
-| Runner | which turns should start (the inbox), runs them, their status in memory |
-| Windows | editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision). The page knows no format |
-| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules |
+| Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff and three-way merge, text operations (`ot.js`; *planned* to replace the three-way merge), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
+| Markdown library (`src/markdown/`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |
+| Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agent scripts in the config folder; buddy files (Clippy's there, a project's in its folder) |
+| DocService (`src/host/doc-service.js`) | every write to a doc and its sidecar, one at a time; outside changes; versions |
+| Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
+| Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
+| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
+| Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, a project's files in the sidebar; starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`). An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Team, ProjectService | *planned:* who is on a project and what each may do; the project's files, the same for everyone. See Sharing |
 
 DocService and Runner run in the doc host, the app's utility process.
@@ -190,13 +218,14 @@ they are fixed upstream.
 
 The target: each component does one thing (principle 7) through the few
 calls below (principle 8). Done: one `comment` call and one function that
-builds a comment (#177), the Runner's `reconcile` (#178), and a save from an
+builds a comment (#177), the Runner's `reconcile` (#178), a save from an
 older text merged by the host (#179; the code calls it `saveDoc`, and
-`stop`/`resume` for `pause`). Not yet: Config, History and Store as the
-components below, `DocService.move`, and all that [Sharing](#sharing) needs:
-the door, Team, ProjectService, revisions and the views' side of them. Until
-revisions land, the page merges typing with an outside change itself,
-running the rules (#180).
+`stop`/`resume` for `pause`), and `DocService.move` (`moveTo`, which the
+Shell calls to rename an open doc). Not yet: Config, History and Store as
+the components below (today they are the modules of `src/store/`), and all
+that [Sharing](#sharing) needs: the door, Team, ProjectService, revisions
+and the views' side of them. Until revisions land, the page merges typing
+with an outside change itself, running the rules (#180).
 
 **Every writer comes through one door.** A page's call, a buddy's finished
 turn and a change from outside each arrive as `call(type, arg, who)`. The
@@ -248,7 +277,7 @@ turn. Either way it is the same function every edit goes through.
 | Config | own the settings, buddies and agent scripts | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
 | Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
 | View | the doc's editor: what a person sees and types in | its contract as today (`getText`, `applyText`, `setMarks`, the selection); the page turns its text into operations and back ([plan A](markdown-view.md#many-writers)). Only if the prototype fails does a view send and take operations itself (plan B) |
-| Shell | windows, menus, dialogs, recent docs | renaming goes through `DocService.move`, the sidebar through ProjectService; it reads no sidecar and no history |
+| Shell | windows, menus, dialogs, recent docs | an open doc's files only through `DocService` (renaming through `DocService.move`), the sidebar through ProjectService; the settings and agent scripts through Store and Config |
 | Agent | edit its copy, append to its sidecar, print a reply | none: it cannot call anything |
 
 The page's calls: `state`, `submit`, `comment`, `undo`, `cursor`, `history`,

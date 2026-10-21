@@ -22,10 +22,10 @@ import { diffEdits } from '../core/diff.js';
 import { newId } from '../core/comments.js';
 import { hashText, lockFile, writeAtomic } from './files.js';
 
-export const HISTORY_VERSION = 1;
+const HISTORY_VERSION = 1;
 export const COALESCE_MS = 2 * 60 * 1000;
 export const MAX_SPAN_MS = 30 * 60 * 1000;
-export const MAX_VERSIONS = 500;
+const MAX_VERSIONS = 500;
 // The characters of text kept, besides: of a doc of millions of characters
 // (up to 5,000,000 are edited, web/views/plain/index.js), the latest versions
 // that fit; of an ordinary doc, all MAX_VERSIONS.

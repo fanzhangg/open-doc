@@ -1,5 +1,5 @@
 // The Settings dialog (General, Views, Rules, Shortcuts, Agent), tooltips that show shortcuts, and how shortcuts are written: shared
-// by the editor (web/ui.js) and the desktop start window (desktop/start.js),
+// by the editor (web/ui.js) and the desktop start window (web/start.js),
 // so both look and behave the same. Settings are saved for every doc and
 // window (see settings.js); a change made in another window shows up here
 // too. Every window shows the same sections, Agent among them (the agent

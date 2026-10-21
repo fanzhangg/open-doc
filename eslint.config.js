@@ -5,7 +5,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 
-const browser = ['web/**/*.js', 'test/views/page.js', 'test/collab/page.js', 'site/*.js', 'desktop/start.js', 'preview/doc-stub.js', 'preview/start-stub.js'];
+const browser = ['web/**/*.js', 'test/views/page.js', 'test/collab/page.js', 'site/*.js', 'preview/doc-stub.js', 'preview/start-stub.js'];
 
 export default [
   { ignores: ['dist/**', 'release/**', 'node_modules/**'] },

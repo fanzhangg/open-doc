@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/eslint.config.js)",
+      "Edit(/.dependency-cruiser.js)",
+      "Edit(/knip.config.js)",
+      "Edit(/.claude/settings.json)"
+    ]
+  }
+}

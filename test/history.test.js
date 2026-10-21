@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { writeAtomic } from '../src/store/files.js';
 import { COALESCE_MS, MAX_HISTORY_CHARS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
@@ -108,8 +109,9 @@ test('the doc service records saves, changes on disk and restores', async () => 
     const before = await state();
     assert.ok(!(await call('saveDoc', { text: SAMPLE.replace('six', 'seven'), baseHash: before.docHash })).conflict);
 
-    // Written by another program: noticed by the watcher.
-    await writeFile(docPath, SAMPLE.replace('six', 'eight'));
+    // Written by another program: noticed by the watcher. Atomically, as an
+    // in-place write can be read half done and is then a version of its own.
+    await writeAtomic(docPath, SAMPLE.replace('six', 'eight'));
     await until(async () => (await versions()).length === 3, 'the outside change to be recorded');
     const list = await versions();
     assert.deepEqual(list.map((v) => [v.kind, v.author?.name ?? null]), [['opened', null], ['edit', 'fzhan'], ['external', null]]);

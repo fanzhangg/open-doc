@@ -6,14 +6,14 @@ import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/prom
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { SIDECAR_SUFFIX, decodeText, moveDoc, sidecarPath } from '../src/store/files.js';
 
-export const DOC_EXTENSIONS = ['.md', '.markdown'];
+const DOC_EXTENSIONS = ['.md', '.markdown'];
 // Room for the longest doc the Plain text view edits (5,000,000 characters,
 // web/views/plain/index.js), at up to 4 bytes a character.
 export const MAX_TEXT_BYTES = 20 * 1024 * 1024;
 const UNTITLED = 'Untitled';
 const MAX_UNTITLED = 10_000;
 
-export class DocFileError extends Error {
+class DocFileError extends Error {
   /** @param {'exists' | 'inside'} code */
   constructor(code, message, path) {
     super(message);

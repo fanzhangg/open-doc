@@ -4,7 +4,7 @@
 
 import { locate } from './anchor.js';
 
-export const EDIT_CONTEXT = 32;
+const EDIT_CONTEXT = 32;
 const CHUNK = 1024;
 
 // The common start and end of two texts. A long doc changes in a few places,
