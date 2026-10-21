@@ -3,9 +3,9 @@
 // `opendoc` (`opendoc.cmd` on Windows) next to it, on your own node, under
 // the contract of docs/agent-config.md. Yours to change.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { text } from 'node:stream/consumers';
 import { fileURLToPath } from 'node:url';
 
@@ -176,9 +176,23 @@ function apply(edits, paths, texts) {
   return { doc: doc + texts.doc.slice(at), sidecar: sidecar + tail };
 }
 
-/** What the turn can see: the copies. */
-export function files({ doc, sidecar }) {
-  return async (path) => ([doc, sidecar].includes(resolve(path)) ? readFile(path, 'utf8') : null);
+/**
+ * What the turn can see: the copies, and in project mode (`project` a
+ * folder) its files, as the app's own: resolved to their real path, inside
+ * the folder, and no name starting with `.`. A relative path is in the
+ * project, but for the copies' names.
+ */
+export function files({ doc, sidecar, project }) {
+  return async (path) => {
+    if ([doc, sidecar].includes(resolve(path))) return readFile(path, 'utf8');
+    if (!project) return null;
+    const real = await realpath(resolve(project, path)).catch(() => null);
+    const inside = real && relative(await realpath(project), real);
+    if (inside === null || isAbsolute(inside) || inside.split(sep).some((name) => name.startsWith('.'))) return null;
+    const entries = await readdir(real, { withFileTypes: true }).catch(() => null);
+    if (!entries) return readFile(real, 'utf8').catch(() => null);
+    return entries.filter((e) => !e.name.startsWith('.')).map((e) => e.name + (e.isDirectory() ? '/' : '')).sort();
+  };
 }
 
 // One step of the model, over the Chat Completions API: its message.
@@ -195,11 +209,11 @@ async function infer(messages, tools) {
 // The contract: the prompt on stdin, the copies' paths in the environment,
 // the edits applied to the copies, the reply on stdout.
 async function main() {
-  const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar } = process.env;
-  const readCopy = files({ doc, sidecar });
+  const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: project } = process.env;
+  const readable = files({ doc, sidecar, project });
   try {
-    const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer, readFile: readCopy });
-    const texts = apply(edits, { doc, sidecar }, { doc: await readCopy(doc), sidecar: await readCopy(sidecar) });
+    const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer, readFile: readable });
+    const texts = apply(edits, { doc, sidecar }, { doc: await readable(doc), sidecar: await readable(sidecar) });
     await writeFile(doc, texts.doc);
     await writeFile(sidecar, texts.sidecar);
     process.stdout.write(reply);

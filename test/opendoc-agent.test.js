@@ -5,9 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { basename, delimiter, dirname, join } from 'node:path';
 import { text } from 'node:stream/consumers';
 import { files, turn } from '../agents/opendoc.mjs';
 import { agentScript, installAgents } from '../src/store/agents.js';
@@ -99,6 +99,30 @@ test('a long file reads as its outline, and in parts by line number', async () =
   assert.deepEqual(outline.split('\n').slice(0, 5), [`${doc} has 98 lines, too many to read at once: read it in parts.`, 'Its headings, with their lines:', '1-2\t# Plan', '3-10\t## One', '11-14\t## S0']);
   assert.equal(part, `3\t## One\n4\t`);
   assert.equal(missing, 'nowhere.md: no such file, or not one you can read.');
+});
+
+test('in project mode the turn reads the project as the app shows it, and nothing hidden or outside', async () => {
+  const { doc, sidecar } = await copies();
+  const project = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
+  const outside = await mkdtemp(join(tmpdir(), 'opendoc-outside-'));
+  await mkdir(join(project, 'notes'));
+  await mkdir(join(project, '.git'));
+  await writeFile(join(project, 'notes', 'a.md'), 'A\n');
+  await writeFile(join(project, 'notes', 'a.md.opendoc.jsonl'), HEADER);
+  await writeFile(join(project, '.git', 'config'), 'secret');
+  await writeFile(join(project, '.env'), 'secret');
+  await writeFile(join(outside, 'b.md'), 'secret');
+  await symlink(outside, join(project, 'out'), 'junction');
+  const readable = files({ doc, sidecar, project });
+  assert.deepEqual(await readable(''), ['notes/', 'out'], 'a folder, its entries');
+  assert.deepEqual(await readable('notes'), ['a.md', 'a.md.opendoc.jsonl']);
+  assert.equal(await readable(join(project, 'notes', 'a.md')), 'A\n');
+  assert.equal(await readable('notes/a.md.opendoc.jsonl'), HEADER, 'sidecars included');
+  assert.equal(await readable(doc), SAMPLE, 'and the copies');
+  for (const path of ['.env', '.git/config', 'notes/../.env', `../${basename(outside)}/b.md`, join(outside, 'b.md'), 'out/b.md', 'notes/none.md']) {
+    assert.equal(await readable(path), null, path);
+  }
+  assert.equal(await files({ doc, sidecar })('notes/a.md'), null, 'in doc mode, only the copies');
 });
 
 test('the shipped script runs a turn under the contract, on a Chat Completions server', { skip: process.platform === 'win32' }, async () => {
