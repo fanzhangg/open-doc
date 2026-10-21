@@ -133,7 +133,7 @@ const emit = (event, data) => listener?.(event, data);
 // The buddies this user's comments ask, as the runner would start them.
 function answer() {
   for (const thread of threadsOf(comments(), buddies().map(({ id, name }) => ({ id, name })))) {
-    for (const asked of askedOf(thread, s.settings.id)) {
+    for (const asked of askedOf(thread, [s.settings.id])) {
       if (running.get(asked)?.includes(thread.id)) continue;
       running.set(asked, [...(running.get(asked) ?? []), thread.id]);
       emit('agents', agents());

@@ -176,6 +176,38 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
   });
 });
 
+test('the door: each call needs a level, and a comment is by whoever calls, never by what the call says', async () => {
+  await withDoc(async ({ doc, state }) => {
+    const owner = await doc.owner();
+    const at = (level) => ({ ...owner, level });
+    assert.equal((await doc.call('state', undefined, at('read'))).rev, 0);
+    await assert.rejects(doc.call('comment', { anchor: null, body: 'x' }, at('read')), refused('forbidden'));
+    await assert.rejects(doc.call('saveSettings', { theme: 'dark' }, at('write')), refused('forbidden'));
+    await assert.rejects(doc.call('state'), refused('forbidden'), 'no one may do anything');
+    const pilot = { id: 'Pilot', name: 'Pilot', kind: 'ai', level: 'write' };
+    const { rev, epoch } = await state();
+    await doc.call('submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev, epoch, id: 'p.1' }, pilot);
+    const { id } = await doc.call('comment', { anchor: null, body: 'Mine.', by: owner }, pilot);
+    assert.deepEqual((await threadOf(state, id)).comments[0].by, { id: 'Pilot', name: 'Pilot', kind: 'ai' });
+    await doc.call('comment', { thread: id, body: '', resolved: true }, pilot);
+    assert.equal((await threadOf(state, id)).resolved, true, 'a buddy that may write resolves');
+  });
+});
+
+test('a buddy asked to resolve resolves its thread with its reply; the other buddies there stop', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Clippy @Pilot hold;; resolve' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 2, 'both runs');
+    await writeFile(join(settingsDir, 'release-Clippy'), '');
+    await until(async () => (await threadOf(state, id)).resolved, 'the thread resolved');
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'Pilot to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(500);
+    const { comments } = await threadOf(state, id);
+    assert.deepEqual(comments.map((c) => [c.by.name, c.body, c.resolved ?? false]), [['fzhan', '@Clippy @Pilot hold;; resolve', false], ['Clippy', 'Nothing to change.', true]]);
+  });
+});
+
 test('a comment written while a buddy works asks it again once it replies', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, state, settingsDir }) => {
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold' });

@@ -11,6 +11,12 @@ import { fakeConfig, tempDoc, until } from './helpers.js';
 
 const TEXT = 'Alpha one.\n\nBeta two.\n\nGamma three.\n';
 
+// The doc host at `docPath`, called as its owner, as a window's port does.
+async function openHost(docPath, options) {
+  const doc = await openDoc(docPath, options);
+  return { ...doc, call: async (type, arg) => doc.call(type, arg, await doc.owner()) };
+}
+
 // A view the test types into, and a client joining it to the doc host
 // `host()`; its edits wait for `gate` on their way.
 function page(host, gate = () => null) {
@@ -32,7 +38,7 @@ test('typing lands and is written; a doc host started again loses nothing typed,
   const docPath = await tempDoc(TEXT);
   const settingsDir = await fakeConfig();
   let receive = () => {};
-  let host = await openDoc(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  let host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
   const { view, client } = page(() => host);
   receive = (event) => client.receive(event);
   client.start(await host.call('state'));
@@ -48,7 +54,7 @@ test('typing lands and is written; a doc host started again loses nothing typed,
   client.flush();
   await old.close();
   await writeFile(docPath, 'Alpha one typed.\n\nBeta two.\n\nGamma pulled.\n');
-  host = await openDoc(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
   await client.resync(); // the page's new connection says hello
   await client.landed();
   const expected = 'Alpha one typed.\n\nBeta two typed.\n\nGamma pulled.\n';
@@ -61,7 +67,7 @@ test('typing lands and is written; a doc host started again loses nothing typed,
 test('two pages of one doc: each one\'s typing reaches the other, and the doc', async () => {
   const docPath = await tempDoc(TEXT);
   const pages = [];
-  const host = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && pages.forEach((p) => p.client.receive(data)) });
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && pages.forEach((p) => p.client.receive(data)) });
   for (let i = 0; i < 2; i++) {
     pages.push(page(() => host));
     pages[i].client.start(await host.call('state'));
@@ -80,7 +86,7 @@ test('two pages of one doc: each one\'s typing reaches the other, and the doc', 
 test('an outside change that lands while typing is on its way yields to the typing, in the page and the doc alike', async () => {
   const docPath = await tempDoc(TEXT);
   let receive = () => {};
-  const host = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
   let open;
   const held = new Promise((done) => { open = done; });
   const { view, client } = page(() => host, () => held);
@@ -102,7 +108,7 @@ test('a page that missed the event of its own edit landing takes the text again,
   const docPath = await tempDoc(TEXT);
   let receive = () => {};
   let drop = 1; // the first event never reaches the page
-  const host = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && (drop-- > 0 || receive(data)) });
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && (drop-- > 0 || receive(data)) });
   const { view, client } = page(() => host);
   receive = (event) => client.receive(event);
   client.start(await host.call('state'));
@@ -122,7 +128,7 @@ test('a doc host that stops after writing an edit, before telling the page: star
   const docPath = await tempDoc(TEXT);
   const settingsDir = await fakeConfig();
   let receive = () => {};
-  const old = await openDoc(docPath, { settingsDir }); // it stops before telling anything, or answering
+  const old = await openHost(docPath, { settingsDir }); // it stops before telling anything, or answering
   let host = { call: (type, arg) => (type === 'submit' ? (old.call(type, arg), new Promise(() => {})) : old.call(type, arg)) };
   const { view, client } = page(() => host);
   client.start(await old.call('state'));
@@ -130,7 +136,7 @@ test('a doc host that stops after writing an edit, before telling the page: star
   client.flush();
   await until(async () => (await readFile(docPath, 'utf8')).includes('typed'), 'the edit written');
   await old.close();
-  host = await openDoc(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
   receive = (event) => client.receive(event);
   await client.resync(); // the page's new connection says hello
   await client.landed();
