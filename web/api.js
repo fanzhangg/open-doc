@@ -19,12 +19,16 @@ export const api = {
    * empty reply. The comments now, and its `id`.
    */
   comment: ({ thread, anchor, body, resolved }) => call('comment', { thread, anchor, body, resolved }),
-  /** The doc's events: `on(name, fn)`, fn getting the event's data. */
+  /**
+   * The doc's events: `on(name, fn)`, fn getting the event's data. Those
+   * that came before are handed over once the handlers set up with it, in
+   * the same task, are on.
+   */
   events() {
     const handlers = new Map();
-    window.opendocHost.onEvent((name, data) => {
+    queueMicrotask(() => window.opendocHost.onEvent((name, data) => {
       for (const fn of handlers.get(name) ?? []) fn(data);
-    });
+    }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
   /** The agent scripts: { agents: names, shipped: the names OpenDoc comes with, folder }. */

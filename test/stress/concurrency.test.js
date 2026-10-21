@@ -33,17 +33,15 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
   const docPath = await tempDoc(doc);
 
   const settingsDir = await fakeConfig();
-  const { doc: opened, call, state } = await openTestDoc(docPath, { settingsDir, buddies: Object.fromEntries(buddies.map((name) => [name, '\n'])) });
+  const { doc: opened, call, edit, state } = await openTestDoc(docPath, { settingsDir, buddies: Object.fromEntries(buddies.map((name) => [name, '\n'])) });
   try {
     // Every ask at once, in a random order, while the human edits their own paragraphs.
     const order = asks.map((a) => [random(), a]).sort((x, y) => x[0] - y[0]).map(([, a]) => a);
     const posting = Promise.all(order.map((a) => call('comment', { anchor: null, body: `@${a.name} replace "Para ${a.key} old." with "Para ${a.key} new."` })));
     for (const h of human) {
-      for (;;) {
-        const now = await state();
-        const saved = await call('saveDoc', { text: now.text.replace(`Para ${h} old.`, `Para ${h} typed.`), baseHash: now.docHash });
-        if (!saved.conflict) break; // a buddy's merge landed first: read again
-      }
+      // From the doc as it was read: moved over a buddy's edit that landed since.
+      const now = await state();
+      await edit(now.text.replace(`Para ${h} old.`, `Para ${h} typed.`), now);
       await sleep(Math.floor(random() * 40));
     }
     await posting;

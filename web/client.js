@@ -25,6 +25,7 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
   let last = ''; // the view's text as last read: `confirmed` with `pending` on it
   let pending = []; // the view's edits not landed yet, each on the one before; the first sent once `sent`
   let sent = null; // the id the first was sent with
+  let answer = null; // resolves to whether it landed, once the host answers
   let syncing = null; // a resync on its way; events meanwhile wait in `held`
   let held = [];
   let idle = [];
@@ -32,12 +33,13 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
   function send() {
     const id = `${name}.${++sends}`;
     sent = id;
-    call('submit', { ops: pending[0], rev, epoch, id }).catch((error) => {
-      if (id !== sent) return; // sent again since
+    answer = call('submit', { ops: pending[0], rev, epoch, id }).then(() => true, (error) => {
+      if (id !== sent) return false; // sent again since
       // An edit the host would not take (an epoch or rev it no longer has):
       // take its text again, and send the edit on that.
       if (error.code !== 'stale') onError(error);
       client.resync({ stale: true });
+      return false;
     });
   }
 
@@ -57,7 +59,7 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
 
   function take(event) {
     if (event.epoch !== epoch || event.rev <= rev) return; // a host gone, or already in the text
-    if (event.rev > rev + 1) return client.resync({ stale: true }); // one was missed
+    if (event.rev > rev + 1) return client.resync({ missed: true }); // one was missed
     const ours = sent !== null && event.id === sent;
     if (!ours) flush(); // typing since the last read is on the rev before this one
     const was = confirmed;
@@ -112,17 +114,23 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
     },
     /**
      * Take the host's text again: on a new connection (only if the host
-     * started again, a new epoch) or `stale`. What landed since is the
-     * difference from the text last confirmed; the typing not landed is
-     * moved over it and sent as one edit.
+     * started again, a new epoch), on an edit refused as `stale`, or when an
+     * `ops` event was `missed`. What landed since is the difference from the
+     * text last confirmed, with the edit on its way if it landed meanwhile;
+     * the typing not landed is moved over it and sent as one edit.
      */
-    resync({ stale = false } = {}) {
+    resync({ stale = false, missed = false } = {}) {
       syncing ??= (async () => {
+        let base = confirmed;
+        if (missed && sent !== null && await answer) { // it landed, among the edits missed
+          base = apply(confirmed, pending.shift());
+          sent = null;
+        }
         const state = await call('state');
-        if (stale || state.epoch !== epoch) {
+        if (stale || missed || state.epoch !== epoch) {
           flush();
-          const landed = diffOps(confirmed, state.text);
-          const mine = diffOps(confirmed, last, view.selection()?.to);
+          const landed = diffOps(base, state.text);
+          const mine = diffOps(base, last, view.selection()?.to);
           const moved = transform(mine, landed).ops;
           const shown = transform(landed, mine, { first: true }).ops;
           ({ epoch, rev } = state);

@@ -97,3 +97,23 @@ test('an outside change that lands while typing is on its way yields to the typi
   assert.equal(await readFile(docPath, 'utf8'), view.text);
   await host.close();
 });
+
+test('a page that missed the event of its own edit landing takes the text again, and sends nothing twice', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  let drop = 1; // the first event never reaches the page
+  const host = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && (drop-- > 0 || receive(data)) });
+  const { view, client } = page(() => host);
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  view.text = view.text.replace('Beta two', 'Beta two typed'); // an insert: two of them would both stay
+  client.flush();
+  await until(async () => (await host.call('state')).rev === 1, 'the edit landed');
+  await writeFile(docPath, (await host.call('state')).text.replace('Gamma three', 'Gamma pulled'));
+  await until(() => view.text.includes('Gamma pulled'), 'the next edit shown');
+  await client.landed();
+  const expected = 'Alpha one.\n\nBeta two typed.\n\nGamma pulled.\n';
+  assert.equal(view.text, expected);
+  assert.equal((await host.call('state')).text, expected);
+  await host.close();
+});
