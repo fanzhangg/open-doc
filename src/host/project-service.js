@@ -1,5 +1,5 @@
 // ProjectService: a project's files, the same for everyone. The owner's
-// windows and, planned, a teammate's page read the project only through
+// windows and a teammate's page read the project only through
 // it, so all see the same tree. A path names a file or folder by its place
 // in the project (`/` between folders, '' for the project itself); it is
 // resolved to its real path, which must be inside the project, and no part

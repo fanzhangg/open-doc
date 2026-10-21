@@ -67,8 +67,11 @@ permanent until you make a **New link**. Whoever opens it, in a browser
 with no install and no account, picks a name (not one already on the
 project) and waits. You get a notification; in the Team panel you pick Read
 or Edit (Edit to start) and **Allow**, or **Deny**. That is only the first
-time: then the link lets them in at once, to the project's first doc
-(the file tree and every doc in the project are *planned*). A new link
+time: then the link lets them in at once, to the project's first doc, with
+the project's sidebar: the same tree you see, where a click opens any doc
+in it (another file shows read only) and nothing can be renamed, moved,
+deleted or made. Which folders are open, and whether the sidebar shows,
+are kept in their browser. A new link
 ends every old one, and pages open on it close; **Remove** ends one person
 at once. A page turned away says why: a name taken, a request denied,
 removed, a link replaced, a doc not in the project, a name the project
