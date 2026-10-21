@@ -29,6 +29,7 @@ npm install
 npm run build                 # bundle the editor into dist/web
 npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
+node preview/collab.js        # two people writing in one doc, to try by hand (after build)
 
 npm run lint
 npm test                      # unit and integration tests

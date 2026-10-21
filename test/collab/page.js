@@ -10,7 +10,7 @@ import { markdown } from '../../web/views/markdown/index.js';
 import { viewSettings } from '../../src/core/settings.js';
 import { apply, diffOps, transform } from '../../src/core/ot.js';
 
-const DELAY = 150;
+const DELAY = Number(new URLSearchParams(location.search).get('delay') ?? 150); // ms each way
 let inTransit = 0;
 const later = (fn) => {
   inTransit++;
@@ -25,12 +25,12 @@ function submit(client, ops, rev) {
   for (const landed of host.log.slice(rev)) ops = transform(ops, landed);
   host.text = apply(host.text, ops);
   host.log.push(ops);
-  for (const c of host.clients) later(() => (c === client ? c.ack() : c.receive(ops)));
+  for (const c of host.clients) later(() => (c === client ? c.ack() : c.receive(ops, client?.name ?? 'outside')));
 }
 
-function createClient(view) {
+function createClient(view, name) {
   const client = {
-    view, last: '', rev: 0, pending: [], // pending[0] is at the host or on its way
+    view, name, last: '', rev: 0, pending: [], // pending[0] is at the host or on its way
     errors: [],
     drifts: [], // where getText after applyText was not the text given
     batches: [], // per batch from the host: ms in the getText before it, in applyText and setMarks, and in the getText after
@@ -51,7 +51,7 @@ function createClient(view) {
       client.pending.shift();
       if (client.pending.length) client.send();
     },
-    receive(ops) {
+    receive(ops, by) {
       try {
         const start = performance.now();
         client.flush();
@@ -63,7 +63,7 @@ function createClient(view) {
           return moved;
         });
         client.last = apply(client.last, ops);
-        view.applyText(client.last, { by: 'other' });
+        view.applyText(client.last, { by });
         // The other's cursor, after what they typed, is a mark (plan A, 3).
         let at = 0;
         let shift = 0;
@@ -71,7 +71,7 @@ function createClient(view) {
           at = op.from + shift + op.insert.length;
           shift += op.insert.length - (op.to - op.from);
         }
-        view.setMarks([{ kind: 'cursor', at, by: 'other', working: false }]);
+        view.setMarks([{ kind: 'cursor', at, by, working: false }]);
         const applied = performance.now();
         const shown = view.getText();
         client.batches.push({ before: flushed - start, applyText: applied - flushed, after: performance.now() - applied });
@@ -96,7 +96,7 @@ const collab = {
       let client;
       const toolbar = stage.closest('main').previousElementSibling;
       const view = await createMarkdownView({ stage, text, toolbar, settings: viewSettings({ views: {} }, markdown), onChange: () => client.flush() });
-      client = createClient(view);
+      client = createClient(view, stage.closest('[data-name]')?.dataset.name ?? 'other');
       client.last = text;
       return client;
     }));
