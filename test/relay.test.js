@@ -407,17 +407,17 @@ test('the browser build asks a name, waits for Allow, then shows the doc live: i
   const app = await launchElectron(electron, [join(root, 'test', 'relay', 'main.js'), '--no-sandbox', `--user-data-dir=${join(dir, 'profile')}`], { env });
   try {
     const shown = await app.page('Ponjo');
-    await waitFor(() => shown.evaluate(`!document.querySelector('.od-join').hidden`), 30_000, 'the name asked');
-    await shown.evaluate(`document.querySelector('.od-join input').value = 'Noor'; document.querySelector('.od-join').requestSubmit()`);
+    await waitFor(() => shown.evaluate(`!document.querySelector('.pj-join').hidden`), 30_000, 'the name asked');
+    await shown.evaluate(`document.querySelector('.pj-join input').value = 'Noor'; document.querySelector('.pj-join').requestSubmit()`);
     await until(() => host.joins.length > 0, 'the owner told');
-    const status = () => shown.evaluate(`document.querySelector('.od-status-text').textContent`);
+    const status = () => shown.evaluate(`document.querySelector('.pj-status-text').textContent`);
     await waitFor(async () => (await status()) === 'Waiting for the owner to let you in', 10_000, 'the page waiting');
     const { pending } = await asOwner(host, shared, 'team');
     await asOwner(host, shared, 'allow', { id: pending[0].id, level: 'read' });
-    const text = () => shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.innerText ?? ''`);
+    const text = () => shown.evaluate(`document.querySelector('.pj-stage [contenteditable]')?.innerText ?? ''`);
     await waitFor(async () => (await text()).includes('Ship the preview first.'), 30_000, 'the doc');
-    assert.equal(await shown.evaluate(`document.querySelector('.od-stage [contenteditable]').contentEditable`), 'false');
-    assert.equal(await shown.evaluate(`document.querySelectorAll('.od-toolbar [data-command]').length`), 0, 'no formatting tools');
+    assert.equal(await shown.evaluate(`document.querySelector('.pj-stage [contenteditable]').contentEditable`), 'false');
+    assert.equal(await shown.evaluate(`document.querySelectorAll('.pj-toolbar [data-command]').length`), 0, 'no formatting tools');
 
     const { docId } = await host.request('open', { docPath: join(shared.folder, 'plan.md'), folder: shared.folder });
     const owner = await host.request('call', { docId, call: 'state' });
@@ -427,7 +427,7 @@ test('the browser build asks a name, waits for Allow, then shows the doc live: i
     // The project's tree, the doc marked, and no file menu: the files are the owner's.
     await mkdir(join(shared.folder, 'notes'));
     await writeFile(join(shared.folder, 'notes', 'b.md'), 'Notes on the plan\n');
-    const rows = () => shown.evaluate(`[...document.querySelectorAll('.od-files-row')].filter((r) => !r.closest('[hidden]')).map((r) => r.dataset.path)`).catch(() => []);
+    const rows = () => shown.evaluate(`[...document.querySelectorAll('.pj-files-row')].filter((r) => !r.closest('[hidden]')).map((r) => r.dataset.path)`).catch(() => []);
     await shown.evaluate('window.dispatchEvent(new Event("focus"))'); // back in front: the tree read again
     await waitFor(async () => JSON.stringify(await rows()) === '["notes","plan.md"]', 10_000, 'the tree');
     assert.equal(await shown.evaluate(`document.querySelector('[aria-current="page"]').dataset.path`), 'plan.md');
@@ -444,18 +444,18 @@ test('the browser build asks a name, waits for Allow, then shows the doc live: i
 
     // A thread: a reader sees it, with nothing to reply, resolve or undo with.
     await host.request('call', { docId, call: 'comment', arg: { anchor: null, body: 'Shall we?' } });
-    await waitFor(() => shown.evaluate(`document.querySelector('.od-margin').textContent.includes('Shall we?')`), 10_000, 'the comment');
+    await waitFor(() => shown.evaluate(`document.querySelector('.pj-margin').textContent.includes('Shall we?')`), 10_000, 'the comment');
     const visible = (selector) => shown.evaluate(`[...document.querySelectorAll('${selector}')].filter((node) => node.offsetParent).length`);
-    for (const selector of ['.od-composer', '.od-resolve', '.od-toolbar [data-command]']) assert.equal(await visible(selector), 0, selector);
+    for (const selector of ['.pj-composer', '.pj-resolve', '.pj-toolbar [data-command]']) assert.equal(await visible(selector), 0, selector);
 
     // The owner's cursor, named, in their colour; a writer's goes to the owner.
     const now = await host.request('call', { docId, call: 'state' });
     await host.request('call', { docId, call: 'cursor', arg: { at: 6, rev: now.rev, epoch: now.epoch } });
-    await waitFor(() => shown.evaluate(`document.querySelector('.od-cursor')?.textContent === 'owner'`), 10_000, 'the owner\'s cursor');
+    await waitFor(() => shown.evaluate(`document.querySelector('.pj-cursor')?.textContent === 'owner'`), 10_000, 'the owner\'s cursor');
     await asOwner(host, shared, 'setLevel', { id: pending[0].id, level: 'write' });
-    await waitFor(async () => (await shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.contentEditable`).catch(() => '')) === 'true', 30_000, 'the page at Edit');
+    await waitFor(async () => (await shown.evaluate(`document.querySelector('.pj-stage [contenteditable]')?.contentEditable`).catch(() => '')) === 'true', 30_000, 'the page at Edit');
     await shown.evaluate(`{
-      const editor = document.querySelector('.od-stage [contenteditable]');
+      const editor = document.querySelector('.pj-stage [contenteditable]');
       editor.focus();
       const text = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then')).firstChild;
       getSelection().collapse(text, 4);

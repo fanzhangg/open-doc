@@ -48,16 +48,16 @@ export function createCommentMargin(margin, handlers) {
     const focused = document.activeElement?.closest?.('[data-box]')?.dataset.box;
     const caret = document.activeElement?.selectionStart;
 
-    margin.classList.toggle('od-margin-list', showResolved);
+    margin.classList.toggle('pj-margin-list', showResolved);
     const cards = [];
     if (draft) cards.push(draftCard());
     const shown = visibleThreads();
     for (const thread of shown) cards.push(threadCard(thread));
-    if (showResolved && shown.length === 0) cards.push(el('p', 'od-empty', 'No resolved comments.'));
+    if (showResolved && shown.length === 0) cards.push(el('p', 'pj-empty', 'No resolved comments.'));
 
     // Live updates arrive while the human types: keep the card they are typing
     // in attached, updated around its text box, so text, caret and IME input survive.
-    const typingIn = focused && document.activeElement.closest('.od-card');
+    const typingIn = focused && document.activeElement.closest('.pj-card');
     const at = typingIn ? cards.findIndex((c) => c.dataset.thread === typingIn.dataset.thread) : -1;
     const kept = at !== -1 && patchCard(typingIn, cards[at]) ? typingIn : null;
     if (kept) cards[at] = kept;
@@ -78,22 +78,22 @@ export function createCommentMargin(margin, handlers) {
   }
 
   function threadCard(thread) {
-    const card = el('article', 'od-card');
+    const card = el('article', 'pj-card');
     card.dataset.thread = thread.id;
     const active = thread.id === activeId;
     const working = thread.resolved ? [] : agents.filter((a) => a.threadIds.includes(thread.id));
-    card.classList.toggle('od-card-active', active);
-    card.classList.toggle('od-card-working', working.length > 0);
+    card.classList.toggle('pj-card-active', active);
+    card.classList.toggle('pj-card-working', working.length > 0);
     if (working.length > 0) card.style.setProperty('--buddy', buddyColor(working[0].id));
-    card.classList.toggle('od-card-resolved', thread.resolved);
+    card.classList.toggle('pj-card-resolved', thread.resolved);
     // A click that ends selecting the card's text leaves the selection, to copy.
     card.addEventListener('click', (event) => {
       if (!event.target.closest('textarea, button, a') && getSelection().isCollapsed) handlers.onSelect(thread.id);
     });
 
-    if (thread.anchor && thread.detached) card.append(el('div', 'od-card-note', 'The text this was about was deleted.'));
-    if (thread.anchor && (showResolved || thread.detached)) card.append(el('blockquote', 'od-quote', truncate(thread.anchor.exact, 120)));
-    if (!thread.anchor) card.append(el('div', 'od-card-note', 'On the whole document'));
+    if (thread.anchor && thread.detached) card.append(el('div', 'pj-card-note', 'The text this was about was deleted.'));
+    if (thread.anchor && (showResolved || thread.detached)) card.append(el('blockquote', 'pj-quote', truncate(thread.anchor.exact, 120)));
+    if (!thread.anchor) card.append(el('div', 'pj-card-note', 'On the whole document'));
 
     // A long thread folds its middle replies until the human opens them or
     // selects the card (setActive); Hide folds them again either way. A
@@ -110,13 +110,13 @@ export function createCommentMargin(margin, handlers) {
 
     // Each buddy working on it, its face at work; several can at once.
     for (const { id, name } of working) {
-      const row = el('div', 'od-typing');
+      const row = el('div', 'pj-typing');
       row.append(avatar(name, 'agent', true, id), el('span', '', `${name} is working…`));
       card.append(row);
     }
     if (thread.resolved) {
       const by = thread.comments.findLast((c) => c.resolved).by;
-      const row = el('div', 'od-resolved-row');
+      const row = el('div', 'pj-resolved-row');
       row.append(checkIcon(), el('span', '', `Resolved by ${by.id === me.id ? 'you' : by.name}`));
       row.append(linkButton('Reopen', () => handlers.onReopen(thread.id)));
       card.append(row);
@@ -129,37 +129,37 @@ export function createCommentMargin(margin, handlers) {
   }
 
   function commentRow(comment, action) {
-    const row = el('div', 'od-msg');
-    const head = el('div', 'od-msg-head');
-    const who = el('div', 'od-who');
+    const row = el('div', 'pj-msg');
+    const head = el('div', 'pj-msg-head');
+    const who = el('div', 'pj-who');
     const kind = kindOf(comment);
     const shown = kind === 'agent' ? nameOf(comment.by.id, comment.by.name) : comment.by.name; // a buddy by its name now
-    const name = el('span', 'od-name', shown);
-    who.append(name, el('time', 'od-time', relativeTime(comment.at)));
+    const name = el('span', 'pj-name', shown);
+    who.append(name, el('time', 'pj-time', relativeTime(comment.at)));
     namecardFor(name, shown, kind, 'click');
     head.append(namecardFor(avatar(shown, kind, false, comment.by.id), shown, kind, 'click'), who);
     if (action) head.append(action);
     const open = unfolded.has(comment.id);
-    const body = el('div', `od-body${open ? '' : ' od-body-folded'}`);
+    const body = el('div', `pj-body${open ? '' : ' pj-body-folded'}`);
     body.append(...withMentions(comment.body, handlers.mentionable?.() ?? []));
     if (comment.body.trim()) row.append(head, body, foldButton(comment.id, open));
     else row.append(head);
     // To retry, or to redo what was dropped, the human asks again.
-    if (comment.failed) row.append(el('div', 'od-card-note od-msg-note', `The run failed. @mention ${shown} again to retry.`));
-    if (comment.conflict || edits[comment.id]?.conflict) row.append(el('div', 'od-card-note od-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${shown} again to redo it.`));
+    if (comment.failed) row.append(el('div', 'pj-card-note pj-msg-note', `The run failed. @mention ${shown} again to retry.`));
+    if (comment.conflict || edits[comment.id]?.conflict) row.append(el('div', 'pj-card-note pj-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${shown} again to redo it.`));
     if (edits[comment.id]) row.append(receipt(comment.id, edits[comment.id]));
-    row.classList.toggle('od-msg-failed', Boolean(comment.failed));
+    row.classList.toggle('pj-msg-failed', Boolean(comment.failed));
     return row;
   }
 
   // What a run did, as the app counted it, on the machine that ran it:
   // the count shows its edits in the text, or hides them; the icon undoes them.
   function receipt(id, { state, by, changes }) {
-    const box = el('div', `od-receipt${state === 'undone' ? ' od-receipt-undone' : ''}`);
+    const box = el('div', `pj-receipt${state === 'undone' ? ' pj-receipt-undone' : ''}`);
     box.style.setProperty('--buddy', buddyColor(by ?? ''));
     if (state === 'undone') box.append(icon('pencil'), el('span', '', `${changes === 1 ? 'Edit' : 'Edits'} undone`));
     else {
-      const show = el('button', 'od-receipt-show');
+      const show = el('button', 'pj-receipt-show');
       show.type = 'button';
       show.setAttribute('aria-pressed', String(shownEdits === id));
       show.title = shownEdits === id ? 'Hide in the text' : 'Show in the text';
@@ -169,7 +169,7 @@ export function createCommentMargin(margin, handlers) {
         handlers.onShowEdits(shownEdits === id ? null : id);
       });
       box.append(show);
-      const undo = el('button', 'od-icon-btn od-receipt-undo');
+      const undo = el('button', 'pj-icon-btn pj-receipt-undo');
       undo.type = 'button';
       undo.title = `Undo ${changes === 1 ? 'this edit' : `these ${changes} edits`}`;
       undo.setAttribute('aria-label', undo.title);
@@ -187,11 +187,11 @@ export function createCommentMargin(margin, handlers) {
   // The replies folded out of a long thread: who wrote them and how many,
   // in the link color, opening and closing them in place.
   function moreButton(threadId, hidden, open) {
-    const button = el('button', 'od-more');
+    const button = el('button', 'pj-more');
     button.type = 'button';
     button.setAttribute('aria-expanded', String(open));
     if (!open) {
-      const faces = el('span', 'od-more-faces');
+      const faces = el('span', 'pj-more-faces');
       const authors = new Map(hidden.map((c) => [c.by.id, c]));
       for (const c of [...authors.values()].slice(0, 3)) faces.append(avatar(c.by.name, kindOf(c), true, c.by.id));
       button.append(faces);
@@ -209,7 +209,7 @@ export function createCommentMargin(margin, handlers) {
   // Show more / Show less under a long message. Folded, it stays hidden until
   // layout finds the text actually overflows its clamp.
   function foldButton(id, open) {
-    const button = el('button', 'od-fold');
+    const button = el('button', 'pj-fold');
     button.type = 'button';
     button.setAttribute('aria-expanded', String(open));
     button.append(el('span', '', open ? 'Show less' : 'Show more'), icon('chevron'));
@@ -223,7 +223,7 @@ export function createCommentMargin(margin, handlers) {
   }
 
   function resolveButton(thread) {
-    const button = el('button', 'od-icon-btn od-resolve');
+    const button = el('button', 'pj-icon-btn pj-resolve');
     button.type = 'button';
     button.title = 'Mark as resolved and hide';
     button.setAttribute('aria-label', 'Resolve');
@@ -233,11 +233,11 @@ export function createCommentMargin(margin, handlers) {
   }
 
   function draftCard() {
-    const card = el('article', 'od-card od-card-active od-card-draft');
+    const card = el('article', 'pj-card pj-card-active pj-card-draft');
     card.dataset.thread = 'draft';
-    const head = el('div', 'od-msg-head');
-    const who = el('div', 'od-who');
-    who.append(el('span', 'od-name', me.name));
+    const head = el('div', 'pj-msg-head');
+    const who = el('div', 'pj-who');
+    who.append(el('span', 'pj-name', me.name));
     head.append(avatar(me.name, 'human'), who);
     card.append(head);
     card.append(composer('draft', 'Comment…', 'Comment', async (body) => {
@@ -258,19 +258,19 @@ export function createCommentMargin(margin, handlers) {
   // cancels. @ offers the agents and people to address, grouped (agents in
   // the doc, agents to bring in, people).
   function composer(id, placeholder, submitLabel, submit, cancel, draftKey) {
-    const wrap = el('div', 'od-composer');
+    const wrap = el('div', 'pj-composer');
     wrap.dataset.box = id;
     const box = document.createElement('textarea');
     box.rows = 1;
     box.placeholder = placeholder;
     box.value = draftKey ? replyDrafts.get(draftKey) ?? '' : '';
-    const menu = el('ul', 'od-mentions');
+    const menu = el('ul', 'pj-mentions');
     menu.setAttribute('role', 'listbox');
     menu.hidden = true;
-    const buttons = el('div', 'od-composer-buttons');
-    const send = el('button', 'od-primary', submitLabel);
+    const buttons = el('div', 'pj-composer-buttons');
+    const send = el('button', 'pj-primary', submitLabel);
     send.type = 'button';
-    const cancelButton = el('button', 'od-secondary', 'Cancel');
+    const cancelButton = el('button', 'pj-secondary', 'Cancel');
     cancelButton.type = 'button';
     buttons.append(send, cancelButton);
     let choices = [];
@@ -350,7 +350,7 @@ export function createCommentMargin(margin, handlers) {
 
   function layout() {
     foldBodies();
-    const cards = [...margin.querySelectorAll('.od-card')];
+    const cards = [...margin.querySelectorAll('.pj-card')];
     if (showResolved || narrow.matches) {
       for (const card of cards) card.style.top = '';
       margin.style.height = '';
@@ -394,7 +394,7 @@ export function createCommentMargin(margin, handlers) {
 
   // Offer Show more only on messages cut off by their line clamp.
   function foldBodies() {
-    for (const body of margin.querySelectorAll('.od-body-folded')) {
+    for (const body of margin.querySelectorAll('.pj-body-folded')) {
       body.nextElementSibling.hidden = body.scrollHeight <= body.clientHeight + 1;
     }
   }
@@ -403,7 +403,7 @@ export function createCommentMargin(margin, handlers) {
   narrow.addEventListener('change', layout);
 
   // The card under the pointer lights up its text. Delegated, as cards are redrawn.
-  margin.addEventListener('mouseover', (event) => handlers.onHover(event.target.closest('.od-card')?.dataset.thread ?? null));
+  margin.addEventListener('mouseover', (event) => handlers.onHover(event.target.closest('.pj-card')?.dataset.thread ?? null));
   margin.addEventListener('mouseleave', () => handlers.onHover(null));
 
   return {
@@ -429,7 +429,7 @@ export function createCommentMargin(margin, handlers) {
       replyDrafts.delete('draft');
       showResolved = false;
       render();
-      margin.querySelector('.od-card-draft textarea')?.focus();
+      margin.querySelector('.pj-card-draft textarea')?.focus();
     },
     /** Make `id` the active card; `focus: false` leaves the caret where it is (e.g. in the doc). */
     setActive(id, { focus = true } = {}) {
@@ -455,8 +455,8 @@ export function createCommentMargin(margin, handlers) {
 // Give `card` the content of `fresh` (same thread) but keep its own text box
 // element. False when either has no text box, so the caller replaces the card.
 function patchCard(card, fresh) {
-  const box = card.querySelector('.od-composer');
-  const freshBox = fresh.querySelector('.od-composer');
+  const box = card.querySelector('.pj-composer');
+  const freshBox = fresh.querySelector('.pj-composer');
   if (!box || !freshBox) return false;
   const keep = [...card.children].find((child) => child.contains(box));
   const kids = [...fresh.childNodes];
@@ -469,7 +469,7 @@ function patchCard(card, fresh) {
 }
 
 /**
- * Fills `menu` (an `.od-mentions` list) with `choices` from mentionChoices,
+ * Fills `menu` (an `.pj-mentions` list) with `choices` from mentionChoices,
  * under their group headings, `selected` highlighted; `onPick(choice)` on a
  * click. Hidden when there is nothing to offer. The comment box and the doc's
  * text share it, so @ looks the same in both.
@@ -480,16 +480,16 @@ function fillMentionMenu(menu, choices, selected, onPick) {
   choices.forEach((choice, i) => {
     if (choice.group !== group) {
       group = choice.group;
-      items.push(el('li', 'od-mentions-group', group));
+      items.push(el('li', 'pj-mentions-group', group));
     }
-    const item = el('li', `od-mention${i === selected ? ' od-selected' : ''}`);
+    const item = el('li', `pj-mention${i === selected ? ' pj-selected' : ''}`);
     item.setAttribute('role', 'option');
     item.setAttribute('aria-selected', String(i === selected));
-    const who = el('span', 'od-mention-who');
-    const name = el('span', 'od-mention-name', choice.name);
-    if (choice.kind === 'agent') name.append(el('span', 'od-ai', 'AI'));
+    const who = el('span', 'pj-mention-who');
+    const name = el('span', 'pj-mention-name', choice.name);
+    if (choice.kind === 'agent') name.append(el('span', 'pj-ai', 'AI'));
     who.append(name);
-    if (choice.tagline) who.append(el('span', 'od-mention-sub', choice.tagline));
+    if (choice.tagline) who.append(el('span', 'pj-mention-sub', choice.tagline));
     item.append(avatar(choice.name, choice.kind, true, choice.id), who);
     item.addEventListener('mousedown', (event) => {
       event.preventDefault();
@@ -499,7 +499,7 @@ function fillMentionMenu(menu, choices, selected, onPick) {
   });
   menu.replaceChildren(...items);
   menu.hidden = choices.length === 0;
-  menu.querySelector('.od-selected')?.scrollIntoView({ block: 'nearest' });
+  menu.querySelector('.pj-selected')?.scrollIntoView({ block: 'nearest' });
 }
 
 /**
@@ -512,7 +512,7 @@ function withMentions(text, people) {
   for (const { start, end, name } of mentionSpans(text, people.map((p) => p.name))) {
     const who = people.find((p) => p.name === name);
     if (start > at) nodes.push(document.createTextNode(text.slice(at, start)));
-    const chip = el('span', `od-at od-at-${who.kind}`, text.slice(start, end));
+    const chip = el('span', `pj-at pj-at-${who.kind}`, text.slice(start, end));
     chip.dataset.mention = who.name;
     chip.dataset.mentionKind = who.kind;
     if (who.kind === 'agent') chip.style.setProperty('--buddy', buddyColor(who.id));
@@ -538,7 +538,7 @@ export function namecardFor(node, name, kind, how) {
 
 export function avatar(name, kind, small = false, id = name) {
   const agent = kind === 'agent';
-  const node = el('span', `od-avatar${agent ? ' od-avatar-agent' : ''}${small ? ' od-avatar-small' : ''}`);
+  const node = el('span', `pj-avatar${agent ? ' pj-avatar-agent' : ''}${small ? ' pj-avatar-small' : ''}`);
   // A buddy's face is drawn from its id, a person's from the name (faces.js): people round,
   // buddies a circle, square, triangle, pentagon or cloud, all drawn by hand.
   node.append(agent ? agentFace(id) : personFace(name));
@@ -550,7 +550,7 @@ function checkIcon() {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('class', 'od-check');
+  svg.setAttribute('class', 'pj-check');
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(ns, 'path');
   path.setAttribute('d', 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z');
@@ -559,7 +559,7 @@ function checkIcon() {
 }
 
 function linkButton(text, onClick) {
-  const button = el('button', 'od-link-button', text);
+  const button = el('button', 'pj-link-button', text);
   button.type = 'button';
   button.addEventListener('click', onClick);
   return button;

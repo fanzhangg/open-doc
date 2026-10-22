@@ -23,7 +23,7 @@ async function render(source) {
   mermaid ??= import('mermaid').then((module) => module.default);
   const m = await mermaid;
   m.initialize({ startOnLoad: false, theme: dark() ? 'dark' : 'default', suppressErrorRendering: true });
-  return (await m.render(`od-diagram-${++renders}`, source)).svg;
+  return (await m.render(`pj-diagram-${++renders}`, source)).svg;
 }
 
 const redrawAll = () => { for (const draw of shown) draw(); };
@@ -33,7 +33,7 @@ new MutationObserver(redrawAll).observe(document.documentElement, { attributeFil
 const diagramView = $view(codeBlockSchema.node, () => (node, _view, _getPos, _outer, inner) => {
   if (!isDiagram(node)) return null;
   const dom = document.createElement('div');
-  dom.className = 'od-diagram';
+  dom.className = 'pj-diagram';
   let source = null;
   const draw = async () => {
     const text = source;
@@ -45,7 +45,7 @@ const diagramView = $view(codeBlockSchema.node, () => (node, _view, _getPos, _ou
       const code = document.createElement('pre');
       code.textContent = text;
       const message = document.createElement('p');
-      message.className = 'od-diagram-error';
+      message.className = 'pj-diagram-error';
       message.textContent = error.message;
       dom.replaceChildren(code, message);
     }
@@ -54,8 +54,8 @@ const diagramView = $view(codeBlockSchema.node, () => (node, _view, _getPos, _ou
   const highlight = (decorations) => {
     const comments = [];
     decorations.forEachSet((set) => comments.push(...set.find().filter((d) => d.spec.thread)));
-    dom.classList.toggle('od-hl', comments.length > 0);
-    dom.classList.toggle('od-hl-active', comments.some((d) => d.spec.active));
+    dom.classList.toggle('pj-hl', comments.length > 0);
+    dom.classList.toggle('pj-hl-active', comments.some((d) => d.spec.active));
     if (comments.length > 0) dom.dataset.thread = comments[0].spec.thread;
     else delete dom.dataset.thread;
   };

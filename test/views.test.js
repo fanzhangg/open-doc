@@ -26,7 +26,7 @@ before(async () => {
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>views</title><link rel="stylesheet" href="app.css">
-<main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main>
+<main class="pj-canvas"><div class="pj-stage"><article class="pj-page"><div class="pj-editor"></div></article></div></main>
 <script src="page.js"></script>`);
   const electron = createRequire(import.meta.url)('electron');
   const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html') };
@@ -81,13 +81,13 @@ for (const name of VIEWS) {
       { kind: 'edit', from: at('line'), to: at('.\n', at('line')), removed: 'old **row**', by: null, replay: 0 },
     ])})`);
     assert.equal(await drawn('[data-thread="t1"]'), 'bold words');
-    assert.equal(await drawn('[data-thread="t2"].od-hl-active'), 'A');
-    assert.equal(await drawn('.od-mark-ins'), 'line');
+    assert.equal(await drawn('[data-thread="t2"].pj-hl-active'), 'A');
+    assert.equal(await drawn('.pj-mark-ins'), 'line');
     assert.equal(await drawn('del'), 'old row');
     await run(`document.querySelector('[data-thread="t1"]').click()`);
     assert.deepEqual(await run('contract.clicked'), ['t1']);
     await run('view.setMarks([])');
-    assert.equal(await drawn('[data-thread], .od-mark-ins, del'), '');
+    assert.equal(await drawn('[data-thread], .pj-mark-ins, del'), '');
   });
 
   test(`${name} view: setMarks draws a buddy's cursor after the text it stands at; its name shows while it works`, async () => {
@@ -95,7 +95,7 @@ for (const name of VIEWS) {
     await make(name, text);
     const mark = (working) => JSON.stringify([{ kind: 'cursor', at: text.indexOf(' here'), by: 'Clippy', working }]);
     const before = () => run(`(() => {
-      const cursor = document.querySelector('.od-cursor');
+      const cursor = document.querySelector('.pj-cursor');
       const range = document.createRange();
       range.setStart(cursor.parentElement.closest('[contenteditable]'), 0);
       range.setEndBefore(cursor);
@@ -103,11 +103,11 @@ for (const name of VIEWS) {
     })()`);
     await run(`view.setMarks(${mark(false)})`);
     assert.equal(await before(), 'Some bold words');
-    assert.equal(await run(`getComputedStyle(document.querySelector('.od-cursor-name')).display`), 'none');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.pj-cursor-name')).display`), 'none');
     await run(`view.setMarks(${mark(true)})`);
-    assert.equal(await run(`getComputedStyle(document.querySelector('.od-cursor-name')).display`), 'block');
+    assert.equal(await run(`getComputedStyle(document.querySelector('.pj-cursor-name')).display`), 'block');
     await run('view.setMarks([])');
-    assert.equal(await run(`document.querySelectorAll('.od-cursor').length`), 0);
+    assert.equal(await run(`document.querySelectorAll('.pj-cursor').length`), 0);
   });
 
   test(`${name} view: selection is in offsets on the text`, async () => {
@@ -156,9 +156,9 @@ for (const name of VIEWS) {
 
 test('markdown view: a read-only view has no formatting tools and no Comment bubble', async () => {
   await make('markdown', 'Alpha beta.\n', { toolbar: true, editable: false });
-  assert.equal(await run(`document.querySelectorAll('.od-toolbar [data-command]').length`), 0);
+  assert.equal(await run(`document.querySelectorAll('.pj-toolbar [data-command]').length`), 0);
   await select('Alpha', 0, 5);
-  assert.equal(await run(`document.querySelectorAll('.od-bubble').length`), 0);
+  assert.equal(await run(`document.querySelectorAll('.pj-bubble').length`), 0);
 });
 
 test('markdown view: typed Markdown stays text and saves escaped', async () => {
@@ -200,40 +200,40 @@ test('markdown view: the toolbar switches a numbered list to bullets and back', 
 test('markdown view: a change applied with who made it glows, with their name', async () => {
   await make('markdown', 'Alpha.\n\nBeta.\n');
   await run(`view.applyText('Alpha.\\n\\nBeta two.\\n', { by: 'Ana' })`);
-  assert.equal(await run(`contract.drawn('.od-flash')`), ' two');
-  assert.equal(await run(`contract.drawn('.od-flag')`), 'Ana');
+  assert.equal(await run(`contract.drawn('.pj-flash')`), ' two');
+  assert.equal(await run(`contract.drawn('.pj-flag')`), 'Ana');
 });
 
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);
   await select('cd', 1, 1);
-  await waitFor(async () => (await run(`document.querySelector('.od-status-position').textContent`)) === 'Ln 2, Col 2', 5_000, 'the caret place');
+  await waitFor(async () => (await run(`document.querySelector('.pj-status-position').textContent`)) === 'Ln 2, Col 2', 5_000, 'the caret place');
   await select('cd', 0, 2);
-  await waitFor(async () => (await run(`document.querySelector('.od-status-position').textContent`)).endsWith('2 selected'), 5_000, 'the selection size');
+  await waitFor(async () => (await run(`document.querySelector('.pj-status-position').textContent`)).endsWith('2 selected'), 5_000, 'the selection size');
   await run(`view.applySettings({ lineNumbers: false, wrap: false, fontSize: 18 })`);
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 0);
   assert.equal(await run(`getComputedStyle(document.querySelector('.cm-scroller')).fontSize`), '18px');
   await make('plain', 'x\n');
-  assert.equal(await run(`document.querySelectorAll('.od-statusbar').length`), 1, 'destroy takes the status bar away');
+  assert.equal(await run(`document.querySelectorAll('.pj-statusbar').length`), 1, 'destroy takes the status bar away');
   await make('plain', 'x\n', { editable: false });
-  assert.equal(await run(`document.querySelectorAll('.od-statusbar').length`), 0, 'a read-only view has none');
+  assert.equal(await run(`document.querySelectorAll('.pj-statusbar').length`), 0, 'a read-only view has none');
 });
 
 test('plain view: whitespace marks and guides draw over the text without changing it', async () => {
   const text = 'a\tb  \n    indented\n\t\ttabbed\n\n  trailing  ';
   await make('plain', text);
   assert.equal(await getText(), text);
-  assert.equal(await run(`document.querySelectorAll('.od-ws-space, .od-ws-tab').length`), 0, 'nothing is selected');
-  assert.ok(await run(`document.querySelectorAll('.od-guides').length`) >= 3, 'guides over the indented lines');
+  assert.equal(await run(`document.querySelectorAll('.pj-ws-space, .pj-ws-tab').length`), 0, 'nothing is selected');
+  assert.ok(await run(`document.querySelectorAll('.pj-guides').length`) >= 3, 'guides over the indented lines');
   await run(`view.applySettings({ lineNumbers: true, wrap: true, fontSize: 14, whitespace: 'all', guides: false })`);
-  assert.equal(await run(`document.querySelectorAll('.od-ws-tab').length`), 3);
-  assert.equal(await run(`document.querySelectorAll('.od-guides').length`), 0);
+  assert.equal(await run(`document.querySelectorAll('.pj-ws-tab').length`), 3);
+  assert.equal(await run(`document.querySelectorAll('.pj-guides').length`), 0);
   await run(`view.applySettings({ lineNumbers: true, wrap: true, fontSize: 14, whitespace: 'selection', guides: true })`);
   await select('indented', 0, 8);
-  await waitFor(async () => (await run(`document.querySelectorAll('.od-ws-space').length`)) === 0, 5_000, 'no marks inside text without space');
+  await waitFor(async () => (await run(`document.querySelectorAll('.pj-ws-space').length`)) === 0, 5_000, 'no marks inside text without space');
   await select('a\tb', 0, 3);
-  await waitFor(async () => (await run(`document.querySelectorAll('.od-ws-tab').length`)) === 1, 5_000, 'the tab in the selection marked');
+  await waitFor(async () => (await run(`document.querySelectorAll('.pj-ws-tab').length`)) === 1, 5_000, 'the tab in the selection marked');
   assert.equal(await getText(), text);
 });
 
@@ -280,20 +280,20 @@ test('plain view: the status bar shows the indent and saves what its menu and to
   await make('plain', 'a\n  b\n    c\n');
   const text = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).textContent`);
   const click = (selector) => run(`document.querySelector(${JSON.stringify(selector)}).click()`);
-  assert.equal(await text('.od-status-indent'), 'Indent: 2 spaces', 'found in the file');
-  await click('.od-status-indent');
-  assert.equal(await run(`document.querySelector('.od-statusbar .od-block-menu').hidden`), false);
+  assert.equal(await text('.pj-status-indent'), 'Indent: 2 spaces', 'found in the file');
+  await click('.pj-status-indent');
+  assert.equal(await run(`document.querySelector('.pj-statusbar .pj-block-menu').hidden`), false);
   assert.equal(await run(`document.querySelector('[aria-selected="true"]').textContent`), '2 spaces');
   await click('[data-indent="8"]');
-  assert.equal(await run(`document.querySelector('.od-statusbar .od-block-menu').hidden`), true);
-  await click('.od-status-indent');
+  assert.equal(await run(`document.querySelector('.pj-statusbar .pj-block-menu').hidden`), true);
+  await click('.pj-status-indent');
   await click('[data-indent="tabs"]');
   await click('[data-setting="wrap"]');
   await click('[data-setting="whitespace"]');
   assert.deepEqual(await run('contract.saved'), [{ indent: 'spaces', tabWidth: 8 }, { indent: 'tabs' }, { wrap: false }, { whitespace: 'all' }]);
   assert.equal(await getText(), 'a\n  b\n    c\n', 'the file is not changed');
   await run(`view.applySettings({ lineNumbers: true, wrap: false, fontSize: 14, whitespace: 'all', guides: true, indent: 'tabs', tabWidth: 4, keepIndent: true })`);
-  assert.equal(await text('.od-status-indent'), 'Indent: Tab');
+  assert.equal(await text('.pj-status-indent'), 'Indent: Tab');
   assert.equal(await run(`document.querySelector('[data-setting="wrap"]').getAttribute('aria-pressed')`), 'false');
   assert.equal(await run(`document.querySelector('[data-setting="whitespace"]').getAttribute('aria-pressed')`), 'true');
 });
@@ -319,7 +319,7 @@ test('plain view: a text with "\\r\\n" line breaks is written back with them, an
 
 test('plain view: indent guides run on over blank lines', async () => {
   await make('plain', 'a\n    b\n\n    c\n\nd\n');
-  assert.equal(await run(`document.querySelectorAll('.od-guides-blank').length`), 1, 'only the blank line between two indented lines');
-  assert.equal(await run(`document.querySelector('.od-guides-blank').style.getPropertyValue('--width')`), '4');
+  assert.equal(await run(`document.querySelectorAll('.pj-guides-blank').length`), 1, 'only the blank line between two indented lines');
+  assert.equal(await run(`document.querySelector('.pj-guides-blank').style.getPropertyValue('--width')`), '4');
   assert.equal(await getText(), 'a\n    b\n\n    c\n\nd\n');
 });

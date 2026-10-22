@@ -80,8 +80,8 @@ before(async () => {
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   // One page as the app lays it out, with its comment margin.
   await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>perf</title><link rel="stylesheet" href="app.css">
-<div style="display:flex;flex-direction:column;height:100vh"><div class="od-toolbar"><span class="od-spacer"></span></div>
-<main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main></div>
+<div style="display:flex;flex-direction:column;height:100vh"><div class="pj-toolbar"><span class="pj-spacer"></span></div>
+<main class="pj-canvas"><div class="pj-stage"><article class="pj-page"><div class="pj-editor"></div></article></div></main></div>
 <script src="page.js"></script>`);
   const electron = createRequire(import.meta.url)('electron');
   const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html') };

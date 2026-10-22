@@ -7,32 +7,32 @@
 import { hydrateIcons, icon } from '../../icons.js';
 
 const TOOLS = `
-  <div class="od-tool-group">
+  <div class="pj-tool-group">
     <button type="button" data-command="undo" data-icon="undo" data-tip="Undo" data-keys="Mod+Z" aria-label="Undo"></button>
     <button type="button" data-command="redo" data-icon="redo" data-tip="Redo" data-keys="Mod+Shift+Z" aria-label="Redo"></button>
   </div>
-  <span class="od-sep"></span>
-  <div class="od-block-picker">
-    <button type="button" class="od-block-button" aria-haspopup="listbox" aria-expanded="false" data-tip="Text style">
-      <span class="od-block-label">Normal text</span>
+  <span class="pj-sep"></span>
+  <div class="pj-block-picker">
+    <button type="button" class="pj-block-button" aria-haspopup="listbox" aria-expanded="false" data-tip="Text style">
+      <span class="pj-block-label">Normal text</span>
     </button>
-    <ul class="od-block-menu" role="listbox" aria-label="Text style" hidden>
-      <li role="option" data-command="paragraph" data-block="paragraph"><span class="od-sample-p">Normal text</span></li>
-      <li role="option" data-command="h1" data-block="h1"><span class="od-sample-h1">Heading 1</span></li>
-      <li role="option" data-command="h2" data-block="h2"><span class="od-sample-h2">Heading 2</span></li>
-      <li role="option" data-command="h3" data-block="h3"><span class="od-sample-h3">Heading 3</span></li>
+    <ul class="pj-block-menu" role="listbox" aria-label="Text style" hidden>
+      <li role="option" data-command="paragraph" data-block="paragraph"><span class="pj-sample-p">Normal text</span></li>
+      <li role="option" data-command="h1" data-block="h1"><span class="pj-sample-h1">Heading 1</span></li>
+      <li role="option" data-command="h2" data-block="h2"><span class="pj-sample-h2">Heading 2</span></li>
+      <li role="option" data-command="h3" data-block="h3"><span class="pj-sample-h3">Heading 3</span></li>
     </ul>
   </div>
-  <span class="od-sep"></span>
-  <div class="od-tool-group">
+  <span class="pj-sep"></span>
+  <div class="pj-tool-group">
     <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" aria-label="Bold"></button>
     <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" aria-label="Italic"></button>
     <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" aria-label="Strikethrough"></button>
     <button type="button" data-command="code" data-icon="code" data-tip="Inline code" aria-label="Inline code"></button>
     <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link" aria-haspopup="dialog"></button>
   </div>
-  <span class="od-sep"></span>
-  <div class="od-tool-group">
+  <span class="pj-sep"></span>
+  <div class="pj-tool-group">
     <button type="button" data-command="bullets" data-icon="bullets" data-tip="Bulleted list" aria-label="Bulleted list"></button>
     <button type="button" data-command="numbers" data-icon="numbers" data-tip="Numbered list" aria-label="Numbered list"></button>
     <button type="button" data-command="quote" data-icon="quote" data-tip="Quote" aria-label="Quote"></button>
@@ -42,30 +42,30 @@ const TOOLS = `
   </div>`;
 
 const BUBBLE = `
-  <div class="od-bubble" role="toolbar" aria-label="Selection" hidden>
-    <button type="button" class="od-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
+  <div class="pj-bubble" role="toolbar" aria-label="Selection" hidden>
+    <button type="button" class="pj-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
   </div>`;
 
 const OUTLINE = `
-  <nav class="od-outline" aria-label="Outline" hidden>
-    <div class="od-outline-ticks" aria-hidden="true"></div>
-    <div class="od-outline-panel">
-      <div class="od-outline-title">Outline</div>
-      <ol class="od-outline-list"></ol>
+  <nav class="pj-outline" aria-label="Outline" hidden>
+    <div class="pj-outline-ticks" aria-hidden="true"></div>
+    <div class="pj-outline-panel">
+      <div class="pj-outline-title">Outline</div>
+      <ol class="pj-outline-list"></ol>
     </div>
   </nav>`;
 
 const LINK = `
-  <div class="od-link-card" role="toolbar" aria-label="Link" hidden>
-    <button type="button" class="od-link-go" data-action="open" data-tip="Open" data-keys="Mod+Click"><span class="od-link-go-icon"></span><span class="od-link-go-text"></span></button>
-    <button type="button" class="od-icon-btn" data-action="edit" data-icon="pencil" data-tip="Edit link" aria-label="Edit link"></button>
-    <button type="button" class="od-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link"></button>
+  <div class="pj-link-card" role="toolbar" aria-label="Link" hidden>
+    <button type="button" class="pj-link-go" data-action="open" data-tip="Open" data-keys="Mod+Click"><span class="pj-link-go-icon"></span><span class="pj-link-go-text"></span></button>
+    <button type="button" class="pj-icon-btn" data-action="edit" data-icon="pencil" data-tip="Edit link" aria-label="Edit link"></button>
+    <button type="button" class="pj-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link"></button>
   </div>
-  <div class="od-link" role="dialog" aria-label="Link" hidden>
-    <span class="od-link-icon" data-icon="link"></span>
-    <input class="od-link-input" type="text" inputmode="url" autocomplete="off" spellcheck="false" aria-label="Link URL" placeholder="Paste or type a link">
-    <button type="button" class="od-primary" data-action="apply">Apply</button>
-    <button type="button" class="od-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link" hidden></button>
+  <div class="pj-link" role="dialog" aria-label="Link" hidden>
+    <span class="pj-link-icon" data-icon="link"></span>
+    <input class="pj-link-input" type="text" inputmode="url" autocomplete="off" spellcheck="false" aria-label="Link URL" placeholder="Paste or type a link">
+    <button type="button" class="pj-primary" data-action="apply">Apply</button>
+    <button type="button" class="pj-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link" hidden></button>
   </div>`;
 
 const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
@@ -98,21 +98,21 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
   const [bubble] = elements(BUBBLE);
   const [outlineNav] = elements(OUTLINE);
   const [card, popover] = elements(LINK);
-  const count = Object.assign(document.createElement('span'), { className: 'od-count', title: 'Word count' });
+  const count = Object.assign(document.createElement('span'), { className: 'pj-count', title: 'Word count' });
   if (editable) toolbar.prepend(...tools); // a read-only view has nothing to format or comment on
-  toolbar.querySelector('.od-spacer').after(count);
+  toolbar.querySelector('.pj-spacer').after(count);
   if (editable) stage.append(bubble);
   stage.before(outlineNav);
   document.body.append(card, popover);
   const made = [...tools, count, bubble, outlineNav, card, popover];
 
   const canvas = stage.parentElement; // scrolls the page
-  const page = host.closest('.od-page');
+  const page = host.closest('.pj-page');
   const done = new AbortController();
   const { signal } = done;
   const link = setupLink(editor, { card, popover, host, canvas, signal });
   const outline = setupOutline(editor, { nav: outlineNav, host, canvas, signal });
-  const blockPicker = setupBlockPicker(editor, tools.find((el) => el.matches('.od-block-picker')), signal);
+  const blockPicker = setupBlockPicker(editor, tools.find((el) => el.matches('.pj-block-picker')), signal);
   const buttons = tools.flatMap((el) => [...el.querySelectorAll('button[data-command]')]);
   const commentButton = bubble.querySelector('[data-action="comment"]');
 
@@ -268,8 +268,8 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
 // the text it links, or under the button that opened it when that text is
 // out of view.
 function setupLink(editor, { card, popover, host, canvas, signal }) {
-  const go = card.querySelector('.od-link-go');
-  const input = popover.querySelector('.od-link-input');
+  const go = card.querySelector('.pj-link-go');
+  const input = popover.querySelector('.pj-link-input');
   const unlink = popover.querySelector('[data-action="unlink"]');
   let button = null; // the toolbar or bubble button it opened from
   let shown = null; // the link the card is for: { href, rect }
@@ -287,8 +287,8 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
     if (!link) return;
     const { href } = link;
     const doc = !/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith('#');
-    go.querySelector('.od-link-go-icon').replaceChildren(icon(doc ? 'file' : 'link'));
-    go.querySelector('.od-link-go-text').textContent = doc
+    go.querySelector('.pj-link-go-icon').replaceChildren(icon(doc ? 'file' : 'link'));
+    go.querySelector('.pj-link-go-text').textContent = doc
       ? decoded(href.split(/[?#]/)[0].split('/').at(-1)).replace(/\.(md|markdown)$/i, '') || href
       : href.replace(/^(https?:|mailto:)(\/\/)?(www\.)?/i, '');
     go.dataset.tip = href;
@@ -402,10 +402,10 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
 // ---- "Normal text ▾" block style picker ----
 
 function setupBlockPicker(editor, root, signal) {
-  const button = root.querySelector('.od-block-button');
-  const label = root.querySelector('.od-block-label');
-  const menu = root.querySelector('.od-block-menu');
-  button.append(icon('chevron', 'od-icon od-chevron'));
+  const button = root.querySelector('.pj-block-button');
+  const label = root.querySelector('.pj-block-label');
+  const menu = root.querySelector('.pj-block-menu');
+  button.append(icon('chevron', 'pj-icon pj-chevron'));
 
   const close = () => {
     menu.hidden = true;
@@ -438,8 +438,8 @@ function setupBlockPicker(editor, root, signal) {
 // ---- outline: a tick per heading at the left edge, a list on hover ----
 
 function setupOutline(editor, { nav, host, canvas, signal }) {
-  const ticks = nav.querySelector('.od-outline-ticks');
-  const list = nav.querySelector('.od-outline-list');
+  const ticks = nav.querySelector('.pj-outline-ticks');
+  const list = nav.querySelector('.pj-outline-list');
   let signature = '';
   let current = [];
 
@@ -476,8 +476,8 @@ function setupOutline(editor, { nav, host, canvas, signal }) {
     elements.forEach((h, i) => {
       if (h.getBoundingClientRect().top <= top) active = i;
     });
-    [...ticks.children].forEach((tick, i) => tick.classList.toggle('od-on', i === active));
-    [...list.querySelectorAll('button')].forEach((link, i) => link.classList.toggle('od-on', i === active));
+    [...ticks.children].forEach((tick, i) => tick.classList.toggle('pj-on', i === active));
+    [...list.querySelectorAll('button')].forEach((link, i) => link.classList.toggle('pj-on', i === active));
   }
   canvas.addEventListener('scroll', () => requestAnimationFrame(markActive), { passive: true, signal });
 

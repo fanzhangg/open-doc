@@ -8,13 +8,13 @@ const INDENTS = [['tabs', 'Tab'], [2, '2 spaces'], [4, '4 spaces'], [8, '8 space
 const indentName = ({ tabs, size }) => (tabs ? 'Tab' : `${size} spaces`);
 
 const BAR = `
-<div class="od-statusbar" aria-label="Editor status">
-  <span class="od-status-position"></span>
-  <span class="od-status-actions">
-    <button type="button" class="od-status-indent" aria-haspopup="listbox" aria-expanded="false"></button>
+<div class="pj-statusbar" aria-label="Editor status">
+  <span class="pj-status-position"></span>
+  <span class="pj-status-actions">
+    <button type="button" class="pj-status-indent" aria-haspopup="listbox" aria-expanded="false"></button>
     <button type="button" data-setting="wrap" aria-pressed="false" data-tip="Wrap long lines">Wrap</button>
     <button type="button" data-setting="whitespace" aria-pressed="false" data-tip="Show all whitespace">Whitespace</button>
-    <ul class="od-block-menu" role="listbox" aria-label="Indent with" hidden></ul>
+    <ul class="pj-block-menu" role="listbox" aria-label="Indent with" hidden></ul>
   </span>
 </div>`;
 
@@ -29,9 +29,9 @@ export function createStatusBar(view, canvas, save) {
   template.innerHTML = BAR;
   const bar = template.content.firstElementChild;
   canvas.after(bar);
-  const position = bar.querySelector('.od-status-position');
-  const indentButton = bar.querySelector('.od-status-indent');
-  const menu = bar.querySelector('.od-block-menu');
+  const position = bar.querySelector('.pj-status-position');
+  const indentButton = bar.querySelector('.pj-status-indent');
+  const menu = bar.querySelector('.pj-block-menu');
   const toggles = [...bar.querySelectorAll('[data-setting]')];
   let own;
 
