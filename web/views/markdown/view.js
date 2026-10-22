@@ -347,10 +347,16 @@ export async function createMarkdownView({
    */
   function caretAt(doc, at) {
     const projection = projected(doc);
-    const before = renderedRange(projection, at - 1, at);
-    if (before.start < before.end) return charAt(doc, at - 1)?.to ?? null;
-    const range = charAt(doc, at);
-    return range && (renderedRange(projection, at, at).start < projection.text.length ? range.from : range.to);
+    const last = projection.text.length - 1;
+    if (last < 0) return null;
+    // One pass over the text: the character drawn before `at`, else the one after it, else the last.
+    const { start, end } = renderedRange(projection, at - 1, at);
+    const i = Math.min(start, last);
+    const editorProjection = projectionOf(doc);
+    const found = across(projection, editorProjection, i, i + 1);
+    if (!found) return null;
+    const range = docRange(editorProjection, found.start, found.end);
+    return start < end || start > last ? range.to : range.from;
   }
 
   /** Text offset of document position `pos`, or null when it is not in the text. */
