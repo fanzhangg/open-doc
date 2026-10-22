@@ -36,8 +36,9 @@ designed, not built.
   Delete at the start of a list item deletes forward, as in any text.
 - **Links.** At the caret a card says where a link goes: open it, edit it or
   remove it. The link button opens a popover for the URL: Enter applies, an
-  empty URL removes, Escape cancels. Mod+click opens a link; `#heading`
-  scrolls to that heading in the doc.
+  empty URL removes, Escape cancels. Pasting a URL over selected text links
+  the text. Mod+click opens a link; `#heading` scrolls to that heading in the
+  doc.
 - **Diagrams.** A ` ```mermaid ` block shows as its diagram. Its source is
   hidden and cannot be typed into; a click selects the whole block, to
   comment on or delete. An AI buddy changes it, asked in a comment.
