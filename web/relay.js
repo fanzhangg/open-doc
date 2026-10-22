@@ -9,7 +9,7 @@
 // its way when the line drops fails as `offline`. The line is made again,
 // after 2 seconds and twice as long each time up to 30 (a page left open
 // while the host sleeps costs the relay little), and the host's `hello` on
-// it resyncs the page, unless the host turned the page away: then every
+// it catches the page up, unless the host turned the page away: then every
 // call fails with the host's reason.
 
 const RETRY_MS = 2000;

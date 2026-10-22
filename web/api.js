@@ -14,7 +14,8 @@ async function call(type, arg) {
 }
 
 export const api = {
-  state: () => call('state'),
+  /** The doc as this page may see it; with `since` ({ epoch, rev }), the `events` missed since. */
+  state: ({ since } = {}) => call('state', { since }),
   /** An edit: operations `ops` on rev `rev` of `epoch`, named `id` in the `ops` event that tells it landed. */
   submit: ({ ops, rev, epoch, id }) => call('submit', { ops, rev, epoch, id }),
   /** The person's cursor is at offset `at` of the text at rev `rev` of `epoch`. */

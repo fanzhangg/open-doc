@@ -69,6 +69,29 @@ test('an edit lands on its revision, is written, then told to every window; one 
   });
 });
 
+test('A3: an edit sent again with its id lands once, and is answered as it was', async () => {
+  await withDoc(async ({ call, state, docPath }) => {
+    const before = await state();
+    const submit = { ops: [{ from: 0, to: 0, insert: 'Hello ' }], rev: before.rev, epoch: before.epoch, id: 'page.1' };
+    assert.deepEqual(await call('submit', submit), { rev: 1 });
+    await call('submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev: 1, epoch: before.epoch, id: 'other.1' });
+    assert.deepEqual(await call('submit', submit), { rev: 1 }, 'sent again: the line dropped before its answer');
+    assert.equal(await readFile(docPath, 'utf8'), `> Hello ${SAMPLE}`);
+  });
+});
+
+test('C5: state since a rev gives the events missed, as they were told, while the log holds them', async () => {
+  await withDoc(async ({ call, edit, state, events }) => {
+    const before = await state();
+    await edit(`A${SAMPLE}`);
+    await edit(`AB${SAMPLE}`);
+    const told = events.filter(([name]) => name === 'ops').map(([, data]) => data);
+    assert.deepEqual((await call('state', { since: { epoch: before.epoch, rev: 0 } })).events, told);
+    assert.deepEqual((await call('state', { since: { epoch: before.epoch, rev: 2 } })).events, []);
+    for (const since of [{ epoch: 'e_gone', rev: 0 }, { epoch: before.epoch, rev: 3 }, undefined]) assert.equal((await call('state', { since })).events, undefined);
+  });
+});
+
 test('the doc is its text: a byte order mark and CRLF line ends are kept on disk only', async () => {
   await withDoc(async ({ edit, state, docPath }) => {
     const now = await state();

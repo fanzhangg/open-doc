@@ -125,7 +125,7 @@ test('a page reaches only what the project shows, and is told why not; only with
   }
 });
 
-test('when the host goes away the page waits, and once it is back resyncs with state', async () => {
+test('when the host goes away the page waits, and once it is back catches up with state', async () => {
   const shared = await project();
   let host = await startHost(shared);
   try {
@@ -151,7 +151,7 @@ test('when the host goes away the page waits, and once it is back resyncs with s
     await writeFile(join(shared.folder, 'plan.md'), `${TEXT}Changed while the host was away.\n`);
     host = await startHost(shared);
     await until(() => hellos() > 0, 'hello from the new host');
-    await client.resync();
+    await client.catchUp();
     assert.equal(shown, `${TEXT}Changed while the host was away.\n`);
     assert.deepEqual(teammate.lines, ['host', 'in']);
   } finally {

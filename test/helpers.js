@@ -1,8 +1,10 @@
+import { execFile } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { openDoc } from '../src/host/doc-service.js';
 import { diffOps } from '../src/core/ot.js';
 
@@ -75,6 +77,17 @@ export async function openTestDoc(docPath, { buddies = null, ...options } = {}) 
   };
   const call = async (type, arg) => doc.call(type, arg, await doc.owner());
   return { doc, events, edit, call, state: () => call('state') };
+}
+
+/**
+ * Make the doc at `docPath` one that cannot be written (`on`), or can again:
+ * the file itself read-only on Windows; elsewhere its folder, and as root,
+ * who writes there anyway, immutable (chattr).
+ */
+export async function readOnly(docPath, on) {
+  if (process.platform === 'win32') await chmod(docPath, on ? 0o444 : 0o644);
+  else if (process.getuid() === 0) await promisify(execFile)('chattr', [on ? '+i' : '-i', dirname(docPath)]);
+  else await chmod(dirname(docPath), on ? 0o555 : 0o755);
 }
 
 /** Wait until `check()` resolves to a truthy value, which it returns. */

@@ -123,11 +123,14 @@ that fails before the fix.
   (`web/client.js`) over a fake line that can delay, drop the line (calls
   fail `offline`), lose an event, restart the host, fail a write (the file
   read-only), make an outside change, land a buddy's edit and change a
-  level. A fake clock, seeded and deterministic. On a pull request, a fixed
-  300 seeds on Linux and Windows (about 2 minutes); nightly, 30 minutes of
-  random seeds, as a scheduled run of the same `stress` job. A failing seed
-  is shrunk and printed; the pull request that fixes it adds it to
-  `test/stress/regressions.json`, which every run replays.
+  level. Each seed makes a list of steps, run one at a time, so it runs
+  the same every time. On a pull request, a fixed 300 seeds on Linux and
+  Windows (under a minute); nightly, 30 minutes of random seeds, as a
+  scheduled run of the same `stress` job. A failing seed is shrunk to the
+  fewest steps that still fail and printed; the pull request that fixes it
+  adds them to `test/stress/regressions.json`, which every run replays. Not
+  yet: buddies and level changes, and outside changes while more than one
+  page edits.
 - **Layer 3** runs each scenario for each other writer (a teammate, a
   buddy, an outside change) in each view (Markdown, Plain).
 - **Layer 4**: `test/perf/latency.test.js` opens each view at its limits,
@@ -169,7 +172,7 @@ on machine B, on another network (a phone's hotspot will do), in a browser.
 | --- | --- | --- | --- |
 | PR | push to a PR | lint; unit and conformance (Node and browser); integration on Linux, macOS, Windows; web build | blocks merge |
 | main | merge | all of PR, e2e on three platforms, nightly installers | blocks the nightly build |
-| Nightly | schedule | the `stress` job, 30 minutes of random seeds | opens an issue |
+| Nightly | schedule | the `stress` job, 30 minutes of random seeds | fails the run |
 | Release | version tag | all of main, draft release | blocks publishing |
 
 - A PR that changes `spec/` changes `spec/conformance/` too.
