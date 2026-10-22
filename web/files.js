@@ -130,10 +130,11 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   // ---- filtering: grep the files' paths with a regular expression ----
 
+  // What git ignores (build output, installed packages) is left out: a filter never opens into it.
   async function allFiles() {
     const paths = [];
     async function read(path) {
-      const entries = await api.list(path).catch(() => []);
+      const entries = (await api.list(path).catch(() => [])).filter(({ ignored }) => !ignored);
       await Promise.all(entries.map(({ name, folder }) => (folder ? read(join(path, name)) : paths.push(join(path, name)))));
     }
     await read('');
@@ -264,11 +265,12 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   // What the folder `path` holds, as rows: a subfolder with what is in it, when open.
   function items(path, level) {
-    return (lists.get(path) ?? []).map(({ name, folder }) => {
+    return (lists.get(path) ?? []).map(({ name, folder, ignored }) => {
       const at = join(path, name);
       const item = el('li');
       item.setAttribute('role', 'none');
       const node = row(folder ? 'folder' : 'file', at, name, level);
+      node.classList.toggle('pj-files-ignored', ignored);
       item.append(node);
       if (folder) {
         const open = lists.has(at);

@@ -229,8 +229,10 @@ shows only as set or not.
   app, a banner says so and saving pauses.
 - **A project's sidebar** shows every file and folder as it is on disk,
   except names starting with `.` and comment files, each folder read as you
-  open it. Everyone on the team sees the same tree. A doc opens in the
-  editor; any other file shows read only in its place (Escape goes back).
+  open it. What git ignores (build output, installed packages) is dimmed,
+  and the filter leaves it out. Everyone on the team sees the same tree. A
+  doc opens in the editor; any other file shows read only in its place
+  (Escape goes back).
   Its menu, the same for every row and only yours: New File (in a folder; `/`
   in the name makes folders), Rename (F2), Copy Path (relative to the
   project, as AI buddies read it), Reveal, and Delete (to the Trash). Drag a

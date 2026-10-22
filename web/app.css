@@ -702,6 +702,8 @@ label.pj-setting { cursor: pointer; }
 .pj-files-tree ul { padding-left: 16px; }
 .pj-files-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; color: var(--text-soft); }
 .pj-files-row:hover { background: var(--hover); color: var(--text); }
+/* what git ignores (build output, installed packages): dimmed, not hidden */
+.pj-files-row.pj-files-ignored { color: var(--text-faint); }
 .pj-files-row .pj-icon { width: 16px; height: 16px; color: var(--text-faint); }
 .pj-files-row .pj-files-chevron { width: 16px; height: 16px; transition: transform 0.15s; }
 .pj-files-folder[aria-expanded="false"] .pj-files-chevron { transform: rotate(-90deg); }

@@ -197,7 +197,7 @@ test('the door: each call needs a level, and a comment is by whoever calls, neve
 test('the project\'s files, at the door: whoever may read lists, reads and opens what the project shows', async () => {
   await withDoc(async ({ doc, docPath, settingsDir }) => {
     const reader = { ...(await doc.owner()), level: 'read' };
-    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.ponjo is not shown');
+    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false, ignored: false }], '.ponjo is not shown');
     assert.deepEqual(await doc.call('read', { path: 'plan.md' }, reader), { text: SAMPLE });
     assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: 'plan.md' }, 'the real path is the owner\'s');
     assert.deepEqual(await doc.call('open', { path: 'plan.md' }, await doc.owner()), { path: await realpath(docPath) });
