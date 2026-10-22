@@ -290,7 +290,7 @@ function share(folder, team, secret) {
       if (text.length > MAX_FRAME) {
         const { id } = JSON.parse(frame.data);
         if (id === undefined) return;
-        text = JSON.stringify({ peer, data: JSON.stringify({ id, error: { message: 'Too big to send through the relay', code: 'too_big' } }) });
+        text = JSON.stringify({ peer, data: JSON.stringify({ id, error: { message: 'This doc is too big to open through sharing', code: 'too_big' } }) });
       }
       socket.send(text);
     });
