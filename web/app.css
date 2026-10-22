@@ -452,9 +452,9 @@ del.pj-buddy-del { margin-right: 0.15em; }
 .pj-link { position: fixed; z-index: 40; display: flex; align-items: center; gap: 6px; width: 380px; max-width: calc(100vw - 16px); padding: 6px 6px 6px 8px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); animation: pj-pop 0.12s ease-out; }
 .pj-link-icon { display: flex; color: var(--text-soft); }
 .pj-link-icon .pj-icon { width: 16px; height: 16px; }
-.pj-link-input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--canvas); color: var(--text); font: inherit; font-size: 13px; }
-.pj-link-input::placeholder { color: var(--text-faint); }
-.pj-link-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pj-link-input, .pj-find-input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--canvas); color: var(--text); font: inherit; font-size: 13px; }
+.pj-link-input::placeholder, .pj-find-input::placeholder { color: var(--text-faint); }
+.pj-link-input:focus, .pj-find-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pj-link .pj-primary { flex: none; }
 .pj-link .pj-icon-btn:hover { color: var(--red); }
 .pj-link-card { position: fixed; z-index: 40; display: flex; align-items: center; gap: 2px; max-width: min(420px, calc(100vw - 16px)); padding: 4px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); animation: pj-pop 0.12s ease-out; }
@@ -465,6 +465,15 @@ del.pj-buddy-del { margin-right: 0.15em; }
 .pj-link-go-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pj-link-card [data-action="unlink"]:hover { color: var(--red); }
 .pj-editor .pj-link-target { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* ---- find bar (web/find.js): at the page's top right, staying there as the page scrolls ---- */
+.pj-find { position: sticky; top: 8px; z-index: 30; height: 0; margin: -32px calc(8px - var(--page-pad)) 32px; display: flex; justify-content: flex-end; }
+.pj-find-box { display: flex; flex-direction: column; gap: 6px; width: 380px; max-width: calc(100vw - 16px); height: fit-content; padding: 6px; background: var(--bg); border-radius: 10px; box-shadow: var(--shadow-raised); animation: pj-pop 0.12s ease-out; }
+.pj-find-row { display: flex; align-items: center; gap: 4px; }
+.pj-find-count { padding: 0 4px; }
+.pj-find .pj-icon-btn .pj-icon { width: 16px; height: 16px; }
+.pj-editor .pj-found { background: var(--accent-soft); border-radius: 2px; }
+.pj-editor .pj-found-current { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 
 
 

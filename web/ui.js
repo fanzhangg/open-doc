@@ -17,7 +17,7 @@ export function createChrome({ getView, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
-  const page = document.querySelector('.pj-page');
+  const editor = document.querySelector('.pj-page .pj-editor'); // not the find bar's fields
 
   const settings = setupSettings({
     store,
@@ -47,7 +47,7 @@ export function createChrome({ getView, settings: store, getName, setName }) {
     command(name) {
       // Undo in the doc is the view's own history (your edits only); in a field, the field's.
       if (name === 'undo' || name === 'redo') {
-        if (page.contains(document.activeElement)) getView()[name]();
+        if (editor.contains(document.activeElement)) getView()[name]();
         else document.execCommand(name);
       } else if (name === 'settings') settings.toggle('general');
       else if (name === 'shortcuts') settings.toggle('shortcuts');

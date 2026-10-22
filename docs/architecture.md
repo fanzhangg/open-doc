@@ -123,7 +123,7 @@ flowchart TD
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
 | ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
-| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
+| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js`; every view's find bar is `find.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Relay (`relay/`) | a Cloudflare Worker at `share.ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
@@ -152,7 +152,7 @@ The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
 is; line numbers, wrapping, font size, whitespace marks, indent guides and
 indentation are its settings, with a status bar (`status.js`) whose menu and
 toggles save the same settings. The Markdown view (`web/views/markdown/`, [design](markdown-view.md)) is
-WYSIWYG; its toolbar (the only formatting entry), outline, focus mode and
+WYSIWYG; its toolbar (and the standard keys), outline, focus mode and
 word count are parts of it, switched by its settings, not separate extensions.
 It maps the doc's text to its own document through the rendered text, and
 saves each block the user did not change as it was written.

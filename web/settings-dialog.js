@@ -11,6 +11,7 @@ import { hydrateIcons, icon } from './icons.js';
 import { agentSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
+  ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Inline code', 'Mod+E'], ['Strikethrough', 'Mod+Shift+X'], ['Link', 'Mod+K'], ['Find', 'Mod+F'], ['Find and replace', 'Mod+Alt+F'], ['Next match', 'Mod+G'], ['Previous match', 'Mod+Shift+G']]],
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
   ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Plain text view', 'Mod+Shift+T'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];

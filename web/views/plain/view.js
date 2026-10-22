@@ -6,7 +6,7 @@
 // also glows (as in the Markdown view).
 
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
-import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemirror/view';
+import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, lineNumbers } from '@codemirror/view';
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
@@ -16,6 +16,7 @@ import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
 import { indentKeys, resolveIndent } from './indent.js';
 import { createStatusBar } from './status.js';
+import { createFind, matches } from '../../find.js';
 import { indentGuides, whitespaceMarks } from './whitespace.js';
 
 const FLASH_MS = 6000;
@@ -24,6 +25,7 @@ const fromDisk = Annotation.define();
 const setMarks = StateEffect.define();
 const addFlash = StateEffect.define();
 const dropFlash = StateEffect.define();
+const setFound = StateEffect.define();
 
 // The page's marks, replaced wholesale, mapped through edits until then.
 const marksField = StateField.define({
@@ -31,6 +33,39 @@ const marksField = StateField.define({
   update: (set, tr) => tr.effects.reduce((next, effect) => (effect.is(setMarks) ? effect.value : next), set.map(tr.changes)),
   provide: (field) => EditorView.decorations.from(field),
 });
+
+// The find bar's matches, replaced wholesale, mapped through edits until then.
+const foundField = StateField.define({
+  create: () => Decoration.none,
+  update: (set, tr) => tr.effects.reduce((next, effect) => (effect.is(setFound) ? effect.value : next), set.map(tr.changes)),
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+// A line holding right-to-left letters (Hebrew, Arabic…) runs the way its
+// text starts (dir="auto"), and the caret moves in it as it reads.
+const RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const rtlLine = Decoration.line({ attributes: { dir: 'auto' } });
+const bidi = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = linesRtl(view);
+  }
+
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = linesRtl(update.view);
+  }
+}, { decorations: (plugin) => plugin.decorations });
+
+function linesRtl(view) {
+  const ranges = [];
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to;) {
+      const line = view.state.doc.lineAt(pos);
+      if (RTL.test(line.text)) ranges.push(rtlLine.range(line.from));
+      pos = line.to + 1;
+    }
+  }
+  return Decoration.set(ranges);
+}
 
 // Who changed what on disk, for a while.
 const flashField = StateField.define({
@@ -60,6 +95,11 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   const host = stage.querySelector('.pj-editor');
   stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
+  let finder = null; // the find bar (web/find.js)
+  let found = []; // [from, to) of each of its matches, in `foundIn`
+  let foundIn = null; // the doc they were found in, while it has a query
+  let query = '';
+  let refind = 0;
   let composed = false; // typed in a composition not ended yet
   let bubble = null;
   let destroyed = false;
@@ -93,7 +133,8 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
+        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField, foundField,
+        bidi, EditorView.perLineTextDirection.of(true),
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
           // Typing during an IME composition is the person's once it ends.
@@ -109,6 +150,10 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
           if ((update.heightChanged || update.geometryChanged) && !update.docChanged) onLayout();
           if (update.selectionSet || update.focusChanged || update.geometryChanged) bubble?.place();
           if (update.selectionSet || update.docChanged) status?.update();
+          if (update.docChanged && foundIn) {
+            clearTimeout(refind);
+            refind = setTimeout(() => finder.changed(), 100); // not on every key
+          }
         }),
       ],
     }),
@@ -120,6 +165,48 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   language?.load().then((support) => {
     if (!destroyed) view.dispatch({ effects: syntax.reconfigure([support, syntaxHighlighting(defaultHighlightStyle)]) });
   }, () => {});
+
+  // ---- find: in the text ----
+
+  const foundState = () => {
+    const { from, to } = view.state.selection.main;
+    return { count: found.length, current: found.findIndex(([f, t]) => f === from && t === to) + 1 };
+  };
+  const paintFound = () => {
+    const { current } = foundState();
+    view.dispatch({ effects: setFound.of(Decoration.set(found.map(([from, to], i) => Decoration.mark({ class: i + 1 === current ? 'pj-found pj-found-current' : 'pj-found' }).range(from, to)))) });
+  };
+  const search = {
+    find(next) {
+      query = next;
+      found = matches(view.state.doc.toString(), query);
+      foundIn = query ? view.state.doc : null;
+      paintFound();
+      return foundState();
+    },
+    step(back) {
+      if (found.length === 0) return foundState();
+      const { from, to } = view.state.selection.main;
+      const same = ([f, t]) => f === from && t === to;
+      const i = back ? found.findLastIndex((r) => r[1] <= from && !same(r)) : found.findIndex((r) => r[0] >= to && !same(r));
+      const [anchor, head] = found.at(i === -1 ? (back ? -1 : 0) : i);
+      view.dispatch({ selection: { anchor, head }, effects: EditorView.scrollIntoView(anchor, { yMargin: 80 }) });
+      paintFound();
+      return foundState();
+    },
+    replace(text, all) {
+      const { from, to } = view.state.selection.main;
+      const targets = all ? found : found.filter(([f, t]) => f === from && t === to);
+      if (!editable || targets.length === 0) return search.step(false);
+      const changes = view.state.changes(targets.map(([f, t]) => ({ from: f, to: t, insert: text })));
+      view.dispatch({ changes, selection: { anchor: changes.mapPos(targets.at(-1)[1], 1) }, userEvent: 'input.replace' });
+      search.find(query);
+      return all ? foundState() : search.step(false);
+    },
+    selected: () => view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to),
+    focus: () => view.focus(),
+  };
+  finder = createFind(search, { host, editable });
 
   if (editable && onComment) bubble = createBubble(view, { stage, host, onComment });
   if (editable) {
@@ -236,7 +323,9 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
       destroyed = true;
       delete stage.dataset.plain;
       clearTimeout(changeTimer);
+      clearTimeout(refind);
       host.removeEventListener('click', clickMark);
+      finder.destroy();
       bubble?.destroy();
       status?.destroy();
       view.destroy();
