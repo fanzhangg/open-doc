@@ -261,8 +261,9 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
 
 // ---- links: a card for the link at the caret, and the popover that edits one ----
 
-// The card shows where the link at the caret goes, under it: click to open,
-// or edit or remove it. Mod+click on a link opens it too. The popover edits
+// The card shows where the link at the caret goes, under it while the link is
+// in view (scrolled out, it hides until it is back): click to open, or edit
+// or remove it. Mod+click on a link opens it too. The popover edits
 // the URL for the selection or the link at the caret: Enter applies, an
 // empty URL removes the link, Escape or clicking away cancels. It sits under
 // the text it links, or under the button that opened it when that text is
@@ -281,10 +282,16 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
     else window.open(href, '_blank', 'noopener');
   }
 
+  // Whether `rect` is in the canvas, not scrolled out under the toolbar or the window's edge.
+  function inView(rect) {
+    const view = canvas.getBoundingClientRect();
+    return rect.bottom > view.top && rect.top < view.bottom;
+  }
+
   function showCard(link) {
     shown = link;
-    card.hidden = !link;
-    if (!link) return;
+    card.hidden = !link || !inView(link.rect);
+    if (card.hidden) return;
     const { href } = link;
     const doc = !/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith('#');
     go.querySelector('.pj-link-go-icon').replaceChildren(icon(doc ? 'file' : 'link'));
@@ -335,8 +342,7 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
 
   function place() {
     const rect = editor.linkRect();
-    const view = canvas.getBoundingClientRect();
-    const visible = rect && rect.bottom > view.top && rect.top < view.bottom;
+    const visible = rect && inView(rect);
     const onScreen = button?.isConnected && button.getClientRects().length > 0;
     const anchor = visible || !onScreen ? rect : button.getBoundingClientRect();
     if (!anchor) return;

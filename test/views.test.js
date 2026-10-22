@@ -204,6 +204,17 @@ test('markdown view: a change applied with who made it glows, with their name', 
   assert.equal(await run(`contract.drawn('.pj-flag')`), 'Ana');
 });
 
+test('markdown view: the link card hides while its link is scrolled out of view', async () => {
+  await make('markdown', `See [the plan](plan.md).\n\n${'More.\n\n'.repeat(80)}`, { toolbar: true });
+  await select('the plan', 3, 3);
+  const cardShown = () => run(`new Promise((done) => requestAnimationFrame(() => done(!document.querySelector('.od-link-card').hidden)))`);
+  assert.equal(await cardShown(), true);
+  await run(`document.querySelector('.od-canvas').scrollTop = 2000`);
+  assert.equal(await cardShown(), false);
+  await run(`document.querySelector('.od-canvas').scrollTop = 0`);
+  assert.equal(await cardShown(), true);
+});
+
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);
