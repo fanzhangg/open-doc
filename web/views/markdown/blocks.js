@@ -179,6 +179,9 @@ export function textOfDoc(doc, base, given, blocks, serialize, parse) {
   return { text: text + given.slice(from), blocks: out };
 }
 
+// A task list item's box: its `[ ]` or `[x]` and what comes before its mark.
+const TASK = /^([ \t>]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])\]/gm;
+
 /**
  * Block `source` with the characters typed into or deleted from it to make
  * block `node`, and nothing else: its own style kept (a setext heading, `*`
@@ -190,6 +193,17 @@ export function textOfDoc(doc, base, given, blocks, serialize, parse) {
 export function typedInto(source, node, parse) {
   const before = project(source);
   const after = projectDoc(node.type.schema.topNodeType.create(null, [node])).text;
+  // No text changed: tasks were ticked or unticked, so each `[ ]` or `[x]` says what its item does.
+  if (before.text === after) {
+    const checked = [];
+    node.descendants((child) => {
+      if (child.attrs.checked != null) checked.push(child.attrs.checked);
+    });
+    let i = 0;
+    const candidate = source.replace(TASK, (_, head, mark) => `${head}${checked[i++] ? mark.trim() || 'x' : ' '}]`);
+    const read = parse(candidate);
+    if (read.childCount === 1 && sameBlock(read.child(0), node)) return candidate;
+  }
   const max = Math.min(before.text.length, after.length);
   let head = 0;
   while (head < max && before.text[head] === after[head]) head++;

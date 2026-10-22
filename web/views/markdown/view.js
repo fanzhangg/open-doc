@@ -111,6 +111,24 @@ const tableTab = $shortcut(() => ({
   },
 }));
 
+// Clicking a task list item's box (app.css draws it in the item's gutter,
+// left of the item) ticks or unticks it.
+const taskBox = $prose(() => new Plugin({
+  props: {
+    handleDOMEvents: {
+      mousedown(view, event) {
+        const item = event.target;
+        if (!view.editable || item.dataset?.itemType !== 'task' || event.clientX >= item.getBoundingClientRect().left) return false;
+        const pos = view.posAtDOM(item, 0) - 1;
+        const node = view.state.doc.nodeAt(pos);
+        event.preventDefault();
+        view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: !node.attrs.checked }));
+        return true;
+      },
+    },
+  },
+}));
+
 // Reports every view update, and marks the top-level block holding the caret
 // (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
@@ -192,7 +210,7 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(taskBox)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .use($prose(() => new Plugin({
       appendTransaction(trs) {

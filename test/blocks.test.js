@@ -161,4 +161,6 @@ test('a block typed into keeps its own style; one formatted anew is written in t
   assert.equal(typed('Some __bold__ here.', 'Some __boldly__ here.'), 'Some __boldly__ here.', 'typed inside bold, inside its markup');
   assert.equal(typed('Some text.', 'Some \\*\\*x\\*\\* text.'), 'Some \\*\\*x\\*\\* text.', 'typed Markdown stays text, escaped');
   assert.equal(typed('Some text.', 'Some **text**.'), null, 'formatting is the editor\'s to write');
+  assert.equal(typed('* [ ] one\n* [X] two', '- [x] one\n- [x] two'), '* [x] one\n* [X] two', 'a task ticked');
+  assert.equal(typed('1. [ ] one\n2. [X] two', '1. [x] one\n2. [ ] two'), '1. [x] one\n2. [ ] two', 'tasks ticked and unticked');
 });

@@ -157,13 +157,15 @@
   <h3>Status bar</h3>
   <p>The plain view has a status bar under the page: <code>.pj-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left; on the right text buttons, 22px, grey on hover and ink on grey while pressed or open, and a menu above them in the <code>.pj-block-menu</code> style. Line numbers, whitespace marks (dots for spaces, arrows for tabs) are <code>--text-faint</code>; indent guides are <code>--border-strong</code>.</p>
   <div class="ds-box"><div class="pj-statusbar"><span>Ln 12, Col 8 · 24 selected</span><span class="pj-status-actions"><button type="button">Indent: 4 spaces</button><button type="button" aria-pressed="true">Wrap</button><button type="button">Whitespace</button></span></div></div>
-  <h3>Text: comments, buddy edits, links</h3>
+  <h3>Text: comments, buddy edits, links, tasks</h3>
   <div class="ds-box ds-prose pj-editor">
     We ship the beta to <span class="pj-hl">fifty design partners</span> in March, then
     <span class="pj-hl pj-hl-active">open the waitlist</span> once
     <del class="pj-buddy-del">the beta is solid</del><span class="pj-buddy-edit" style="--buddy: oklch(0.84 0.17 85)">onboarding is stable</span>.
     See <a href="#">the checklist</a>.
+    <ul><li data-item-type="task" data-checked="true"><p>Invite the partners</p></li><li data-item-type="task" data-checked="false"><p>Open the waitlist</p></li></ul>
   </div>
+  <p>A task list item has a box in place of its bullet: a <code>.pj-radio</code>'s outline, square (radius 4); ink with a check when done. Clicking it ticks it.</p>
   <h3>A thread</h3>
   <div class="pj-card ds-card" style="--buddy: oklch(0.84 0.17 85)">
     <div class="pj-msg">
