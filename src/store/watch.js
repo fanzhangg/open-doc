@@ -42,7 +42,9 @@ export function watchFolder(dir, onChange) {
 function watchIn(dir, matches, signature, onChange) {
   let timer = null;
   let last = signature(); // as the watch starts: a change right after it counts
+  let stopped = false; // a poll on its way when the watch stops fires nothing
   const fire = () => {
+    if (stopped) return;
     clearTimeout(timer);
     timer = setTimeout(onChange, DEBOUNCE_MS);
   };
@@ -64,6 +66,7 @@ function watchIn(dir, matches, signature, onChange) {
   }, POLL_INTERVAL_MS);
 
   return () => {
+    stopped = true;
     clearTimeout(timer);
     clearInterval(poll);
     watcher?.close();

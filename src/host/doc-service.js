@@ -174,6 +174,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // meanwhile; every window hears why it is not saved (`saved`), and when
   // it is. Run in `serial`.
   async function commit() {
+    if (closed) return; // a closed doc writes nothing: another service may have it now
     clearTimeout(retry);
     let wroteAny = false; // its note says only that it is about to be
     try {
@@ -709,6 +710,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // so a write of this service's is all before the read or all after it:
   // a read from before it is never taken for someone else's change.
   async function onDocChanged() {
+    if (closed) return false; // asked before it closed
     if (!missing && ours(await stat(docPath).catch(() => null))) return true; // this service's own write
     let doc;
     try {
