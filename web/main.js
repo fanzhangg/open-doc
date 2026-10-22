@@ -398,10 +398,11 @@ window.addEventListener('beforeunload', (event) => {
 });
 
 // Others' edits landed and the view's text is now `text` (web/client.js).
-// A buddy's show as its revision once its reply is in; anything else glows.
+// A buddy's show as its revision once its reply is in; a person's typing (an
+// edit with an `id`) by their cursor alone; anything else glows.
 function showLanded(text, ops, event) {
   const reply = event?.reply;
-  editor.applyText(text, { by: reply ? event.by : asking ?? ON_DISK, buddy: Boolean(reply) });
+  editor.applyText(text, { by: reply ? event.by : event?.id ? null : asking ?? ON_DISK, buddy: Boolean(reply) });
   paintMarks();
   if (reply) {
     runLanded = reply;
