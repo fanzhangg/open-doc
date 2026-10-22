@@ -143,7 +143,7 @@ or off alone (`settings.json`: `views` and `rules`, each by id).
 | Is | the doc's editor | how a format's edits merge, whoever made them: a buddy, another program |
 | Shape | has state (caret, undo, marks), so it is built in and not an extension point | a declaration of pure hooks: text in, verdict out; no state, no lifecycle, no I/O, no handle to the app |
 | Declared | `{ id, name, about, extensions, always?, limits?, createView, settings }` | `{ id, name, about, extensions, ...hooks }` |
-| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 20 MB); a view only for a doc within its `limits`, see Latency | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
+| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 20 MB); a view only for a doc within its `limits`, see [Editing](#editing) | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
 | Runs in | the page | the doc host (an edit that yields: a buddy's, an outside change, an undo) and the page (one landing while typing is on its way), whatever the view |
 | Its settings | an ordered list of fields `{ key, type: 'switch' \| 'choice' \| 'number', label, hint?, default, group?, when? }`, rendered as its page in Settings > Views; `viewSettings` keeps a stored value only if its field allows it | the switch only: Settings > Rules; `ruleSettings` |
 | Must satisfy | the view contract, `test/views.test.js` | each hook's contract, below |
@@ -183,21 +183,76 @@ ids it does not know. Switching a view makes the affected views again from
 the same text in every window, the history's too, after saving pending
 typing; its own settings reach its view as they are.
 
-### Latency
+### Editing
 
-Writing feels natural only while the page keeps up, a teammate typing too.
-Every view keeps one promise (`LATENCY` in `web/views/index.js`) for any doc
-within its limits:
+What a person can count on when they edit, alone or with others. To a
+person, another writer changing their doc is one of three: a teammate, an
+AI buddy, or an outside program (`git pull`, another editor). Editing alone
+always has the last two, so alone is the case of one person. Every rule
+below holds for any number of people and any kind of other writer, there is
+one path for everyone (page → `web/client.js` → DocService), and one set of
+tests covers it all, by parameters ([testing](testing-ci.md#editing-tests)).
 
-| From | To | Within |
-| --- | --- | --- |
-| the doc's text | an editable view | 3 s |
-| a key | its character in the doc | 30 ms median, 100 ms p95 |
-| a teammate's edit arriving | it shown (the network aside) | 50 ms median, 100 ms p95 |
-| a key | its character shown at a teammate, while the person types on (the network aside) | 50 ms median, 100 ms p95 |
-| the doc opened | the end of any one task that keeps the page busy | 500 ms |
+**Scope.** Docs within the views' limits (below); up to 8 people editing at
+once; a one-way network delay up to 150 ms. Past it editing may be slower,
+but the A rules always hold and the person is told.
 
-A view keeps it only up to a size, its `limits`: how long the doc is, and
+**A. Data**, with no tolerance:
+
+| Id | Rule |
+| --- | --- |
+| A1 | Converge: once writers stop, every page's text is the host's text is the file. |
+| A2 | Nothing lost: what a person typed and nobody deleted ends up in the file, through crashes, power loss and dropped lines. |
+| A3 | Nothing twice: an edit lands at most once, through resends, restarts and write failures. |
+| A4 | People first: people's edits merge by character. A buddy, an outside change and an undo of a buddy yield to a person. What yielded comes back once, and can be found in history. |
+| A5 | Text intact: no split surrogate pair, no U+FFFD; CRLF and BOM kept; unchanged blocks saved byte for byte. |
+| A6 | Shown is saved: whatever the page shows as saved is in the file; anything not saved is marked, with the reason. |
+
+**B. Latency**, median and p95, the network aside, within the limits. The
+numbers are `LATENCY` in `web/views/index.js`, which the tests read:
+
+| Id | From | To | Within |
+| --- | --- | --- | --- |
+| B1 | the doc opened | an editable view | 3 s |
+| B2 | a key | its character on screen | 30 ms, 100 ms |
+| B3 | a key | its character in the file | 50 ms, 100 ms |
+| B4 | another writer's edit arriving | it shown | 50 ms, 100 ms |
+| B5 | a key | its character shown at a teammate | 50 ms, 100 ms |
+| B6 | a person's cursor moving | it shown at the others | 100 ms p95 |
+| B7 | the doc opened | the end of any one task that keeps the page busy | 500 ms |
+
+**C. Recovery:**
+
+| Id | Rule |
+| --- | --- |
+| C1 | Crash: killed and opened again, everything shown as saved is there; no file is half written. |
+| C2 | Close: typing not landed lands before a window closes. |
+| C3 | An outside change while typing: my text stays; the outside version goes to history. |
+| C4 | A write that fails (a read-only file, a lock, a full disk): the page says Not saved, and why. Once the file can be written, the typing is saved, exactly once. |
+| C5 | Reconnect: within 5 s of the line or the host coming back (30 s for a host waking from sleep), the page has caught up on text, comments, cursors and level. Typing done while away lands once. |
+| C6 | Offline shows: within 15 s of the line dropping, a half-open socket included, the page says Offline. It stays editable and says Not saved. |
+| C7 | Level: a level change applies within 2 s online, and on reconnect offline. Typing that can no longer be saved is never dropped silently: the page says so and shows that text, to copy. |
+| C8 | Isolation: one page's bad request or oversized message never disconnects the others. Not yet: an answer over 8 MB (`MAX_MESSAGE` in `relay/worker.js`; `web/files.js` reads a whole file on a doc switch) makes the relay close the host's socket, and so every page. |
+
+**D. Editing**, whoever the other writer is:
+
+| Id | Rule |
+| --- | --- |
+| D1 | My caret stays: others' edits never move my caret or selection off the character it is next to. |
+| D2 | My viewport stays: when others edit above me, the line I am looking at keeps its place on screen. |
+| D3 | My undo: Cmd+Z undoes only my typing, and still works after others split or restyle my paragraph. |
+| D4 | IME: nothing is saved or sent mid-composition; others' edits arriving mid-composition lose or double nothing. |
+| D5 | The view never rewrites: after `applyText(t)`, `getText() === t`; a view's own normalisation is never saved as anyone's edit. |
+| D6 | Clear marks: a teammate's typing shows only by their cursor; a buddy's change is flagged with its name; outside changes and restores glow. |
+| D7 | Drafts stay: a comment being written, and its anchor, survive others' edits. |
+
+**E. State:**
+
+| Id | Rule |
+| --- | --- |
+| E1 | At any moment the page is in exactly one true state: Saved, Saving, Not saved (and why), Offline or Read-only. Alone too. |
+
+A view keeps the B rules only up to a size, its `limits`: how long the doc is, and
 for the Markdown view how long a run of text without a blank line is (one
 paragraph is parsed whole on every edit in it):
 
@@ -208,15 +263,9 @@ paragraph is parsed whole on every edit in it):
 | Plain text's colour | no block over 10,000 characters | the doc opens without colour |
 
 The desktop app opens text files up to 20 MB, room for the plain view's
-limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
-job on every pull request) opens each view at its limits, in the doc shape
-that costs it most, types while a teammate's edits arrive, and fails when
-the promise is missed twice running; `test/perf/typing.test.js` types in
-a view, as the owner, and times each key to the character on a teammate's
-page (the browser build, its applyText and marks included) through the
-relay run locally, with the teammate's line 40 ms slower each way as over
-the internet, in a small Markdown doc and in the plain view's longest,
-which the host writes whole on every key. A view sends each change the
+limit in any script. `npm run test:perf` holds each view to the B rules at
+its limits, and a key to a teammate's page through the relay
+([testing](testing-ci.md#editing-tests)). A view sends each change the
 person makes as it is made (`onEdit`), one edit on its way at a time: keys
 typed while one is on its way go out together once it is answered, so
 typing reaches others while it goes on, not once it pauses; a teammate far
