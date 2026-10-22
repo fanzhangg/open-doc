@@ -15,10 +15,10 @@ const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-settings-'));
 test('configDir follows each OS convention and the override', () => {
   const home = '/home/u';
   assert.equal(configDir({ PONJO_CONFIG_DIR: '/x' }, 'win32', home), '/x');
-  assert.equal(configDir({ APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, 'win32', home), join('C:\\Users\\u\\AppData\\Roaming', 'OpenDoc'));
-  assert.equal(configDir({}, 'darwin', home), join(home, 'Library', 'Application Support', 'OpenDoc'));
-  assert.equal(configDir({ XDG_CONFIG_HOME: '/cfg' }, 'linux', home), join('/cfg', 'opendoc'));
-  assert.equal(configDir({}, 'linux', home), join(home, '.config', 'opendoc'));
+  assert.equal(configDir({ APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, 'win32', home), join('C:\\Users\\u\\AppData\\Roaming', 'Ponjo'));
+  assert.equal(configDir({}, 'darwin', home), join(home, 'Library', 'Application Support', 'Ponjo'));
+  assert.equal(configDir({ XDG_CONFIG_HOME: '/cfg' }, 'linux', home), join('/cfg', 'ponjo'));
+  assert.equal(configDir({}, 'linux', home), join(home, '.config', 'ponjo'));
 });
 
 test('patches are checked key by key', () => {

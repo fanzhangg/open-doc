@@ -371,7 +371,7 @@ edit, which does not yield.
 
 ### The config folder
 
-In the config folder (`~/Library/Application Support/OpenDoc/` on macOS),
+In the config folder (`~/Library/Application Support/Ponjo/` on macOS),
 written only by the app.
 
 | File | Holds |

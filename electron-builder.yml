@@ -1,8 +1,8 @@
 # Installers for the Ponjo desktop app (docs/architecture.md, Desktop app).
 # Build with `npm run dist:desktop`; output goes to release/.
 
-appId: dev.opendoc.desktop
-productName: OpenDoc
+appId: app.ponjo.desktop
+productName: Ponjo
 copyright: Copyright © 2026 fanzhangg
 directories:
   output: release

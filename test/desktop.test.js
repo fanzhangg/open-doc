@@ -145,8 +145,8 @@ test('pathsFromArgs: doc paths from a launch, absolute, flags skipped', () => {
     pathsFromArgs(['electron', 'desktop/main.js', 'plan.md', '--inspect', join(cwd, 'b', 'x.md')], { packaged: false, cwd }),
     [join(cwd, 'plan.md'), join(cwd, 'b', 'x.md')],
   );
-  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', 'notes/idea.md'], { packaged: true, cwd }), [join(cwd, 'notes', 'idea.md')]);
-  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', '--allow-file-access'], { packaged: true, cwd }), []);
+  assert.deepEqual(pathsFromArgs(['Ponjo.exe', 'notes/idea.md'], { packaged: true, cwd }), [join(cwd, 'notes', 'idea.md')]);
+  assert.deepEqual(pathsFromArgs(['Ponjo.exe', '--allow-file-access'], { packaged: true, cwd }), []);
   assert.deepEqual(pathsFromArgs(['electron', 'desktop/main.js'], { packaged: false, cwd }), []);
 });
 

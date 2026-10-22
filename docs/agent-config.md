@@ -57,7 +57,7 @@ replaced (Reset to Default, a new version) without losing them.
 | `<name>` (`<name>.cmd` on Windows) | the program, under the contract above |
 | `<name>.json` | its manifest: `{ name, about, settings }`; optional |
 
-- The config folder is `~/Library/Application Support/OpenDoc/` on macOS.
+- The config folder is `~/Library/Application Support/Ponjo/` on macOS.
   Never in a project: a shared folder must not decide what runs here.
 - Claude Code, Codex and the [Ponjo agent](ponjo-agent.md) ship, written
   once when missing; then they are yours. Reset to Default writes one again.
