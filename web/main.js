@@ -145,6 +145,7 @@ async function start() {
     show: showLanded,
     rules: () => rulesOf(docName, settings.get()),
     caughtUp: (state) => {
+      showUnsaved(state.notSaved);
       applyComments(state);
       if (state.level !== level) setLevel(state.level);
     },
@@ -154,7 +155,7 @@ async function start() {
       else if (offline) setStatus('');
       offline = !online;
     },
-    onError: (error) => setStatus(`Not saved: ${error.message}`, 'error'),
+    onError: (error) => (error.code === 'not_saved' ? showUnsaved(error.message) : setStatus(`Not saved: ${error.message}`, 'error')),
   });
   client.start(initial);
   chrome = createChrome({
@@ -224,6 +225,7 @@ async function start() {
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
   setStatus('Saved');
+  showUnsaved(initial.notSaved);
   setInterval(() => margin.rerender(), 30_000); // relative times, stale "working"
 
   let hidden = false;
@@ -299,6 +301,7 @@ async function start() {
     settleCarets = setTimeout(paintMarks, CARET_WORKING_MS); // names go once they stop
   });
   events.on('here', (data) => people.render({ here: data }));
+  events.on('saved', (data) => showUnsaved(data.error));
   // Where you are in the text, for the others; a reader has no caret.
   document.addEventListener('selectionchange', () => {
     if (level !== 'read') client.moved();
@@ -910,13 +913,23 @@ function renameMe(next) {
 
 // Saving is automatic and local, so the header says nothing while it works;
 // it speaks up only when something fails.
+let unsavedShown = false; // the status says why the file does not hold the doc
 function setStatus(text, state = 'saved') {
+  unsavedShown = false;
   const problem = state === 'error';
   status.hidden = !problem;
   status.dataset.state = state;
   status.querySelector('.pj-status-text').textContent = problem ? text : '';
   status.querySelector('.pj-status-icon').replaceChildren(...(problem ? [icon('alert')] : []));
   status.title = problem ? text : '';
+}
+
+// What the doc host says of the file: why it does not hold the doc as
+// shown, or null once it does, which clears only that.
+function showUnsaved(reason) {
+  if (reason) setStatus(`Not saved: ${reason}`, 'error');
+  else if (unsavedShown) setStatus('');
+  unsavedShown = Boolean(reason);
 }
 
 // Ready once drawn: two frames after the page is built. A hidden page (a new

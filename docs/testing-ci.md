@@ -39,8 +39,9 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
   `resolved`.
 - Mentions (§6): `@name` matches a buddy's name, case-insensitively.
 - A doc's text: UTF-8 only, no byte order mark, LF; written back with its
-  byte order mark and CRLF.
-- Anchors on the doc's text: exact → context → fuzzy → detached.
+  byte order mark and each line's end.
+- Anchors on the doc's text: exact → context → fuzzy → detached; a thread
+  on its latest anchor.
 
 ### Model — unit, property
 
@@ -116,7 +117,7 @@ that fails before the fix.
 | --- | --- | --- |
 | 1. Properties of `src/core/ot.js` | A1 A3 A4 A5 | `npm test` |
 | 2. Protocol fuzz | A1–A6, C1, C3–C5, C7 | `npm run test:stress` (`test/stress/concurrency.test.js`) |
-| 3. Named scenarios in real views and pages | D1–D7, A3 A4 A6, B6, C1–C8 | `npm test` (`test/client.test.js`, `test/views.test.js`, `test/relay.test.js`) |
+| 3. Named scenarios in real views and pages | D1–D8, A2 A3 A4 A5 A6, B6, C1–C8 | `npm test` (`test/client.test.js`, `test/doc-service.test.js`, `test/runner.test.js`, `test/store.test.js`, `test/views.test.js`, `test/relay.test.js`) |
 | 4. Timings | B1–B5, B7 | `npm run test:perf` |
 | 5. By hand | C5, C6 on a real network | [two machines](#sharing--two-machines-by-hand) |
 

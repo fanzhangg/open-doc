@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { appendFile, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -106,6 +106,30 @@ test('a doc that is not UTF-8 does not open, and is left as it is', async () => 
   const docPath = await tempDoc(gbk);
   await assert.rejects(openDoc(docPath, { settingsDir: await fakeConfig() }), refused('not_text'));
   assert.deepEqual(await readFile(docPath), gbk);
+});
+
+test('A5: a line added to a doc of mixed line ends ends as the line before it; every other line ends as it did; the file keeps its permissions', async () => {
+  const content = 'One\r\nTwo\nThree\r\n';
+  await withDoc(async ({ edit, state, docPath }) => {
+    if (process.platform !== 'win32') await chmod(docPath, 0o750);
+    await edit('One\nTwo\nAdded\nThree\n', await state());
+    assert.equal(await readFile(docPath, 'utf8'), 'One\r\nTwo\nAdded\nThree\r\n');
+    if (process.platform !== 'win32') assert.equal((await stat(docPath)).mode & 0o777, 0o750);
+  }, { content });
+});
+
+test('C4: a doc made other than UTF-8 outside says Not saved at once, until it is text again', async () => {
+  await withDoc(async ({ events, docPath, edit, state }) => {
+    const saved = () => events.filter(([name]) => name === 'saved').map(([, data]) => data.error);
+    await writeFile(docPath, Buffer.from('\uFEFF# Title\n', 'utf16le'));
+    await until(() => saved().length === 1, 'Not saved told');
+    assert.match(saved()[0], /other than UTF-8/);
+    await assert.rejects(edit('# Title\n\nTyped.\n', await state()), refused('not_saved'));
+    await writeFile(docPath, '# Title\n\nOld text.\n');
+    await until(() => saved().length === 2, 'saved told');
+    assert.equal(saved()[1], null);
+    assert.equal(await readFile(docPath, 'utf8'), '# Title\n\nTyped.\n');
+  }, { content: '# Title\n\nOld text.\n' });
 });
 
 test('comments: written as the user, one line each; the anchor is never rewritten, and a reader finds it', async () => {

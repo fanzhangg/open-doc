@@ -245,6 +245,84 @@ test('A3 A6 C4: a write that fails says Not saved; once the file can be written,
   await host.close();
 });
 
+test('A6 C4: the doc host tells every page why the file is not saved, and when it is again', async () => {
+  const docPath = await tempDoc('Hello world.\n');
+  const told = [];
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => (name === 'saved' ? told.push(data.error) : name === 'ops' && receive(data)) });
+  const { view, client } = page(() => host, () => null, 'Hello world.\n');
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  await readOnly(docPath, true);
+  try {
+    view.text = 'Hello big world.\n';
+    client.flush();
+    await until(() => told.length === 1, 'Not saved told');
+    assert.equal(told[0], 'the file or its folder cannot be written', 'why, with no path: teammates hear it too');
+    assert.equal((await host.call('state')).notSaved, told[0], 'a page that opens now is told too');
+  } finally {
+    await readOnly(docPath, false);
+  }
+  await client.landed();
+  await until(() => told.length === 2, 'saved told');
+  assert.equal(told[1], null);
+  assert.equal((await host.call('state')).notSaved, null);
+  await host.close();
+});
+
+test('A2 C1: typing not written when the file changed outside, then the host started again, is kept and written once', { skip: process.platform === 'win32' && 'a read-only file there cannot be changed outside either' }, async () => {
+  const docPath = await tempDoc(TEXT);
+  const settingsDir = await fakeConfig();
+  let receive = () => {};
+  let host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  const { view, client, errors } = page(() => host);
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  await readOnly(docPath, true);
+  try {
+    view.text = view.text.replace('one', 'one typed');
+    client.flush();
+    await until(() => errors.some((error) => error.code === 'not_saved'), 'Not saved');
+    await writeFile(docPath, TEXT.replace('Gamma', 'Gamma pulled')); // in place, as the folder allows
+    await until(async () => (await host.call('state')).text.includes('Gamma pulled'), 'the outside change taken');
+    await host.close().catch(() => {}); // its last write fails too
+  } finally {
+    await readOnly(docPath, false);
+  }
+  host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  await client.catchUp();
+  await client.landed();
+  const expected = 'Alpha one typed.\n\nBeta two.\n\nGamma pulled three.\n';
+  assert.equal(view.text, expected);
+  assert.equal(await readFile(docPath, 'utf8'), expected);
+  await host.close();
+});
+
+test('A3 C5: an edit whose answer was lost, sent again after more edits landed than the log holds, lands once', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const wire = line(host);
+  const { view, client } = page(() => wire);
+  receive = wire.events((event) => client.receive(event));
+  client.start(await host.call('state'));
+  wire.up = false;
+  view.text = view.text.replace('one', 'one typed');
+  client.flush();
+  await until(async () => (await host.call('state')).text.includes('typed'), 'the edit landed');
+  for (let i = 0; i < 1001; i++) {
+    const now = await host.call('state');
+    await host.call('submit', { ops: [{ from: now.text.length, to: now.text.length, insert: i % 2 ? '' : '.' }], rev: now.rev, epoch: now.epoch, id: `other.${i}` });
+  }
+  wire.up = true;
+  await client.catchUp();
+  await client.landed();
+  const text = (await host.call('state')).text;
+  assert.equal(text.split('typed').length, 2, 'once');
+  assert.equal(view.text, text);
+  await host.close();
+});
+
 test('A5: a page that missed an event and could not catch up at once changes nothing, and later types where it means', async () => {
   const text = 'a\u{20000}b\n';
   const docPath = await tempDoc(text);

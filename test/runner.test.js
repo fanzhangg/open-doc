@@ -13,7 +13,7 @@ import { mirrorDir } from '../src/host/mirror.js';
 import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
-import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
+import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, readOnly, tempDoc, until } from './helpers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -95,6 +95,38 @@ test('a buddy\'s edit to a line the human changed too: the Markdown rule refuses
       assert.equal(await readFile(docPath, 'utf8'), on ? '1 *2 3\n' : '1 *2 3 4*\n');
     }, { content: '1 *2* 3\n', settings: { rules: { 'markdown-rule': { enabled: on } } } });
   }
+});
+
+test('A3 C4: a turn that ends while the doc cannot be written lands once and runs once; the file has its edit once it can be', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ docPath, call, state, runs, release }) => {
+    await comment(call, '@Clippy hold, then replace "extra load" with "extra extra load"');
+    await until(async () => (await runs()).length === 1, 'the turn started');
+    await readOnly(docPath, true); // the doc and its comments
+    try {
+      await release('Clippy');
+      await until(async () => (await state()).text.includes('extra extra load'), 'the edit landed');
+      await sleep(1500); // a turn whose answer could not be written is not run again
+      assert.equal((await runs()).length, 1);
+    } finally {
+      await readOnly(docPath, false);
+    }
+    await until(async () => (await readFile(docPath, 'utf8')).includes('extra extra load'), 'the edit written');
+    assert.equal((await readFile(docPath, 'utf8')).split('extra extra load').length, 2, 'once');
+    assert.equal((await runs()).length, 1);
+  });
+});
+
+test('D8: a thread whose text its buddy rewrote is on the new text: the reply carries its anchor', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state }) => {
+    const text = (await state()).text;
+    const start = text.indexOf('six features');
+    const id = await comment(call, '@Clippy replace "six features" with "the six features we promised the beta cohort last spring"', { exact: 'six features', prefix: text.slice(start - 32, start), suffix: text.slice(start + 12, start + 44), start });
+    const [answer] = await until(async () => (await repliesIn(state, id)).length && repliesIn(state, id), 'the reply');
+    assert.equal(answer.anchor.exact, 'the six features we promised the beta cohort last spring');
+    const thread = await threadOf(state, id);
+    assert.equal(thread.detached, false);
+    assert.equal(thread.anchor.exact, 'the six features we promised the beta cohort last spring');
+  });
 });
 
 test('two buddies run at once on one doc; both edits land', { timeout: 30_000 }, async () => {

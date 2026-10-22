@@ -8,9 +8,10 @@
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { lineMatches } from '../core/diff.js';
 
 export const SIDECAR_SUFFIX = '.comments.jsonl';
 // Room for the longest doc the Plain text view edits (5,000,000 characters,
@@ -37,8 +38,9 @@ const BOM = '\uFEFF';
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /**
- * A file's text and how it was written: { text, form: { bom, crlf } }, or
- * null when it is not UTF-8. `crlf` when any line ended in \r\n.
+ * A file's text and how it was written: { text, form: { bom, ends } }, or
+ * null when it is not UTF-8. `ends` is how its lines ended: '\n', '\r\n' or
+ * '\r' when all alike, else { text, list }, the end of each line of `text`.
  */
 export function decodeText(bytes) {
   let raw;
@@ -49,17 +51,40 @@ export function decodeText(bytes) {
   }
   const bom = raw.startsWith(BOM);
   if (bom) raw = raw.slice(1);
-  return { text: raw.replace(/\r\n?/g, '\n'), form: { bom, crlf: raw.includes('\r\n') } };
+  if (!raw.includes('\r')) return { text: raw, form: { bom, ends: '\n' } };
+  const text = raw.replace(/\r\n?/g, '\n');
+  const list = raw.match(/\r\n?|\n/g);
+  return { text, form: { bom, ends: list.every((end) => end === list[0]) ? list[0] : { text, list } } };
 }
 
-/** The bytes of `text` written in `form` (from decodeText). */
-export function encodeText(text, { bom = false, crlf = false } = {}) {
-  return Buffer.from((bom ? BOM : '') + (crlf ? text.replace(/\n/g, '\r\n') : text));
+/**
+ * `form` (from decodeText) for `text`, a later text of the same file: a
+ * line it kept ends as it did, a new one as the line before it.
+ */
+export function formFor(text, form) {
+  const { ends } = form;
+  if (typeof ends === 'string' || ends.text === text) return form;
+  const lines = text.split('\n');
+  const list = new Array(lines.length - 1).fill(null);
+  (lineMatches(ends.text.split('\n'), lines) ?? []).forEach((j, i) => {
+    if (j !== -1 && j < list.length && i < ends.list.length) list[j] = ends.list[i];
+  });
+  for (let j = 0; j < list.length; j++) list[j] ??= list[j - 1] ?? ends.list[0];
+  return { ...form, ends: { text, list } };
+}
+
+/** The bytes of `text` written in `form` (from decodeText; none: a new file). */
+export function encodeText(text, form = {}) {
+  const { bom = false, ends = '\n' } = form;
+  let i = 0;
+  const lines = typeof ends === 'string' ? null : formFor(text, form).ends.list;
+  const body = lines ? text.replace(/\n/g, () => lines[i++]) : ends === '\n' ? text : text.replaceAll('\n', ends);
+  return Buffer.from((bom ? BOM : '') + body);
 }
 
 export const hashText = hashBytes; // a string is hashed as UTF-8, without a copy
 
-/** @returns {Promise<{ text: string, hash: string, form: { bom: boolean, crlf: boolean } }>} `hash` of the text */
+/** @returns {Promise<{ text: string, hash: string, form: { bom: boolean, ends: string | object } }>} `hash` of the text */
 export async function readDoc(docPath) {
   let bytes;
   try {
@@ -155,11 +180,15 @@ export async function lockFile(path, target) {
 
 // Write a temp file next to the target and rename it into place, unless
 // `still()` says not to (null then); resolves to its stat as written, taken
-// before anyone else could change it. On Windows a rename can fail briefly
-// while another process has the target open.
+// before anyone else could change it. It keeps the file's permissions: a
+// script stays runnable, a private file private (a file system without
+// them keeps none). On Windows a rename can fail briefly while another
+// process has the target open.
 export async function writeAtomic(path, content, still = async () => true) {
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temp, content);
+  const mode = (await stat(path).catch(() => null))?.mode;
+  if (mode !== undefined) await chmod(temp, mode & 0o7777).catch(() => {});
   const written = await stat(temp);
   if (!(await still())) {
     await rm(temp, { force: true });
