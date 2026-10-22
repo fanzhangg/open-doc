@@ -128,8 +128,9 @@ that fails before the fix.
   Windows (under a minute); nightly, 30 minutes of random seeds, as a
   scheduled run of the same `stress` job. A failing seed is shrunk to the
   fewest steps that still fail and printed; the pull request that fixes it
-  adds them to `test/stress/regressions.json`, which every run replays. Not
-  yet: buddies, and outside changes while more than one page edits.
+  adds them to `test/stress/regressions.json`, which every run replays.
+  Another program adds lines and deletes lines that hold nothing typed;
+  not yet: buddies, whose edits yield as another program's do.
 - **Layer 3** runs each scenario for each other writer (a teammate, a
   buddy, an outside change) in each view (Markdown, Plain).
 - **Layer 4**: `test/perf/latency.test.js` opens each view at its limits,

@@ -344,3 +344,31 @@ test('C7: a page set to Read while away learns it as it catches up; its typing i
   assert.equal(await readFile(docPath, 'utf8'), TEXT.replace('Beta two', 'Beta two typed'));
   await doc.close();
 });
+
+test('A4: a line deleted outside while two people each have an edit on it on its way comes back once, with both edits', async () => {
+  const text = 'One two.\nThree four.\nFive.\n';
+  const docPath = await tempDoc(text);
+  const pages = [];
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && pages.forEach((p) => p.client.receive(data)) });
+  const gates = [];
+  for (let k = 0; k < 2; k++) {
+    let open;
+    gates.push(new Promise((done) => { open = done; }));
+    pages.push({ ...page(() => host, () => gates[k], text), open });
+    pages[k].client.start(await host.call('state'));
+  }
+  pages[0].view.text = text.replace('Three', 'A Three');
+  pages[0].client.flush();
+  pages[1].view.text = text.replace('four.', 'four. B');
+  pages[1].client.flush(); // both on their way, held
+  await writeFile(docPath, 'One two.\nFive.\n');
+  await until(async () => (await host.call('state')).text === 'One two.\nFive.\n', 'the outside change taken');
+  pages[0].open();
+  await until(() => pages[1].view.text.includes('A Three'), 'the first edit shown at the other page');
+  pages[1].open();
+  await Promise.all(pages.map((p) => p.client.landed()));
+  const expected = 'One two.\nA Three four. B\nFive.\n';
+  assert.equal(await readFile(docPath, 'utf8'), expected);
+  for (const p of pages) assert.equal(p.view.text, expected);
+  await host.close();
+});

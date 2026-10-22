@@ -6,7 +6,7 @@
 // not landed yet and shown with the view's applyText. The same for every
 // view, and for the two-writer harness (test/collab/page.js).
 
-import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
+import { apply, diffOps, mapOffset, pastYield, transform } from '../src/core/ot.js';
 
 /**
  * Keep `view` ({ getText, selection }) in the host's order: `call(type,
@@ -32,6 +32,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
   // line dropped before it answered, or it came while the page could only
   // read, so it is sent again as it was.
   let sent = null;
+  let plain = null; // the first as it would be had nothing yielded to it
   let reading = false; // the host says this page may only read: nothing goes out, nothing is dropped
   let catching = null; // a catch-up on its way; events meanwhile wait in `held`
   let again = false; // and one more asked for meanwhile
@@ -62,6 +63,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
     if (sent !== null || catching || reading) return;
     if (pending.length > 0) {
       sent = { ops: pending[0], rev, epoch, id: `${name}.${++sends}` };
+      plain = pending[0];
       post(sent);
     } else {
       for (const done of idle.splice(0)) done();
@@ -105,31 +107,33 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
     if (event.rev > rev + 1) return client.catchUp(); // one was missed
     const ours = event.id !== null && event.id === sent?.id;
     if (!ours) flush(); // typing since the last read is on the rev before this one
+    if (!ours && sent !== null) plain = transform(plain, event.ops).ops;
     const was = confirmed;
     rev = event.rev;
     confirmed = apply(confirmed, event.ops);
     for (const cursor of cursors) cursor.at = mapOffset(cursor.at, event.ops);
     if (ours) {
-      pending.shift();
+      const foreseen = pending.shift();
       sent = null;
+      // Landed otherwise than this page foresaw (another person's edit, from
+      // before the same edit that yields, gave back first): the host's stands.
+      if (JSON.stringify(foreseen) !== JSON.stringify(event.ops)) {
+        const ops = over(diffOps(apply(was, foreseen), confirmed));
+        last = apply(last, ops);
+        show(last, ops, event);
+      }
       flush(); // what was typed while it was on its way
       next();
       return;
     }
-    if (event.yields && pending.length > 0) {
-      // An edit that yields yields to the typing not landed, as the host
-      // makes it: the edit on its way as the host will move it, the rest after.
-      const moved = (ops) => transform(ops, event.ops, { landedYields: true, base: was, rules: rules() }).ops;
-      const after = apply(confirmed, moved(diffOps(was, last)));
-      if (sent !== null) {
-        const first = moved(pending[0]);
-        const rest = diffOps(apply(confirmed, first), after);
-        pending = rest.length > 0 ? [first, rest] : [first];
-      } else pending = [diffOps(confirmed, after)].filter((ops) => ops.length > 0);
-      const shown = diffOps(last, after);
-      last = after;
-      show(last, shown, event);
-      next();
+    if (event.yields && sent !== null) {
+      // An edit that yields yields to the edit on its way, as the host moves
+      // it; the typing after that moves over what is left of it.
+      const { ops: first, left } = pastYield(pending.shift(), { ops: event.ops, text: was }, rules());
+      const ops = over(left.ops);
+      pending.unshift(first);
+      last = apply(last, ops);
+      show(last, ops, event);
       return;
     }
     const ops = over(event.ops);
@@ -159,6 +163,15 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
     let base = confirmed;
     if (sent !== null && (sent.landed || (state.epoch !== sent.epoch && state.landed?.includes(sent.id)))) base = apply(confirmed, pending.shift());
     else if (sent !== null && !sent.refused && state.epoch === sent.epoch) return false;
+    else if (sent !== null) {
+      // Not landed: it goes again as typed, giving back nothing of what
+      // yielded to it, which a host started again no longer knows.
+      const first = pending.shift();
+      const ops = over(diffOps(apply(confirmed, first), apply(confirmed, plain)));
+      pending.unshift(plain);
+      last = apply(last, ops);
+      show(last, ops, null);
+    }
     sent = null;
     flush();
     const shown = over(diffOps(base, state.text));

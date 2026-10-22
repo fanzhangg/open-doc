@@ -121,6 +121,23 @@ export function transform(ops, landed, { first = false, yields = false, landedYi
   return { ops: moved(ops, landed, first), dropped };
 }
 
+/**
+ * Edit `ops`, which started before an edit that yields landed, moved over
+ * it: { ops, dropped, left }. The edit that yields is `yielding`: { ops,
+ * text }, its operations on the text it started from, and `pre`, the edits
+ * of people that started before it and landed since, each on the one
+ * before. It yields to all of them together: `ops` merges with them by
+ * character and gives back only what they left of it, so what yielded comes
+ * back once. `left` is `yielding` once `ops` has landed too. The doc host
+ * and a page both move an edit so (src/host/doc-service.js, web/client.js).
+ */
+export function pastYield(ops, { ops: theirs, text, pre = [] }, rules = []) {
+  const mine = pre.reduce((moved, before) => transform(moved, before).ops, ops);
+  const moved = transform(mine, theirs, { landedYields: true, base: text, rules });
+  const left = transform(theirs, mine, { yields: true, base: text, rules }).ops;
+  return { ...moved, left: { ops: left, text: apply(text, mine), pre: [...pre, mine] } };
+}
+
 // The operations of `ops` grouped by the lines of `base` they touch: each
 // group { ops, from, to }, [from, to] the lines' span from the first's start
 // to the last's end (its newline, or the end of the text).
