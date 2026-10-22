@@ -6,9 +6,9 @@ description: Checks to run in the Ponjo repo before committing or pushing a chan
 # Verify before you push
 
 A push to main rebuilds the nightly installers. CI (`.github/workflows/desktop.yml`)
-publishes them only when lint passes and the packaged app opens a doc on
-Windows and macOS. It runs the unit tests once, on Linux, but a failure there
-does not hold back the nightly, so run them yourself first.
+publishes them only when lint passes, the packaged app opens a doc on
+Windows and macOS, and the unit, stress and perf tests pass on Linux. Run
+them yourself first.
 
 ## 1. Read your own diff
 

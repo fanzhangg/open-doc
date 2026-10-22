@@ -23,7 +23,8 @@ export async function startRelay() {
   const wrangler = createRequire(join(root, 'relay', 'package.json')).resolve('wrangler');
   process.env.WRANGLER_LOG ??= 'error'; // not every request
   const { unstable_startWorker } = await import(pathToFileURL(wrangler).href);
-  const worker = await unstable_startWorker({ config: join(root, 'relay', 'wrangler.toml'), dev: { server: { hostname: '127.0.0.1', port: 0 }, inspector: false, watch: false } });
+  // Nothing kept on disk: each relay starts with no rooms counted against the limit.
+  const worker = await unstable_startWorker({ config: join(root, 'relay', 'wrangler.toml'), dev: { server: { hostname: '127.0.0.1', port: 0 }, inspector: false, watch: false, persist: false } });
   const { host } = await worker.url;
   return { url: `ws://${host}`, origin: `http://${host}`, stop: () => worker.dispose() };
 }

@@ -114,7 +114,8 @@ test('a page that missed the event of its own edit landing takes the text again,
   client.start(await host.call('state'));
   view.text = view.text.replace('Beta two', 'Beta two typed'); // an insert: two of them would both stay
   client.flush();
-  await until(async () => (await host.call('state')).rev === 1, 'the edit landed');
+  // The answer alone tells it, with no other edit after.
+  await until(() => client.idle(), 'the page told its edit landed');
   await writeFile(docPath, (await host.call('state')).text.replace('Gamma three', 'Gamma pulled'));
   await until(() => view.text.includes('Gamma pulled'), 'the next edit shown');
   await client.landed();

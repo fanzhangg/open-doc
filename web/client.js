@@ -54,7 +54,11 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
   function send() {
     const id = `${name}.${++sends}`;
     sent = id;
-    answer = call('submit', { ops: pending[0], rev, epoch, id }).then(() => true, (error) => {
+    answer = call('submit', { ops: pending[0], rev, epoch, id }).then(() => {
+      // Landed, and its event, which comes first, never did: take the text again.
+      if (id === sent) client.resync({ missed: true });
+      return true;
+    }, (error) => {
       if (id !== sent) return false; // sent again since
       // Not this page's to send (set to Read meanwhile): nothing more goes out.
       if (error.code === 'forbidden') {
