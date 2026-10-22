@@ -340,6 +340,25 @@ export async function createMarkdownView({
     return found && docRange(editorProjection, found.start, found.end);
   }
 
+  /**
+   * The document position of a caret at text offset `at`: after the
+   * character drawn before it or, when markup is before it (`# `, `**`),
+   * before the one drawn after it; null for a doc with no text.
+   */
+  function caretAt(doc, at) {
+    const projection = projected(doc);
+    const last = projection.text.length - 1;
+    if (last < 0) return null;
+    // One pass over the text: the character drawn before `at`, else the one after it, else the last.
+    const { start, end } = renderedRange(projection, at - 1, at);
+    const i = Math.min(start, last);
+    const editorProjection = projectionOf(doc);
+    const found = across(projection, editorProjection, i, i + 1);
+    if (!found) return null;
+    const range = docRange(editorProjection, found.start, found.end);
+    return start < end || start > last ? range.to : range.from;
+  }
+
   /** Text offset of document position `pos`, or null when it is not in the text. */
   function offsetAt(doc, pos) {
     const editorProjection = projectionOf(doc);
@@ -347,10 +366,11 @@ export async function createMarkdownView({
     const projection = projected(doc);
     let i = positions.findIndex((p) => p >= pos);
     if (i === -1) i = rendered.length;
+    const last = i - 1; // the character before `pos`, never the line break after it
     if (rendered[i] === '\n' && positions[i + 1] === positions[i]) i++;
     // Before the character at `pos`, else after the one before it.
     const before = i < rendered.length && positions[i] === pos;
-    const at = before ? i : i - 1;
+    const at = before ? i : last;
     if (at < 0) return 0;
     const found = across(editorProjection, projection, at, at + 1);
     return found && projection.offsets[found.start] + (before ? 0 : 1);
@@ -376,10 +396,10 @@ export async function createMarkdownView({
       }
     }
     for (const mark of marks) {
-      const range = mark.kind === 'cursor' && charAt(doc, mark.at - 1);
-      if (!range) continue;
-      decorations.push(Decoration.widget(range.to, () => cursorNode(mark), { side: 1, key: `cursor-${mark.by}-${mark.working}` }));
-      drawn.push('cursor', mark.by, range.to, mark.working);
+      const pos = mark.kind === 'cursor' ? caretAt(doc, mark.at) : null;
+      if (pos === null) continue;
+      decorations.push(Decoration.widget(pos, () => cursorNode(mark), { side: 1, key: `cursor-${mark.by}-${mark.working}` }));
+      drawn.push('cursor', mark.by, pos, mark.working);
     }
     // A revision shows as a suggestion: removed text struck through, new
     // text marked. Decorations only; the doc does not change. A new `replay`
