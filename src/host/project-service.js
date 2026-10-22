@@ -5,6 +5,7 @@
 // resolved to its real path, which must be inside the project, and no part
 // of either may start with `.`. Anything else is as if it were not there.
 
+import { spawn } from 'node:child_process';
 import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { MAX_TEXT_BYTES, SIDECAR_SUFFIX } from '../store/files.js';
@@ -30,6 +31,25 @@ export async function resolve(root, rel) {
     // not there
   }
   throw notFound(rel);
+}
+
+/**
+ * Which of `names` in folder `dir` git ignores (its .gitignore files and its
+ * other rules; never a file it tracks): none when `dir` is not in a git
+ * repository or git is not installed.
+ */
+function ignoredIn(dir, names) {
+  return new Promise((done) => {
+    const git = spawn('git', ['check-ignore', '-z', '--stdin'], { cwd: dir, stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = '';
+    git.stdout.setEncoding('utf8').on('data', (chunk) => {
+      out += chunk;
+    });
+    git.on('error', () => done(new Set()));
+    git.on('close', () => done(new Set(out.split('\0'))));
+    git.stdin.on('error', () => {}); // git is gone: `error` or `close` says so
+    git.stdin.end(names.map((name) => `${name}\0`).join(''));
+  });
 }
 
 /**
@@ -60,7 +80,8 @@ export function projectService(root) {
      * name. Left out: what the project does not show, and each file's
      * sidecar (`X.comments.jsonl` next to `X`); a sidecar whose file is gone
      * shows, so it can be found and fixed. An unreadable folder is empty.
-     * @returns {Promise<{ name: string, folder: boolean }[]>}
+     * `ignored`: git ignores it, as build output or installed packages.
+     * @returns {Promise<{ name: string, folder: boolean, ignored: boolean }[]>}
      */
     async list(rel) {
       const dir = await resolve(root, rel);
@@ -79,6 +100,8 @@ export function projectService(root) {
         }
         shown.push({ name, folder });
       }
+      const ignored = await ignoredIn(dir, shown.map((entry) => entry.name));
+      for (const entry of shown) entry.ignored = ignored.has(entry.name);
       return shown.sort((a, b) => b.folder - a.folder || byName.compare(a.name, b.name));
     },
 

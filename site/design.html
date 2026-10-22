@@ -149,8 +149,10 @@
       <li><button class="pj-files-row pj-files-file" type="button">Launch plan.md</button></li>
       <li><button class="pj-files-row pj-files-file" type="button" aria-current="page">Roadmap.md</button></li>
       <li><button class="pj-files-row pj-files-file" type="button">Notes.md</button></li>
+      <li><button class="pj-files-row pj-files-file pj-files-ignored" type="button">debug.log</button></li>
     </ul>
   </div>
+  <p>A file or folder git ignores (build output, installed packages) is dimmed to <code>--text-faint</code>, not hidden; a filter leaves it out.</p>
   <p>A sidebar is resized by dragging its edge: the cursor turns to <code>col-resize</code> and the edge shows a 2px <code>--text-faint</code> line; double-click the edge for the default width back.</p>
   <h3>Team panel</h3>
   <p>The Team button opens an <code>.pj-panel</code>, 360px: a head with its title and, for the owner of a project, Invite link and New link (both secondary); then <code>.pj-people-row</code>s in groups headed <code>.pj-setting-group</code>: you, Teammates, AI buddies, ending with New AI buddy. A request to join is the first teammate: its row says Asks to join, and under it Read or Edit (a <code>.pj-segmented</code>, Edit to start), Deny (secondary) and Allow, the panel's one primary button. A teammate's row says Can read or Can edit; its card has the same Read or Edit and Remove from this project (secondary, red). A teammate's page in a browser first asks their name in a card in the middle of the page.</p>

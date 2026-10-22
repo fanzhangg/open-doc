@@ -2,6 +2,7 @@
 // shows, and every way out of it refused.
 
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
@@ -34,13 +35,26 @@ test('list: every file and folder the project shows, folders first, without dot 
   await symlink(join(root, 'src'), join(root, 'linked'), 'junction'); // a junction on Windows, which needs no admin rights
   await symlink(outside, join(root, 'out'), 'junction');
   await symlink(join(root, '.github'), join(root, 'ci'), 'junction');
-  assert.deepEqual(await service.list(''), [
+  assert.deepEqual((await service.list('')).map(({ name, folder }) => ({ name, folder })), [
     { name: 'empty', folder: true }, { name: 'linked', folder: true }, { name: 'node_modules', folder: true }, { name: 'src', folder: true },
     { name: 'a 2.txt', folder: false }, { name: 'a 10.txt', folder: false }, { name: 'b.md', folder: false },
     { name: 'gone.md.comments.jsonl', folder: false },
   ]);
   assert.deepEqual(await service.list('empty'), []);
-  assert.deepEqual(await service.list('linked'), [{ name: 'main.js', folder: false }], 'a link that stays in the project');
+  assert.deepEqual(await service.list('linked'), [{ name: 'main.js', folder: false, ignored: false }], 'a link that stays in the project');
+});
+
+test('list: what git ignores is marked, but not a file it tracks; outside a git repository nothing is', async () => {
+  const { root, service } = await project({
+    '.gitignore': 'dist/\n*.log\n!keep.log\n', 'dist/sub/a.md': '', 'debug.log': '', 'keep.log': '', 'tracked.log': '', 'notes/b.md': '',
+  });
+  const ignored = async (rel) => (await service.list(rel)).filter((e) => e.ignored).map((e) => e.name);
+  assert.deepEqual(await ignored(''), [], 'not a git repository');
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  execFileSync('git', ['add', '-f', 'tracked.log'], { cwd: root });
+  assert.deepEqual(await ignored(''), ['dist', 'debug.log']);
+  assert.deepEqual(await ignored('dist'), ['sub'], 'inside an ignored folder');
+  assert.deepEqual(await ignored('notes'), []);
   for (const rel of ['out', 'ci', '.github', 'missing', 'b.md']) await assert.rejects(service.list(rel), notFound, rel);
 });
 
