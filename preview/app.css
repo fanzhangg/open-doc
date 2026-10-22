@@ -324,6 +324,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-editor li { margin: 0.2em 0; padding-left: 0.2em; }
 .pj-editor li > p { margin: 0; }
 .pj-editor li::marker { color: var(--text-soft); }
+/* A task list item's box, in the gutter in place of its bullet: a .pj-radio's
+   outline, square; ink with a check when done. Clicking it ticks it (view.js). */
+.pj-editor li[data-item-type="task"] { position: relative; list-style: none; }
+.pj-editor li[data-item-type="task"]::before { content: ''; position: absolute; left: -1.3em; top: calc(0.5lh - 0.45em); box-sizing: border-box; width: 0.9em; height: 0.9em; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--canvas); cursor: pointer; }
+.pj-editor li[data-checked="true"]::before { border-color: var(--text); background: var(--text); }
+.pj-editor li[data-checked="true"]::after { content: ''; position: absolute; left: -0.98em; top: calc(0.5lh - 0.33em); width: 0.2em; height: 0.45em; border: solid var(--canvas); border-width: 0 0.12em 0.12em 0; transform: rotate(45deg); pointer-events: none; }
 .pj-editor a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 0.18em; }
 .pj-editor a:hover { text-decoration-color: currentColor; }
 .pj-editor strong { font-weight: 600; }
