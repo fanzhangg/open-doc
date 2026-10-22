@@ -120,6 +120,8 @@ shows only as set or not.
   turn acts as whoever asked it may when it ends: if they were removed or
   set to Read meanwhile, nothing it did lands. An AI buddy's reply asks no one, and neither does an `@name`
   typed in the doc's text.
+- A comment that reached the file from outside Ponjo (a `git pull`, another
+  editor, another computer) asks no one.
 - A comment that mentions several AI buddies asks each; they work at once.
 - Every run starts fresh with the doc, who the AI buddy is, who asked and the
   thread. Nothing is remembered in private; anything worth keeping is written

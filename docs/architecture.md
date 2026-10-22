@@ -380,7 +380,7 @@ written only by the app.
 | `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
-| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
+| `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with; the comments this host took |
 | `mirrors/` | each project's mirror: a copy of what the project shows, for agents to read (`src/host/mirror.js`) |
 | `team/` | each project's link (the secret its room is made from) and teammates, `{ id, name, level }`, in a file named by the SHA-256 of the project folder's real path: a project that moves must allow its teammates again |
 
@@ -391,8 +391,8 @@ than X's last comment there, asks X: the owner's, or a teammate's who can
 edit. A comment asks whom it @mentions; one that
 mentions no one asks the thread's AI buddies: the one that opened it, and
 each @mentioned there before. An empty one (resolving, reopening) asks no
-one. That is computed from the sidecar and the ids of those who may ask. AI
-buddies run only on docs open in a window.
+one. That is computed from the sidecar, the comments this host took, and
+the ids of those who may ask. AI buddies run only on docs open in a window.
 
 ### How a turn works
 

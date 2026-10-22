@@ -51,7 +51,8 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
   text changed since, by anyone, stays.
 - The inbox: a thread waits on X only after a comment by this user that
   @mentions X, or mentions no one in a thread X opened or was @mentioned in;
-  another user id asks no one.
+  another user id asks no one, and neither does a comment this host did
+  not take, or one changed since.
 - Same fixtures, same output in Node and the browser.
 
 ### DocService — integration

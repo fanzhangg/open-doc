@@ -19,7 +19,7 @@ import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings
 import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
+import { VERSION_ID, markConflict, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { secretsSet } from '../store/secrets.js';
@@ -348,20 +348,22 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   async function changeComments(change) {
     const current = await readComments();
     if (current.problem) throw new DocError('read_only', `${basename(sidecarPath(docPath))} is read-only here, so it is not changed`);
-    const next = change(current.lines);
+    const next = await change(current.lines);
     if (next !== current.lines) await writeSidecar(docPath, serializeSidecar(next));
   }
 
   // A comment by `who`: a first comment (`anchor` on the doc's text, or
   // null for the whole doc), or a reply in `thread`. Resolving is an empty
   // reply with `resolved`, reopening an empty reply; neither asks anyone.
+  // Only a comment taken here asks (asks): it is noted before it is written.
   async function comment({ thread, anchor = null, body, resolved } = {}, who) {
     if (typeof body !== 'string' || (body.trim() === '' && thread === undefined)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
     if (resolved === true && thread === undefined) throw new DocError('bad_input', 'only a reply can resolve');
     const added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date().toISOString() });
-    await serial(() => changeComments((lines) => {
+    await serial(() => changeComments(async (lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
+      if (body.trim() !== '') await noteTaken(docPath, settingsDir, added, lines.map((l) => l.comment?.id));
       return [...lines, { comment: added }];
     }));
     return { ...(await commentsView(text)), id: added.id };
@@ -376,7 +378,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
   // only the comments of those who may write ask: the owner and the
-  // teammates who can edit. Each says who asked.
+  // teammates who can edit, and only those this host took (comment), as
+  // they were taken: one that reached the sidecar another way is shown but
+  // asks no one. Each says who asked.
   async function asks() {
     if (closed) return [];
     const here = await buddies();
@@ -385,8 +389,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (problem) return []; // a buddy could not post its reply
     const editors = team ? (await team.list()).members.filter((m) => m.level === 'write').map((m) => m.id) : [];
     const askers = [(await me()).id, ...editors];
+    const taken = await readTaken(docPath, settingsDir);
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
-    return threads.flatMap((thread) => [...askedBy(thread, askers)].map(([id, asker]) => ({
+    return threads.flatMap((thread) => [...askedBy(thread, askers, taken)].map(([id, asker]) => ({
       threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here, asker,
     })).filter((ask) => ask.buddy)); // a thread's opener may be gone
   }
