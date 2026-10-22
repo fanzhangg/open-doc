@@ -182,12 +182,14 @@ export async function lockFile(path, target) {
 // `still()` says not to (null then); resolves to its stat as written, taken
 // before anyone else could change it. It keeps the file's permissions: a
 // script stays runnable, a private file private (a file system without
-// them keeps none). On Windows a rename can fail briefly while another
-// process has the target open.
+// them keeps none). Not on Windows, where they are only read-only, which a
+// rename over the file cannot keep, and copying it would keep the file
+// read-only once it no longer is. There a rename can fail briefly while
+// another process has the target open.
 export async function writeAtomic(path, content, still = async () => true) {
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temp, content);
-  const mode = (await stat(path).catch(() => null))?.mode;
+  const mode = process.platform === 'win32' ? undefined : (await stat(path).catch(() => null))?.mode;
   if (mode !== undefined) await chmod(temp, mode & 0o7777).catch(() => {});
   const written = await stat(temp);
   if (!(await still())) {
