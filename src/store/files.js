@@ -12,7 +12,7 @@ import { appendFile, mkdir, open, readFile, rename, rm, stat, writeFile } from '
 import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
-export const SIDECAR_SUFFIX = '.opendoc.jsonl';
+export const SIDECAR_SUFFIX = '.comments.jsonl';
 // Room for the longest doc the Plain text view edits (5,000,000 characters,
 // web/views/plain/index.js), at up to 4 bytes a character.
 export const MAX_TEXT_BYTES = 20 * 1024 * 1024;
@@ -96,7 +96,7 @@ export async function readSidecarText(docPath) {
  * Write the sidecar. Comments may be private and the repo public, so inside
  * a git work tree its pattern first goes into the repo's `info/exclude`, a
  * file git never commits: nothing for the user to do, and a person who wants
- * to share comments adds `!*.opendoc.jsonl` after it. Checked at every write, so a folder
+ * to share comments adds `!*.comments.jsonl` after it. Checked at every write, so a folder
  * that becomes a repo later is covered; outside a repo or without git, no-op.
  */
 export async function writeSidecar(docPath, text) {

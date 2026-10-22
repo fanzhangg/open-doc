@@ -94,7 +94,7 @@ and the first line shows next to its name.
   is yours to change, once for all your docs (`buddies/Clippy.md` in your
   config folder); clear it for Clippy as it ships. Its name stays, and it
   cannot be removed.
-- **A project's** AI buddies live in its `.opendoc/buddies/` and travel with
+- **A project's** AI buddies live in its `.ponjo/buddies/` and travel with
   the folder (commit them). They answer only in that project's docs.
 - A doc opened on its own (from Finder, say) reaches only Clippy, even if it
   sits inside a project folder.
@@ -236,8 +236,6 @@ shows only as set or not.
   project, as AI buddies read it), Reveal, and Delete (to the Trash). Drag a
   row onto a folder to move it. A file's comments go with it when it is
   renamed, moved or deleted here.
-- **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
+- **Comments** are in `X.md.comments.jsonl` next to the doc, one per line, so
   they merge in git ([format](../spec/SPEC.md)). Moving a doc outside the app,
-  move this file with it. A version 1 sidecar
-  (`X.md.opendoc.json`) is not read; a banner says so and the file is left
-  as it is.
+  move this file with it.

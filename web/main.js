@@ -568,7 +568,7 @@ function showReadOnly(problem) {
   readOnlyBanner.querySelector('.od-banner-text').textContent = {
     older: 'These comments are from an older Ponjo, so they are read-only here.',
     newer: 'These comments are from a newer Ponjo, so they are read-only here. Update Ponjo to add comments.',
-    invalid: `This doc's comments file does not start with {"opendoc":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
+    invalid: `This doc's comments file does not start with {"comments":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
   }[problem];
   readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'newer';
   readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.ponjoDesktop;

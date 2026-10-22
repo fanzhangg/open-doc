@@ -65,8 +65,8 @@ export async function openTestDoc(docPath, { buddies = null, ...options } = {}) 
   const events = [];
   if (buddies) {
     options.folder ??= dirname(docPath);
-    await mkdir(join(options.folder, '.opendoc', 'buddies'), { recursive: true });
-    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.opendoc', 'buddies', `${name}.md`), text);
+    await mkdir(join(options.folder, '.ponjo', 'buddies'), { recursive: true });
+    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.ponjo', 'buddies', `${name}.md`), text);
   }
   const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
   const edit = async (next, from) => {

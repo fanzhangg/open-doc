@@ -58,7 +58,7 @@ export function projectService(root) {
     /**
      * What the folder `rel` holds: its subfolders, then its files, both by
      * name. Left out: what the project does not show, and each file's
-     * sidecar (`X.opendoc.jsonl` next to `X`); a sidecar whose file is gone
+     * sidecar (`X.comments.jsonl` next to `X`); a sidecar whose file is gone
      * shows, so it can be found and fixed. An unreadable folder is empty.
      * @returns {Promise<{ name: string, folder: boolean }[]>}
      */

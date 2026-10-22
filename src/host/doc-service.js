@@ -532,7 +532,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     return { agents: agentStatuses() };
   }
 
-  // A new buddy, in this project's .opendoc/buddies/ (made if missing).
+  // A new buddy, in this project's .ponjo/buddies/ (made if missing).
   async function createBuddy({ buddy } = {}) {
     const fields = { about: '', ...buddy };
     await checkBuddy(fields);

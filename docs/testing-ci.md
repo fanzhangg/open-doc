@@ -33,7 +33,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
   comment says so.
 - **Any order or duplication of lines reads to the same threads** (property
   test). This is what makes `merge=union` safe.
-- Unknown major refused; a v1 sidecar not read and left byte for byte; a bad
+- Unknown major refused; a bad
   line reported, skipped and kept on rewrite; unknown fields kept.
 - Writing (§5): the file replaced whole, never torn; only a human sets
   `resolved`.
@@ -83,13 +83,13 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 
 - `<Name>.md`: the file name is the name, the text who it is; a
   renamed file is a renamed buddy; a `Clippy.md` is not a buddy;
-  `.opendoc/` created with the first buddy; only the opened folder's counts.
+  `.ponjo/` created with the first buddy; only the opened folder's counts.
 - Doc mode reaches Clippy only, also inside a project folder.
 - Clippy's text is the user's `buddies/Clippy.md`, the same in every doc
   and in its runs; empty or missing, Clippy is as it ships; it keeps its
   name and cannot be deleted.
 - One agent script runs every buddy, with `PONJO_BUDDY` set;
-  **nothing in `.opendoc/` or a sidecar chooses a program**.
+  **nothing in `.ponjo/` or a sidecar chooses a program**.
 - The same project's buddies have the same faces and colors everywhere;
   Clippy and up to seven buddies all have different colors.
 
