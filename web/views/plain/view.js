@@ -173,7 +173,10 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
       const added = [];
       changes.iterChanges((_fromA, _toA, from, to) => added.push([from, to]));
       if (!buddy) flashes.push(...added.filter(([from, to]) => from < to).map(([from, to]) => Decoration.mark({ class: 'pj-flash', flashId }).range(from, to)));
-      flashes.push(Decoration.widget({ widget: new Flag(by, buddy ? buddyColor(by) : null), side: -1, flashId }).range(added[0][0]));
+      // The flag at the start of the word the change begins in.
+      const at = added[0][0];
+      const word = view.state.update({ changes }).state.wordAt(at);
+      flashes.push(Decoration.widget({ widget: new Flag(by, buddy ? buddyColor(by) : null), side: -1, flashId }).range(word && word.from < at ? word.from : at));
     }
     view.dispatch({
       changes,

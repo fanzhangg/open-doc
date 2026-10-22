@@ -619,8 +619,11 @@ export async function createMarkdownView({
     const decorations = buddy ? [] : ranges.map((r) => (r.node
       ? Decoration.node(r.from, r.to, { class: 'pj-flash-block' }, { flashId })
       : Decoration.inline(r.from, r.to, { class: 'pj-flash' }, { flashId })));
+    // The flag at the start of the word the change begins in.
     const first = ranges[0];
-    decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
+    const $at = tr.doc.resolve(first.from);
+    const at = first.node ? first.from + 1 : first.from - ($at.parent.textBetween(0, $at.parentOffset).match(/[\p{L}\p{N}_]*$/u)?.[0].length ?? 0);
+    decorations.push(Decoration.widget(at, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
     tr.setMeta(flashKey, flashKey.getState(view().state).map(tr.mapping, tr.doc).add(tr.doc, decorations));
     setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flashId === flashId))), FLASH_MS);
   }

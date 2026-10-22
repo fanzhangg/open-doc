@@ -107,6 +107,14 @@ for (const name of VIEWS) {
     }
   });
 
+  test(`D6: ${name} view: a buddy's change is flagged with its name before the word it changed, and its revision drawn whole`, async () => {
+    await make(name, 'Say Hello to all.\n');
+    const at = 'Say H'.length;
+    await run(`view.applyText('Say Howdy to all.\\n', { by: 'Clippy', buddy: true, ops: [{ from: ${at}, to: ${at + 4}, insert: 'owdy' }] })`);
+    await run(`view.setMarks([{ kind: 'edit', from: 4, to: 9, removed: 'Hello', by: 'Clippy', replay: 1 }])`);
+    assert.equal(await run(`document.querySelector('.pj-buddy-edit').textContent`), 'Howdy');
+  });
+
   test(`${name} view: applyText is outside the undo history and keeps the caret`, async () => {
     await make(name, 'Alpha.\n\nBeta.\n');
     await select('Beta.', 5, 5);
