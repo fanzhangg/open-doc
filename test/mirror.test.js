@@ -23,7 +23,7 @@ test('the mirror holds what the project shows: no hidden names, links out, node_
   await mkdir(join(root, '.git'));
   await mkdir(join(root, 'node_modules', 'pkg'), { recursive: true });
   await writeFile(join(root, 'plan.md'), 'Plan.\n');
-  await writeFile(join(root, 'plan.md.opendoc.jsonl'), '{"opendoc":3}\n');
+  await writeFile(join(root, 'plan.md.comments.jsonl'), '{"comments":3}\n');
   await writeFile(join(root, 'notes', 'deep', 'a.txt'), 'A.\n');
   await writeFile(join(root, '.env'), 'KEY=secret\n');
   await writeFile(join(root, '.git', 'config'), '[core]\n');
@@ -37,7 +37,7 @@ test('the mirror holds what the project shows: no hidden names, links out, node_
   const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   const dir = await syncMirror(root, mirrorDir(root, settingsDir));
   assert.ok(dir.startsWith(join(settingsDir, 'mirrors')));
-  assert.deepEqual(await filesIn(dir), ['alias.md', 'notes/deep/a.txt', 'plan.md', 'plan.md.opendoc.jsonl']);
+  assert.deepEqual(await filesIn(dir), ['alias.md', 'notes/deep/a.txt', 'plan.md', 'plan.md.comments.jsonl']);
   assert.equal(await readFile(join(dir, 'alias.md'), 'utf8'), 'Plan.\n', 'a link in the project is its file');
 });
 

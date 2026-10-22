@@ -51,12 +51,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:make', async (event, text) => {
     if (doc) await request('close', { docId: doc.docId });
     const path = await tempDoc(text);
-    await mkdir(join(dirname(path), '.opendoc', 'buddies'), { recursive: true });
+    await mkdir(join(dirname(path), '.ponjo', 'buddies'), { recursive: true });
     const folder = await realpath(dirname(path));
     const secret = `s-${Math.random().toString(36).slice(2)}`;
     const team = { secret, room: roomOf(secret), key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
     await writeTeam(folder, { secret, members: [{ id: idOf(team.key), name: 'Sam', level: 'write' }] }, config);
-    await writeFile(join(dirname(path), '.opendoc', 'buddies', 'Pilot.md'), '\n');
+    await writeFile(join(dirname(path), '.ponjo', 'buddies', 'Pilot.md'), '\n');
     const { docId } = await request('open', { docPath: path, folder });
     doc = { docId, path, folder, team };
     const { port1, port2 } = new MessageChannelMain();

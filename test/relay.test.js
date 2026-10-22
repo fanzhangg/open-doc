@@ -102,7 +102,7 @@ test('a page reaches only what the project shows, and is told why not; only with
   const host = await startHost(shared);
   try {
     for (const [doc, code, message] of [
-      ['.opendoc/secret.md', 'hidden', 'Names starting with . and paths out of the project are never shared'],
+      ['.ponjo/secret.md', 'hidden', 'Names starting with . and paths out of the project are never shared'],
       ['../plan.md', 'hidden'], ['/etc/hosts', 'hidden'],
       ['nothing.md', 'not_found', 'This doc is not in the shared project'],
     ]) {
@@ -290,7 +290,7 @@ test('a teammate sees the owner\'s tree and opens any doc in it at once, nothing
     assert.equal(result.place.path, 'notes/b.md');
     assert.deepEqual(host.joins, []);
 
-    for (const path of ['.opendoc', '.opendoc/secret.md', '../', 'notes/../.opendoc/secret.md']) {
+    for (const path of ['.ponjo', '.ponjo/secret.md', '../', 'notes/../.ponjo/secret.md']) {
       assert.equal((await sam.call('list', { path })).error?.code, 'not_found', path);
       assert.equal((await sam.call('read', { path })).error?.code, 'not_found', path);
     }

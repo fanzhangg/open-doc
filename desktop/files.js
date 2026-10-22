@@ -33,7 +33,7 @@ export async function isTextFile(path) {
 }
 
 /**
- * The doc a path opens: X for X or its sidecar X.opendoc.jsonl, when X is
+ * The doc a path opens: X for X or its sidecar X.comments.jsonl, when X is
  * named as Markdown, is a text file (isTextFile) or is not there yet; null
  * for any other file.
  */

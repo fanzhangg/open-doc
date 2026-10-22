@@ -8,6 +8,5 @@ release/
 !.claude/settings.json
 
 # Ponjo's own comments and buddies: local only
-*.opendoc.json
-*.opendoc.jsonl
-.opendoc/
+*.comments.jsonl
+.ponjo/

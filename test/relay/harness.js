@@ -39,14 +39,14 @@ export const idOf = (key) => `p_${roomOf(key).slice(0, 24)}`;
 
 /**
  * A project folder holding `doc` with `text` (and a hidden
- * .opendoc/secret.md), a config folder for its owner, and its team: a link
+ * .ponjo/secret.md), a config folder for its owner, and its team: a link
  * (`secret`) and `sam`, a teammate who can read.
  */
 export async function project(text, doc = 'plan.md') {
   const folder = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
   await writeFile(join(folder, doc), text);
-  await mkdir(join(folder, '.opendoc'));
-  await writeFile(join(folder, '.opendoc', 'secret.md'), 'hidden\n');
+  await mkdir(join(folder, '.ponjo'));
+  await writeFile(join(folder, '.ponjo', 'secret.md'), 'hidden\n');
   const config = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(config, 'settings.json'), JSON.stringify({ name: 'owner', agents: [] }));
   const secret = `s-${Math.random().toString(36).slice(2)}`;

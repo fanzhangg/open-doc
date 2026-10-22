@@ -94,7 +94,7 @@ test('comments: written as the user, one line each; the anchor is never rewritte
     assert.equal(first.by.id, (await state()).me.id, 'the page cannot post as someone else');
     await call('comment', { thread: id, body: 'More.' });
     const lines = (await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n');
-    assert.equal(lines[0], '{"opendoc":3}');
+    assert.equal(lines[0], '{"comments":3}');
     assert.deepEqual(lines.slice(1).map((l) => JSON.parse(l).body), ['Is this right?', 'More.']);
     assert.deepEqual(JSON.parse(lines[1]).anchor, anchor);
 
@@ -197,11 +197,11 @@ test('the door: each call needs a level, and a comment is by whoever calls, neve
 test('the project\'s files, at the door: whoever may read lists, reads and opens what the project shows', async () => {
   await withDoc(async ({ doc, docPath, settingsDir }) => {
     const reader = { ...(await doc.owner()), level: 'read' };
-    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.opendoc is not shown');
+    assert.deepEqual(await doc.call('list', { path: '' }, reader), [{ name: 'plan.md', folder: false }], '.ponjo is not shown');
     assert.deepEqual(await doc.call('read', { path: 'plan.md' }, reader), { text: SAMPLE });
     assert.deepEqual(await doc.call('open', { path: 'plan.md' }, reader), { path: 'plan.md' }, 'the real path is the owner\'s');
     assert.deepEqual(await doc.call('open', { path: 'plan.md' }, await doc.owner()), { path: await realpath(docPath) });
-    await assert.rejects(doc.call('read', { path: '.opendoc/buddies/Pilot.md' }, reader), refused('not_found'));
+    await assert.rejects(doc.call('read', { path: '.ponjo/buddies/Pilot.md' }, reader), refused('not_found'));
     await assert.rejects(doc.call('list', { path: '' }), refused('forbidden'), 'no one may list');
     const alone = await openTestDoc(await tempDoc(), { settingsDir });
     try {
@@ -275,7 +275,7 @@ test('a sidecar that cannot be written ends the runs: a reply could not be poste
     const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
     await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
     const before = await readFile(sidecarPath(docPath), 'utf8');
-    await writeFile(sidecarPath(docPath), before.replace('{"opendoc":3}', '{"opendoc":9}'));
+    await writeFile(sidecarPath(docPath), before.replace('{"comments":3}', '{"comments":9}'));
     await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
     await writeFile(join(settingsDir, 'release-Pilot'), '');
     await pause(500);
@@ -314,30 +314,12 @@ test('a comment by another user that @mentions a buddy runs nothing; one by you 
     await call('comment', { thread: theirs.id, body: '@Pilot replace "extra load" with "peak load"' });
     await until(async () => (await threadOf(state, theirs.id)).comments.length === 3, 'Pilot\'s reply');
     assert.equal((await fakeRuns(settingsDir)).length, 1);
-  }, { sidecar: `{"opendoc":3}\n${line(theirs)}\n` });
-});
-
-test('a v1 sidecar is not read, and its bytes are unchanged', async () => {
-  const v1 = '{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": [],\n  "participants": []\n}\n';
-  const docPath = await tempDoc();
-  await writeFile(`${docPath}.opendoc.json`, v1);
-  const settingsDir = await fakeConfig();
-  const { doc, call, state } = await openTestDoc(docPath, { settingsDir, buddies: PILOT });
-  try {
-    const now = await state();
-    assert.deepEqual(now.threads, []);
-    assert.equal(now.notice, null);
-    await call('comment', { anchor: null, body: 'New comments go to the new file' });
-    await doc.moveTo(join(dirname(docPath), 'renamed.md'));
-    assert.equal(await readFile(`${docPath}.opendoc.json`, 'utf8'), v1, 'byte for byte, where it was');
-  } finally {
-    await doc.close();
-  }
+  }, { sidecar: `{"comments":3}\n${line(theirs)}\n` });
 });
 
 test('a sidecar of another version, or without a header, is shown read-only; a bad line is reported and kept', async () => {
   const theirs = { id: 'c_theirs1', anchor: null, by: { id: 'u_sam', name: 'Sam', kind: 'human' }, at: '2026-01-01T00:00:00Z', body: 'Hi' };
-  for (const [header, readOnly] of [['{"opendoc":2}', 'older'], ['{"opendoc":4}', 'newer'], ['<<<<<<< HEAD', 'invalid']]) {
+  for (const [header, readOnly] of [['{"comments":2}', 'older'], ['{"comments":4}', 'newer'], ['<<<<<<< HEAD', 'invalid']]) {
     const sidecar = `${header}\n${JSON.stringify(theirs)}\n`;
     await withDoc(async ({ call, state, docPath }) => {
       const now = await state();
@@ -348,16 +330,16 @@ test('a sidecar of another version, or without a header, is shown read-only; a b
     }, { sidecar });
   }
   await withDoc(async ({ call, state, docPath }) => {
-    assert.match((await state()).notice, /A line of plan\.md\.opendoc\.jsonl could not be read/);
+    assert.match((await state()).notice, /A line of plan\.md\.comments\.jsonl could not be read/);
     assert.equal((await state()).readOnly, null);
     await call('comment', { anchor: null, body: 'x' });
     assert.equal((await readFile(sidecarPath(docPath), 'utf8')).split('\n')[1], 'not json', 'kept as it is');
-  }, { sidecar: '{"opendoc":3}\nnot json\n' });
+  }, { sidecar: '{"comments":3}\nnot json\n' });
 });
 
 test('events: the sidecar changed on disk; the doc changed outside lands as an edit', { timeout: 15_000 }, async () => {
   await withDoc(async ({ events, docPath, state }) => {
-    await writeFile(sidecarPath(docPath), '{"opendoc":3}\n');
+    await writeFile(sidecarPath(docPath), '{"comments":3}\n');
     await until(() => events.some(([name]) => name === 'sidecar'), 'a sidecar event');
     await writeFile(docPath, SAMPLE.replace('Q4 Launch Plan', 'Q4 Plan'));
     const [, landed] = await until(() => events.find(([name]) => name === 'ops'), 'an ops event');
@@ -374,7 +356,7 @@ test('a doc renamed while open is found at its new path, with its comments', asy
     const [moved] = await Promise.all([doc.moveTo(newPath), edit(SAMPLE.replace('Q4', 'Q1'))]);
     assert.equal(moved, newPath);
     assert.equal(doc.docPath(), newPath);
-    assert.deepEqual((await readdir(dirname(docPath))).filter((f) => f !== '.opendoc').sort(), ['launch.md', 'launch.md.opendoc.jsonl']);
+    assert.deepEqual((await readdir(dirname(docPath))).filter((f) => f !== '.ponjo').sort(), ['launch.md', 'launch.md.comments.jsonl']);
     assert.match(await readFile(newPath, 'utf8'), /Q1 Launch Plan/);
     const after = await state();
     assert.equal(after.doc, 'launch.md');
@@ -454,5 +436,5 @@ test('a person is shown by the name in their latest comment', async () => {
   const later = { id: 'c_frank0002', thread: old.id, by: { id: 'u_frank001', name: 'Frank', kind: 'human' }, at: '2026-10-02T10:00:00Z', body: 'second' };
   await withDoc(async ({ state }) => {
     assert.deepEqual((await state()).people, [{ id: 'u_frank001', name: 'Frank' }]);
-  }, { sidecar: `{"opendoc":3}\n${line(old)}\n${line(later)}\n` });
+  }, { sidecar: `{"comments":3}\n${line(old)}\n${line(later)}\n` });
 });

@@ -15,8 +15,7 @@ Sharing is built: teammates join from a link, are allowed by the owner,
 read or edit, and see who is here and where each person's cursor is.
 Everything here is what the code does.
 
-No backward compatibility with earlier formats: a version 1 sidecar is
-ignored, and a version 2 one is not converted. A sidecar this version must
+No backward compatibility with earlier formats: a sidecar this version must
 not write (another version, or no header) shows its comments read-only,
 with a way to fix it.
 
@@ -60,7 +59,7 @@ The app has two modes:
   folder.
 - **Project mode:** a folder opened from the home page. A file tree and
   its docs, Clippy, and the project's own buddies. They live in
-  `.opendoc/buddies/` at the folder's root and travel with it
+  `.ponjo/buddies/` at the folder's root and travel with it
   ([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
@@ -80,7 +79,7 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | | Clippy | Project buddies |
 | --- | --- | --- |
 | Reached from | every doc, in either mode | docs in their project only |
-| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.opendoc/buddies/<Name>.md` in the project |
+| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.ponjo/buddies/<Name>.md` in the project |
 | Travels with | the user | the project folder |
 | Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from its id |
 | Color | yellow, its own | one of the other seven, picked by id |
@@ -115,7 +114,7 @@ flowchart TD
 
 | Component | Owns |
 | --- | --- |
-| Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
+| Format | `X` + `X.comments.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
 | Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff (Myers', `diff.js`), text operations and how they merge (`ot.js`), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
 | Markdown library (`src/markdown/`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |

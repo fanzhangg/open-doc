@@ -54,10 +54,10 @@ test('any order or duplication of lines reads to the same threads (what makes me
 });
 
 test('a version this tool does not know, or no header, is a problem; the lines are still read', () => {
-  assert.equal(parseSidecar('{"opendoc":3}\n').problem, null);
-  assert.equal(parseSidecar('{"opendoc":2}\n').problem, 'older');
-  assert.equal(parseSidecar('{"opendoc":4}\n').problem, 'newer');
-  assert.equal(parseSidecar('{\n  "opendoc": 1,\n  "doc": "plan.md",\n  "threads": []\n}\n').problem, 'invalid');
+  assert.equal(parseSidecar('{"comments":3}\n').problem, null);
+  assert.equal(parseSidecar('{"comments":2}\n').problem, 'older');
+  assert.equal(parseSidecar('{"comments":4}\n').problem, 'newer');
+  assert.equal(parseSidecar('{\n  "comments": 1,\n  "doc": "plan.md",\n  "threads": []\n}\n').problem, 'invalid');
   assert.equal(parseSidecar('').problem, 'invalid');
 });
 

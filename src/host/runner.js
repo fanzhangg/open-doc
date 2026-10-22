@@ -122,7 +122,7 @@ export class Runner {
       const copy = join(dir, docName);
       await writeFile(copy, base);
       const sidecar = join(dir, docName + SIDECAR_SUFFIX);
-      const before = comments ?? `${JSON.stringify({ opendoc: FORMAT_VERSION })}\n`;
+      const before = comments ?? `${JSON.stringify({ comments: FORMAT_VERSION })}\n`;
       await writeFile(sidecar, before);
       const { script, settings } = await this.agent();
       const folder = await this.folder();

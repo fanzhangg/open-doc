@@ -14,13 +14,13 @@ import { INFER, files, turn } from '../agents/ponjo.mjs';
 import { agentScript, installAgents } from '../src/store/agents.js';
 import { SAMPLE } from './helpers.js';
 
-const HEADER = '{"opendoc":1}\n';
+const HEADER = '{"comments":1}\n';
 
 /** A working folder holding copies of a doc and its sidecar: { dir, doc, sidecar }. */
 async function copies(content = SAMPLE) {
   const dir = await mkdtemp(join(tmpdir(), 'ponjo-agent-'));
   const doc = join(dir, 'plan.md');
-  const sidecar = `${doc}.opendoc.jsonl`;
+  const sidecar = `${doc}.comments.jsonl`;
   await writeFile(doc, content);
   await writeFile(sidecar, HEADER);
   return { dir, doc, sidecar };
@@ -106,16 +106,16 @@ test('in project mode the turn reads the project as the app shows it, and nothin
   await mkdir(join(project, 'notes'));
   await mkdir(join(project, '.git'));
   await writeFile(join(project, 'notes', 'a.md'), 'A\n');
-  await writeFile(join(project, 'notes', 'a.md.opendoc.jsonl'), HEADER);
+  await writeFile(join(project, 'notes', 'a.md.comments.jsonl'), HEADER);
   await writeFile(join(project, '.git', 'config'), 'secret');
   await writeFile(join(project, '.env'), 'secret');
   await writeFile(join(outside, 'b.md'), 'secret');
   await symlink(outside, join(project, 'out'), 'junction');
   const readable = files({ doc, sidecar, project });
   assert.deepEqual(await readable(''), ['notes/', 'out'], 'a folder, its entries');
-  assert.deepEqual(await readable('notes'), ['a.md', 'a.md.opendoc.jsonl']);
+  assert.deepEqual(await readable('notes'), ['a.md', 'a.md.comments.jsonl']);
   assert.equal(await readable(join(project, 'notes', 'a.md')), 'A\n');
-  assert.equal(await readable('notes/a.md.opendoc.jsonl'), HEADER, 'sidecars included');
+  assert.equal(await readable('notes/a.md.comments.jsonl'), HEADER, 'sidecars included');
   assert.equal(await readable(doc), SAMPLE, 'and the copies');
   for (const path of ['.env', '.git/config', 'notes/../.env', `../${basename(outside)}/b.md`, join(outside, 'b.md'), 'out/b.md', 'notes/none.md']) {
     assert.equal(await readable(path), null, path);

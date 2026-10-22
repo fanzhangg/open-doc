@@ -97,7 +97,7 @@ async function openPath(path, { create = false, parent = null } = {}) {
   const docPath = await docPathFor(path);
   if (!docPath) {
     await warn(parent, `Ponjo can't open ${basename(path)}.`,
-      'It opens text files (UTF-8, up to 20 MB) and their comment files (.opendoc.jsonl).');
+      'It opens text files (UTF-8, up to 20 MB) and their comment files (.comments.jsonl).');
     return false;
   }
   if (!isFile(docPath)) {

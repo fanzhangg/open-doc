@@ -24,18 +24,18 @@ const LINE = '{"id":"c_store0001","by":{"id":"u_alice01","name":"alice","kind":"
 test('a doc without a sidecar has none; writing one leaves no temp file', async () => {
   const docPath = await tempDoc();
   assert.equal(await readSidecarText(docPath), null);
-  await writeAtomic(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
-  assert.equal(await readSidecarText(docPath), `{"opendoc":3}\n${LINE}\n`);
-  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
+  await writeAtomic(sidecarPath(docPath), `{"comments":3}\n${LINE}\n`);
+  assert.equal(await readSidecarText(docPath), `{"comments":3}\n${LINE}\n`);
+  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.comments.jsonl']);
 });
 
 test('moveDoc renames the doc and its sidecar together, never over another file', async () => {
   const docPath = await tempDoc();
-  await writeFile(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
+  await writeFile(sidecarPath(docPath), `{"comments":3}\n${LINE}\n`);
   const target = join(dirname(docPath), 'renamed.md');
   await moveDoc(docPath, target);
-  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['renamed.md', 'renamed.md.opendoc.jsonl']);
-  assert.equal(await readSidecarText(target), `{"opendoc":3}\n${LINE}\n`, 'byte for byte');
+  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['renamed.md', 'renamed.md.comments.jsonl']);
+  assert.equal(await readSidecarText(target), `{"comments":3}\n${LINE}\n`, 'byte for byte');
   await writeFile(docPath, 'other');
   await assert.rejects(moveDoc(target, docPath), (e) => e.code === 'exists');
 });
@@ -62,7 +62,7 @@ test('watchDoc reports changes to the sidecar', async () => {
   const stop = watchDoc(docPath, () => { calls++; });
   try {
     await new Promise((r) => setTimeout(r, 100));
-    await writeAtomic(sidecarPath(docPath), `{"opendoc":3}\n${LINE}\n`);
+    await writeAtomic(sidecarPath(docPath), `{"comments":3}\n${LINE}\n`);
     const deadline = Date.now() + 2000;
     while (calls === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
     assert.ok(calls > 0);
@@ -76,20 +76,20 @@ const git = (cwd, ...args) => promisify(execFile)('git', args, { cwd });
 test('a sidecar written in a git work tree is excluded, once; a repo made later is covered', async () => {
   const docPath = await tempDoc();
   const dir = dirname(docPath);
-  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n`);
+  await writeSidecar(docPath, `{"comments":3}\n${LINE}\n`);
   await git(dir, 'init', '-q');
-  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n`);
-  await writeSidecar(docPath, `{"opendoc":3}\n${LINE}\n${LINE}\n`);
-  assert.equal((await git(dir, 'status', '--porcelain', '-uall')).stdout.includes('opendoc.jsonl'), false);
+  await writeSidecar(docPath, `{"comments":3}\n${LINE}\n`);
+  await writeSidecar(docPath, `{"comments":3}\n${LINE}\n${LINE}\n`);
+  assert.equal((await git(dir, 'status', '--porcelain', '-uall')).stdout.includes('comments.jsonl'), false);
   const exclude = readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8');
-  assert.equal(exclude.split('\n').filter((l) => l === '*.opendoc.jsonl').length, 1);
+  assert.equal(exclude.split('\n').filter((l) => l === '*.comments.jsonl').length, 1);
 });
 
 test('a sidecar outside a git work tree is written as before', async () => {
   const docPath = await tempDoc();
-  await writeSidecar(docPath, `{"opendoc":3}\n`);
-  assert.equal(await readSidecarText(docPath), `{"opendoc":3}\n`);
-  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
+  await writeSidecar(docPath, `{"comments":3}\n`);
+  assert.equal(await readSidecarText(docPath), `{"comments":3}\n`);
+  assert.deepEqual((await readdir(dirname(docPath))).sort(), ['plan.md', 'plan.md.comments.jsonl']);
 });
 
 test('writeAtomic resolves to the stat it wrote, or leaves the file alone when, just before, it should not', async () => {

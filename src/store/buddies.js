@@ -1,4 +1,4 @@
-// Buddy files (spec/PROJECT.md): a project's, in its `.opendoc/buddies/`,
+// Buddy files (spec/PROJECT.md): a project's, in its `.ponjo/buddies/`,
 // and the user's Clippy, in `buddies/` in their config folder.
 
 import { mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
@@ -7,7 +7,7 @@ import { BuddyError, buddyText, parseBuddy } from '../core/buddies.js';
 import { NAME_PATTERN, sameName } from '../core/mentions.js';
 import { writeAtomic } from './files.js';
 
-export const projectBuddiesDir = (folder) => join(folder, '.opendoc', 'buddies');
+export const projectBuddiesDir = (folder) => join(folder, '.ponjo', 'buddies');
 export const userBuddiesDir = (settingsDir) => join(settingsDir, 'buddies');
 
 /** The buddies in `dir`, by name; none when it does not exist. A name twice (in another case) counts once. */

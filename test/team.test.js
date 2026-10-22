@@ -12,8 +12,8 @@ async function newTeam() {
   const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fan' }));
   const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
-  await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
-  await writeFile(join(folder, '.opendoc', 'buddies', 'Editor.md'), 'Edits.\n');
+  await mkdir(join(folder, '.ponjo', 'buddies'), { recursive: true });
+  await writeFile(join(folder, '.ponjo', 'buddies', 'Editor.md'), 'Edits.\n');
   const linkOf = (secret) => `page?room=${secret}`;
   return { settingsDir, folder, team: (at = folder) => createTeam(at, { settingsDir, linkOf }) };
 }
