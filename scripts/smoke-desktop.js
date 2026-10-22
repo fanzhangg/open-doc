@@ -62,7 +62,7 @@ const step = (text) => console.log(`smoke: ${text}`);
 // it: a buddy's cursor, and the name it shows while it works, are not text.
 const textOf = (selector) => `[...document.querySelectorAll('${selector}')].map((node) => {
   const copy = node.cloneNode(true);
-  for (const cursor of copy.querySelectorAll('.od-cursor')) cursor.remove();
+  for (const cursor of copy.querySelectorAll('.pj-cursor')) cursor.remove();
   return copy.textContent;
 })`;
 let failed = false;
@@ -95,13 +95,13 @@ step('a .js file, in the plain view');
 const plain = await app.page('app.js');
 const lines = await plain.evaluate(`(async () => {
   for (let i = 0; i < 100 && !document.querySelector('.cm-content'); i++) await new Promise((r) => setTimeout(r, 100));
-  return ${textOf('.od-stage .cm-line')}.join('\\n');
+  return ${textOf('.pj-stage .cm-line')}.join('\\n');
 })()`);
 check(lines === CODE, 'the plain view shows app.js as it is');
 check(await commentShows(plain, CODE, 'greet'), 'a comment on its text is drawn over that text');
 check(await bubbleComments(plain, 'world'), 'selecting text shows Comment, which opens a draft on it');
 check(await answers(plain, 'Hello', 'Howdy', code), 'a buddy answers in app.js and its edit lands');
-const revision = await waitFor(() => plain.evaluate(`document.querySelector('.od-stage .od-buddy-edit')?.textContent`), 15_000, 'the revision').catch(() => null);
+const revision = await waitFor(() => plain.evaluate(`document.querySelector('.pj-stage .pj-buddy-edit')?.textContent`), 15_000, 'the revision').catch(() => null);
 check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
 check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
 check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
@@ -113,20 +113,20 @@ step('the Markdown view, off and on');
 const commented = await commentShows(first, readFileSync(docs[0], 'utf8'), 'gather feedback');
 check(Boolean(commented), 'a comment on plan.md is drawn over its text');
 const unswitched = { text: readFileSync(docs[0], 'utf8'), versions: await versionCount(first) };
-await first.evaluate(`document.querySelector('.od-tool-history').click()`);
+await first.evaluate(`document.querySelector('.pj-tool-history').click()`);
 check(await switchesView(first, false, [first, notes], commented), 'off: both Markdown docs and the history show in the plain view, the comment still drawn, no outline');
 check(await switchesView(first, true, [first, notes], commented), 'on: Markdown\'s view is back, with the comment and the outline');
-await first.evaluate(`document.querySelector('.od-history-bar [data-action="close"]').click()`);
+await first.evaluate(`document.querySelector('.pj-history-bar [data-action="close"]').click()`);
 check(await ownSettingsApply(first), 'its Outline switch and the focus mode shortcut take effect at once');
 check(readFileSync(docs[0], 'utf8') === unswitched.text && (await versionCount(first)) === unswitched.versions, 'switching wrote no file and recorded no version');
 
 step('the Markdown rule, apart from the view');
-await notes.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="enabled"]').click()`);
-await waitFor(() => notes.evaluate(`Boolean(document.querySelector('.od-stage .cm-content'))`), 15_000, 'the plain view');
+await notes.evaluate(`document.querySelector('.pj-settings [data-owner="markdown"][data-key="enabled"]').click()`);
+await waitFor(() => notes.evaluate(`Boolean(document.querySelector('.pj-stage .cm-content'))`), 15_000, 'the plain view');
 // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
 const ruleOn = await mergesOutside(notes, docs[1]);
 check(ruleOn === '1 *2* 3 4*\n', `on, with the view off: the line conflicts and your typing stays (${JSON.stringify(ruleOn)})`);
-await notes.evaluate(`document.querySelector('.od-settings [data-owner="markdown-rule"][data-key="enabled"]').click()`);
+await notes.evaluate(`document.querySelector('.pj-settings [data-owner="markdown-rule"][data-key="enabled"]').click()`);
 const ruleOff = await mergesOutside(notes, docs[1]);
 check(ruleOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(ruleOff)})`);
 
@@ -185,7 +185,7 @@ async function commentShows(page, text, quote) {
   const end = start + quote.length;
   const anchor = { exact: quote, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32), start };
   const id = await page.evaluate(`window.ponjoHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
-  return waitFor(() => page.evaluate(`document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
+  return waitFor(() => page.evaluate(`document.querySelector('.pj-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
     .then(() => id, () => false);
 }
 
@@ -194,13 +194,13 @@ async function commentShows(page, text, quote) {
 // doc in the view that goes with that (Markdown's, with its outline, or the
 // plain one), and `page` its history too, with the comment drawn as before.
 async function switchesView(page, on, pages, id) {
-  await page.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="enabled"]').click()`);
+  await page.evaluate(`document.querySelector('.pj-settings [data-owner="markdown"][data-key="enabled"]').click()`);
   const [shown, gone] = on ? ['.ProseMirror', '.cm-content'] : ['.cm-content', '.ProseMirror'];
   const inView = (stage) => `Boolean(document.querySelector('${stage} ${shown}')) && !document.querySelector('${stage} ${gone}')`;
-  const doc = `${inView('.od-stage:not(.od-history-stage)')} && Boolean(document.querySelector('.od-outline')) === ${on}`;
-  const drawn = `document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === 'gather feedback'`;
-  const own = `document.querySelector('.od-settings [data-key="outline"]').closest('.od-setting').parentElement.hidden === ${!on}`;
-  const probes = pages.map((p) => [p, p === page ? `${doc} && ${inView('.od-history-stage')} && ${drawn} && ${own}` : doc]);
+  const doc = `${inView('.pj-stage:not(.pj-history-stage)')} && Boolean(document.querySelector('.pj-outline')) === ${on}`;
+  const drawn = `document.querySelector('.pj-stage [data-thread="${id}"]')?.textContent === 'gather feedback'`;
+  const own = `document.querySelector('.pj-settings [data-key="outline"]').closest('.pj-setting').parentElement.hidden === ${!on}`;
+  const probes = pages.map((p) => [p, p === page ? `${doc} && ${inView('.pj-history-stage')} && ${drawn} && ${own}` : doc]);
   for (const [p, probe] of probes) {
     if (!(await waitFor(() => p.evaluate(probe), 15_000, 'the view').catch(() => false))) return false;
   }
@@ -212,7 +212,7 @@ async function switchesView(page, on, pages, id) {
 // back again.
 async function ownSettingsApply(page) {
   const has = (attr) => page.evaluate(`document.documentElement.hasAttribute('${attr}')`);
-  const outline = () => page.evaluate(`document.querySelector('.od-settings [data-owner="markdown"][data-key="outline"]').click()`);
+  const outline = () => page.evaluate(`document.querySelector('.pj-settings [data-owner="markdown"][data-key="outline"]').click()`);
   const modifiers = (process.platform === 'darwin' ? 4 : 2) | 8; // Meta or Ctrl, and Shift
   const focusKey = async () => {
     for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'F', code: 'KeyF', windowsVirtualKeyCode: 70 });
@@ -236,7 +236,7 @@ function versionCount(page) {
 async function bubbleComments(page, quote) {
   await page.send('Emulation.setFocusEmulationEnabled', { enabled: true }); // the window may be behind another
   const shown = await page.evaluate(`(async () => {
-    const editor = document.querySelector('.od-stage [contenteditable="true"]');
+    const editor = document.querySelector('.pj-stage [contenteditable="true"]');
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
     let node = walker.nextNode();
     while (node && !node.data.includes('${quote}')) node = walker.nextNode();
@@ -247,11 +247,11 @@ async function bubbleComments(page, quote) {
     getSelection().removeAllRanges();
     getSelection().addRange(range);
     await new Promise((r) => setTimeout(r, 200));
-    const button = document.querySelector('.od-stage .od-bubble:not([hidden]) [data-action="comment"]');
+    const button = document.querySelector('.pj-stage .pj-bubble:not([hidden]) [data-action="comment"]');
     button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     return Boolean(button);
   })()`);
-  const draft = shown && (await waitFor(() => page.evaluate(`Boolean(document.querySelector('.od-card[data-thread="draft"]'))`), 5_000, 'the draft').catch(() => false));
+  const draft = shown && (await waitFor(() => page.evaluate(`Boolean(document.querySelector('.pj-card[data-thread="draft"]'))`), 5_000, 'the draft').catch(() => false));
   await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   return draft;
@@ -261,7 +261,7 @@ async function bubbleComments(page, quote) {
 // then press Cmd+Z (Ctrl+Z): true when the typing is gone and the change stays.
 async function undoesOwnOnly(page, doc, from, to) {
   await page.evaluate(`(async () => {
-    const editor = document.querySelector('.od-stage [contenteditable="true"]');
+    const editor = document.querySelector('.pj-stage [contenteditable="true"]');
     editor.focus();
     const range = document.createRange();
     range.selectNodeContents([...editor.querySelectorAll('p, .cm-line')].at(-1));
@@ -274,7 +274,7 @@ async function undoesOwnOnly(page, doc, from, to) {
   const onDisk = (text) => readFileSync(doc, 'utf8').includes(text);
   await waitFor(() => onDisk('Typed here.'), 15_000, 'the typing to be saved');
   if (!(await answers(page, from, to, doc))) return false;
-  await waitFor(() => page.evaluate(`${textOf('.od-stage .od-editor')}[0].includes('${to}')`), 15_000, 'the edit to show');
+  await waitFor(() => page.evaluate(`${textOf('.pj-stage .pj-editor')}[0].includes('${to}')`), 15_000, 'the edit to show');
   await new Promise((done) => setTimeout(done, 2000)); // its typing-in ends
   const modifiers = process.platform === 'darwin' ? 4 : 2; // Meta : Ctrl
   for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, modifiers, key: 'z', code: 'KeyZ', windowsVirtualKeyCode: 90 });
@@ -286,7 +286,7 @@ async function undoesOwnOnly(page, doc, from, to) {
 // text it changed, is back on disk.
 async function undoesReply(page, doc, before) {
   const clicked = await page.evaluate(`(() => {
-    const button = [...document.querySelectorAll('.od-receipt-undo')].at(-1);
+    const button = [...document.querySelectorAll('.pj-receipt-undo')].at(-1);
     button?.click();
     return Boolean(button);
   })()`);
@@ -298,10 +298,10 @@ async function undoesReply(page, doc, before) {
 // while a change from outside takes out its second `*`. The doc once the page
 // has merged the two and saved it.
 async function mergesOutside(page, doc) {
-  const shown = `${textOf('.od-stage .cm-line')}.join('\\n')`;
+  const shown = `${textOf('.pj-stage .cm-line')}.join('\\n')`;
   writeFileSync(doc, '1 *2* 3\n');
   await waitFor(async () => (await page.evaluate(shown)) === '1 *2* 3\n', 15_000, 'the doc from disk');
-  await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
+  await page.evaluate(`document.querySelector('.pj-stage [contenteditable="true"]').focus()`);
   // The End key, not a DOM selection: the editor's own caret is where typing goes.
   for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'End', code: 'End', windowsVirtualKeyCode: 35 });
   await page.send('Input.insertText', { text: ' 4*' });
@@ -315,7 +315,7 @@ async function mergesOutside(page, doc) {
 // The doc is changed from outside right after ' A' is typed, and the save's answer is
 // held back while ' B' is typed: the page ends with all three, saved.
 async function typesDuringSave(page, doc) {
-  const shown = `${textOf('.od-stage .cm-line')}.join('\\n')`;
+  const shown = `${textOf('.pj-stage .cm-line')}.join('\\n')`;
   // The end of the first line: the caret may be anywhere after the doc was read from disk.
   const endOfFirstLine = async () => {
     const mac = process.platform === 'darwin';
@@ -327,7 +327,7 @@ async function typesDuringSave(page, doc) {
   };
   writeFileSync(doc, 'one\ntwo\nthree\n');
   await waitFor(async () => (await page.evaluate(shown)) === 'one\ntwo\nthree\n', 15_000, 'the doc from disk');
-  await page.evaluate(`document.querySelector('.od-stage [contenteditable="true"]').focus()`);
+  await page.evaluate(`document.querySelector('.pj-stage [contenteditable="true"]').focus()`);
   writeFileSync(hold, '');
   try {
     await endOfFirstLine();

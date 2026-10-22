@@ -8,8 +8,8 @@ import { setupSettings, setupTooltips } from './settings-dialog.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
 const desktop = window.ponjoDesktop;
-const list = document.querySelector('.od-recent ul');
-const empty = document.querySelector('.od-recent-empty');
+const list = document.querySelector('.pj-recent ul');
+const empty = document.querySelector('.pj-recent-empty');
 
 hydrateIcons();
 setupTooltips();
@@ -52,7 +52,7 @@ async function showRecent() {
     button.type = 'button';
     button.title = folder;
     // rtl keeps the end of a long path visible; the marks keep it readable
-    button.append(icon('folder'), el('span', 'od-recent-name', name), el('span', 'od-recent-folder', `‎${folder}‎`));
+    button.append(icon('folder'), el('span', 'pj-recent-name', name), el('span', 'pj-recent-folder', `‎${folder}‎`));
     button.addEventListener('click', () => desktop.openRecent(index).catch(() => {}));
     const item = el('li');
     item.append(button);

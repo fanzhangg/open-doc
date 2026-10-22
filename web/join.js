@@ -42,9 +42,9 @@ export const named = () => Boolean(name);
 
 /** Ask the teammate's name, `problem` saying why it is asked again; resolves once it is picked. */
 export function askName(problem = '') {
-  const form = document.querySelector('.od-join');
+  const form = document.querySelector('.pj-join');
   const field = form.querySelector('input');
-  const error = form.querySelector('.od-input-error');
+  const error = form.querySelector('.pj-input-error');
   const show = (message) => {
     error.textContent = message;
     error.hidden = !message;

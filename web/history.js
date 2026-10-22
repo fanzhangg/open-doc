@@ -23,13 +23,13 @@ const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month
  */
 export function createHistory({ api, chooseView, commentOf, onRestore, onClose }) {
   const root = document.documentElement;
-  const stage = document.querySelector('.od-history-stage');
-  const list = stage.querySelector('.od-history-list');
-  const bar = document.querySelector('.od-history-bar');
-  const heading = bar.querySelector('.od-history-heading');
+  const stage = document.querySelector('.pj-history-stage');
+  const list = stage.querySelector('.pj-history-list');
+  const bar = document.querySelector('.pj-history-bar');
+  const heading = bar.querySelector('.pj-history-heading');
   const restoreButton = bar.querySelector('[data-action="restore"]');
-  const changesToggle = bar.querySelector('.od-history-changes input');
-  const toggleButton = document.querySelector('.od-tool-history');
+  const changesToggle = bar.querySelector('.pj-history-changes input');
+  const toggleButton = document.querySelector('.pj-tool-history');
 
   let view = null; // the read-only view, made when history first opens
   let viewId; // the view `view` is of (null: the plain view)
@@ -111,35 +111,35 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
       const label = dayLabel(version.at);
       if (label !== day) {
         day = label;
-        items.push(el('li', 'od-history-day', label, { role: 'presentation' }));
+        items.push(el('li', 'pj-history-day', label, { role: 'presentation' }));
       }
       items.push(row(version, version === current));
     }
-    if (items.length === 0) items.push(el('li', 'od-history-empty', 'No versions yet.'));
+    if (items.length === 0) items.push(el('li', 'pj-history-empty', 'No versions yet.'));
     list.replaceChildren(...items);
     markSelected();
   }
 
   function row(version, current) {
-    const li = el('li', 'od-version', null, { role: 'option', 'data-id': version.id });
-    const face = version.author ? avatar(version.author.name, version.author.kind, true, version.author.id) : el('span', 'od-avatar od-avatar-small od-version-outside');
+    const li = el('li', 'pj-version', null, { role: 'option', 'data-id': version.id });
+    const face = version.author ? avatar(version.author.name, version.author.kind, true, version.author.id) : el('span', 'pj-avatar pj-avatar-small pj-version-outside');
     if (!version.author) face.append(icon(version.kind === 'opened' ? 'file' : 'history'));
-    const who = el('span', 'od-version-who', authorLabel(version));
-    const when = el('span', 'od-version-time', timeRange(version));
-    const top = el('span', 'od-version-top');
+    const who = el('span', 'pj-version-who', authorLabel(version));
+    const when = el('span', 'pj-version-time', timeRange(version));
+    const top = el('span', 'pj-version-top');
     top.append(who);
-    if (current) top.append(el('span', 'od-version-tag', 'Current'));
-    const stats = el('span', 'od-version-stats');
+    if (current) top.append(el('span', 'pj-version-tag', 'Current'));
+    const stats = el('span', 'pj-version-stats');
     if (version.kind !== 'opened') { // the first version counts the whole doc as added
-      if (version.added) stats.append(el('span', 'od-plus', `+${version.added}`));
-      if (version.removed) stats.append(el('span', 'od-minus', `−${version.removed}`));
+      if (version.added) stats.append(el('span', 'pj-plus', `+${version.added}`));
+      if (version.removed) stats.append(el('span', 'pj-minus', `−${version.removed}`));
     }
     stats.title = 'Characters added and removed';
     li.append(face, top, when);
     const note = describe(version);
     if (note || stats.childNodes.length) {
-      const what = el('span', 'od-version-what');
-      if (note) what.append(el('span', 'od-version-note', note));
+      const what = el('span', 'pj-version-what');
+      if (note) what.append(el('span', 'pj-version-note', note));
       what.append(stats);
       li.append(what);
     }
@@ -148,17 +148,17 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   }
 
   function markSelected() {
-    for (const li of list.querySelectorAll('.od-version')) {
+    for (const li of list.querySelectorAll('.pj-version')) {
       const on = li.dataset.id === selected;
       li.setAttribute('aria-selected', String(on));
-      if (on) list.setAttribute('aria-activedescendant', li.id = `od-version-${li.dataset.id}`);
+      if (on) list.setAttribute('aria-activedescendant', li.id = `pj-version-${li.dataset.id}`);
     }
   }
 
   list.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
-    const rows = [...list.querySelectorAll('.od-version')];
+    const rows = [...list.querySelectorAll('.pj-version')];
     const at = rows.findIndex((li) => li.dataset.id === selected);
     const next = rows[Math.min(rows.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)))];
     if (next && next.dataset.id !== selected) {
