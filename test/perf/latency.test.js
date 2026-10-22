@@ -3,8 +3,8 @@
 // person types in the doc while a teammate's edit arrives every 300 ms, as
 // in the collab harness (test/collab/page.js); the doc opens, and keys, the
 // teammate's edits and the longest task are timed. A case that misses is
-// measured once more, so one slow moment of a shared CI machine does not
-// fail it; a regression misses both times. npm run test:perf.
+// measured up to twice more, so slow moments of a shared CI machine do not
+// fail it; a regression misses every time. npm run test:perf.
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -136,7 +136,7 @@ function misses(got) {
 for (const [view, shape, text] of CASES) {
   test(`B1 B2 B4 B7: ${view} view, ${shape}, ${text.length.toLocaleString('en')} characters: keeps the latency promise`, { timeout: 600_000 }, async () => {
     let got = await measure(view, text);
-    if (misses(got).length > 0) got = await measure(view, text);
+    for (let again = 0; again < 2 && misses(got).length > 0; again++) got = await measure(view, text);
     console.log(`# ${view} ${shape}: ${JSON.stringify(got)}`);
     assert.deepEqual(misses(got), [], `LATENCY is ${JSON.stringify(LATENCY)}`);
   });

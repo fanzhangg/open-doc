@@ -412,7 +412,10 @@ when read. Nothing stores it.
   changes, it tells every window; a doc it did not write is a change from
   outside: saved to history first, then landed as an edit that yields, from
   the text the file held when last written. Where it overlaps what was typed
-  since, the typing wins and the outside version is only in history.
+  since, the typing wins and the outside version is only in history. It is
+  taken once the file is unchanged for 50 ms (up to a second): another
+  program may be half way through writing it, emptied with the rest to
+  come.
 - Before writing, DocService checks the file is still what it last wrote;
   if not, it lands the outside change first, the same way. A file whose
   size, mtime and inode are still those of its own last write is not read

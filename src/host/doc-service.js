@@ -176,7 +176,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         if (!ours(before)) {
           let disk;
           try {
-            disk = await readDoc(docPath);
+            disk = await readOutside();
           } catch (error) {
             if (error.code !== 'no_doc') throw error;
             break;
@@ -212,6 +212,17 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     }
     // Written now, so landed even if the file changes outside before the next write.
     if (wroteAny) await noteWritten(docPath, settingsDir, writtenHash, writtenIds).catch(() => {});
+  }
+
+  // The file as changed outside, once it holds still: another program may be
+  // half way through writing it, emptied with the rest to come.
+  async function readOutside() {
+    for (let tries = 1; ; tries++) {
+      const was = await stat(docPath).catch(() => null);
+      const disk = await readDoc(docPath);
+      await new Promise((done) => setTimeout(done, STILL_MS));
+      if (tries === STILL_TRIES || sameStat(await stat(docPath).catch(() => null), was)) return disk;
+    }
   }
 
   // The doc's rules, as the settings are now.
@@ -665,7 +676,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (!missing && ours(await stat(docPath).catch(() => null))) return true; // this service's own write
     let doc;
     try {
-      doc = await readDoc(docPath);
+      doc = await readOutside();
     } catch (error) {
       if (error.code !== 'no_doc') throw error;
       if (!missing) {
@@ -873,6 +884,9 @@ const LOG_SIZE = 1000;
 const RETRY_MS = 500;
 // Typing is a version once it pauses this long.
 const SAVE_DELAY_MS = 800;
+// A file changed outside is taken once it is unchanged this long, waiting at most STILL_TRIES times.
+const STILL_MS = 50;
+const STILL_TRIES = 20;
 
 // Whether `ops` is an edit: { from, to, insert } in order, not overlapping.
 function validOps(ops) {
