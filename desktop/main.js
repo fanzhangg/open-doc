@@ -25,7 +25,7 @@ import { createDocHost } from './doc-host-client.js';
 import { resolve as resolveInProject } from '../src/host/project-service.js';
 import { docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
-import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
+import { addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
 
 const MARKDOWN = { name: 'Markdown', extensions: ['md', 'markdown'] };
@@ -185,7 +185,7 @@ async function openFolder(path, parent = null) {
     }
   }
   try {
-    const { entry } = await windows.openDoc(docInFolder(folder, rel), { folder });
+    const { entry } = await windows.openDoc(docInFolder(folder, rel), { folder, expanded: state.folderExpanded[folder] });
     rememberIn(entry);
     return true;
   } catch (error) {
@@ -310,7 +310,7 @@ function remember(docPath) {
 function rememberIn(entry) {
   if (!entry.folder) return remember(entry.docPath);
   const rel = relativeDoc(entry.folder, entry.docPath);
-  if (rel) state.folderDocs = rememberFolderDoc(state.folderDocs, entry.folder, rel);
+  if (rel) state.folderDocs = rememberForFolder(state.folderDocs, entry.folder, rel);
   state.recent = addRecent(state.recent, entry.folder);
   app.addRecentDocument(entry.folder);
   state.lastFolder = dirname(entry.docPath);
@@ -819,7 +819,14 @@ ipcMain.handle('ponjo:action', async (event, action, arg) => {
   if (action === 'openInFolder' && fromDoc) return openInFolder(win, arg);
   if (action === 'openLink' && fromDoc) return void (await openLink(win, arg));
   if (action === 'folderExpand' && fromDoc) {
-    if (typeof arg?.path === 'string') windows.setExpanded(win, arg.path, Boolean(arg.open));
+    if (typeof arg?.path !== 'string') return undefined;
+    windows.setExpanded(win, arg.path, Boolean(arg.open));
+    // The folder opens with them next time, after a restart too.
+    const { folder, expanded } = windows.docFor(win);
+    if (folder) {
+      state.folderExpanded = rememberForFolder(state.folderExpanded, folder, [...expanded]);
+      saveState();
+    }
     return undefined;
   }
   if (action === 'folderSidebar' && fromDoc) return void windows.setSidebar(win, Boolean(arg));

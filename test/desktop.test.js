@@ -9,7 +9,7 @@ import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
   nameParts, nameProblem, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from '../desktop/files.js';
-import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
+import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
   docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
@@ -117,15 +117,18 @@ test('renameFile can change only the case of the name', async () => {
 
 test('state round-trips and survives a missing or corrupt file', async () => {
   const dir = await tempDir();
-  const empty = { recent: [], folderDocs: {}, lastFolder: null, bounds: null };
+  const empty = { recent: [], folderDocs: {}, folderExpanded: {}, lastFolder: null, bounds: null };
   assert.deepEqual(await readState(dir), empty);
-  const state = { recent: ['/a/x.md', '/b'], folderDocs: { '/b': 'notes/y.md' }, lastFolder: '/a', bounds: { x: 1, y: 2, width: 800, height: 600 } };
+  const state = {
+    recent: ['/a/x.md', '/b'], folderDocs: { '/b': 'notes/y.md' }, folderExpanded: { '/b': ['notes', 'notes/old'] }, lastFolder: '/a', bounds: { x: 1, y: 2, width: 800, height: 600 },
+  };
   await writeState(state, dir);
   assert.deepEqual(await readState(dir), state);
   await writeFile(join(dir, 'state.json'), '{ nope');
   assert.deepEqual(await readState(dir), empty);
-  await writeFile(join(dir, 'state.json'), JSON.stringify({ folderDocs: { '/b': 3, '/c': 'z.md' } }));
+  await writeFile(join(dir, 'state.json'), JSON.stringify({ folderDocs: { '/b': 3, '/c': 'z.md' }, folderExpanded: { '/b': 'notes', '/c': ['x', 3], '/d': ['x'] } }));
   assert.deepEqual((await readState(dir)).folderDocs, { '/c': 'z.md' });
+  assert.deepEqual((await readState(dir)).folderExpanded, { '/d': ['x'] });
 });
 
 test('recent docs: newest first, no duplicates, at most ten, renames keep their place', () => {
@@ -160,9 +163,9 @@ test('cleanPaths keeps absolute path strings only, up to a limit', () => {
 
 test('the doc last open in a folder: newest first, one per folder, at most fifty folders', () => {
   let folderDocs = {};
-  for (let i = 0; i < MAX_FOLDER_DOCS + 5; i++) folderDocs = rememberFolderDoc(folderDocs, `/f/${i}`, 'a.md');
+  for (let i = 0; i < MAX_FOLDER_DOCS + 5; i++) folderDocs = rememberForFolder(folderDocs, `/f/${i}`, 'a.md');
   assert.equal(Object.keys(folderDocs).length, MAX_FOLDER_DOCS);
-  folderDocs = rememberFolderDoc(folderDocs, '/f/10', 'sub/b.md');
+  folderDocs = rememberForFolder(folderDocs, '/f/10', 'sub/b.md');
   assert.deepEqual(Object.entries(folderDocs)[0], ['/f/10', 'sub/b.md']);
   assert.equal(Object.keys(folderDocs).filter((k) => k === '/f/10').length, 1);
 });
