@@ -8,12 +8,12 @@
 !define PONJO_PROGID "Ponjo.md"
 !define PONJO_MARK "Ponjo"
 
-!macro openDocRegisterType EXT
+!macro ponjoRegisterType EXT
   WriteRegNone SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${PONJO_PROGID}"
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\SupportedTypes" ".${EXT}" ""
 !macroend
 
-!macro openDocUnregisterType EXT
+!macro ponjoUnregisterType EXT
   DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${PONJO_PROGID}"
 !macroend
 
@@ -27,8 +27,8 @@
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}" "FriendlyAppName" "${PRODUCT_NAME}"
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\shell\open\command" "" '"$appExe" "%1"'
 
-  !insertmacro openDocRegisterType "md"
-  !insertmacro openDocRegisterType "markdown"
+  !insertmacro ponjoRegisterType "md"
+  !insertmacro ponjoRegisterType "markdown"
 
   ; New > Markdown Document creates an empty .md. Only if no other app has
   ; added a New entry for .md; ours is marked so uninstalling removes only it.
@@ -44,8 +44,8 @@
 !macroend
 
 !macro customUnInstall
-  !insertmacro openDocUnregisterType "md"
-  !insertmacro openDocUnregisterType "markdown"
+  !insertmacro ponjoUnregisterType "md"
+  !insertmacro ponjoUnregisterType "markdown"
   DeleteRegKey SHCTX "Software\Classes\${PONJO_PROGID}"
   DeleteRegKey SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}"
 

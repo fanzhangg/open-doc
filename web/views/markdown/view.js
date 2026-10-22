@@ -89,7 +89,7 @@ const linkPlugin = $prose(() => new Plugin({
     decorations(state) {
       const range = linkKey.getState(state);
       if (!range || range.from === range.to) return null;
-      return DecorationSet.create(state.doc, [Decoration.inline(range.from, range.to, { class: 'od-link-target' })]);
+      return DecorationSet.create(state.doc, [Decoration.inline(range.from, range.to, { class: 'pj-link-target' })]);
     },
   },
 }));
@@ -124,7 +124,7 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
       const { $from } = state.selection;
       if ($from.depth === 0) return null;
       const top = $from.before(1);
-      return DecorationSet.create(state.doc, [Decoration.node(top, top + $from.node(1).nodeSize, { class: 'od-current' })]);
+      return DecorationSet.create(state.doc, [Decoration.node(top, top + $from.node(1).nodeSize, { class: 'pj-current' })]);
     },
   },
 }));
@@ -168,7 +168,7 @@ export async function createMarkdownView({
   const hooks = {
     onUpdate: () => chrome?.update(),
   };
-  const host = stage.querySelector('.od-editor');
+  const host = stage.querySelector('.pj-editor');
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
@@ -326,7 +326,7 @@ export async function createMarkdownView({
       if (mark.kind === 'comment') {
         const range = docRangeOf(doc, mark.from, mark.to);
         if (!range) continue;
-        const classes = mark.active ? 'od-hl od-hl-active' : 'od-hl';
+        const classes = mark.active ? 'pj-hl pj-hl-active' : 'pj-hl';
         decorations.push(Decoration.inline(range.from, range.to, { class: classes, 'data-thread': mark.id }, { thread: mark.id, active: mark.active }));
         drawn.push(range.from, range.to, mark.id, classes);
       }
@@ -346,8 +346,8 @@ export async function createMarkdownView({
     const projection = edits.length > 0 ? projected(doc) : null;
     const editorProjection = projectionOf(doc);
     (projection ? editItems(projection.source, edits, projection) : []).forEach(({ anchor, mark, widget, by, replay }, i) => {
-      const kindClass = (kind) => (by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`);
-      const classes = (kind) => `${kindClass(kind)}${replay ? ' od-replay' : ''}`;
+      const kindClass = (kind) => (by ? (kind === 'ins' ? 'pj-buddy-edit' : 'pj-buddy-del') : `pj-mark-${kind}`);
+      const classes = (kind) => `${kindClass(kind)}${replay ? ' pj-replay' : ''}`;
       const style = by ? `--buddy: ${buddyColor(by)}` : '';
       const found = across(projection, editorProjection, anchor.start, anchor.start + anchor.exact.length);
       if (!found) return;
@@ -577,8 +577,8 @@ export async function createMarkdownView({
     if (ranges.length === 0) return;
     const flashId = Symbol('flash');
     const decorations = buddy ? [] : ranges.map((r) => (r.node
-      ? Decoration.node(r.from, r.to, { class: 'od-flash-block' }, { flashId })
-      : Decoration.inline(r.from, r.to, { class: 'od-flash' }, { flashId })));
+      ? Decoration.node(r.from, r.to, { class: 'pj-flash-block' }, { flashId })
+      : Decoration.inline(r.from, r.to, { class: 'pj-flash' }, { flashId })));
     const first = ranges[0];
     decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
     tr.setMeta(flashKey, flashKey.getState(view().state).map(tr.mapping, tr.doc).add(tr.doc, decorations));
@@ -746,10 +746,10 @@ function el(tag, className, text) {
 // Who made a change, over its start; in a buddy's colour (`color`) for a buddy.
 function flag(name, color = null) {
   const wrap = document.createElement('span');
-  wrap.className = 'od-flag';
+  wrap.className = 'pj-flag';
   if (color) wrap.style.cssText = `--buddy: ${color}; --buddy-ink: #1f1d24`;
   const label = document.createElement('span');
-  label.className = 'od-flag-label';
+  label.className = 'pj-flag-label';
   label.textContent = name;
   wrap.append(label);
   return wrap;

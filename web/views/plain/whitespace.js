@@ -3,9 +3,9 @@
 
 import { Decoration, ViewPlugin } from '@codemirror/view';
 
-const space = Decoration.mark({ class: 'od-ws-space' });
-const tab = Decoration.mark({ class: 'od-ws-tab' });
-const guides = Decoration.mark({ class: 'od-guides' });
+const space = Decoration.mark({ class: 'pj-ws-space' });
+const tab = Decoration.mark({ class: 'pj-ws-tab' });
+const guides = Decoration.mark({ class: 'pj-guides' });
 
 // The ranges of the visible text a plugin looks at, as [from, to] pairs.
 const visible = (view, onlySelection) => {
@@ -70,7 +70,7 @@ export const indentGuides = ViewPlugin.fromClass(class {
         const line = doc.lineAt(at);
         const lead = /^[ \t]+/.exec(line.text);
         const width = line.text === '' ? Math.min(nearest(line, -1), nearest(line, 1)) : 0;
-        if (width > 0) ranges.push(Decoration.line({ class: 'od-guides-blank', attributes: { style: `--width: ${width}` } }).range(line.from));
+        if (width > 0) ranges.push(Decoration.line({ class: 'pj-guides-blank', attributes: { style: `--width: ${width}` } }).range(line.from));
         else if (lead) ranges.push(guides.range(line.from, line.from + lead[0].length));
         at = line.to + 1;
       }

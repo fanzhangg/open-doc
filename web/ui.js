@@ -17,7 +17,7 @@ export function createChrome({ getView, settings: store, getName, setName }) {
   hydrateIcons();
   for (const kbd of document.querySelectorAll('kbd[data-keys]')) kbd.textContent = keyLabel(kbd.dataset.keys);
   setupTooltips();
-  const page = document.querySelector('.od-page');
+  const page = document.querySelector('.pj-page');
 
   const settings = setupSettings({
     store,
@@ -38,7 +38,7 @@ export function createChrome({ getView, settings: store, getName, setName }) {
   });
 
   // Toolbar buttons act without taking the doc's selection.
-  document.querySelector('.od-toolbar').addEventListener('mousedown', (event) => {
+  document.querySelector('.pj-toolbar').addEventListener('mousedown', (event) => {
     if (event.target.closest('button')) event.preventDefault();
   });
 

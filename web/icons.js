@@ -45,7 +45,7 @@ const PATHS = {
 };
 
 /** An inline SVG icon; `name` is a key of PATHS. */
-export function icon(name, className = 'od-icon') {
+export function icon(name, className = 'pj-icon') {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
@@ -59,5 +59,5 @@ export function icon(name, className = 'od-icon') {
 
 /** Fill every `[data-icon]` placeholder under `root` not filled yet with its icon, before any label. */
 export function hydrateIcons(root = document) {
-  for (const node of root.querySelectorAll('[data-icon]:not(:has(> .od-icon))')) node.prepend(icon(node.dataset.icon));
+  for (const node of root.querySelectorAll('[data-icon]:not(:has(> .pj-icon))')) node.prepend(icon(node.dataset.icon));
 }

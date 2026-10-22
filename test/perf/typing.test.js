@@ -52,8 +52,8 @@ before(async () => {
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>typing</title><link rel="stylesheet" href="app.css">
-<div style="display:flex;flex-direction:column;height:100vh"><div class="od-toolbar"><span class="od-spacer"></span></div>
-<main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main></div>
+<div style="display:flex;flex-direction:column;height:100vh"><div class="pj-toolbar"><span class="pj-spacer"></span></div>
+<main class="pj-canvas"><div class="pj-stage"><article class="pj-page"><div class="pj-editor"></div></article></div></main></div>
 <script src="page.js"></script>`);
   const env = { ...process.env, VIEWS_PAGE: join(dir, 'index.html'), VIEWS_SEARCH: '?delay=0', PONJO_RELAY: relay.url };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -94,11 +94,11 @@ async function teammatePage({ room, key }) {
   await shown.send('Page.enable'); // for the script below
   await shown.send('Page.addScriptToEvaluateOnNewDocument', { source: slowLine(LINE_MS) });
   await shown.evaluate(`localStorage.setItem('ponjo.key', ${JSON.stringify(key)}); localStorage.setItem('ponjo.name', 'Sam'); location.reload()`);
-  await waitFor(async () => (await shown.evaluate(`document.querySelector('.od-stage [contenteditable]')?.innerText ?? ''`).catch(() => '')).includes('Ship the preview'), 30_000, 'the teammate\'s page');
+  await waitFor(async () => (await shown.evaluate(`document.querySelector('.pj-stage [contenteditable]')?.innerText ?? ''`).catch(() => '')).includes('Ship the preview'), 30_000, 'the teammate\'s page');
   // When each x is shown there.
   await shown.evaluate(`{
     window.shownAt = [];
-    const editor = document.querySelector('.od-stage [contenteditable]');
+    const editor = document.querySelector('.pj-stage [contenteditable]');
     new MutationObserver(() => {
       const keys = (editor.textContent.match(/x/g) ?? []).length;
       const at = performance.timeOrigin + performance.now();

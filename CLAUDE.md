@@ -13,7 +13,7 @@ Before any commit, push or PR: the verify-before-push skill.
 - Never run the desktop smoke test (`npm run smoke:desktop`) without the person's approval; CI runs it on every PR.
 - Split big tasks into small goals with clear acceptance boundaries.
 - Commits, PRs and docs: core points and essential complexity only, not accidental complexity.
-- UI: read the design system `site/design.html` and `site/avatars.html` first (live at https://fanzhangg.github.io/open-doc/design.html) and follow it strictly; if the system itself changes, change it and the tokens in `web/app.css` before the UI.
+- UI: read the design system `site/design.html` and `site/avatars.html` first (live at https://ponjo.app/design.html) and follow it strictly; if the system itself changes, change it and the tokens in `web/app.css` before the UI.
 
 ## Issues and PRs
 

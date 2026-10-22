@@ -64,7 +64,7 @@ before(async () => {
   });
   await copyFile(join(root, 'web', 'app.css'), join(dir, 'app.css'));
   // Two pages side by side, each without the comment margin, as with comments hidden.
-  const column = '<div style="flex:1;min-width:0;--margin-w:0px;--stage-gap:0px"><div class="od-toolbar"><span class="od-spacer"></span></div><main class="od-canvas"><div class="od-stage"><article class="od-page"><div class="od-editor"></div></article></div></main></div>';
+  const column = '<div style="flex:1;min-width:0;--margin-w:0px;--stage-gap:0px"><div class="pj-toolbar"><span class="pj-spacer"></span></div><main class="pj-canvas"><div class="pj-stage"><article class="pj-page"><div class="pj-editor"></div></article></div></main></div>';
   await writeFile(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>collab</title><link rel="stylesheet" href="app.css">
 <div style="display:flex;height:100vh">${column}${column}</div>
 <script src="page.js"></script>`);

@@ -15,11 +15,11 @@ export function revisionMarks(text, edits, { by = null, replay = 0 } = {}) {
 /** The node of a buddy's cursor mark (kind 'cursor'): a line in its colour, with its name while it works. */
 export function cursorNode({ by, working }) {
   const node = document.createElement('span');
-  node.className = working ? 'od-cursor od-cursor-working' : 'od-cursor';
+  node.className = working ? 'pj-cursor pj-cursor-working' : 'pj-cursor';
   node.style.cssText = `--buddy: ${buddyColor(by)}; --buddy-ink: #1f1d24`;
   node.contentEditable = 'false';
   const label = document.createElement('span');
-  label.className = 'od-cursor-name';
+  label.className = 'pj-cursor-name';
   label.textContent = nameOf(by);
   node.append(label);
   return node;

@@ -125,7 +125,7 @@ flowchart TD
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
-| Relay (`relay/`) | a Cloudflare Worker at `ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
+| Relay (`relay/`) | a Cloudflare Worker at `share.ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
 
 DocService, Runner, ProjectService and Team run in the doc host, the app's utility process.
@@ -463,7 +463,7 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   teammates are in, and a page waits and reconnects by itself.
 - **A relay** (`relay/worker.js`, a Cloudflare Worker, one Durable Object
   per room) joins the host's outgoing WebSocket to each teammate's, over
-  TLS, and stores nothing. It is at `ponjo.app`, on the owner of
+  TLS, and stores nothing. It is at `share.ponjo.app`, on the owner of
   this repo's Cloudflare account, and serves the teammate's page too, so
   page and relay share one origin (the page may connect to its own origin
   only). There is no encryption of our own: the relay is
@@ -474,7 +474,7 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   the room, lets no one pose as the host. The app's own doc host shares a
   project, at its link, once a doc of it opens, so a teammate's page gets
   the owner's edits straight from the host that orders them. The app's
-  relay is `wss://ponjo.app` unless `PONJO_RELAY` names another
+  relay is `wss://share.ponjo.app` unless `PONJO_RELAY` names another
   (empty: nothing is shared).
 - **Limits**, so the relay is no free pipe and stays within the Workers
   free plan: at most 20 pages in a room (one more is turned away, `full`),
@@ -524,7 +524,7 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
 - **Joining.** The link is one per project, permanent until the owner makes a
   new one, and grants nothing by itself: it names the room, and opens the
   page the relay serves at the same origin
-  (`https://ponjo.app/team?room=<room>`). The page asks a name
+  (`https://share.ponjo.app/team?room=<room>`). The page asks a name
   once, and joins with it and its key. A first join asks the owner, with a notification (the host tells
   the app `join`), and waits, told `waiting`, for Allow in the Team panel,
   where the owner picks Read or Edit; Allow binds the teammate's id to that

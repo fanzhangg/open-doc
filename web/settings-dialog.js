@@ -17,34 +17,34 @@ const SHORTCUTS = [
 
 // The dialog itself, put into the page by setupSettings: static, no user text.
 const DIALOG = `
-<dialog class="od-settings" aria-label="Settings">
-  <nav class="od-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
-    <div class="od-settings-title">Settings</div>
+<dialog class="pj-settings" aria-label="Settings">
+  <nav class="pj-settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
+    <div class="pj-settings-title">Settings</div>
     <button type="button" role="tab" data-section="general" data-icon="user">General</button>
     <button type="button" role="tab" data-section="views" data-icon="pencil">Views</button>
     <button type="button" role="tab" data-section="rules" data-icon="check">Rules</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     <button type="button" role="tab" data-section="agents" data-icon="settings">Agents</button>
   </nav>
-  <div class="od-settings-main">
-    <button type="button" class="od-icon-btn od-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
+  <div class="pj-settings-main">
+    <button type="button" class="pj-icon-btn pj-settings-close" data-icon="close" data-action="close" aria-label="Close settings"></button>
 
-    <section class="od-settings-section" role="tabpanel" data-section="general">
+    <section class="pj-settings-section" role="tabpanel" data-section="general">
       <h2>General</h2>
-      <div class="od-setting">
-        <div class="od-setting-text">
-          <label for="od-name-input">Your name</label>
+      <div class="pj-setting">
+        <div class="pj-setting-text">
+          <label for="pj-name-input">Your name</label>
         </div>
-        <div class="od-setting-control">
-          <input id="od-name-input" class="od-input" type="text" autocomplete="off" spellcheck="false" maxlength="64">
-          <div class="od-input-error" role="alert" hidden>Use letters, digits, . _ or -</div>
+        <div class="pj-setting-control">
+          <input id="pj-name-input" class="pj-input" type="text" autocomplete="off" spellcheck="false" maxlength="64">
+          <div class="pj-input-error" role="alert" hidden>Use letters, digits, . _ or -</div>
         </div>
       </div>
-      <div class="od-setting">
-        <div class="od-setting-text">
-          <span class="od-setting-label">Theme</span>
+      <div class="pj-setting">
+        <div class="pj-setting-text">
+          <span class="pj-setting-label">Theme</span>
         </div>
-        <div class="od-segmented" role="radiogroup" aria-label="Theme">
+        <div class="pj-segmented" role="radiogroup" aria-label="Theme">
           <button type="button" role="radio" data-theme-choice="system">Auto</button>
           <button type="button" role="radio" data-theme-choice="light">Light</button>
           <button type="button" role="radio" data-theme-choice="dark">Dark</button>
@@ -52,34 +52,34 @@ const DIALOG = `
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="views" hidden>
-      <div class="od-page-list">
+    <section class="pj-settings-section" role="tabpanel" data-section="views" hidden>
+      <div class="pj-page-list">
         <h2>Views</h2>
-        <p class="od-settings-intro">How a file is edited. Each gives one kind of file its own editor. Off, those files open as plain text.</p>
-        <ul class="od-setting-pages"></ul>
+        <p class="pj-settings-intro">How a file is edited. Each gives one kind of file its own editor. Off, those files open as plain text.</p>
+        <ul class="pj-setting-pages"></ul>
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="rules" hidden>
-      <div class="od-page-list">
+    <section class="pj-settings-section" role="tabpanel" data-section="rules" hidden>
+      <div class="pj-page-list">
         <h2>Rules</h2>
-        <p class="od-settings-intro">How changes to a file are merged, whatever its view. Each gives one kind of file its own rules. Off, those files merge as plain text.</p>
-        <ul class="od-setting-pages"></ul>
+        <p class="pj-settings-intro">How changes to a file are merged, whatever its view. Each gives one kind of file its own rules. Off, those files merge as plain text.</p>
+        <ul class="pj-setting-pages"></ul>
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="agents" hidden>
+    <section class="pj-settings-section" role="tabpanel" data-section="agents" hidden>
       <h2>Agents</h2>
-      <p class="od-settings-intro">What does a buddy's work: a program in <code class="od-agents-folder"></code>, with the prompt on stdin and the reply on stdout. The one picked runs every buddy.</p>
-      <ul class="od-choices" role="radiogroup" aria-label="Agents"></ul>
-      <div class="od-setting-row">
-        <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
+      <p class="pj-settings-intro">What does a buddy's work: a program in <code class="pj-agents-folder"></code>, with the prompt on stdin and the reply on stdout. The one picked runs every buddy.</p>
+      <ul class="pj-choices" role="radiogroup" aria-label="Agents"></ul>
+      <div class="pj-setting-row">
+        <button type="button" class="pj-secondary" data-action="show-agents" hidden>Show folder</button>
       </div>
     </section>
 
-    <section class="od-settings-section" role="tabpanel" data-section="shortcuts" hidden>
+    <section class="pj-settings-section" role="tabpanel" data-section="shortcuts" hidden>
       <h2>Keyboard shortcuts</h2>
-      <div class="od-shortcuts-body"></div>
+      <div class="pj-shortcuts-body"></div>
     </section>
   </div>
 </dialog>
@@ -95,7 +95,7 @@ export function keyLabel(keys) {
 }
 
 /**
- * The Settings dialog, opened by the page's `.od-settings-toggle`, Mod+, and
+ * The Settings dialog, opened by the page's `.pj-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
  * one page shows. `views` (web/views/index.js) and `rules` (src/rules/index.js)
  * fill Views and Rules, which show only when there are some: a list of them,
@@ -110,10 +110,10 @@ export function keyLabel(keys) {
  */
 export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], rules = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
-  const dialog = document.querySelector('.od-settings');
+  const dialog = document.querySelector('.pj-settings');
   // Views and Rules are lists of pages alike: `read(settings, item)` gives an item's settings.
   const lists = [['views', 'Views', views, viewSettings], ['rules', 'Rules', rules, ruleSettings]].map(([kind, title, items, read]) => {
-    const list = dialog.querySelector(`[data-section="${kind}"] .od-page-list`);
+    const list = dialog.querySelector(`[data-section="${kind}"] .pj-page-list`);
     const parts = items.map((item) => itemRowAndPage(kind, title, item, (patch) => store.set(patch)));
     list.querySelector('ul').append(...parts.map((part) => part.row));
     list.after(...parts.map((part) => part.page));
@@ -122,11 +122,11 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   });
   hydrateIcons(dialog);
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
-  const sections = [...dialog.querySelectorAll('.od-settings-section')];
-  const nameInput = dialog.querySelector('#od-name-input');
-  const nameError = dialog.querySelector('.od-input-error');
+  const sections = [...dialog.querySelectorAll('.pj-settings-section')];
+  const nameInput = dialog.querySelector('#pj-name-input');
+  const nameError = dialog.querySelector('.pj-input-error');
 
-  fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
+  fillShortcuts(dialog.querySelector('.pj-shortcuts-body'));
   dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
 
   // The agents are read again each time Agents shows (the user may add one) and after a Reset.
@@ -140,7 +140,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
       return;
     }
     secretsSet = found.secrets;
-    dialog.querySelector('.od-agents-folder').textContent = found.folder;
+    dialog.querySelector('.pj-agents-folder').textContent = found.folder;
     const choices = found.agents.map((agent) => agentChoice(agent, found.shipped.includes(agent.id), {
       pick: () => set({ agent: agent.id }),
       change: (key, value) => set({ agents: { [agent.id]: { [key]: value } } }),
@@ -157,7 +157,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
         if (window.confirm(`Reset ${agent.name} to what Ponjo comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(listAgents, () => {});
       },
     }));
-    dialog.querySelector('[data-section="agents"] .od-choices').replaceChildren(...choices.map((choice) => choice.node));
+    dialog.querySelector('[data-section="agents"] .pj-choices').replaceChildren(...choices.map((choice) => choice.node));
     paintAgents = (settings) => found.agents.forEach((agent, i) => {
       const secrets = Object.fromEntries((secretsSet[agent.id] ?? []).map((key) => [key, true]));
       choices[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secrets });
@@ -184,7 +184,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   }
   store.subscribe(apply);
   const set = (patch) => store.set(patch);
-  const listOf = (button) => lists.find(({ list }) => list.parentElement === button.closest('.od-settings-section'));
+  const listOf = (button) => lists.find(({ list }) => list.parentElement === button.closest('.pj-settings-section'));
 
   function show(section) {
     for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.section === section));
@@ -226,7 +226,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     else if (button.dataset.action === 'show-agents') scripts.showFolder(); else if (button.getAttribute('role') === 'tab') show(button.dataset.section);
     else if (button.dataset.openPage) {
       showPage(listOf(button), button.dataset.openPage);
-      dialog.querySelector(`[data-page="${button.dataset.openPage}"] .od-back`).focus();
+      dialog.querySelector(`[data-page="${button.dataset.openPage}"] .pj-back`).focus();
     } else if (button.dataset.action === 'back') {
       const id = button.closest('[data-page]').dataset.page;
       showPage(listOf(button), null);
@@ -235,7 +235,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     else if (button.dataset.themeChoice) set({ theme: button.dataset.themeChoice });
   });
   // Up and down move between sections, as in a vertical tab list.
-  dialog.querySelector('.od-settings-nav').addEventListener('keydown', (event) => {
+  dialog.querySelector('.pj-settings-nav').addEventListener('keydown', (event) => {
     if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
     event.preventDefault();
     const at = tabs.indexOf(document.activeElement);
@@ -244,7 +244,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     next.focus();
   });
 
-  document.querySelector('.od-settings-toggle')?.addEventListener('click', () => open('general'));
+  document.querySelector('.pj-settings-toggle')?.addEventListener('click', () => open('general'));
 
   /** Open on `section`, or close when it is already showing that section. */
   function toggle(section) {
@@ -272,12 +272,12 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
 // `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
 function itemRowAndPage(kind, title, item, save) {
   const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
-  const name = el('span', 'od-setting-label', item.name);
-  if (extensions.length > 0) name.append(el('span', 'od-setting-ext', extensions.join(' ')));
-  const summary = el('span', 'od-setting-text');
-  summary.append(name, el('span', 'od-setting-hint', item.about));
+  const name = el('span', 'pj-setting-label', item.name);
+  if (extensions.length > 0) name.append(el('span', 'pj-setting-ext', extensions.join(' ')));
+  const summary = el('span', 'pj-setting-text');
+  summary.append(name, el('span', 'pj-setting-hint', item.about));
   const state = el('span');
-  const stateBox = el('span', 'od-setting-state');
+  const stateBox = el('span', 'pj-setting-state');
   stateBox.append(state, icon('chevron'));
   const open = el('button');
   open.type = 'button';
@@ -298,10 +298,10 @@ function itemRowAndPage(kind, title, item, save) {
   const page = el('div');
   page.dataset.page = item.id;
   page.hidden = true;
-  const back = el('button', 'od-back', title);
+  const back = el('button', 'pj-back', title);
   back.type = 'button';
   Object.assign(back.dataset, { action: 'back', icon: 'back' });
-  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), enabled.node, ...fields.map((field) => field.node));
+  page.append(back, el('h2', null, item.name), el('p', 'pj-settings-intro', item.about), enabled.node, ...fields.map((field) => field.node));
   const paint = (own) => {
     enabled.paint(own);
     fields.forEach((field, i) => {
@@ -319,20 +319,20 @@ function itemRowAndPage(kind, title, item, save) {
 // field. `paint(using, own)` shows whether it is picked and its settings
 // `own`, a secret as true when set.
 function agentChoice(agent, shipped, { pick, change, saveSecret, reset }) {
-  const radio = el('input', 'od-radio');
-  Object.assign(radio, { type: 'radio', name: 'od-agent' });
+  const radio = el('input', 'pj-radio');
+  Object.assign(radio, { type: 'radio', name: 'pj-agent' });
   radio.addEventListener('change', pick);
-  const text = el('span', 'od-setting-text');
-  text.append(el('span', 'od-setting-label', agent.name), el('span', 'od-setting-hint', agent.about));
-  const label = el('label', 'od-choice');
+  const text = el('span', 'pj-setting-text');
+  text.append(el('span', 'pj-setting-label', agent.name), el('span', 'pj-setting-hint', agent.about));
+  const label = el('label', 'pj-choice');
   label.append(radio, text);
   const secret = (key) => agent.settings.find((field) => field.key === key).type === 'secret';
   const fields = agent.settings.map((field) => fieldRow(field, agent.id, (key, value) => (secret(key) ? saveSecret : change)(key, value)));
-  const detail = el('div', 'od-choice-detail');
+  const detail = el('div', 'pj-choice-detail');
   detail.append(...fields.map((field) => field.node));
   if (shipped) {
-    const buttons = el('div', 'od-setting-row');
-    const button = el('button', 'od-secondary', 'Reset to Default');
+    const buttons = el('div', 'pj-setting-row');
+    const button = el('button', 'pj-secondary', 'Reset to Default');
     button.type = 'button';
     button.addEventListener('click', reset);
     buttons.append(button);
@@ -353,10 +353,10 @@ function agentChoice(agent, shipped, { pick, change, saveSecret, reset }) {
 
 // The Enabled row of a view that cannot be switched off: no switch.
 function alwaysOn() {
-  const line = el('div', 'od-setting');
-  const text = el('span', 'od-setting-text');
-  text.append(el('span', 'od-setting-label', 'Enabled'), el('span', 'od-setting-hint', 'The fallback for files no other view claims.'));
-  line.append(text, el('span', 'od-setting-state', 'Always on'));
+  const line = el('div', 'pj-setting');
+  const text = el('span', 'pj-setting-text');
+  text.append(el('span', 'pj-setting-label', 'Enabled'), el('span', 'pj-setting-hint', 'The fallback for files no other view claims.'));
+  line.append(text, el('span', 'pj-setting-state', 'Always on'));
   const node = el('div');
   node.append(line);
   return { node, paint() {} };
@@ -371,19 +371,19 @@ function matches(when = {}, own) {
 // type (marked with its owner and the key), under a heading if it starts a
 // `group`. `change(key, value)` saves a change; `paint(own)` shows the current value.
 function fieldRow(field, id, change) {
-  const text = el('span', 'od-setting-text');
-  text.append(el('span', 'od-setting-label', field.label));
-  if (field.hint) text.append(el('span', 'od-setting-hint', field.hint));
-  const line = el(field.type === 'switch' ? 'label' : 'div', 'od-setting');
+  const text = el('span', 'pj-setting-text');
+  text.append(el('span', 'pj-setting-label', field.label));
+  if (field.hint) text.append(el('span', 'pj-setting-hint', field.hint));
+  const line = el(field.type === 'switch' ? 'label' : 'div', 'pj-setting');
   let control;
   let paint;
   if (field.type === 'switch') {
-    control = el('input', 'od-switch');
+    control = el('input', 'pj-switch');
     control.type = 'checkbox';
     control.addEventListener('change', () => change(field.key, control.checked));
     paint = (own) => { control.checked = own[field.key]; };
   } else if (field.type === 'choice') {
-    control = el('div', 'od-segmented');
+    control = el('div', 'pj-segmented');
     control.setAttribute('role', 'radiogroup');
     control.ariaLabel = field.label;
     const buttons = field.options.map(([value, label]) => {
@@ -396,7 +396,7 @@ function fieldRow(field, id, change) {
     control.append(...buttons);
     paint = (own) => buttons.forEach((button, i) => button.setAttribute('aria-checked', String(field.options[i][0] === own[field.key])));
   } else if (field.type === 'text') {
-    control = el('input', 'od-input');
+    control = el('input', 'pj-input');
     Object.assign(control, { type: 'text', spellcheck: false, autocomplete: 'off', ariaLabel: field.label });
     control.addEventListener('change', () => change(field.key, control.value.trim() || field.default)); // empty is the default again
     paint = (own) => {
@@ -404,16 +404,16 @@ function fieldRow(field, id, change) {
     };
   } else if (field.type === 'secret') {
     // Never shown, only whether it is set: typing one in replaces it.
-    const input = el('input', 'od-input');
+    const input = el('input', 'pj-input');
     Object.assign(input, { type: 'password', autocomplete: 'off', ariaLabel: field.label });
     input.addEventListener('change', () => {
       if (input.value.trim()) change(field.key, input.value.trim());
       input.value = '';
     });
-    const clear = el('button', 'od-link-button', 'Clear');
+    const clear = el('button', 'pj-link-button', 'Clear');
     clear.type = 'button';
     clear.addEventListener('click', () => change(field.key, ''));
-    control = el('div', 'od-setting-row');
+    control = el('div', 'pj-setting-row');
     control.append(input, clear);
     paint = (own) => {
       input.placeholder = own[field.key] ? 'Set' : 'Not set';
@@ -430,7 +430,7 @@ function fieldRow(field, id, change) {
       return button;
     });
     const value = el('span');
-    control = el('div', 'od-segmented od-stepper');
+    control = el('div', 'pj-segmented pj-stepper');
     control.setAttribute('role', 'group');
     control.ariaLabel = field.label;
     control.append(less, value, more);
@@ -444,7 +444,7 @@ function fieldRow(field, id, change) {
   Object.assign(control.dataset, { owner: id, key: field.key });
   line.append(text, control);
   const node = el('div');
-  if (field.group) node.append(el('h3', 'od-setting-group', field.group));
+  if (field.group) node.append(el('h3', 'pj-setting-group', field.group));
   node.append(line);
   return { node, paint };
 }
@@ -464,7 +464,7 @@ function fillShortcuts(body) {
     section.append(title);
     for (const [label, keys] of rows) {
       const row = document.createElement('div');
-      row.className = 'od-shortcut';
+      row.className = 'pj-shortcut';
       const name = document.createElement('span');
       name.textContent = label;
       const kbd = document.createElement('kbd');
@@ -476,9 +476,9 @@ function fillShortcuts(body) {
   }
 }
 
-/** Tooltips for every `[data-tip]`, with its `data-keys` shortcut; the page has one `.od-tip`. */
+/** Tooltips for every `[data-tip]`, with its `data-keys` shortcut; the page has one `.pj-tip`. */
 export function setupTooltips() {
-  const tip = document.querySelector('.od-tip');
+  const tip = document.querySelector('.pj-tip');
   let timer;
   let owner = null;
   const hide = () => {

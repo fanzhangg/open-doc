@@ -108,7 +108,7 @@ function diffs(a, b) {
   return a.slice(Math.max(0, start - 40), start + 40);
 }
 
-const stages = [...document.querySelectorAll('.od-stage')];
+const stages = [...document.querySelectorAll('.pj-stage')];
 const collab = {
   host,
   clients: [],

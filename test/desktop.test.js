@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, parse } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MAX_TEXT_BYTES, readSidecarText, sidecarPath } from '../src/store/files.js';
 import {
   cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
@@ -10,7 +11,7 @@ import {
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
-  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc, watchFolder,
+  docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
@@ -270,6 +271,17 @@ test('relativeDoc says where a doc is in a folder, and null outside it', () => {
   assert.equal(relativeDoc(root, join(root, '..', 'b.md')), null);
   assert.equal(relativeDoc(root, join(root, '..work', 'b.md')), '..work/b.md');
   assert.equal(relativeDoc(root, root), null);
+});
+
+test('linkURL: a link from the doc\'s place, or from the project\'s top when it starts with /', () => {
+  const root = join(tmpdir(), 'work');
+  const doc = join(root, 'notes', 'plan.md');
+  const path = (href, folder = root) => fileURLToPath(linkURL(href, doc, folder));
+  assert.equal(path('/docs/a.md'), join(root, 'docs', 'a.md'));
+  assert.equal(path('a.md'), join(root, 'notes', 'a.md'));
+  assert.equal(path('../a.md'), join(root, 'a.md'));
+  assert.equal(path('/docs/a.md', null), join(parse(doc).root, 'docs', 'a.md'), 'a single doc has no project');
+  assert.equal(linkURL('https://example.com/a', doc, root).href, 'https://example.com/a');
 });
 
 test('firstDoc: the one last open, else a README or index at the top, else the first', () => {
