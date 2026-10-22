@@ -142,9 +142,7 @@ function createView(entry, hosted) {
   restrictNavigation(view.webContents, PAGE);
   editMenu(view.webContents);
   hostedDocs.set(view.webContents, hosted);
-  hosted.onRestart = () => {
-    if (!view.webContents.isDestroyed()) view.webContents.reload();
-  };
+  hosted.onRestart = () => connectPage(view.webContents).catch((error) => console.error(error));
   view.webContents.on('page-title-updated', (_event, title) => {
     if (entry.view === view) entry.win.setTitle(title);
   });

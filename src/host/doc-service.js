@@ -30,7 +30,11 @@ import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
 import { TeamError } from './team.js';
 
-/** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale', 'forbidden'). */
+/**
+ * A call refused: `code` says why ('bad_input', 'not_found', 'read_only',
+ * 'stale', 'forbidden'); or 'not_saved', an edit that landed but whose
+ * file could not be written: it is written once it can be, and told then.
+ */
 class DocError extends Error {
   constructor(code, message) {
     super(message);
@@ -103,8 +107,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // this service started, `epoch` names that start (a window that sees a
   // new one takes the text again). `log` holds the latest landed edits, the
   // one that made rev `logStart + k + 1` at k, to move a window's edit from
-  // an older rev: { ops }, and the `base` text of one that yields, with a
-  // buddy's `reply`.
+  // an older rev, to know a window's edit sent again, and to tell a window
+  // what it missed: { ops, id, event }, and the `base` text of one that
+  // yields, with a buddy's `reply`.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
   // `writtenStat` is the file's stat as this service last wrote it: a file
@@ -134,50 +139,68 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     ...cursor, at: log.slice(toldRev - logStart, rev - logStart).reduce((at, landed) => mapOffset(at, landed.ops), cursor.at),
   }));
   // Windows' edits the file holds that a service before this one may not
-  // have told them of (noteWritten).
+  // have told them of (noteWritten), kept in each note after.
   const landedBefore = await writtenEdits(docPath, settingsDir, opened.hash);
+  const noteIds = () => [...landedBefore, ...log.map((landed) => landed.id).filter(Boolean)].slice(-LOG_SIZE);
+  let writtenIds = landedBefore; // the ids noted for the file as last written
+  let unsaved = null; // a write that failed, tried again
 
   // Edit `ops` lands on the text, from a window (`id`, the window's name for
   // it) or from here: one that yields (a buddy's, with its `reply` and buddy
   // `by`; an outside change; an undo).
   function land(ops, meta = {}) {
-    log.push(meta.yields ? { ops, base: text, reply: meta.reply } : { ops, id: meta.id });
+    const event = { epoch, rev: rev + 1, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}), ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) };
+    log.push(meta.yields ? { ops, base: text, reply: meta.reply, event } : { ops, id: meta.id, event });
     if (log.length > LOG_SIZE) {
       log.shift();
       logStart++;
     }
     text = apply(text, ops);
     rev++;
-    told.push({ epoch, rev, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}), ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) });
+    told.push(event);
   }
 
   // Write what landed, then tell every window: what a window has heard of is
   // in the file. A file changed outside since it was last written is merged
   // first, and one changed while it was being written, just before it took
   // the file's place, too, then written again. A missing doc is not
-  // written; its edits are still told. Run in `serial`.
+  // written; its edits are still told. A write that fails is tried again
+  // until it is written, nothing told meanwhile. Run in `serial`.
   async function commit() {
-    while (!missing && text !== written) {
-      const before = await stat(docPath).catch(() => null);
-      if (!ours(before)) {
-        let disk;
-        try {
-          disk = await readDoc(docPath);
-        } catch (error) {
-          if (error.code !== 'no_doc') throw error;
-          break;
+    clearTimeout(unsaved);
+    try {
+      while (!missing && text !== written) {
+        const before = await stat(docPath).catch(() => null);
+        if (!ours(before)) {
+          let disk;
+          try {
+            disk = await readDoc(docPath);
+          } catch (error) {
+            if (error.code !== 'no_doc') throw error;
+            break;
+          }
+          form = disk.form;
+          if (disk.hash !== writtenHash) await takeOutside(disk);
+          if (text === written) break;
         }
-        form = disk.form;
-        if (disk.hash !== writtenHash) await takeOutside(disk);
-        if (text === written) break;
+        // A window told nothing yet, should this service stop now, learns from it its edit is in;
+        // if the write fails, the note is again of what the file holds.
+        const hash = hashText(text);
+        const ids = noteIds();
+        await noteWritten(docPath, settingsDir, hash, ids);
+        const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before)).catch(async (error) => {
+          await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
+          throw error;
+        });
+        if (!wrote) continue;
+        writtenHash = hash;
+        writtenIds = ids;
+        writtenStat = wrote;
+        written = text;
       }
-      writtenHash = hashText(text);
-      // A window told nothing yet, should this service stop now, learns from it its edit is in.
-      await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
-      const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before));
-      if (!wrote) continue;
-      writtenStat = wrote;
-      written = text;
+    } catch (error) {
+      unsaved = setTimeout(() => serial(commit).catch(() => {}), RETRY_MS);
+      throw error;
     }
     for (const event of told.splice(0)) {
       for (const cursor of cursors.values()) cursor.at = mapOffset(cursor.at, event.ops);
@@ -205,6 +228,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
     written = disk.text;
     writtenHash = disk.hash;
+    writtenIds = noteIds();
+    await noteWritten(docPath, settingsDir, writtenHash, writtenIds); // the edits it holds, should nothing more be written
     land(ops, { yields: true });
     if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
   }
@@ -234,12 +259,21 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // A window's edit: operations `ops` on rev `rev` of epoch `epoch`, moved over
   // what landed since, by character; an edit that yields, there since, yields
   // to it too, and a buddy's turn that loses part of it so is marked
-  // `conflict` in history. `id` names it in the `ops` event that tells it.
+  // `conflict` in history. `id` names it in the `ops` event that tells it;
+  // one sent again once it landed lands no more, and is answered as it was.
   // An epoch or rev this service no longer has is `stale`: the window takes
   // the text again (state) and sends its edit on that.
   async function submit({ ops, rev: at, epoch: from, id } = {}, who) {
     if (!validOps(ops) || !Number.isInteger(at) || typeof id !== 'string') throw new DocError('bad_input', 'expected { ops, rev, epoch, id }');
+    const saved = () => commit().catch((error) => {
+      throw new DocError('not_saved', error.message);
+    });
     return serial(async () => {
+      const landedAt = from === epoch ? log.findIndex((landed) => landed.id === id) : -1;
+      if (landedAt !== -1) {
+        await saved();
+        return { rev: logStart + landedAt + 1 };
+      }
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
       const overridden = [];
       for (const landed of log.slice(at - logStart)) {
@@ -250,7 +284,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
       land(ops, { id });
       typed(who);
-      await commit();
+      await saved();
       for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
       if (overridden.length > 0) emit('history', {});
       return { rev };
@@ -262,7 +296,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (!missing) return {};
     await mkdir(dirname(docPath), { recursive: true });
     writtenHash = hashText(text);
-    await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
+    writtenIds = noteIds();
+    await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
     writtenStat = await writeDoc(docPath, text, form);
     written = text;
     await noteVersion(text, { kind: 'edit', author: byOf(who) });
@@ -296,14 +331,17 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 
   // The doc as `who` sees it, and their `level`. The owner's settings and
   // name are theirs alone: anyone else gets the default settings, and is
-  // `me` themselves.
-  async function state(who) {
+  // `me` themselves. A window that has the text at `since` ({ epoch, rev })
+  // gets the `events` it missed since, as told, while the log holds them.
+  async function state({ since } = {}, who) {
     const owner = can(who, 'owner');
+    const caught = since?.epoch === epoch && Number.isInteger(since.rev) && since.rev >= logStart && since.rev <= toldRev;
     return {
       doc: basename(docPath),
       text,
       epoch,
       rev,
+      ...(caught ? { events: log.slice(since.rev - logStart, toldRev - logStart).map((landed) => landed.event) } : {}),
       landed: landedBefore,
       ...(await commentsView(text)),
       settings: owner ? (await readSettings(settingsDir)).settings : DEFAULT_SETTINGS,
@@ -691,7 +729,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // changed, for the window that asked.
   const calls = {
     read: {
-      state: (body, who) => state(who),
+      state,
       cursor,
       async history() {
         await serial(flushTyping); // typing not paused yet is a version too
@@ -784,24 +822,31 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
       syncAgents();
     },
+    // Closed even when its last write fails: what was not written is lost.
     async close() {
-      await serial(async () => {
-        await commit();
-        await flushTyping();
-      });
-      stopWatching();
-      stopWatchingSettings();
-      stopWatchingProjectBuddies();
-      stopWatchingUserBuddies();
-      stopFollowingTeam();
-      closed = true;
-      await runner.stop();
+      try {
+        await serial(async () => {
+          await commit();
+          await flushTyping();
+        });
+      } finally {
+        clearTimeout(unsaved);
+        stopWatching();
+        stopWatchingSettings();
+        stopWatchingProjectBuddies();
+        stopWatchingUserBuddies();
+        stopFollowingTeam();
+        closed = true;
+        await runner.stop();
+      }
     },
   };
 }
 
 // How many landed edits the log keeps: a window's edit from an older rev is stale.
 const LOG_SIZE = 1000;
+// A write that failed is tried again after this long.
+const RETRY_MS = 500;
 // Typing is a version once it pauses this long.
 const SAVE_DELAY_MS = 800;
 

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createClient } from '../web/client.js';
 import { openDoc } from '../src/host/doc-service.js';
-import { fakeConfig, tempDoc, until } from './helpers.js';
+import { fakeConfig, readOnly, tempDoc, until } from './helpers.js';
 
 const TEXT = 'Alpha one.\n\nBeta two.\n\nGamma three.\n';
 
@@ -18,9 +18,11 @@ async function openHost(docPath, options) {
 }
 
 // A view the test types into, and a client joining it to the doc host
-// `host()`; its edits wait for `gate` on their way.
-function page(host, gate = () => null) {
-  const view = { text: TEXT, getText: () => view.text, selection: () => null };
+// `host()`; its edits wait for `gate` on their way. The errors it shows are
+// in `errors`.
+function page(host, gate = () => null, text = TEXT) {
+  const view = { text, getText: () => view.text, selection: () => null };
+  const errors = [];
   const client = createClient({
     view,
     call: async (type, arg) => {
@@ -29,9 +31,24 @@ function page(host, gate = () => null) {
     },
     show: (text) => { view.text = text; },
     rules: () => [],
-    onError: (error) => { throw error; },
+    onError: (error) => errors.push(error),
   });
-  return { view, client };
+  return { view, client, errors };
+}
+
+// The doc host `host` through a line that can drop: while it is down, a
+// call that reaches the host has its answer lost, and the host's events too.
+function line(host) {
+  const it = {
+    up: true,
+    call: async (type, arg) => {
+      const result = await host.call(type, arg);
+      if (!it.up) throw Object.assign(new Error('The host is offline'), { code: 'offline' });
+      return result;
+    },
+    events: (receive) => (event) => it.up && receive(event),
+  };
+  return it;
 }
 
 test('typing lands and is written; a doc host started again loses nothing typed, and takes what changed on disk meanwhile', async () => {
@@ -55,7 +72,7 @@ test('typing lands and is written; a doc host started again loses nothing typed,
   await old.close();
   await writeFile(docPath, 'Alpha one typed.\n\nBeta two.\n\nGamma pulled.\n');
   host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
-  await client.resync(); // the page's new connection says hello
+  await client.catchUp(); // the page's new connection says hello
   await client.landed();
   const expected = 'Alpha one typed.\n\nBeta two typed.\n\nGamma pulled.\n';
   assert.equal(view.text, expected);
@@ -139,7 +156,7 @@ test('a doc host that stops after writing an edit, before telling the page: star
   await old.close();
   host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
   receive = (event) => client.receive(event);
-  await client.resync(); // the page's new connection says hello
+  await client.catchUp(); // the page's new connection says hello
   await client.landed();
   const expected = 'Alpha one.\n\nBeta two typed.\n\nGamma three.\n';
   assert.equal(view.text, expected);
@@ -181,5 +198,120 @@ test('a key goes out at once when nothing is on its way; keys typed meanwhile go
   release();
   await client.landed();
   assert.equal(await readFile(docPath, 'utf8'), 'Alpha! one xy.\n\nBeta two.\n\nGamma three.\n');
+  await host.close();
+});
+
+test('A3: a line that drops after the host took an edit, before it answered, never lands the edit twice', async () => {
+  const docPath = await tempDoc('world.\n');
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const wire = line(host);
+  const { view, client } = page(() => wire, () => null, 'world.\n');
+  receive = wire.events((event) => client.receive(event));
+  client.start(await host.call('state'));
+  wire.up = false;
+  view.text = 'Hello world.\n';
+  client.flush();
+  await until(async () => (await readFile(docPath, 'utf8')) === 'Hello world.\n', 'the edit written');
+  wire.up = true;
+  await client.catchUp(); // the host's hello on the line made again
+  await client.landed();
+  assert.equal(view.text, 'Hello world.\n');
+  assert.equal(await readFile(docPath, 'utf8'), 'Hello world.\n');
+  await host.close();
+});
+
+test('A3 C4: a write that fails says Not saved; once the file can be written, the typing is saved once', async () => {
+  const docPath = await tempDoc('Hello world.\n');
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const { view, client, errors } = page(() => host, () => null, 'Hello world.\n');
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  await readOnly(docPath, true);
+  try {
+    view.text = 'Hello big world.\n';
+    client.flush();
+    await until(() => errors.some((error) => error.code === 'not_saved'), 'Not saved shown');
+    view.text = 'Hello big, bright world.\n';
+    client.edited();
+    assert.equal(await readFile(docPath, 'utf8'), 'Hello world.\n');
+  } finally {
+    await readOnly(docPath, false);
+  }
+  await client.landed();
+  assert.equal(view.text, 'Hello big, bright world.\n');
+  assert.equal(await readFile(docPath, 'utf8'), 'Hello big, bright world.\n');
+  await host.close();
+});
+
+test('A5: a page that missed an event and could not catch up at once changes nothing, and later types where it means', async () => {
+  const text = 'a\u{20000}b\n';
+  const docPath = await tempDoc(text);
+  let receive = () => {};
+  let drop = 1; // the page's own edit's event is lost
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && (drop-- > 0 || receive(data)) });
+  let fail = 0; // the next `state` calls that fail
+  const { view, client } = page(() => ({
+    call: (type, arg) => (type === 'state' && fail-- > 0 ? Promise.reject(Object.assign(new Error('The host is offline'), { code: 'offline' })) : host.call(type, arg)),
+  }), () => null, text);
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  fail = 1;
+  view.text = `x${text}`;
+  client.flush();
+  await until(() => client.idle() || fail === 0, 'the catch-up tried');
+  view.text = view.text.replace('b', 'yb'); // after the pair
+  client.edited();
+  await client.catchUp(); // the next connection
+  await client.landed();
+  assert.equal(view.text, 'xa\u{20000}yb\n');
+  assert.equal(await readFile(docPath, 'utf8'), 'xa\u{20000}yb\n');
+  await host.close();
+});
+
+test('C5: a page that connects again to the same host catches up on the text it missed, and its cursors', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const wire = line(host);
+  const { view, client } = page(() => wire);
+  receive = wire.events((event) => client.receive(event));
+  client.start(await host.call('state'));
+  wire.up = false;
+  const now = await host.call('state');
+  await host.call('submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev: now.rev, epoch: now.epoch, id: 'other.1' });
+  await host.call('cursor', { at: 4, rev: now.rev + 1, epoch: now.epoch });
+  wire.up = true;
+  await client.catchUp();
+  assert.equal(view.text, `> ${TEXT}`);
+  assert.deepEqual(client.cursorsShown().map((c) => c.at), [4]);
+  await host.close();
+});
+
+test('A3: the edits a host wrote and never told of stay known through any number of restarts', async () => {
+  const docPath = await tempDoc(TEXT);
+  const settingsDir = await fakeConfig();
+  const first = await openHost(docPath, { settingsDir }); // it stops before telling anything, or answering
+  let host = { call: (type, arg) => (type === 'submit' ? (first.call(type, arg), new Promise(() => {})) : first.call(type, arg)) };
+  const { view, client } = page(() => host);
+  client.start(await first.call('state'));
+  view.text = view.text.replace('Beta two', 'Beta two typed'); // an insert: two of them would both stay
+  client.flush();
+  await until(async () => (await readFile(docPath, 'utf8')).includes('typed'), 'the edit written');
+  await first.close();
+  // Started again, it writes another window's edit, and starts again.
+  const second = await openHost(docPath, { settingsDir });
+  const at = await second.call('state');
+  await second.call('submit', { ops: [{ from: 0, to: 0, insert: '> ' }], rev: at.rev, epoch: at.epoch, id: 'other.1' });
+  await second.close();
+  let receive = () => {};
+  host = await openHost(docPath, { settingsDir, emit: (name, data) => name === 'ops' && receive(data) });
+  receive = (event) => client.receive(event);
+  await client.catchUp();
+  await client.landed();
+  const expected = '> Alpha one.\n\nBeta two typed.\n\nGamma three.\n';
+  assert.equal(view.text, expected);
+  assert.equal(await readFile(docPath, 'utf8'), expected);
   await host.close();
 });

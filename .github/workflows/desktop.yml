@@ -10,7 +10,8 @@
 # A pull request that changes only docs (docs/ or a top-level *.md) skips the
 # installers, the tests and the stress test: the `changes` job decides, and
 # the `package` jobs still run and report success so the required checks pass.
-# Every push to main runs the full gate.
+# Every push to main runs the full gate. Each night the stress test alone runs
+# for 30 minutes of random seeds (docs/testing-ci.md, Editing tests).
 
 name: Desktop builds
 
@@ -19,6 +20,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 
 # A newer push supersedes a pull request's run; on main every push finishes,
 # so no commit there is marked by a cancelled run.
@@ -29,7 +32,7 @@ concurrency:
 jobs:
   changes:
     # `code` is true when something other than docs changed, and always for a
-    # push or a manual run. The heavier jobs key off it.
+    # push or a manual run; never for the nightly run. The heavier jobs key off it.
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -39,6 +42,10 @@ jobs:
           fetch-depth: 0
       - id: filter
         run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -154,11 +161,22 @@ jobs:
       - run: xvfb-run -a npm run test:perf # opens an Electron window
 
   stress:
-    # The buddy concurrency stress test: deterministic, a couple of minutes.
+    # The stress tests (npm run test:stress): the buddies and the protocol
+    # fuzz, deterministic, a couple of minutes, on Linux and Windows; each
+    # night, 30 minutes of random seeds.
+    name: stress (${{ matrix.platform }})
     needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -167,10 +185,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:stress
+        env:
+          STRESS_MINUTES: ${{ github.event_name == 'schedule' && 30 || 0 }}
 
   release:
     needs: [build, test, stress, perf]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

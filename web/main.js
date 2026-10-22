@@ -143,6 +143,7 @@ async function start() {
     call: (type, arg) => api[type](arg),
     show: showLanded,
     rules: () => rulesOf(docName, settings.get()),
+    caughtUp: applyComments,
     onError: (error) => setStatus(`Not saved: ${error.message}`, 'error'),
   });
   client.start(initial);
@@ -315,7 +316,7 @@ async function start() {
   events.on('hello', (data) => {
     if (Boolean(data.missing) !== missing) setMissing(!missing);
     showAgents(data.agents);
-    client.resync();
+    client.catchUp();
   });
   await files.ready;
   if (startTyping) editor.focus();

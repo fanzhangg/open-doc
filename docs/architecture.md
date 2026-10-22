@@ -327,16 +327,29 @@ the host first; a buddy's turn that loses part of it so is marked
 lands on the text in memory, the file is written, and only then does it go
 to every window as `ops` (`{ epoch, rev, ops, id }`, `id` the window's name
 for its own edit; `yields`, and a buddy's `reply` and `by`): a window
-rebases what it has typed and not yet heard back (`web/client.js`). Its
-own edit's event comes before the answer to its `submit`, so an answer
-without one means the event was lost: the window takes the text again. The
-epoch changes when the doc host starts: a window that sees a new one takes
-`diffOps(the text it last heard, the new text)` as what landed and rebases
-on that, the same function again; its edit on its way is in that text if
-the new host lists it as `landed`, read from what the one before noted, in
-the doc's history folder, just before it last wrote the file. A window's edit on a rev the log no
-longer holds is refused as `stale`, and the window does the same. The log
-holds the last 1,000 edits, for windows' edits only: a buddy's turn, an
+rebases what it has typed and not yet heard back (`web/client.js`).
+
+**A window catches up one way**, whatever it missed: on every new
+connection (`hello`), an event missed, an edit refused as `stale`, or an
+answer whose event never came (its own edit's event comes before the
+answer). It asks `state({ since: { epoch, rev } })`, and changes nothing
+before the answer. While the log reaches back that far, the answer holds
+the `events` missed, as they were told, and the window takes them as it
+takes any, so it knows its own edit by its id. Only for a new epoch (the
+doc host started again) or a log that no longer reaches back does it take
+`diffOps(the text it last heard, the new text)` as what landed and move
+its typing over that, as it was typed; its edit on its way is in that text
+if the answer lists it as `landed`, the ids the doc's history folder
+notes for the file as it is, kept through every restart. An edit is landed
+at most once: one whose fate a window does not know (the line dropped
+before the answer) is sent again as it was, same id, same rev, and the
+host answers one it already landed with its rev, never landing it again; a
+window never moves such an edit. A write that fails (a read-only file, a
+lock, a full disk) is not a refusal: the edit has landed, `submit` answers
+`not_saved`, the window says Not saved and why, and the host writes it once
+it can, trying again every half second, and tells it then. When the doc
+host started again, a window gets a new port and catches up, as a
+teammate's page does on a new line. The log holds the last 1,000 edits, for windows' edits only: a buddy's turn, an
 outside change and an undo each have their base text (the turn's copy, the
 text the file last held, the version saved after the turn) and take
 `diffOps(that base, the text now)` as what landed since, so they need no
@@ -357,7 +370,7 @@ does not yield: an undo must not give way to a buddy's edit.
 | --- | --- | --- |
 | Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`, `mapOffset(at, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
+| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
 | Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
