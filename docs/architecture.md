@@ -232,7 +232,7 @@ numbers are `LATENCY` in `web/views/index.js`, which the tests read:
 | C5 | Reconnect: within 5 s of the line or the host coming back (30 s for a host waking from sleep), the page has caught up on text, comments, cursors and level. Typing done while away lands once. |
 | C6 | Offline shows: within 15 s of the line dropping, a half-open socket included, the page says Offline. It stays editable and says Not saved. Not yet: a half-open socket, or a line that drops while nothing is on its way on the desktop, shows only once a call fails. |
 | C7 | Level: a level change applies within 2 s online, and on reconnect offline. Typing that can no longer be saved is never dropped silently: the page says so and shows that text, to copy. |
-| C8 | Isolation: one page's bad request or oversized message never disconnects the others. An answer too big for the relay (`MAX_MESSAGE` in `relay/worker.js`) fails as `too_big`; an event that big is left out, and the page catches up. |
+| C8 | Isolation: one page's bad request or oversized message never disconnects the others. A doc too big for the relay (`MAX_MESSAGE` in `relay/worker.js`, room for the Plain view's longest) does not open through sharing, and its page says so; an event that big is left out. |
 
 **D. Editing**, whoever the other writer is:
 

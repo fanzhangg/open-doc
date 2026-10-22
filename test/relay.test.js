@@ -353,7 +353,7 @@ test('B6: two writers see each other\'s cursor move, within the promise, followi
   }
 });
 
-test('C8: one page\'s answer too big for the relay is refused to it alone; the host and the other pages stay', async () => {
+test('C8: a doc too big for the relay: its page says so, alone; the host and the other pages stay', async () => {
   const shared = await project();
   await writeFile(join(shared.folder, 'big.txt'), `${'x'.repeat(99)}\n`.repeat(9 * 2 ** 20 / 100));
   const host = await startHost(shared);
@@ -361,7 +361,7 @@ test('C8: one page\'s answer too big for the relay is refused to it alone; the h
     const other = page(shared.secret, shared.sam);
     await other.call('state');
     const sam = page(shared.secret, shared.sam, 'big.txt');
-    assert.equal((await sam.call('state')).error?.code, 'too_big');
+    assert.deepEqual((await sam.call('state')).error, { message: 'This doc is too big to open through sharing', code: 'too_big' });
     assert.equal((await other.call('state')).result.text, TEXT, 'the other page still in');
     assert.ok(!other.lines.includes('host'), 'the host never went away');
   } finally {
