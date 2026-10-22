@@ -131,7 +131,7 @@ async function fakeApi(answers) {
   const requests = [];
   const server = createServer(async (req, res) => {
     requests.push({ url: req.url, headers: req.headers, body: JSON.parse(await text(req)) });
-    const [status, body] = answers.shift();
+    const [status, body] = answers.shift() ?? [500, { error: 'no answer queued' }];
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -224,6 +224,15 @@ test('the shipped script runs a turn under the contract, with its settings from 
       ['Ada', [], 'No API key: set one in Settings > Agents > Ponjo agent.'],
     ], 'each turn\'s messages are logged');
     assert.doesNotMatch(log, /sk-secret-test/, 'never the key');
+
+    // A CRLF doc reads without its \r, and an edit quoting more than a line keeps its line breaks.
+    await writeFile(doc, SAMPLE.replace(/\n/g, '\r\n'));
+    const quote = 'We plan to **ship all six features** in week one, then gather feedback from the\nbeta cohort';
+    const step = (id, name, args) => [200, { choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] }];
+    answers.push(step('c2', 'read', { path: doc, lines: [3, 4] }), step('c3', 'propose', { edits: [{ path: doc, old: quote, new: 'We ship\nin week two' }], reply: '' }));
+    assert.equal((await run()).code, 0);
+    assert.equal(api.requests.at(-1).body.messages.at(-1).content, '3\tWe plan to **ship all six features** in week one, then gather feedback from the\n4\tbeta cohort before the public release.');
+    assert.equal(await readFile(doc, 'utf8'), SAMPLE.replace(quote, 'We ship\nin week two').replace(/\n/g, '\r\n'));
 
     await api.close();
     assert.match((await run()).stderr, new RegExp(`^Cannot reach ${api.url}/chat/completions \\(ECONNREFUSED\\)\\.\nThe provider, endpoint, model and key are in Settings > Agents > Ponjo agent\\.`));
