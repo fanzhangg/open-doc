@@ -6,8 +6,8 @@
   <title>Ponjo Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=d41e217">
-  <link rel="stylesheet" href="site.css?v=d41e217">
+  <link rel="stylesheet" href="./dist/web/app.css?v=cc88bb0">
+  <link rel="stylesheet" href="site.css?v=cc88bb0">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -40,7 +40,7 @@
   <ol>
     <li><strong>Reuse before adding.</strong> Use an existing class (<code>.pj-primary</code>, <code>.pj-secondary</code>, <code>.pj-icon-btn</code>, <code>.pj-input</code>, <code>.pj-segmented</code>, <code>.pj-switch</code>, <code>.pj-radio</code>, <code>.pj-panel</code>…) before writing a new rule.</li>
     <li><strong>Colours are tokens.</strong> No hex, <code>rgb()</code>, <code>oklch()</code>, <code>black</code> or <code>white</code> outside the token blocks at the top of <code>app.css</code>. A colour with a new meaning gets a token there, and a line on this page, first.</li>
-    <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions (a buddy's deletions are grey); green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
+    <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions (a buddy's deletions are grey); green for insertions and online; yellow for commented text; blue only for focus, text selection, found text and links.</li>
     <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full; spacing 2, 4, 6, 8, 12, 16, 24, 32, 48px; control heights 24, 28, 32px (36 and 40 for bars and big buttons).</li>
     <li><strong>One of each control.</strong> Icon buttons are <code>.pj-icon-btn</code>: 28px, 32 in the header, 24 inside a row. Menu and list rows share one size, set once in <code>app.css</code>: 28px tall, 8px side padding, radius 6, 13px; grey on hover, <code>--active</code> when selected or current.</li>
     <li><strong>One primary button per view.</strong> Everything else is secondary, ghost or a link button.</li>
@@ -65,7 +65,7 @@
   <div class="ds-grid">
     <div class="ds-swatch"><i style="background: var(--highlight)"></i><b>--highlight</b><span>Commented text</span></div>
     <div class="ds-swatch"><i style="background: var(--highlight-active)"></i><b>--highlight-active</b><span>The open or hovered comment's text</span></div>
-    <div class="ds-swatch"><i style="background: var(--accent)"></i><b>--accent</b><span>Focus, selection, links only</span></div>
+    <div class="ds-swatch"><i style="background: var(--accent)"></i><b>--accent</b><span>Focus, selection, found text, links only</span></div>
     <div class="ds-swatch"><i style="background: var(--red)"></i><b>--red</b><span>Danger, errors, deletions</span></div>
     <div class="ds-swatch"><i style="background: var(--green)"></i><b>--green</b><span>Insertions, online</span></div>
   </div>
@@ -159,6 +159,9 @@
   <h3>Status bar</h3>
   <p>The plain view has a status bar under the page: <code>.pj-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left; on the right text buttons, 22px, grey on hover and ink on grey while pressed or open, and a menu above them in the <code>.pj-block-menu</code> style. Line numbers, whitespace marks (dots for spaces, arrows for tabs) are <code>--text-faint</code>; indent guides are <code>--border-strong</code>.</p>
   <div class="ds-box"><div class="pj-statusbar"><span>Ln 12, Col 8 · 24 selected</span><span class="pj-status-actions"><button type="button">Indent: 4 spaces</button><button type="button" aria-pressed="true">Wrap</button><button type="button">Whitespace</button></span></div></div>
+  <h3>Find bar</h3>
+  <p>Mod+F opens <code>.pj-find</code> at the page's top right, staying there as the page scrolls: a floating card like the link popover (radius 10, <code>--shadow-raised</code>), its field the link popover's, then the count, then Previous, Next and Close as icon buttons; Replace adds a row with Replace and Replace all, both secondary. Every match is <code>--accent-soft</code>, the current one the stronger blue of selected commented text, as the sidebar's filter marks its matches.</p>
+  <div class="ds-box ds-prose pj-editor">We ship the <span class="pj-found">beta</span> in March, then the <span class="pj-found pj-found-current">beta</span> waitlist.</div>
   <h3>Text: comments, buddy edits, links, tasks</h3>
   <div class="ds-box ds-prose pj-editor">
     We ship the beta to <span class="pj-hl">fifty design partners</span> in March, then
@@ -183,6 +186,6 @@
   </div>
 
 </main>
-<script type="module" src="site.js?v=d41e217"></script>
+<script type="module" src="site.js?v=cc88bb0"></script>
 </body>
 </html>
