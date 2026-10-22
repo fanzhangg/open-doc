@@ -207,12 +207,27 @@ test('markdown view: a change applied with who made it glows, with their name', 
 test('markdown view: the link card hides while its link is scrolled out of view', async () => {
   await make('markdown', `See [the plan](plan.md).\n\n${'More.\n\n'.repeat(80)}`, { toolbar: true });
   await select('the plan', 3, 3);
-  const cardShown = () => run(`new Promise((done) => requestAnimationFrame(() => done(!document.querySelector('.od-link-card').hidden)))`);
+  const cardShown = () => run(`new Promise((done) => requestAnimationFrame(() => done(!document.querySelector('.pj-link-card').hidden)))`);
   assert.equal(await cardShown(), true);
-  await run(`document.querySelector('.od-canvas').scrollTop = 2000`);
+  await run(`document.querySelector('.pj-canvas').scrollTop = 2000`);
   assert.equal(await cardShown(), false);
-  await run(`document.querySelector('.od-canvas').scrollTop = 0`);
+  await run(`document.querySelector('.pj-canvas').scrollTop = 0`);
   assert.equal(await cardShown(), true);
+});
+
+test('markdown view: pasting a URL over selected text links the text; other pastes are unchanged', async () => {
+  const paste = (text) => run(`(() => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', ${JSON.stringify(text)});
+    document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  })()`);
+  await make('markdown', 'See the plan here.\n');
+  await select('the plan', 0, 8);
+  await paste(' https://example.com/plan ');
+  assert.equal(await getText(), 'See [the plan](https://example.com/plan) here.\n');
+  await select('here', 0, 4);
+  await paste('not a link');
+  assert.equal(await getText(), 'See [the plan](https://example.com/plan) not a link.\n');
 });
 
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
