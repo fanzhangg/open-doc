@@ -57,6 +57,56 @@ for (const name of VIEWS) {
     assert.equal(await run(`document.querySelectorAll('[contenteditable]').length`), 1, 'destroy takes a view away');
   });
 
+  test(`D5: ${name} view: after applyText(t), getText() is t, as someone types Markdown a key at a time; nothing is sent as the person's edit`, async () => {
+    const steps = (from, typed) => [...typed].map((_, k) => from + typed.slice(0, k + 1));
+    for (const [start, typed] of [
+      ['Intro.\n\n| a | b |\n| --- | --- |\n', '| 1 | 2 |\n'], // a table row
+      ['Intro.\n\n', '```js\nconst x = 1;\n'], // a fence not closed yet
+      ['Intro.\n\n', '- one\n- \n-'], // a list marker on its own
+      ['Intro.\n\n', '# Title\n\n> a quote\n'],
+    ]) {
+      await make(name, start);
+      let text = start;
+      for (text of steps(start, typed)) {
+        await run(`view.applyText(${JSON.stringify(text)}, { by: 'Someone' })`);
+        await new Promise((done) => setTimeout(done, 10)); // what the editor does after it
+        assert.equal(await getText(), text);
+      }
+      assert.deepEqual(await run('contract.edits'), [], 'nothing sent as the person\'s edit');
+      // The person types elsewhere: that alone is their edit.
+      await select('Intro.', 0, 0);
+      await type('X');
+      assert.deepEqual(await run('contract.edits'), [`X${text}`]);
+    }
+  });
+
+  test(`D1: ${name} view: others' edits never move the caret off the character it is next to`, async () => {
+    for (const by of [null, 'Clippy', 'Edited on disk']) { // a teammate's typing, a buddy's edit, another program's
+      await make(name, 'A wonderful day.\n');
+      await select('wonderful', 6, 6); // wonder|ful
+      const at = 'A wonderful'.length;
+      await run(`view.applyText('A wonderfully good day.\\n', { by: ${JSON.stringify(by)}, ops: [{ from: ${at}, to: ${at}, insert: 'ly good' }] })`);
+      await type('X');
+      assert.equal(await getText(), 'A wonderXfully good day.\n', by ?? 'a teammate');
+    }
+  });
+
+  test(`D3: ${name} view: Cmd+Z undoes only my typing, after others split or restyle the paragraph I typed in`, async () => {
+    for (const [theirs, after] of [
+      ['# Beta. X\n', '# Beta.\n'], // a heading
+      ['- Beta. X\n', '- Beta.\n'], // a list
+      ['> Beta. X\n', '> Beta.\n'], // a quote
+      ['Be\n\nta. X\n', 'Be\n\nta.\n'], // split in two
+    ]) {
+      await make(name, 'Alpha.\n\nBeta.\n');
+      await select('Beta.', 5, 5);
+      await type(' X');
+      await run(`view.applyText(${JSON.stringify(`Alpha.\n\n${theirs}`)}, { by: 'Someone' })`);
+      await undo();
+      assert.equal(await getText(), `Alpha.\n\n${after}`, theirs);
+    }
+  });
+
   test(`${name} view: applyText is outside the undo history and keeps the caret`, async () => {
     await make(name, 'Alpha.\n\nBeta.\n');
     await select('Beta.', 5, 5);

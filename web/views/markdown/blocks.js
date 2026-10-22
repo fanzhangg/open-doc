@@ -5,6 +5,7 @@
 
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
+import { Transform, replaceStep } from '@milkdown/kit/prose/transform';
 import { blockRanges, definesLinks, project } from '../../../src/markdown/project.js';
 import { projectDoc } from '../../pm-text.js';
 import { splice } from '../../../src/markdown/splice.js';
@@ -19,17 +20,22 @@ export function diffBlocks(a, b) {
 }
 
 /**
- * Turn doc `a` into doc `b` in `tr` (a transaction on `a`), replacing the runs
- * of blocks in `hunks` (from diffBlocks). A block replaced by one of the same
- * type keeps what did not change, so a caret in it stays where it was. Blocks
- * replaced whole (a paragraph made a list item) keep a caret at the same
- * character of their text, moved along with what changed before it.
+ * Turn doc `a` into doc `b` in `tr` (a transaction on `a`), changing the runs
+ * of blocks in `hunks` (from diffBlocks) by the smallest step, so a caret
+ * and the undo history in what did not change stay: a block replaced by one
+ * of the same type keeps what did not change; one that keeps its text is
+ * made the other type, wrapped (made a list item or a quote) or split
+ * (reshape); otherwise only what lies between the first and the last
+ * position that differ is replaced, and a caret in it is kept at the same
+ * character of the text, moved along with what changed before it.
  */
 export function replaceBlocks(tr, a, b, hunks) {
   const { selection } = tr;
   const kept = new Map(); // a position of the selection in `a` → where it is in `b`
   for (const h of [...hunks].reverse()) {
     const from = childPos(a, h.a0);
+    const nodes = [];
+    for (let k = h.b0; k < h.b1; k++) nodes.push(b.child(k));
     if (h.a1 - h.a0 === 1 && h.b1 - h.b0 === 1 && a.child(h.a0).type === b.child(h.b0).type) {
       const old = a.child(h.a0);
       const next = b.child(h.b0);
@@ -45,15 +51,33 @@ export function replaceBlocks(tr, a, b, hunks) {
       }
       tr.replace(from + 1 + start, from + 1 + endA, next.slice(start, endB));
     } else {
+      const reshaped = h.a1 - h.a0 === 1 && reshape(tr.doc, from, a.child(h.a0), nodes);
+      if (reshaped && makes(reshaped.doc, tr.doc, h, nodes)) {
+        for (const step of reshaped.steps) tr.step(step);
+        continue;
+      }
       const to = childPos(a, h.a1);
-      const nodes = [];
-      for (let k = h.b0; k < h.b1; k++) nodes.push(b.child(k));
+      const at = childPos(b, h.b0);
+      const old = a.slice(from, to).content;
+      const next = Fragment.from(nodes);
+      const start = old.findDiffStart(next) ?? 0;
+      let { a: endA, b: endB } = old.findDiffEnd(next) ?? { a: old.size, b: next.size };
+      const overlap = start - Math.min(endA, endB);
+      if (overlap > 0) {
+        endA += overlap;
+        endB += overlap;
+      }
+      // As one step, if it makes just these blocks (a table cut through is
+      // made whole again otherwise); else they are replaced whole.
+      const step = replaceStep(tr.doc, from + start, from + endA, b.slice(at + start, at + endB));
+      const whole = !step || !makes(step.apply(tr.doc).doc, tr.doc, h, nodes);
       if (selection instanceof TextSelection) {
         for (const pos of [selection.anchor, selection.head]) {
-          if (pos > from && pos < to) kept.set(pos, sameCharacter(a, from, h.a1, pos, nodes, childPos(b, h.b0)));
+          if (whole ? pos > from && pos < to : pos > from + start && pos < from + endA) kept.set(pos, sameCharacter(a, from, h.a1, pos, nodes, at));
         }
       }
-      tr.replaceWith(from, to, Fragment.from(nodes));
+      if (whole) tr.replaceWith(from, to, next);
+      else tr.step(step);
     }
   }
   if (kept.size > 0) {
@@ -62,6 +86,34 @@ export function replaceBlocks(tr, a, b, hunks) {
   }
   return tr;
 }
+
+// Block `old` at `from` of `doc` made the blocks `nodes` by steps that keep
+// its text: made another type (a paragraph a heading), wrapped (in a list
+// item, a quote) or split in two: a Transform, or null when it is none of those.
+function reshape(doc, from, old, nodes) {
+  if (!old.isTextblock) return null;
+  const t = new Transform(doc);
+  if (nodes.length === 2 && nodes.every((node) => node.type === old.type && sameAttrs(node, old)) && old.content.eq(nodes[0].content.append(nodes[1].content))) {
+    return t.split(from + 1 + nodes[0].content.size);
+  }
+  let inner = nodes[0];
+  const wrappers = [];
+  while (nodes.length === 1 && !inner.isTextblock && inner.childCount === 1) {
+    wrappers.push({ type: inner.type, attrs: inner.attrs });
+    inner = inner.firstChild;
+  }
+  if (nodes.length !== 1 || !inner.isTextblock || !inner.content.eq(old.content)) return null;
+  try {
+    if (inner.type !== old.type || !sameAttrs(inner, old)) t.setNodeMarkup(from, inner.type, inner.attrs);
+    if (wrappers.length > 0) t.wrap(t.doc.resolve(from + 1).blockRange(), wrappers);
+  } catch {
+    return null; // a wrap the schema does not allow there
+  }
+  return t;
+}
+
+// Whether `made`, `doc` with hunk `h` changed, has `nodes` in its place.
+const makes = (made, doc, h, nodes) => made.childCount === doc.childCount - (h.a1 - h.a0) + nodes.length && nodes.every((node, k) => sameBlock(made.child(h.a0 + k), node));
 
 // Where position `pos` (in children from `from` up to child `end` of doc `a`)
 // is in `nodes`, which replace them at `at`: at the same character of their

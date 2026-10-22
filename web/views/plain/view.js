@@ -1,16 +1,16 @@
 // The plain view: a text file as it is, in CodeMirror, with no formatting,
 // for any text file no other view claims (index.js). The doc's text is the editor's,
 // so offsets on it are positions in the editor and marks are decorations
-// as given. A change made on disk goes in as changes to the lines that
-// differ, outside the human's undo history; a buddy's is flagged with its
-// name, any other also glows (as in the Markdown view).
+// as given. Others' edits go in as the operations that made them, outside
+// the human's undo history; a buddy's is flagged with its name, any other
+// also glows (as in the Markdown view).
 
 import { Annotation, Compartment, EditorState, StateEffect, StateField, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, keymap, lineNumbers } from '@codemirror/view';
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
-import { diffEdits, sameEnd, sameStart } from '../../../src/core/diff.js';
+import { diffOps } from '../../../src/core/ot.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { hydrateIcons } from '../../icons.js';
@@ -153,32 +153,30 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   host.addEventListener('click', clickMark);
 
   /**
-   * Show `next`, outside the human's undo history: only the lines that
-   * differ change, flagged `by` for a while, if given; anything but a
-   * buddy's change (`buddy`) also glows.
+   * Show `next`, outside the human's undo history, as `ops` change the text
+   * shown (when given; else as diffOps finds), so the caret stays at its
+   * character; flagged `by` for a while, if given; anything but a buddy's
+   * change (`buddy`) also glows.
    */
-  function applyText(next, { by = null, buddy = false } = {}) {
-    const before = crlf ? view.state.doc.toString() : currentText();
+  function applyText(next, { by = null, buddy = false, ops = null } = {}) {
+    const before = currentText();
+    const lf = (s) => s.replaceAll('\r\n', '\n');
+    const changes = view.state.changes(ops && isCrlf(next) === crlf
+      ? ops.map(({ from, to, insert }) => ({ from: toDoc(from), to: toDoc(to), insert: lf(insert) }))
+      : diffOps(lf(before), lf(next)));
     crlf = isCrlf(next);
-    const after = next.replaceAll('\r\n', '\n');
-    // Only the lines between what the two texts start and end with are diffed:
-    // a long doc changes a few lines at a time.
-    const [head, tail] = sameLines(before, after);
-    const edits = diffEdits(before.slice(head, before.length - tail), after.slice(head, after.length - tail))
-      .map(({ from, to, edit }) => ({ from: from + head, to: to + head, start: edit.start + head, insert: edit.after }));
-    if (edits.length === 0) {
-      textOf = { doc: view.state.doc, text: next };
-      return;
-    }
+    textOf = { doc: view.state.doc, text: next };
+    if (changes.empty) return; // only how lines end changed
     const flashId = Symbol('flash');
     const flashes = [];
     if (by) {
-      const added = edits.map(({ start, insert }) => [start, start + insert.length]);
+      const added = [];
+      changes.iterChanges((_fromA, _toA, from, to) => added.push([from, to]));
       if (!buddy) flashes.push(...added.filter(([from, to]) => from < to).map(([from, to]) => Decoration.mark({ class: 'pj-flash', flashId }).range(from, to)));
       flashes.push(Decoration.widget({ widget: new Flag(by, buddy ? buddyColor(by) : null), side: -1, flashId }).range(added[0][0]));
     }
     view.dispatch({
-      changes: edits.map(({ from, to, insert }) => ({ from, to, insert })),
+      changes,
       effects: flashes.length > 0 ? addFlash.of(flashes) : [],
       annotations: [Transaction.addToHistory.of(false), fromDisk.of(true)],
     });
@@ -378,15 +376,6 @@ class Flag extends WidgetType {
     wrap.append(label);
     return wrap;
   }
-}
-
-// How many characters `a` and `b` share at the start and at the end, in whole lines.
-function sameLines(a, b) {
-  let head = sameStart(a, b);
-  head = head && a.lastIndexOf('\n', head - 1) + 1;
-  const tail = sameEnd(a, b, Math.min(a.length, b.length) - head);
-  const end = a.indexOf('\n', a.length - tail);
-  return [head, end === -1 ? 0 : a.length - end];
 }
 
 // Whether every line break of `text` is "\r\n".

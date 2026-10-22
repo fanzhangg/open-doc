@@ -109,11 +109,17 @@ document.
 
 ### Text in, text out
 
-- **In:** `applyText(text, { by })` parses the text, finds the top-level
-  blocks that differ, and replaces only those, a block of the same kind only
-  from its first to its last differing character. It is outside the undo
-  history: the caret stays, and the person's own steps map over it. `by`
-  names who made the change, for its glow.
+- **In:** `applyText(text, { by, ops })` parses the text, finds the
+  top-level blocks that differ, and changes only those, by the smallest
+  step: a block of the same kind from its first to its last differing
+  character; one that keeps its text is made the other kind, wrapped (a
+  list item, a quote) or split; any other only from the first to the last
+  position that differs. It is outside the undo history: the caret stays,
+  and the person's own steps map over it. `by` names who made the change,
+  for its glow; `ops`, the operations that made it, are what the Plain text
+  view applies, as they are. Whatever the editor then does on its own (a
+  half-typed table row filled out) is no one's edit: `getText()` is `text`
+  until the person types.
 - **Out:** `getText()` keeps the original bytes of every top-level block
   whose meaning did not change (`splice`). A block only typed into or
   deleted from keeps its own bytes but for those characters, so its style
@@ -195,8 +201,10 @@ and changes from outside.
    meant. Accepted: nothing typed is lost, and people fix it by hand.
 3. **Escapes.** A typed `*` is saved as `\*`; an operation can land next to
    the backslash.
-4. **A block that changes kind** (a paragraph becomes a list item) is
-   replaced whole, and a caret in it may move.
+4. **A block that changes kind** in a way that keeps its text (a
+   paragraph made a heading, a list item or a quote, or split) keeps the
+   caret and the undo history in it; one changed otherwise is replaced
+   from its first to its last differing position.
 5. **Undo across others' edits** in the same block.
 6. **Cost:** `getText` once per edit sent (at most one a round trip to the
    host) and once per batch from the host.

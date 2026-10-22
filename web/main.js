@@ -425,7 +425,7 @@ window.addEventListener('beforeunload', (event) => {
 // edit with an `id`) by their cursor alone; anything else glows.
 function showLanded(text, ops, event) {
   const reply = event?.reply;
-  editor.applyText(text, { by: reply ? event.by : event?.id ? null : asking ?? ON_DISK, buddy: Boolean(reply) });
+  editor.applyText(text, { by: reply ? event.by : event?.id ? null : asking ?? ON_DISK, buddy: Boolean(reply), ops });
   paintMarks();
   if (reply) {
     runLanded = reply;
