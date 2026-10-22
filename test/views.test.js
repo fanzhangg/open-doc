@@ -215,6 +215,21 @@ test('markdown view: the link card hides while its link is scrolled out of view'
   assert.equal(await cardShown(), true);
 });
 
+test('markdown view: pasting a URL over selected text links the text; other pastes are unchanged', async () => {
+  const paste = (text) => run(`(() => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', ${JSON.stringify(text)});
+    document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  })()`);
+  await make('markdown', 'See the plan here.\n');
+  await select('the plan', 0, 8);
+  await paste(' https://example.com/plan ');
+  assert.equal(await getText(), 'See [the plan](https://example.com/plan) here.\n');
+  await select('here', 0, 4);
+  await paste('not a link');
+  assert.equal(await getText(), 'See [the plan](https://example.com/plan) not a link.\n');
+});
+
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);
