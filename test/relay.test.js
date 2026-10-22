@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '../web/client.js';
+import { LATENCY } from '../web/views/index.js';
 import { launchElectron, waitFor } from '../scripts/devtools.js';
 import { until } from './helpers.js';
 import { idOf, page as teammatePage, pageAt, project as newProject, roomOf, startHost as hostOn, startRelay, teammate as newTeammate } from './relay/harness.js';
@@ -299,7 +300,7 @@ test('a teammate sees the owner\'s tree and opens any doc in it at once, nothing
   }
 });
 
-test('two writers see each other\'s cursor move, following the text, and who is here', async () => {
+test('B6: two writers see each other\'s cursor move, within the promise, following the text, and who is here', async () => {
   const shared = await project();
   const host = await startHost(shared);
   try {
@@ -331,7 +332,7 @@ test('two writers see each other\'s cursor move, following the text, and who is 
       assert.equal(told.data.by, idOf(shared.sam.key));
     }
     ms.sort((a, b) => a - b);
-    assert.ok(ms[10] < 50 && ms[18] < 100, `a cursor seen within the typing promise: ${ms.map(Math.round)}`);
+    assert.ok(ms[18] < LATENCY.cursor.p95, `a cursor seen within LATENCY.cursor: ${ms.map(Math.round)}`);
 
     // The owner types before it: it moves with the text, at the host and in a page's state.
     const owner = await asOwner(host, shared, 'state');
@@ -347,6 +348,22 @@ test('two writers see each other\'s cursor move, following the text, and who is 
     await asOwner(host, shared, 'remove', { id: idOf(shared.sam.key) });
     await until(() => asking.events.slice(seen).find((e) => e.event === 'cursors' && e.data.cursors.length === 0), 'the cursor gone');
     await until(() => here(asking)?.length === 1, 'Sam gone');
+  } finally {
+    host.kill();
+  }
+});
+
+test('C8: one page\'s answer too big for the relay is refused to it alone; the host and the other pages stay', async () => {
+  const shared = await project();
+  await writeFile(join(shared.folder, 'big.txt'), `${'x'.repeat(99)}\n`.repeat(9 * 2 ** 20 / 100));
+  const host = await startHost(shared);
+  try {
+    const other = page(shared.secret, shared.sam);
+    await other.call('state');
+    const sam = page(shared.secret, shared.sam, 'big.txt');
+    assert.equal((await sam.call('state')).error?.code, 'too_big');
+    assert.equal((await other.call('state')).result.text, TEXT, 'the other page still in');
+    assert.ok(!other.lines.includes('host'), 'the host never went away');
   } finally {
     host.kill();
   }
@@ -398,7 +415,7 @@ test('the relay limits pages, message sizes and rooms, so it is no free pipe', a
   }
 });
 
-test('the browser build asks a name, waits for Allow, then shows the doc live: its tree, the owner\'s cursor, read only until Edit', async () => {
+test('C2 D7: the browser build asks a name, waits for Allow, then shows the doc live: its tree, the owner\'s cursor, read only until Edit; a comment draft stays, and typing lands before it lets go', async () => {
   const shared = await project();
   const host = await startHost(shared);
   const dir = await mkdtemp(join(tmpdir(), 'ponjo-relay-page-'));
@@ -464,6 +481,32 @@ test('the browser build asks a name, waits for Allow, then shows the doc live: i
       getSelection().collapse(text, 4);
     }`);
     await until(async () => (await host.request('call', { docId, call: 'state' })).cursors.some((c) => c.name === 'Noor'), 'Noor\'s cursor at the host');
+
+    // D7: a comment being written, and its anchor, stay while the owner types above it.
+    await shown.evaluate(`{
+      const text = [...document.querySelectorAll('.pj-stage [contenteditable] p')].find((p) => p.textContent.startsWith('Then')).firstChild;
+      getSelection().setBaseAndExtent(text, 5, text, 12);
+    }`);
+    await new Promise((done) => setTimeout(done, 100)); // the editor takes in the selection
+    await shown.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM', key: 'm', ctrlKey: true, altKey: true, bubbles: true }))`);
+    await waitFor(() => shown.evaluate(`Boolean(document.querySelector('.pj-card-draft textarea'))`), 10_000, 'the draft');
+    await shown.evaluate(`document.querySelector('.pj-card-draft textarea').value = 'Which feedback?'`);
+    const before = await host.request('call', { docId, call: 'state' });
+    await host.request('call', { docId, call: 'submit', arg: { ops: [{ from: 0, to: 0, insert: 'Draft: ' }], rev: before.rev, epoch: before.epoch, id: 'w.2' } });
+    await waitFor(async () => (await text()).startsWith('Draft: '), 10_000, 'the owner\'s edit');
+    assert.equal(await shown.evaluate(`document.querySelector('.pj-card-draft textarea').value`), 'Which feedback?');
+    assert.equal(await shown.evaluate(`[...document.querySelectorAll('.pj-stage [contenteditable] [data-thread="draft"]')].map((m) => m.textContent).join('')`), 'ask for');
+
+    // C2: typing not landed lands before the page lets go of its doc.
+    await shown.evaluate(`{
+      const editor = document.querySelector('.pj-stage [contenteditable]');
+      editor.focus();
+      getSelection().collapse([...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Ship')).firstChild, 0);
+    }`);
+    await shown.send('Input.insertText', { text: 'Now: ' });
+    await shown.evaluate('window.ponjoLeave()');
+    assert.match((await host.request('call', { docId, call: 'state' })).text, /Now: Ship the preview/);
+    await shown.evaluate('window.ponjoStay()');
 
     // Turned away, the page says why.
     await asOwner(host, shared, 'remove', { id: pending[0].id });

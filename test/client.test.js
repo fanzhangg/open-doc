@@ -100,7 +100,7 @@ test('two pages of one doc: each one\'s typing reaches the other, and the doc', 
   await host.close();
 });
 
-test('an outside change that lands while typing is on its way yields to the typing, in the page and the doc alike', async () => {
+test('C3: an outside change that lands while typing is on its way yields to the typing, in the page and the doc alike', async () => {
   const docPath = await tempDoc(TEXT);
   let receive = () => {};
   const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
@@ -142,7 +142,7 @@ test('a page that missed the event of its own edit landing takes the text again,
   await host.close();
 });
 
-test('a doc host that stops after writing an edit, before telling the page: started again, it says so, and the edit is not sent twice', async () => {
+test('C1: a doc host that stops after writing an edit, before telling the page: started again, it says so, and the edit is not sent twice', async () => {
   const docPath = await tempDoc(TEXT);
   const settingsDir = await fakeConfig();
   let receive = () => {};
@@ -221,7 +221,7 @@ test('A3: a line that drops after the host took an edit, before it answered, nev
   await host.close();
 });
 
-test('A3 C4: a write that fails says Not saved; once the file can be written, the typing is saved once', async () => {
+test('A3 A6 C4: a write that fails says Not saved; once the file can be written, the typing is saved once', async () => {
   const docPath = await tempDoc('Hello world.\n');
   let receive = () => {};
   const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
