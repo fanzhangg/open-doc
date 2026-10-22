@@ -10,8 +10,8 @@
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
 // `collab:release` hold Pilot's turns and let them go. The project has a
 // link and Sam, a teammate who can edit; `collab:share` shares it through
-// the relay at PONJO_RELAY and answers the link's secret and room and
-// Sam's key (test/collab.test.js, test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
+// the relay at PONJO_RELAY and answers the link's secret and room, Sam's
+// key and the doc's path (test/collab.test.js, test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
 // `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';
@@ -68,6 +68,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:release', () => writeFile(join(config, 'release-Pilot'), ''));
   ipcMain.handle('collab:share', async () => {
     await request('share', { folder: doc.folder });
-    return doc.team;
+    return { ...doc.team, path: doc.path };
   });
 });

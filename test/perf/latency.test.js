@@ -134,7 +134,7 @@ function misses(got) {
 }
 
 for (const [view, shape, text] of CASES) {
-  test(`${view} view, ${shape}, ${text.length.toLocaleString('en')} characters: keeps the latency promise`, { timeout: 600_000 }, async () => {
+  test(`B1 B2 B4 B7: ${view} view, ${shape}, ${text.length.toLocaleString('en')} characters: keeps the latency promise`, { timeout: 600_000 }, async () => {
     let got = await measure(view, text);
     if (misses(got).length > 0) got = await measure(view, text);
     console.log(`# ${view} ${shape}: ${JSON.stringify(got)}`);

@@ -107,16 +107,17 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 One set of tests for the rules in [Editing](architecture.md#editing),
 alone and shared alike: what changes is parameters, never the path. Every
 test title starts with its rule id (`A3: a dropped line never lands an
-edit twice`), and a check in `npm test` fails when a rule id in that table
-has no test. Every editing bug fix comes with a test, named by its rule id,
+edit twice`), and a check in `npm test` (`test/rules.test.js`) fails when
+a rule id in that table has no test, unless its row says "No test yet".
+Every editing bug fix comes with a test, named by its rule id,
 that fails before the fix.
 
 | Layer | Covers | Where |
 | --- | --- | --- |
 | 1. Properties of `src/core/ot.js` | A1 A3 A4 A5 | `npm test` |
 | 2. Protocol fuzz | A1–A6, C1, C3–C5, C7 | `npm run test:stress` (`test/stress/concurrency.test.js`) |
-| 3. Named scenarios in real views | D1–D7, C2, C6, C8, E1 | `npm test` (the views and collab harnesses) |
-| 4. Timings | B1–B7, C5, C6 | `npm run test:perf` |
+| 3. Named scenarios in real views and pages | D1–D7, A3 A4 A6, B6, C1–C8 | `npm test` (`test/client.test.js`, `test/views.test.js`, `test/relay.test.js`) |
+| 4. Timings | B1–B5, B7 | `npm run test:perf` |
 | 5. By hand | C5, C6 on a real network | [two machines](#sharing--two-machines-by-hand) |
 
 - **Layer 2** runs a real DocService on temp files with 1 to 4 clients

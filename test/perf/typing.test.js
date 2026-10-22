@@ -1,8 +1,8 @@
 // The typing promise (LATENCY.typed in web/views/index.js): a key the owner
 // types in a view is shown on a teammate's page, through the relay run
 // locally (test/relay/harness.js), within its bound while the owner types
-// on, the network aside. The owner's view is the collab harness's
-// (test/collab/page.js) in Electron, on a doc host started as the app starts
+// on, the network aside; and it is in the file within LATENCY.saved. The
+// owner's view is the collab harness's (test/collab/page.js) in Electron, on a doc host started as the app starts
 // it, with no delay of its own; the teammate's page is the browser build
 // (team.html, served by the relay) in another Electron, whose line to the relay is
 // LINE_MS slower each way, as over the internet: its client, applyText and
@@ -15,10 +15,11 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { execFile } from 'node:child_process';
-import { copyFile, mkdtemp, writeFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
+import { copyFile, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { launchElectron, waitFor } from '../../scripts/devtools.js';
@@ -110,7 +111,15 @@ async function teammatePage({ room, key }) {
 
 async function measure(view, text) {
   await run(`collab.make(${JSON.stringify(text)}, { view: '${view}' })`);
-  const shown = await teammatePage(await run('collabHost.share()'));
+  const shared = await run('collabHost.share()');
+  const shown = await teammatePage(shared);
+  // When each x is in the file: the time of the write that holds it, or a later one.
+  const writtenAt = [];
+  const watcher = watch(dirname(shared.path), async () => {
+    const keys = ((await readFile(shared.path, 'utf8').catch(() => '')).match(/x/g) ?? []).length;
+    const was = await stat(shared.path).catch(() => null);
+    while (was && writtenAt.length < keys) writtenAt.push(was.mtimeMs);
+  });
   await run(`collab.select(0, 'first', 5, 5)`);
   const typedAt = [];
   for (let k = 0; k < KEYS; k++) {
@@ -119,18 +128,24 @@ async function measure(view, text) {
     await new Promise((done) => setTimeout(done, KEY_MS));
   }
   await waitFor(async () => (await shown.evaluate('shownAt.length')) === KEYS, 30_000, 'every key at the teammate');
+  await waitFor(() => writtenAt.length === KEYS, 30_000, 'every key in the file');
+  watcher.close();
   const ms = (await shown.evaluate('shownAt')).map((at, k) => at - typedAt[k] - LINE_MS);
+  const saved = writtenAt.map((at, k) => at - typedAt[k]);
   await teammates.pop().quit();
-  return { median: percentile(ms, 0.5), p95: percentile(ms, 0.95) };
+  return {
+    typed: { median: percentile(ms, 0.5), p95: percentile(ms, 0.95) },
+    saved: { median: percentile(saved, 0.5), p95: percentile(saved, 0.95) },
+  };
 }
 
-const misses = (got) => ['median', 'p95'].filter((q) => got[q] > LATENCY.typed[q]).map((q) => `${q} ${Math.round(got[q])} ms`);
+const misses = (got) => ['typed', 'saved'].flatMap((kind) => ['median', 'p95'].filter((q) => got[kind][q] > LATENCY[kind][q]).map((q) => `${kind} ${q} ${Math.round(got[kind][q])} ms`));
 
 for (const [view, text] of [['markdown', TEXT], ['plain', LONGEST]]) {
-  test(`a key the owner types is shown on a teammate's page within the typing promise, while they type on: ${view} view, ${text.length.toLocaleString('en')} characters`, { timeout: 300_000 }, async () => {
+  test(`B3 B5: a key the owner types is in the file, and shown on a teammate's page, within the promise, while they type on: ${view} view, ${text.length.toLocaleString('en')} characters`, { timeout: 300_000 }, async () => {
     let got = await measure(view, text);
     if (misses(got).length > 0) got = await measure(view, text);
     console.log(`# typed, ${view} (the line's ${LINE_MS} ms aside): ${JSON.stringify(got)}`);
-    assert.deepEqual(misses(got), [], `missed LATENCY.typed ${JSON.stringify(LATENCY.typed)}`);
+    assert.deepEqual(misses(got), [], `missed LATENCY ${JSON.stringify({ typed: LATENCY.typed, saved: LATENCY.saved })}`);
   });
 }

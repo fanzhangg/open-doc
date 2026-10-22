@@ -281,7 +281,19 @@ function share(folder, team, secret) {
   async function take({ peer, open, data, close }) {
     if (close) return gone(peer);
     if (!open) return peers.get(peer)?.port.receive(data);
-    const port = peerPort((frame) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ peer, ...frame })));
+    const port = peerPort((frame) => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      let text = JSON.stringify({ peer, ...frame });
+      // A frame too big for the relay would close the host's line, and every
+      // page's with it: an answer goes as an error instead; an event is left
+      // out, and the page catches up when it sees one missed.
+      if (text.length > MAX_FRAME) {
+        const { id } = JSON.parse(frame.data);
+        if (id === undefined) return;
+        text = JSON.stringify({ peer, data: JSON.stringify({ id, error: { message: 'Too big to send through the relay', code: 'too_big' } }) });
+      }
+      socket.send(text);
+    });
     const id = typeof open.key === 'string' && open.key.length >= 16 ? `p_${roomOf(open.key).slice(0, 24)}` : null;
     const entry = { port, id, doc: open.doc ?? '', admitted: false, level: null };
     peers.set(peer, entry);
@@ -399,6 +411,7 @@ function peerPort(send) {
 // How long a host whose relay connection dropped waits to connect again:
 // twice as long each time it is not made, up to MAX_RECONNECT_MS.
 const RECONNECT_MS = 1000;
+const MAX_FRAME = 8 * 2 ** 20; // characters: MAX_MESSAGE in relay/worker.js
 const MAX_RECONNECT_MS = 30_000;
 
 channel.listen(async ({ id, type, ...arg }, ports) => {
