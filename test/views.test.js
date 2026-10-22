@@ -207,11 +207,11 @@ test('markdown view: a change applied with who made it glows, with their name', 
 test('markdown view: the link card hides while its link is scrolled out of view', async () => {
   await make('markdown', `See [the plan](plan.md).\n\n${'More.\n\n'.repeat(80)}`, { toolbar: true });
   await select('the plan', 3, 3);
-  const cardShown = () => run(`new Promise((done) => requestAnimationFrame(() => done(!document.querySelector('.od-link-card').hidden)))`);
+  const cardShown = () => run(`new Promise((done) => requestAnimationFrame(() => done(!document.querySelector('.pj-link-card').hidden)))`);
   assert.equal(await cardShown(), true);
-  await run(`document.querySelector('.od-canvas').scrollTop = 2000`);
+  await run(`document.querySelector('.pj-canvas').scrollTop = 2000`);
   assert.equal(await cardShown(), false);
-  await run(`document.querySelector('.od-canvas').scrollTop = 0`);
+  await run(`document.querySelector('.pj-canvas').scrollTop = 0`);
   assert.equal(await cardShown(), true);
 });
 
