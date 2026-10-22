@@ -423,6 +423,7 @@ test('the browser build asks a name, waits for Allow, then shows the doc live: i
     const owner = await host.request('call', { docId, call: 'state' });
     await host.request('call', { docId, call: 'submit', arg: { ops: [{ from: TEXT.length, to: TEXT.length, insert: '\nThen ask for feedback.\n' }], rev: owner.rev, epoch: owner.epoch, id: 'w.1' } });
     await waitFor(async () => (await text()).includes('Then ask for feedback.'), 10_000, 'the owner\'s typing');
+    assert.equal(await shown.evaluate(`document.querySelectorAll('.pj-flag, .pj-flash, .pj-flash-block').length`), 0, 'typing shows by its cursor, with no glow');
 
     // The project's tree, the doc marked, and no file menu: the files are the owner's.
     await mkdir(join(shared.folder, 'notes'));
