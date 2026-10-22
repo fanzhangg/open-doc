@@ -40,7 +40,7 @@ import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js
 import { editItems } from '../../review.js';
 import { markdownPlugins } from '../../markdown-schema.js';
 import { diagrams } from '../../diagrams.js';
-import { blocksOf, childPos, diffBlocks, parseRun, replaceBlocks, textOfDoc, textPos } from './blocks.js';
+import { blocksOf, childPos, diffBlocks, pairRanges, parseRun, replaceBlocks, textOfDoc, textPos } from './blocks.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
@@ -603,6 +603,13 @@ export async function createMarkdownView({
     base = { doc: tr.doc, blocks };
     if (by) flash(tr, hunks.map((h) => changedRange(current, target, h)).filter(Boolean), by, buddy);
     v.dispatch(tr);
+    // What the editor makes of it on its own (a table's half-typed row
+    // filled out, an empty line kept after a last table) is still `next`:
+    // it is no one's edit.
+    if (v.state.doc !== tr.doc) {
+      const paired = blocks && pairRanges(v.state.doc.content.content, blocks, true);
+      if (paired || !blocks) base = { doc: v.state.doc, blocks: paired ?? undefined };
+    }
   }
 
   // Glow `ranges` of the doc `tr` makes, in the same transaction, so the page is drawn once.
@@ -612,8 +619,11 @@ export async function createMarkdownView({
     const decorations = buddy ? [] : ranges.map((r) => (r.node
       ? Decoration.node(r.from, r.to, { class: 'pj-flash-block' }, { flashId })
       : Decoration.inline(r.from, r.to, { class: 'pj-flash' }, { flashId })));
+    // The flag at the start of the word the change begins in.
     const first = ranges[0];
-    decorations.push(Decoration.widget(first.node ? first.from + 1 : first.from, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
+    const $at = tr.doc.resolve(first.from);
+    const at = first.node ? first.from + 1 : first.from - ($at.parent.textBetween(0, $at.parentOffset).match(/[\p{L}\p{N}_]*$/u)?.[0].length ?? 0);
+    decorations.push(Decoration.widget(at, () => flag(by, buddy ? buddyColor(by) : null), { side: -1, flashId }));
     tr.setMeta(flashKey, flashKey.getState(view().state).map(tr.mapping, tr.doc).add(tr.doc, decorations));
     setTimeout(() => updateFlashes((set) => set.remove(set.find(undefined, undefined, (spec) => spec.flashId === flashId))), FLASH_MS);
   }
