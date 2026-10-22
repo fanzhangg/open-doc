@@ -169,6 +169,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // until it is written, nothing told meanwhile. Run in `serial`.
   async function commit() {
     clearTimeout(unsaved);
+    let wroteAny = false; // its note says only that it is about to be
     try {
       while (!missing && text !== written) {
         const before = await stat(docPath).catch(() => null);
@@ -188,7 +189,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         // if the write fails, the note is again of what the file holds.
         const hash = hashText(text);
         const ids = noteIds();
-        await noteWritten(docPath, settingsDir, hash, ids);
+        await noteWritten(docPath, settingsDir, hash, ids, writtenIds);
         const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before)).catch(async (error) => {
           await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
           throw error;
@@ -198,6 +199,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         writtenIds = ids;
         writtenStat = wrote;
         written = text;
+        wroteAny = true;
       }
     } catch (error) {
       unsaved = setTimeout(() => serial(commit).catch(() => {}), RETRY_MS);
@@ -208,6 +210,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       toldRev = event.rev;
       emit('ops', event);
     }
+    // Written now, so landed even if the file changes outside before the next write.
+    if (wroteAny) await noteWritten(docPath, settingsDir, writtenHash, writtenIds).catch(() => {});
   }
 
   // The doc's rules, as the settings are now.
@@ -229,8 +233,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
     written = disk.text;
     writtenHash = disk.hash;
-    writtenIds = noteIds();
-    await noteWritten(docPath, settingsDir, writtenHash, writtenIds); // the edits it holds, should nothing more be written
+    await noteWritten(docPath, settingsDir, writtenHash, writtenIds); // the edits written so far: landed, though the file now holds another's
     land(ops, { yields: true });
     if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
   }
@@ -315,10 +318,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   async function recreate(who) {
     if (!missing) return {};
     await mkdir(dirname(docPath), { recursive: true });
-    writtenHash = hashText(text);
-    writtenIds = noteIds();
-    await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
+    const ids = noteIds();
+    await noteWritten(docPath, settingsDir, hashText(text), ids, writtenIds);
     writtenStat = await writeDoc(docPath, text, form);
+    writtenHash = hashText(text);
+    writtenIds = ids;
     written = text;
     await noteVersion(text, { kind: 'edit', author: byOf(who) });
     return {};

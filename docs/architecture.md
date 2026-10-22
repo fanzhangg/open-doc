@@ -348,7 +348,8 @@ doc host started again) or a log that no longer reaches back does it take
 `diffOps(the text it last heard, the new text)` as what landed and move
 its typing over that, as it was typed; its edit on its way is in that text
 if the answer lists it as `landed`, the ids the doc's history folder
-notes for the file as it is, kept through every restart. An edit is landed
+notes as written to the file, kept through every restart and every change
+made outside since. An edit is landed
 at most once: one whose fate a window does not know (the line dropped
 before the answer) is sent again as it was, same id, same rev, and the
 host answers one it already landed with its rev, never landing it again; a
