@@ -1,5 +1,5 @@
 {
-  "name": "opendoc",
+  "name": "ponjo",
   "version": "0.1.0",
   "description": "Co-author plain markdown with AI buddies: comment threads in a sidecar file and a desktop editor.",
   "author": "fanzhangg",
@@ -22,7 +22,7 @@
     "lint": "eslint . && depcruise src web desktop scripts preview test && knip",
     "test": "node --test --test-timeout=300000 --test-force-exit \"test/*.test.js\"",
     "test:stress": "node --test --test-timeout=120000 --test-force-exit \"test/stress/*.test.js\"",
-    "test:perf": "node --test --test-timeout=1800000 --test-force-exit \"test/perf/*.test.js\"",
+    "test:perf": "node --test --test-concurrency=1 --test-timeout=1800000 --test-force-exit \"test/perf/*.test.js\"",
     "pack:desktop": "npm run build && electron-builder --dir",
     "dist:desktop": "npm run build && electron-builder",
     "smoke:desktop": "node scripts/smoke-desktop.js"

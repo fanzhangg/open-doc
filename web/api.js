@@ -1,8 +1,14 @@
 // Talks to the doc in the doc host (src/host/doc-service.js) through the
-// line the desktop app's preload gives the page (window.opendocHost).
+// line the desktop app's preload gives the page (window.ponjoHost), or in
+// a plain browser through the relay (relay.js).
+
+import { identity } from './join.js';
+import { relayHost } from './relay.js';
+
+const host = window.ponjoHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
 
 async function call(type, arg) {
-  const { result, error } = await window.opendocHost.call(type, arg);
+  const { result, error } = await host.call(type, arg);
   if (error) throw Object.assign(new Error(error.message), { code: error.code });
   return result;
 }
@@ -11,6 +17,8 @@ export const api = {
   state: () => call('state'),
   /** An edit: operations `ops` on rev `rev` of `epoch`, named `id` in the `ops` event that tells it landed. */
   submit: ({ ops, rev, epoch, id }) => call('submit', { ops, rev, epoch, id }),
+  /** The person's cursor is at offset `at` of the text at rev `rev` of `epoch`. */
+  cursor: ({ at, rev, epoch }) => call('cursor', { at, rev, epoch }),
   /** Write a doc that went missing back as it is in the doc host. */
   recreate: () => call('recreate'),
   /**
@@ -26,14 +34,16 @@ export const api = {
    */
   events() {
     const handlers = new Map();
-    queueMicrotask(() => window.opendocHost.onEvent((name, data) => {
+    queueMicrotask(() => host.onEvent((name, data) => {
       for (const fn of handlers.get(name) ?? []) fn(data);
     }));
     return { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) };
   },
+  /** How the line to the host is, for a page in a browser (relay.js `onLine`); the app's is always there. */
+  line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
-   * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   * Ponjo comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
    */
   scripts: () => call('scripts'),
   /** Write shipped agent `name` (its program and manifest) again as it came. */
@@ -57,4 +67,15 @@ export const api = {
   list: (path) => call('list', { path }),
   /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
   read: (path) => call('read', { path }),
+  /**
+   * The owner's: the project's team, { members: [{ id, name, level }],
+   * pending: [{ id, name }] (asking to join), link (or null) }, and changing
+   * it, each answered with the team then. `level` is 'read' or 'write'.
+   */
+  team: () => call('team'),
+  allow: (id, level) => call('allow', { id, level }),
+  remove: (id) => call('remove', { id }),
+  setLevel: (id, level) => call('setLevel', { id, level }),
+  /** A new link: every one before it ends. */
+  link: () => call('link'),
 };

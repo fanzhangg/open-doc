@@ -5,7 +5,7 @@
 # It reads the project without --add-dir, which would make it writable.
 reply="$(mktemp)"
 codex exec --sandbox workspace-write --skip-git-repo-check \
-  ${OPENDOC_SETTING_MODEL:+-m "$OPENDOC_SETTING_MODEL"} \
+  ${PONJO_SETTING_MODEL:+-m "$PONJO_SETTING_MODEL"} \
   --output-last-message "$reply" - >&2
 status=$?
 cat "$reply"

@@ -32,5 +32,6 @@ contextBridge.exposeInMainWorld('collabHost', {
   write: (text) => ipcRenderer.invoke('collab:write', text),
   hold: () => ipcRenderer.invoke('collab:hold'),
   release: () => ipcRenderer.invoke('collab:release'),
+  share: () => ipcRenderer.invoke('collab:share'),
   onEvent: (fn) => { listener = fn; },
 });

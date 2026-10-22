@@ -1,11 +1,12 @@
 // The page's side of the order the doc host keeps (docs/architecture.md,
 // Interfaces; docs/markdown-view.md, Many writers, plan A): the view's typing
 // goes to the host as operations on the rev it started from, one edit at a
-// time, and others' edits come back as operations, moved over the typing not
-// landed yet and shown with the view's applyText. The same for every view,
-// and for the two-writer harness (test/collab/page.js).
+// time: at once when none is on its way, else all typed meanwhile once the
+// host answers. Others' edits come back as operations, moved over the typing
+// not landed yet and shown with the view's applyText. The same for every
+// view, and for the two-writer harness (test/collab/page.js).
 
-import { apply, diffOps, transform } from '../src/core/ot.js';
+import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
 
 /**
  * Keep `view` ({ getText, selection }) in the host's order: `call(type,
@@ -13,8 +14,9 @@ import { apply, diffOps, transform } from '../src/core/ot.js';
  * shows others' edits, `ops` as they changed the view's text, `event` the
  * host's `ops` event (null for the edits of a host that started again);
  * `rules()`, the doc's rules (rulesOf), as the host judges an edit that
- * yields. Start it with the host's `state`; give it each `ops` event, and
- * `resync()` on a new connection.
+ * yields. Start it with the host's `state`; call `edited()` on every change
+ * the person makes in the view, and `moved()` when their caret moves; give
+ * it each `ops` and `cursors` event, and `resync()` on a new connection.
  */
 export function createClient({ view, call, show, rules, onError = () => {} }) {
   const name = Math.random().toString(36).slice(2);
@@ -29,12 +31,36 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
   let syncing = null; // a resync on its way; events meanwhile wait in `held`
   let held = [];
   let idle = [];
+  let cursors = []; // people's cursors: [{ id, name, at }], `at` in `confirmed`
+  let caretMoved = false; // the person's caret moved since it was last sent
+  let caretSent = false; // one is on its way
+  let caretWas = null; // where the last one sent was: `at` on `rev`
+
+  // The person's caret goes to the host on the text the host has: once
+  // their typing has landed, one at a time, the latest.
+  function sendCaret() {
+    if (!caretMoved || caretSent || syncing || pending.length > 0) return;
+    caretMoved = false;
+    const at = view.selection()?.to;
+    if (at === undefined || caretWas === `${at}@${rev}`) return;
+    caretWas = `${at}@${rev}`;
+    caretSent = true;
+    call('cursor', { at, rev, epoch }).catch(() => {}).finally(() => {
+      caretSent = false;
+      sendCaret();
+    });
+  }
 
   function send() {
     const id = `${name}.${++sends}`;
     sent = id;
     answer = call('submit', { ops: pending[0], rev, epoch, id }).then(() => true, (error) => {
       if (id !== sent) return false; // sent again since
+      // Not this page's to send (set to Read meanwhile): nothing more goes out.
+      if (error.code === 'forbidden') {
+        onError(error);
+        return false;
+      }
       // An edit the host would not take (an epoch or rev it no longer has):
       // take its text again, and send the edit on that.
       if (error.code !== 'stale') onError(error);
@@ -46,6 +72,7 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
   function settle() {
     if (pending.length > 0) return;
     for (const done of idle.splice(0)) done();
+    sendCaret();
   }
 
   // The view's typing since it was last read is pending too.
@@ -65,11 +92,15 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
     const was = confirmed;
     rev = event.rev;
     confirmed = apply(confirmed, event.ops);
+    for (const cursor of cursors) cursor.at = mapOffset(cursor.at, event.ops);
     if (ours) {
       pending.shift();
       sent = null;
-      if (pending.length > 0) send();
-      else settle();
+      flush(); // what was typed while it was on its way
+      if (sent === null) {
+        if (pending.length > 0) send();
+        else settle();
+      }
       return;
     }
     if (event.yields && pending.length > 0) {
@@ -103,10 +134,14 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
 
   const client = {
     start(state) {
-      ({ epoch, rev } = state);
+      ({ epoch, rev, cursors = [] } = state);
       confirmed = last = state.text;
     },
     flush,
+    /** The person changed the view: their typing goes out now, or once the edit on its way is answered. */
+    edited() {
+      if (sent === null && !syncing) flush();
+    },
     /** An `ops` event: an edit landed. */
     receive(event) {
       if (syncing) held.push(event);
@@ -138,7 +173,7 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
           const mine = diffOps(base, last, view.selection()?.to);
           const moved = transform(mine, landed).ops;
           const shown = transform(landed, mine, { first: true }).ops;
-          ({ epoch, rev } = state);
+          ({ epoch, rev, cursors = [] } = state);
           confirmed = state.text;
           pending = moved.length > 0 ? [moved] : [];
           sent = null;
@@ -152,9 +187,21 @@ export function createClient({ view, call, show, rules, onError = () => {} }) {
       })().catch(onError).finally(() => {
         syncing = null;
         for (const event of held.splice(0)) client.receive(event);
+        if (sent === null) flush(); // typed meanwhile
       });
       return syncing;
     },
+    /** The person's caret moved: the host hears where, once their typing has landed. */
+    moved() {
+      caretMoved = true;
+      sendCaret();
+    },
+    /** A `cursors` event: where each person's cursor is. */
+    cursors(event) {
+      if (event.epoch === epoch && event.rev === rev && !syncing) cursors = event.cursors;
+    },
+    /** Where people's cursors are in the view's text as last read: [{ id, name, at }]. */
+    cursorsShown: () => cursors.map((cursor) => ({ ...cursor, at: pending.reduce((at, ops) => mapOffset(at, ops), cursor.at) })),
     /** Resolves once all the view's typing so far has landed (and is written). */
     landed() {
       flush();

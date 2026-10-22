@@ -14,9 +14,9 @@ import {
 } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
-const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
+const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-desktop-'));
 
-const SIDECAR = '{"opendoc":3}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
+const SIDECAR = '{"comments":3}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
 
 test('docPathFor opens Markdown, any UTF-8 text file up to 1 MB, a file not there yet, and their sidecars', async () => {
   const dir = await tempDir();
@@ -30,11 +30,11 @@ test('docPathFor opens Markdown, any UTF-8 text file up to 1 MB, a file not ther
   await mkdir(at('folder.js'));
   assert.equal(await docPathFor(at('plan.md')), at('plan.md'), 'a Markdown name, even before it exists');
   assert.equal(await docPathFor(at('Notes.MARKDOWN')), at('Notes.MARKDOWN'));
-  assert.equal(await docPathFor(at('plan.md.opendoc.jsonl')), at('plan.md'));
+  assert.equal(await docPathFor(at('plan.md.comments.jsonl')), at('plan.md'));
   for (const name of ['app.js', 'Makefile', 'empty.txt']) assert.equal(await docPathFor(at(name)), at(name), name);
-  assert.equal(await docPathFor(at('app.js.opendoc.jsonl')), at('app.js'));
+  assert.equal(await docPathFor(at('app.js.comments.jsonl')), at('app.js'));
   assert.equal(await docPathFor(at('new.js')), at('new.js'), 'not there yet: it can be found or made');
-  assert.equal(await docPathFor(at('new.js.opendoc.jsonl')), at('new.js'));
+  assert.equal(await docPathFor(at('new.js.comments.jsonl')), at('new.js'));
   for (const name of ['big.log', 'pic.png', 'latin1.txt', 'folder.js']) {
     assert.equal(await docPathFor(at(name)), null, name);
   }
@@ -73,7 +73,7 @@ test('new docs in a folder take the next free Untitled name', async () => {
 
 test('a leftover sidecar keeps its name from being reused', async () => {
   const dir = await tempDir();
-  await writeFile(join(dir, 'Untitled.md.opendoc.jsonl'), '{"opendoc":3}\n');
+  await writeFile(join(dir, 'Untitled.md.comments.jsonl'), '{"comments":3}\n');
   assert.equal(await freeUntitledPath(dir), join(dir, 'Untitled 2.md'));
 });
 
@@ -84,7 +84,7 @@ test('renameFile moves the file and its sidecar together, under the name given',
 
   const moved = await renameFile(from, to);
   assert.equal(moved, to);
-  assert.deepEqual((await readdir(dirname(from))).sort(), ['launch.txt', 'launch.txt.opendoc.jsonl']);
+  assert.deepEqual((await readdir(dirname(from))).sort(), ['launch.txt', 'launch.txt.comments.jsonl']);
   assert.equal(await readFile(moved, 'utf8'), '# Plan\n\nShip it.\n');
   assert.equal(await readSidecarText(moved), SIDECAR);
 });
@@ -110,7 +110,7 @@ test('renameFile can change only the case of the name', async () => {
   await writeFile(sidecarPath(from), SIDECAR);
   const moved = await renameFile(from, join(dirname(from), 'Plan.md'));
   assert.equal(moved, join(dirname(from), 'Plan.md'));
-  assert.deepEqual((await readdir(dirname(from))).sort(), ['Plan.md', 'Plan.md.opendoc.jsonl']);
+  assert.deepEqual((await readdir(dirname(from))).sort(), ['Plan.md', 'Plan.md.comments.jsonl']);
   assert.equal(await readSidecarText(moved), SIDECAR);
 });
 
@@ -145,8 +145,8 @@ test('pathsFromArgs: doc paths from a launch, absolute, flags skipped', () => {
     pathsFromArgs(['electron', 'desktop/main.js', 'plan.md', '--inspect', join(cwd, 'b', 'x.md')], { packaged: false, cwd }),
     [join(cwd, 'plan.md'), join(cwd, 'b', 'x.md')],
   );
-  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', 'notes/idea.md'], { packaged: true, cwd }), [join(cwd, 'notes', 'idea.md')]);
-  assert.deepEqual(pathsFromArgs(['OpenDoc.exe', '--allow-file-access'], { packaged: true, cwd }), []);
+  assert.deepEqual(pathsFromArgs(['Ponjo.exe', 'notes/idea.md'], { packaged: true, cwd }), [join(cwd, 'notes', 'idea.md')]);
+  assert.deepEqual(pathsFromArgs(['Ponjo.exe', '--allow-file-access'], { packaged: true, cwd }), []);
   assert.deepEqual(pathsFromArgs(['electron', 'desktop/main.js'], { packaged: false, cwd }), []);
 });
 
@@ -169,7 +169,7 @@ test('the doc last open in a folder: newest first, one per folder, at most fifty
 test('listDocs: the docs in a folder and its subfolders, subfolders first, hidden folders and packages left out', async () => {
   const dir = await tempDir();
   const files = [
-    'README.md', 'b.markdown', 'a 10.md', 'a 2.md', 'notes.txt', 'plan.md.opendoc.jsonl', '.hidden.md',
+    'README.md', 'b.markdown', 'a 10.md', 'a 2.md', 'notes.txt', 'plan.md.comments.jsonl', '.hidden.md',
     'guides/intro.md', 'guides/deep/more.md', 'empty/nothing.txt', '.git/HEAD.md', 'node_modules/pkg/readme.md',
   ];
   for (const file of files) {
@@ -193,7 +193,7 @@ test('firstTextFile: a text file at the top before one below, never a sidecar or
   await writeFile(join(dir, 'src', 'app.js'), 'let x = 1;\n');
   assert.equal(await firstTextFile(dir), 'src/app.js');
   await writeFile(join(dir, 'a.png'), Buffer.from([0x89, 0x50, 0x00, 0x47]));
-  await writeFile(join(dir, 'b.json.opendoc.jsonl'), '{"opendoc":3}\n');
+  await writeFile(join(dir, 'b.json.comments.jsonl'), '{"comments":3}\n');
   await writeFile(join(dir, 'c.json'), '{}\n');
   assert.equal(await firstTextFile(dir), 'c.json');
   assert.equal(await firstTextFile(join(dir, 'missing')), null);
@@ -236,10 +236,10 @@ test('moveFolder moves a folder with everything in it, never over another or int
   const dir = await tempDir();
   await mkdir(join(dir, 'drafts', 'deep'), { recursive: true });
   await writeFile(join(dir, 'drafts', 'deep', 'plan.md'), '# Plan\n');
-  await writeFile(join(dir, 'drafts', 'deep', 'plan.md.opendoc.jsonl'), '{}');
+  await writeFile(join(dir, 'drafts', 'deep', 'plan.md.comments.jsonl'), '{}');
   await mkdir(join(dir, 'archive'));
   await moveFolder(join(dir, 'drafts'), join(dir, 'archive', 'drafts'));
-  assert.deepEqual((await readdir(join(dir, 'archive', 'drafts', 'deep'))).sort(), ['plan.md', 'plan.md.opendoc.jsonl']);
+  assert.deepEqual((await readdir(join(dir, 'archive', 'drafts', 'deep'))).sort(), ['plan.md', 'plan.md.comments.jsonl']);
   await mkdir(join(dir, 'taken'));
   await assert.rejects(moveFolder(join(dir, 'archive'), join(dir, 'taken')), { code: 'exists' });
   await assert.rejects(moveFolder(join(dir, 'archive'), join(dir, 'archive', 'drafts', 'archive')), { code: 'inside' });

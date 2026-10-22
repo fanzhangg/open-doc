@@ -32,8 +32,8 @@ export function createChrome({ getView, settings: store, getName, setName }) {
       list: api.scripts,
       reset: api.resetScript,
       // Only the app can encrypt a secret: it hands it to the doc host before this resolves.
-      saveSecret: (id, key, value) => window.opendocDesktop.saveSecret(id, key, value),
-      showFolder: window.opendocDesktop && (() => window.opendocDesktop.showAgents()),
+      saveSecret: (id, key, value) => window.ponjoDesktop.saveSecret(id, key, value),
+      showFolder: window.ponjoDesktop && (() => window.ponjoDesktop.showAgents()),
     },
   });
 

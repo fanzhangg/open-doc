@@ -19,7 +19,7 @@ let app;
 let page;
 
 before(async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-views-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-views-'));
   await build({
     entryPoints: [join(root, 'test', 'views', 'page.js')], outfile: join(dir, 'page.js'),
     bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',
@@ -133,6 +133,18 @@ for (const name of VIEWS) {
     }, 5_000, 'the offset to scroll into view');
   });
 
+  test(`${name} view: onEdit fires on each change the person makes, with getText holding it; onChange once they pause`, async () => {
+    await make(name, 'Alpha.\n');
+    await select('Alpha', 5, 5);
+    for (const key of 'xyz') await type(key);
+    assert.deepEqual(await run('contract.edits'), ['Alphax.\n', 'Alphaxy.\n', 'Alphaxyz.\n']);
+    assert.equal(await run('contract.changes'), 0);
+    await waitFor(() => run('contract.changes === 1'), 2_000, 'onChange after the pause');
+    await run(`view.applyText('Beta.\\n')`);
+    await new Promise((done) => setTimeout(done, 300));
+    assert.equal((await run('contract.edits')).length, 3, 'not for a change applied from outside');
+  });
+
   test(`${name} view: a read-only view cannot be edited`, async () => {
     await make(name, 'Alpha.\n', { editable: false });
     await select('Alpha', 2, 2);
@@ -141,6 +153,13 @@ for (const name of VIEWS) {
     assert.equal(await getText(), 'Alpha.\n');
   });
 }
+
+test('markdown view: a read-only view has no formatting tools and no Comment bubble', async () => {
+  await make('markdown', 'Alpha beta.\n', { toolbar: true, editable: false });
+  assert.equal(await run(`document.querySelectorAll('.od-toolbar [data-command]').length`), 0);
+  await select('Alpha', 0, 5);
+  assert.equal(await run(`document.querySelectorAll('.od-bubble').length`), 0);
+});
 
 test('markdown view: typed Markdown stays text and saves escaped', async () => {
   await make('markdown', 'Start.\n');

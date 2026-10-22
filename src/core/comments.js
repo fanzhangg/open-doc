@@ -1,5 +1,5 @@
-// The sidecar, version 3 (spec/SPEC.md): `X.opendoc.jsonl`, a first
-// line `{"opendoc":3}` and then one comment per line. A comment never
+// The sidecar, version 3 (spec/SPEC.md): `X.comments.jsonl`, a first
+// line `{"comments":3}` and then one comment per line. A comment never
 // changes or goes; resolving is a comment. Threads, who is
 // mentioned and who is asked are read from the comments, never stored.
 // Pure, so the doc host and the page read a sidecar the same way.
@@ -39,7 +39,7 @@ export function parseSidecar(text) {
   } catch {
     header = null;
   }
-  const problem = !isObject(header) || !Number.isInteger(header.opendoc) ? 'invalid' : header.opendoc < FORMAT_VERSION ? 'older' : header.opendoc > FORMAT_VERSION ? 'newer' : null;
+  const problem = !isObject(header) || !Number.isInteger(header.comments) ? 'invalid' : header.comments < FORMAT_VERSION ? 'older' : header.comments > FORMAT_VERSION ? 'newer' : null;
   const lines = [];
   const bad = [];
   const seen = new Set();
@@ -64,7 +64,7 @@ export function parseSidecar(text) {
 
 /** A sidecar's text: the header, then `lines` (from parseSidecar, or added). */
 export function serializeSidecar(lines) {
-  return [JSON.stringify({ opendoc: FORMAT_VERSION }), ...lines.map((l) => l.text ?? JSON.stringify(l.comment))].join('\n') + '\n';
+  return [JSON.stringify({ comments: FORMAT_VERSION }), ...lines.map((l) => l.text ?? JSON.stringify(l.comment))].join('\n') + '\n';
 }
 
 // Why `c` is not a valid comment (§2), or null.
@@ -189,19 +189,22 @@ export function threadsOf(comments, mentionable = []) {
  * what was asked before it, so reopening asks no one.
  */
 export function askedOf(thread, askers) {
-  if (thread.resolved) return [];
-  const add = (list, id) => { if (!list.includes(id) && !askers.includes(id)) list.push(id); };
-  const theirs = [];
-  add(theirs, thread.comments[0].by.id);
-  const asked = [];
+  return [...askedBy(thread, askers).keys()];
+}
+
+/** The same, each with who asked it: Map(buddy id → the id of the latest of `askers` who asks it). */
+export function askedBy(thread, askers) {
+  const asked = new Map();
+  if (thread.resolved) return asked;
+  const theirs = [thread.comments[0].by.id].filter((id) => !askers.includes(id));
   thread.comments.forEach((c, i) => {
-    if (c.resolved) asked.length = 0;
+    if (c.resolved) asked.clear();
     if (!askers.includes(c.by.id) || c.body.trim() === '') return;
     for (const id of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.id === id);
-      if (!answered) add(asked, id);
+      if (!answered && !askers.includes(id)) asked.set(id, c.by.id);
     }
-    for (const id of c.mentions) add(theirs, id);
+    for (const id of c.mentions) if (!theirs.includes(id) && !askers.includes(id)) theirs.push(id);
   });
   return asked;
 }

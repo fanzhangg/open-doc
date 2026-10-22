@@ -18,13 +18,13 @@ const HOST = join(dirname(fileURLToPath(import.meta.url)), '..', 'desktop', 'doc
 // A host with its own settings, with no buddies in them, and the processes
 // started for it, latest last.
 async function newHost() {
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ agents: [] }));
   const processes = [];
   const logged = [];
   const host = createDocHost({
     fork: () => {
-      const child = fork(HOST, [], { env: { ...process.env, OPENDOC_CONFIG_DIR: settingsDir }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+      const child = fork(HOST, [], { env: { PONJO_RELAY: '', ...process.env, PONJO_CONFIG_DIR: settingsDir }, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
       child.sent = [];
       processes.push(child);
       return { postMessage: (message) => child.sent.push(message.type) && child.send(message), on: (event, fn) => child.on(event, fn), kill: () => child.kill() };
@@ -50,7 +50,7 @@ test('the doc host opens a doc, renames it with its sidecar, and closes it', asy
   const { host } = await newHost();
   try {
     const docPath = await tempDoc();
-    await writeFile(sidecarPath(docPath), '{"opendoc":3}\n');
+    await writeFile(sidecarPath(docPath), '{"comments":3}\n');
     const doc = await host.openHostedDoc(docPath);
     assert.ok(await serves(doc));
 
@@ -76,7 +76,7 @@ test('the doc host opens a doc, renames it with its sidecar, and closes it', asy
 test('a doc whose folder moved is followed there, and says which buddies are at work', async () => {
   const { host } = await newHost();
   try {
-    const root = await mkdtemp(join(tmpdir(), 'opendoc-folder-'));
+    const root = await mkdtemp(join(tmpdir(), 'ponjo-folder-'));
     await mkdir(join(root, 'drafts'));
     const docPath = join(root, 'drafts', 'plan.md');
     await writeFile(docPath, '# Plan\n');
@@ -95,7 +95,7 @@ test('a doc whose folder moved is followed there, and says which buddies are at 
 test('a doc that cannot be read fails to open', async () => {
   const { host } = await newHost();
   try {
-    await assert.rejects(host.openHostedDoc(join(tmpdir(), 'no-such-dir-opendoc', 'missing.md')));
+    await assert.rejects(host.openHostedDoc(join(tmpdir(), 'no-such-dir-ponjo', 'missing.md')));
   } finally {
     await host.shutdown();
   }
@@ -104,7 +104,7 @@ test('a doc that cannot be read fails to open', async () => {
 test('a doc host that stops is started again and opens the open docs again, the agents\' secrets first', async () => {
   const { host, processes, logged } = await newHost();
   try {
-    await host.setSecrets({ opendoc: { key: 'sk-test' } });
+    await host.setSecrets({ ponjo: { key: 'sk-test' } });
     const docPath = await tempDoc();
     const doc = await host.openHostedDoc(docPath);
     const closedDoc = await host.openHostedDoc(await tempDoc());

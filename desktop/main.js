@@ -1,11 +1,11 @@
-// The OpenDoc desktop app (Electron main process): app lifecycle, one app
+// The Ponjo desktop app (Electron main process): app lifecycle, one app
 // instance for every launch, the menus, the Open / Open Folder / New Doc /
 // Rename dialogs, and the app state (recent docs and folders, last folder,
 // window bounds). Each doc window shows the editor page (dist/web), which
 // talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
+import { BrowserWindow, Menu, Notification, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
@@ -33,11 +33,11 @@ const isMac = process.platform === 'darwin';
 const REVEAL_LABEL = isMac ? 'Reveal in Finder' : process.platform === 'win32' ? 'Show in File Explorer' : 'Show in Folder';
 const DOC_HOST = join(dirname(fileURLToPath(import.meta.url)), 'doc-host.js');
 
-app.setName('OpenDoc');
+app.setName('Ponjo');
 app.enableSandbox();
 
 // One app for every launch: a second launch (double-clicking a doc while the
-// app runs, `OpenDoc x.md` in a shell) hands its docs to this one and quits.
+// app runs, `Ponjo x.md` in a shell) hands its docs to this one and quits.
 const launchPaths = pathsFromArgs(process.argv, launchContext());
 if (!app.requestSingleInstanceLock({ paths: launchPaths })) {
   app.exit(0);
@@ -96,8 +96,8 @@ async function openPath(path, { create = false, parent = null } = {}) {
   if (isDirectory(path)) return openFolder(path, parent);
   const docPath = await docPathFor(path);
   if (!docPath) {
-    await warn(parent, `OpenDoc can't open ${basename(path)}.`,
-      'It opens text files (UTF-8, up to 20 MB) and their comment files (.opendoc.jsonl).');
+    await warn(parent, `Ponjo can't open ${basename(path)}.`,
+      'It opens text files (UTF-8, up to 20 MB) and their comment files (.comments.jsonl).');
     return false;
   }
   if (!isFile(docPath)) {
@@ -234,7 +234,7 @@ async function newDocDialog(parent) {
   } catch (error) {
     if (error.code !== 'exists') return failed(parent, `Could not create ${basename(path)}.`, error);
     const open = await ask(parent, `${basename(path)} already exists.`,
-      `OpenDoc never replaces a file. Open the existing doc in ${dirname(path)} instead?`, 'Open');
+      `Ponjo never replaces a file. Open the existing doc in ${dirname(path)} instead?`, 'Open');
     if (open) await openPath(path, { parent });
     return;
   }
@@ -269,7 +269,7 @@ async function renameDialog(win) {
     recentChanged();
   } catch (error) {
     const detail = error.code === 'exists'
-      ? `${basename(error.path)} already exists in ${dirname(error.path)}. OpenDoc never replaces a file; pick another name.`
+      ? `${basename(error.path)} already exists in ${dirname(error.path)}. Ponjo never replaces a file; pick another name.`
       : error.message;
     await warn(win, `Could not rename ${basename(from)}.`, detail);
   }
@@ -450,7 +450,26 @@ function setSettings(patch) {
 // Ask the doc page in `win` to open part of its own UI.
 function pageCommand(win, name) {
   const page = windows.docFor(win)?.view ?? (windows.isStartWindow(win) ? win : null);
-  page?.webContents.send('opendoc:command', name);
+  page?.webContents.send('ponjo:command', name);
+}
+
+// Someone asks to join the project in `folder`: a notification, whose click
+// opens the Team panel of the project's window, where they wait at the top.
+const notices = new Set(); // shown, kept until clicked or closed
+function askedToJoin({ folder, name }) {
+  if (!Notification.isSupported()) return;
+  const notice = new Notification({ title: `${name} asks to join ${basename(folder)}`, body: 'Allow them in the Team panel.' });
+  notices.add(notice);
+  notice.on('close', () => notices.delete(notice));
+  notice.on('click', () => {
+    notices.delete(notice);
+    const entry = windows.folderWindow(folder);
+    if (!entry) return;
+    entry.win.show();
+    entry.win.focus();
+    pageCommand(entry.win, 'team');
+  });
+  notice.show();
 }
 
 // Settings > Agents > Show folder: where the agents are, to edit them.
@@ -761,7 +780,7 @@ const listNames = (names) => (names.length < 3 ? names.join(' and ') : `${names.
 async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
   const entry = sidebarOf(win);
   const path = await checkInFolder(entry, rel, kind);
-  const command = (action) => () => contents.send('opendoc:folder-command', { action, rel, kind });
+  const command = (action) => () => contents.send('ponjo:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
   const newFile = { label: 'New File', click: command('newFile') };
   const template = kind === 'root' ? [newFile] : [
@@ -784,12 +803,12 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
 // ---- requests from pages (preload.cjs) ----
 
 // A doc page asks for a message port to its doc (windows.connectPage).
-ipcMain.on('opendoc:connect', (event) => {
+ipcMain.on('ponjo:connect', (event) => {
   if (event.senderFrame !== event.sender.mainFrame) return;
   windows.connectPage(event.sender).catch((error) => console.error(error));
 });
 
-ipcMain.handle('opendoc:action', async (event, action, arg) => {
+ipcMain.handle('ponjo:action', async (event, action, arg) => {
   // A doc's page is in a view of its window; the start window's is the window's own.
   const win = windows.windowForContents(event.sender) ?? BrowserWindow.fromWebContents(event.sender);
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');
@@ -891,7 +910,7 @@ async function start() {
   // own so that what the docs do never holds up the windows. It takes its
   // environment from this process, so the login shell's goes in first.
   Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
-  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'OpenDoc Docs' }) });
+  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'Ponjo Docs' }), onJoin: askedToJoin });
   secrets = await readSecrets(safeStorage).catch((error) => {
     console.error('Could not read the agents\' secrets:', error.message);
     return {};

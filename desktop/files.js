@@ -33,7 +33,7 @@ export async function isTextFile(path) {
 }
 
 /**
- * The doc a path opens: X for X or its sidecar X.opendoc.jsonl, when X is
+ * The doc a path opens: X for X or its sidecar X.comments.jsonl, when X is
  * named as Markdown, is a text file (isTextFile) or is not there yet; null
  * for any other file.
  */
@@ -101,7 +101,7 @@ export async function createUntitled(dir) {
 }
 
 /**
- * Rename (or move) a file and its sidecar together, as `opendoc mv` does.
+ * Rename (or move) a file and its sidecar together, as `ponjo mv` does.
  * A name that only changes case works on case-insensitive disks too. Never
  * overwrites.
  * @returns {Promise<string>} the file's new path

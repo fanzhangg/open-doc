@@ -1,5 +1,5 @@
 {
-  "name": "OpenDoc agent",
+  "name": "Ponjo agent",
   "about": "Our own: a cloud model reads and proposes, and the program checks and applies. Runs on Node.js.",
   "settings": [
     { "key": "provider", "type": "choice", "label": "Provider", "options": [["anthropic", "Anthropic"], ["openai", "OpenAI-compatible"]], "default": "anthropic" },

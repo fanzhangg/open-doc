@@ -1,8 +1,8 @@
-// The OpenDoc agent (docs/opendoc-agent.md): a model reads and proposes, and
+// The Ponjo agent (docs/ponjo-agent.md): a model reads and proposes, and
 // this program checks the proposal and applies it to the copies. Run by
-// `opendoc` (`opendoc.cmd` on Windows) next to it, on your own node, under
-// the contract of docs/agent-config.md; its settings (opendoc.json) come
-// as OPENDOC_SETTING_*. Plain fetch, no SDK: it runs from the config
+// `ponjo` (`ponjo.cmd` on Windows) next to it, on your own node, under
+// the contract of docs/agent-config.md; its settings (ponjo.json) come
+// as PONJO_SETTING_*. Plain fetch, no SDK: it runs from the config
 // folder, with no node_modules. Yours to change.
 
 import { appendFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { text } from 'node:stream/consumers';
 import { fileURLToPath } from 'node:url';
 
 // Each turn's messages, a line each, next to the app's own logs.
-const LOG = fileURLToPath(new URL('../logs/opendoc.jsonl', import.meta.url));
+const LOG = fileURLToPath(new URL('../logs/ponjo.jsonl', import.meta.url));
 
 const STEPS = 20;
 const MAX_READ = 20_000; // characters a read without `lines` returns
@@ -200,7 +200,7 @@ export function files({ doc, sidecar, project }) {
 }
 
 // Where a failed run's reply sends the user: the failure, then what to change.
-const SETTINGS = 'The provider, endpoint, model and key are in Settings > Agents > OpenDoc agent.';
+const SETTINGS = 'The provider, endpoint, model and key are in Settings > Agents > Ponjo agent.';
 const HINTS = { 401: 'Check the API key.', 404: 'Check the endpoint and the model.' };
 
 const CACHED = { type: 'ephemeral' };
@@ -261,14 +261,14 @@ async function post(url, headers, body) {
 // the environment, the edits applied to the copies, the reply on stdout.
 // Then the log.
 async function main() {
-  const { OPENDOC_DOC: doc, OPENDOC_COMMENTS: sidecar, OPENDOC_PROJECT: project, OPENDOC_BUDDY: buddy } = process.env;
-  const { OPENDOC_SETTING_PROVIDER: provider, OPENDOC_SETTING_ENDPOINT: endpoint, OPENDOC_SETTING_MODEL: model, OPENDOC_SETTING_KEY: key, OPENDOC_SETTING_EFFORT: effort } = process.env;
+  const { PONJO_DOC: doc, PONJO_COMMENTS: sidecar, PONJO_PROJECT: project, PONJO_BUDDY: buddy } = process.env;
+  const { PONJO_SETTING_PROVIDER: provider, PONJO_SETTING_ENDPOINT: endpoint, PONJO_SETTING_MODEL: model, PONJO_SETTING_KEY: key, PONJO_SETTING_EFFORT: effort } = process.env;
   const readable = files({ doc, sidecar, project });
   const at = new Date().toISOString();
   let messages = []; // the turn's, which it goes on adding to after each step
   let error = null;
   try {
-    if (!key) throw new Error('No API key: set one in Settings > Agents > OpenDoc agent.');
+    if (!key) throw new Error('No API key: set one in Settings > Agents > Ponjo agent.');
     const infer = INFER[provider]({ endpoint, model, key, effort });
     const step = (sent, tools) => infer((messages = sent), tools);
     const { edits, reply } = await turn({ prompt: await text(process.stdin), doc, sidecar }, { infer: step, readFile: readable });

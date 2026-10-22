@@ -2,7 +2,7 @@
 
 ## Overview
 
-How OpenDoc is built, in three parts. [The app](#the-app): the doc host, a
+How Ponjo is built, in three parts. [The app](#the-app): the doc host, a
 background process that does every file write and runs the AI buddies, and
 the windows you edit in. [A buddy's turn](#a-buddys-turn): AI buddies are
 agents that answer comments, and a turn is one AI buddy answering one
@@ -11,12 +11,11 @@ what it changed back in. (The code calls a turn a run: `Runner`,
 `runs.jsonl`.) [Sharing](#sharing): how a teammate's browser joins the same
 host.
 
-Sharing, and the revisions every edit goes through with it, are designed,
-not built. What they change is marked *planned*; everything else is what
-the code does.
+Sharing is built: teammates join from a link, are allowed by the owner,
+read or edit, and see who is here and where each person's cursor is.
+Everything here is what the code does.
 
-No backward compatibility with earlier formats: a version 1 sidecar is
-ignored, and a version 2 one is not converted. A sidecar this version must
+No backward compatibility with earlier formats: a sidecar this version must
 not write (another version, or no header) shows its comments read-only,
 with a way to fix it.
 
@@ -28,7 +27,7 @@ with a way to fix it.
 2. **Only the app writes them.** An agent gets only a copy. Any other
    change (other editors, `git pull`) is seen and merged.
 3. **An agent is a filter:** prompt on stdin, copies of the doc and its
-   comments to edit, reply on stdout. It knows nothing of OpenDoc and
+   comments to edit, reply on stdout. It knows nothing of Ponjo and
    remembers nothing.
 4. **No one resolves a conflict by hand.** Between people, nothing typed is
    dropped: the host orders their edits and merges them by character. An
@@ -60,7 +59,7 @@ The app has two modes:
   folder.
 - **Project mode:** a folder opened from the home page. A file tree and
   its docs, Clippy, and the project's own buddies. They live in
-  `.opendoc/buddies/` at the folder's root and travel with it
+  `.ponjo/buddies/` at the folder's root and travel with it
   ([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
@@ -80,7 +79,7 @@ buddy ([PROJECT §2](../spec/PROJECT.md)):
 | | Clippy | Project buddies |
 | --- | --- | --- |
 | Reached from | every doc, in either mode | docs in their project only |
-| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.opendoc/buddies/<Name>.md` in the project |
+| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.ponjo/buddies/<Name>.md` in the project |
 | Travels with | the user | the project folder |
 | Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from its id |
 | Color | yellow, its own | one of the other seven, picked by id |
@@ -115,7 +114,7 @@ flowchart TD
 
 | Component | Owns |
 | --- | --- |
-| Format | `X` + `X.opendoc.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
+| Format | `X` + `X.comments.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
 | Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff (Myers', `diff.js`), text operations and how they merge (`ot.js`), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
 | Markdown library (`src/markdown/`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |
@@ -126,11 +125,12 @@ flowchart TD
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
 | Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
-| Team | *planned:* who is on a project and what each may do. See Sharing |
+| Relay (`relay/`) | a Cloudflare Worker at `ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
+| Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
 
-DocService, Runner and ProjectService run in the doc host, the app's utility process.
-Windows reach it over Electron message ports; a teammate's page, *planned*,
-over a relay.
+DocService, Runner, ProjectService and Team run in the doc host, the app's utility process.
+Windows reach it over Electron message ports; a teammate's page over the
+relay.
 
 ### Views and rules
 
@@ -194,6 +194,7 @@ within its limits:
 | the doc's text | an editable view | 3 s |
 | a key | its character in the doc | 30 ms median, 100 ms p95 |
 | a teammate's edit arriving | it shown (the network aside) | 50 ms median, 100 ms p95 |
+| a key | its character shown at a teammate, while the person types on (the network aside) | 50 ms median, 100 ms p95 |
 | the doc opened | the end of any one task that keeps the page busy | 500 ms |
 
 A view keeps it only up to a size, its `limits`: how long the doc is, and
@@ -210,7 +211,16 @@ The desktop app opens text files up to 20 MB, room for the plain view's
 limit in any script. `test/perf/latency.test.js` (`npm run test:perf`, a CI
 job on every pull request) opens each view at its limits, in the doc shape
 that costs it most, types while a teammate's edits arrive, and fails when
-the promise is missed twice running. Two dependencies are quadratic in one
+the promise is missed twice running; `test/perf/typing.test.js` types in
+a view, as the owner, and times each key to the character on a teammate's
+page (the browser build, its applyText and marks included) through the
+relay run locally, with the teammate's line 40 ms slower each way as over
+the internet, in a small Markdown doc and in the plain view's longest,
+which the host writes whole on every key. A view sends each change the
+person makes as it is made (`onEdit`), one edit on its way at a time: keys
+typed while one is on its way go out together once it is answered, so
+typing reaches others while it goes on, not once it pauses; a teammate far
+from the relay sends one edit per round trip. Two dependencies are quadratic in one
 paragraph's length; installs and builds patch them in node_modules, for the
 page and the doc host alike (`scripts/patch-deps.js`), until
 they are fixed upstream.
@@ -226,9 +236,10 @@ with the views' side of them (#215; the code calls Undo on a reply
 `undoReply`, and a restore is still its own call, `restoreVersion`). Not
 yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
-teammates, Team and `cursor`. The door is built for the owner and AI
-buddies (#223); ProjectService is behind it (#229), but an agent still reads
-more than it shows (#230).
+teammates who edit, and `cursor`. The door is built for the owner, AI
+buddies and a teammate's page that reads (#223, #226); ProjectService
+(#229) and Team (#227) are behind it, and an agent reads only the
+project's mirror, what ProjectService shows (#230).
 
 **Every writer comes through one door.** A page's call comes as
 `call(type, arg, who)`, `who` being `{ id, name, kind, level }`. Each call
@@ -280,7 +291,9 @@ text the file last held, the version saved after the turn) and take
 `diffOps(that base, the text now)` as what landed since, so they need no
 log, after a restart or days later. History records a version when typing
 pauses, before and after each buddy's edit, an outside change, an undo or a
-restore, and when the history is opened.
+restore, and when the history is opened, each credited to whoever made it.
+A burst of typing ends once everyone typing in it has paused: one version,
+whose `authors` are each person who typed in it (#228).
 
 **Undo on a reply is one edit**: the inverse of the turn's, from the
 versions saved before and after it, rebased with `transform` over
@@ -291,12 +304,12 @@ does not yield: an undo must not give way to a buddy's edit.
 
 | Component | Its one thing | Interface |
 | --- | --- | --- |
-| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
+| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`, `mapOffset(at, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor(at)`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes |
+| DocService | order every edit to a doc, and write it | `state()` → text, `{ epoch, rev }` and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again calls `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
-| Team | who is on the project and what each may do | for the owner `allow(id, access)`, `remove(id)`, `set(id, { access })` with `access` `read` or `edit`, `link()`; the door asks it a `who`'s level; a request to join comes from the relay as `join({ id, name })` |
+| Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
 | ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agents | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
 | Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
@@ -328,7 +341,11 @@ when read. Nothing stores it.
   the text the file held when last written. Where it overlaps what was typed
   since, the typing wins and the outside version is only in history.
 - Before writing, DocService checks the file is still what it last wrote;
-  if not, it lands the outside change first, the same way.
+  if not, it lands the outside change first, the same way. A file whose
+  size, mtime and inode are still those of its own last write is not read
+  again, nor when the watch fires for that write: a doc of millions of
+  characters takes tens of milliseconds to read and hash, on every key
+  (#235).
 - Every file is written whole: a temporary file in the same folder,
   renamed over it.
 - Above the files, a doc is its text: UTF-8, no byte order mark, lines
@@ -347,30 +364,31 @@ since: where someone changed that text since, their text stays.
 
 Each saves a version first. Undo on a reply is the same `transform` every
 edit goes through (see Interfaces): the turn's edit taken back, yielding to
-what changed since. It works where the versions are, on the doc host;
-*planned*, from any window of the team. Cmd+Z is the editor's own history,
+what changed since. It works where the versions are, on the doc host,
+from any window of the team, as whoever clicked it. Cmd+Z is the editor's own history,
 your typing only, and its result is typing like any other: a person's
 edit, which does not yield.
 
 ### The config folder
 
-In the config folder (`~/Library/Application Support/OpenDoc/` on macOS),
+In the config folder (`~/Library/Application Support/Ponjo/` on macOS),
 written only by the app.
 
 | File | Holds |
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; views', rules' and agents' settings; which agent runs buddies |
-| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the OpenDoc agent ship |
+| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
-| `team/` | *planned:* each project's teammates and their access |
+| `mirrors/` | each project's mirror: a copy of what the project shows, for agents to read (`src/host/mirror.js`) |
+| `team/` | each project's link (the secret its room is made from) and teammates, `{ id, name, level }`, in a file named by the SHA-256 of the project folder's real path: a project that moves must allow its teammates again |
 
 ## A buddy's turn
 
 A thread waits on AI buddy X (by id) when a person's comment that may ask, newer
-than X's last comment there, asks X: today this machine's user's, *planned*
-also a teammate's who can edit. A comment asks whom it @mentions; one that
+than X's last comment there, asks X: the owner's, or a teammate's who can
+edit. A comment asks whom it @mentions; one that
 mentions no one asks the thread's AI buddies: the one that opened it, and
 each @mentioned there before. An empty one (resolving, reopening) asks no
 one. That is computed from the sidecar and the ids of those who may ask. AI
@@ -381,7 +399,11 @@ buddies run only on docs open in a window.
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
-   `OPENDOC_BUDDY` (the name is for the script; the app goes by id).
+   `PONJO_BUDDY` (the name is for the script; the app goes by id). In
+   project mode the project is its mirror, brought up to date first: a copy
+   in the config folder of what ProjectService shows, but `node_modules`
+   and files that are not text or are over 20 MB, so an agent never learns
+   the real path or reads what a teammate may not.
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.
 3. On exit 0, DocService saves versions before and after, lands the doc
@@ -414,9 +436,8 @@ app cannot (why, what to decide), and may be empty. The turn's edits land at
 once, shown as a revision (new text in the buddy's color, removed text
 struck through) until the user next types or another turn's edits land;
 clicking the count shows them again. The count, the revision and Undo are
-read from the version saved after the turn and the one before it: today on
-the machine that ran it only, *planned* in every window of the team, since
-the versions are on the host.
+read from the version saved after the turn and the one before it, in every
+window of the team, since the versions are on the host.
 
 ### Failures, retries and restarts
 
@@ -428,7 +449,10 @@ the same time; their merges are applied one at a time.
 
 ## Sharing
 
-*Planned.* A teammate joins the owner's project from a link, in a browser.
+A teammate joins the owner's project from a link, in a browser. Built: a
+page reads a doc through the relay (#226); joining, Allow and Team
+(#227); teammates who edit (#228); the relay deployed (#241); the
+project's tree and every doc in it (#242).
 The files stay on the owner's machine. Teammates are trusted: in a doc a
 teammate who can edit does what the owner does. Doc mode has no sharing.
 
@@ -437,20 +461,58 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   keeps only what it shows, and a reload resyncs it from the host. While the
   host is offline no one edits; the app keeps the computer awake while
   teammates are in, and a page waits and reconnects by itself.
-- **A relay** (a Cloudflare Worker, one Durable Object per room) joins the
-  host's outgoing WebSocket to each teammate's, over TLS, and stores
-  nothing. There is no encryption of our own: the relay is ours, and it
-  could read what passes.
+- **A relay** (`relay/worker.js`, a Cloudflare Worker, one Durable Object
+  per room) joins the host's outgoing WebSocket to each teammate's, over
+  TLS, and stores nothing. It is at `ponjo.app`, on the owner of
+  this repo's Cloudflare account, and serves the teammate's page too, so
+  page and relay share one origin (the page may connect to its own origin
+  only). There is no encryption of our own: the relay is
+  ours, and it could read what passes. The host has one connection for all
+  its pages: the relay numbers each page as a peer, which a page cannot
+  forge. A room is the SHA-256 of a secret only the host knows; the host
+  proves it holds the secret when it connects, so a link, which names only
+  the room, lets no one pose as the host. The app's own doc host shares a
+  project, at its link, once a doc of it opens, so a teammate's page gets
+  the owner's edits straight from the host that orders them. The app's
+  relay is `wss://ponjo.app` unless `PONJO_RELAY` names another
+  (empty: nothing is shared).
+- **Limits**, so the relay is no free pipe and stays within the Workers
+  free plan: at most 20 pages in a room (one more is turned away, `full`),
+  no message over 8 MiB characters (its sender is closed), and 60 rooms a
+  minute from one address. Sockets hibernate between messages, so an idle
+  room costs nothing; a page waiting for its host, and a host for the
+  relay, try again twice as long each time, up to 30 seconds.
 - **One seam.** A page talks to the host through `{ call, onEvent }`: in the
-  app a message port, in a browser the relay. The host serves both the same
-  way, adding a `who` to every call. The browser build already exists in
-  `preview/`, where `doc-stub.js` plays the host; the relay replaces it.
+  app a message port, in a browser the relay (`web/relay.js`). The host
+  serves both the same way (`serve` in `desktop/doc-host.js`), adding a
+  `who` to every call. `team.html` (built with the app's pages, in
+  `dist/web`) is the doc window on the relay; in the preview (`preview/`)
+  `doc-stub.js` plays the host instead.
+  A page names its doc by its path in the project, or none for the
+  project's first; `state` tells it that path and the project's name
+  (`place`), for its sidebar (`web/files.js`), which reads the tree through
+  the door (`list`, `read`) and opens another doc as the page of the same
+  link on it, let in at once. The doc is open once however many windows
+  and pages have it. Anyone but the owner gets the default settings, not the
+  owner's, and a path in the project, not its real path. A page the host
+  turns away is told why (`not_found`, `name_taken`, `denied`, `removed`,
+  `link_replaced`, `full`), and says so.
+- **Presence.** The host tells everyone on a project who has a window or
+  page on any of its docs (`here`), each person once and whether on the
+  same doc; a person not there is away, greyed. Each person's cursor goes
+  to the host once their typing has landed (`cursor`, on the rev they
+  have), and the host tells it to everyone on the doc (`cursors`); a page
+  moves it over the edits it hears of and its own typing not landed yet
+  (`web/client.js`), so it stays where its text is.
 - **Everyone is a participant**: `{ id, name, kind, level }`. The host sets
-  `who` from the connection (a
-  teammate's id is made once in their browser; an AI buddy's is in its file)
-  and never trusts one sent in a message. Names are unique on a project,
-  people's and AI buddies' together. `can(who, level)` is the one place
-  that decides:
+  `who` from the connection and never trusts one sent in a message. A
+  teammate's id is the hash of a key made once in their browser, which
+  only that browser and the host (through the relay) see, so no one who
+  reads an id in a comment can pose as them; an AI buddy's is in its file.
+  Names are unique on a project, people's and AI buddies' together: Team
+  refuses a name taken by the owner, an AI buddy, a teammate or a request,
+  and DocService a buddy's or the owner's taken by a teammate.
+  `can(who, level)` is the one place that decides:
   - *Owner:* rename, move, delete and create files; settings, AI buddies
     and agent scripts; and all a teammate who can edit may.
   - *A teammate's access*, Read or Edit (write), set when the owner allows
@@ -460,11 +522,18 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
     it; it decides nothing.
 - **Joining.** The link is one per project, permanent until the owner makes a
-  new one, and grants nothing by itself. A first join asks the owner, with a
-  notification, and waits for Allow, where the owner picks Read or Edit;
-  Allow binds the teammate's id to that browser. A name already taken on the
+  new one, and grants nothing by itself: it names the room, and opens the
+  page the relay serves at the same origin
+  (`https://ponjo.app/team?room=<room>`). The page asks a name
+  once, and joins with it and its key. A first join asks the owner, with a notification (the host tells
+  the app `join`), and waits, told `waiting`, for Allow in the Team panel,
+  where the owner picks Read or Edit; Allow binds the teammate's id to that
+  browser, and from then on the link lets it in at once. A request lives
+  in the host's memory; a teammate in `team/`. A name already taken on the
   project is refused at the door, and the teammate picks another. Remove
-  ends one teammate; a new link ends every old one.
+  turns one teammate's pages away at once; a new link turns away every
+  page on the old one, whose room then has no host, and teammates join
+  again from the new one.
 - **Scope is the project folder**, served by a `ProjectService` to the
   owner's windows and teammates alike, so both see the same tree. A path is
   resolved to its real path and must be inside the root; a link out of it,

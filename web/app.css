@@ -132,11 +132,12 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 /* A buddy has three states, the same on every face of it: ready (as drawn),
    working (it grows, its body rolls and its face bobs) and away (greyed). A
    failed run is a moment: the face shakes and flashes red, once. A face you
-   point at grows too, and on its card it moves as if at work, to greet you. */
+   point at grows too, and on its card it moves as if at work, to greet you.
+   A person is here (as drawn) or away (greyed). */
 :is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-avatar-agent, .od-avatar-agent:hover { transform: scale(1.12); }
 :is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-body { animation: od-spin 2.4s linear infinite; }
 :is([data-presence="working"], .od-typing, .od-panel .od-profile:not([data-presence="away"])) .od-face-look { animation: od-bob 0.8s ease-in-out infinite alternate; }
-[data-presence="away"] .od-avatar-agent { filter: grayscale(1); opacity: 0.45; }
+[data-presence="away"] .od-avatar { filter: grayscale(1); opacity: 0.45; }
 .od-avatar-agent.od-failed { animation: od-shake 0.45s ease-in-out; }
 .od-failed .od-face-body { animation: od-red 1s; }
 @keyframes od-spin { to { transform: rotate(360deg); } }
@@ -172,7 +173,17 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 
 
 /* the People panel: who is in the doc, like a shared doc's people list */
-.od-panel[data-card="buddies"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.od-panel[data-card="team"] { width: 360px; max-height: calc(100vh - 70px); overflow-y: auto; }
+.od-people-list .od-setting-group { margin: 12px 0 2px; }
+.od-people-none { padding: 4px 0; color: var(--text-faint); font-size: 12px; }
+.od-people-invite { display: flex; gap: 6px; }
+.od-people-invite .od-icon { width: 14px; height: 14px; }
+.od-people-pending { padding: 4px 0 8px; }
+.od-people-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.od-teammate-row { margin-top: 12px; }
+.od-join { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; gap: 12px; width: 320px; height: fit-content; margin: auto; padding: 24px; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow-raised); }
+.od-join-text { margin: 0; color: var(--text-soft); font-size: 13px; }
+.od-join .od-input { width: auto; }
 .od-people-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
 .od-people-row { display: flex; align-items: center; gap: 8px; margin: 0 -8px; }
 .od-people-row:not(.od-people-new):hover { background: var(--hover); }
@@ -262,7 +273,8 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .od-banner-text { flex: 1; }
 .od-banner button { height: 28px; border: 1px solid var(--border-strong); background: var(--bg); border-radius: 6px; padding: 0 12px; font-weight: 500; }
 .od-banner button:hover { background: var(--hover); }
-[data-read-only] :is(.od-bubble [data-action="comment"], .od-bubble:has(> [data-action="comment"]:only-child), .od-composer, .od-resolve, .od-resolved-row .od-link-button, .od-receipt-undo) { display: none !important; }
+:is([data-read-only], [data-reader]) :is(.od-bubble [data-action="comment"], .od-bubble:has(> [data-action="comment"]:only-child), .od-composer, .od-resolve, .od-resolved-row .od-link-button, .od-receipt-undo) { display: none !important; }
+[data-reader] .od-history-restore { display: none !important; }
 
 /* ---- tooltips ---- */
 
@@ -593,6 +605,14 @@ label.od-setting { cursor: pointer; }
 .od-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--canvas); box-shadow: var(--shadow); transition: transform 0.15s; }
 .od-switch:checked { background: var(--text); }
 .od-switch:checked::after { transform: translateX(14px); }
+.od-radio { appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--canvas); cursor: pointer; }
+.od-radio:checked { border-color: var(--text); background: radial-gradient(var(--text) 0 4px, var(--canvas) 4.5px); }
+.od-radio:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.od-choices { list-style: none; margin: 0; padding: 0; }
+.od-choices > li { border-top: 1px solid var(--border); }
+.od-choice { display: flex; align-items: flex-start; gap: 8px; padding: 12px 0; font-size: 13px; cursor: pointer; }
+.od-choice .od-radio { margin-top: 1px; }
+.od-choice-detail { padding: 0 0 12px 24px; }
 .od-shortcuts-body { padding-top: 4px; }
 
 /* ---- home window (desktop/start.html) ---- */

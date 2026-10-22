@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenDoc Design System</title>
+  <title>Ponjo Design System</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
   <link rel="stylesheet" href="../dist/web/app.css">
@@ -12,7 +12,7 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-brand" href="index.html"><img src="../build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
+  <a class="site-brand" href="index.html"><img src="../build/icon.svg" alt="" width="24" height="24"><span>Ponjo</span></a>
   <nav class="site-nav" aria-label="Pages">
     <a href="index.html">Download</a>
     <div class="site-dev">
@@ -32,13 +32,13 @@
 <main class="ds-page">
 
   <h1>Paper and ink</h1>
-  <p class="ds-lead">OpenDoc's design system. The page is quiet so the writing and the buddies stand out: a warm grey ramp, one ink, and colour only where it means something.</p>
+  <p class="ds-lead">Ponjo's design system. The page is quiet so the writing and the buddies stand out: a warm grey ramp, one ink, and colour only where it means something.</p>
   <p>This page is rendered with the app's own <code>web/app.css</code>. Change the system there and here together.</p>
 
   <h2>Rules for changing the UI</h2>
   <p>For anyone, person or agent, who changes how the app looks.</p>
   <ol>
-    <li><strong>Reuse before adding.</strong> Use an existing class (<code>.od-primary</code>, <code>.od-secondary</code>, <code>.od-icon-btn</code>, <code>.od-input</code>, <code>.od-segmented</code>, <code>.od-switch</code>, <code>.od-panel</code>…) before writing a new rule.</li>
+    <li><strong>Reuse before adding.</strong> Use an existing class (<code>.od-primary</code>, <code>.od-secondary</code>, <code>.od-icon-btn</code>, <code>.od-input</code>, <code>.od-segmented</code>, <code>.od-switch</code>, <code>.od-radio</code>, <code>.od-panel</code>…) before writing a new rule.</li>
     <li><strong>Colours are tokens.</strong> No hex, <code>rgb()</code>, <code>oklch()</code>, <code>black</code> or <code>white</code> outside the token blocks at the top of <code>app.css</code>. A colour with a new meaning gets a token there, and a line on this page, first.</li>
     <li><strong>Colour means something.</strong> Grey for the UI; ink for the one primary action and for what is on or selected; a buddy's own colour only for that buddy; red for danger and deletions (a buddy's deletions are grey); green for insertions and online; yellow for commented text; blue only for focus, text selection and links.</li>
     <li><strong>Sizes come from the scales.</strong> Font sizes 11, 12, 13, 14, 16, 20, 24px; weights 400, 500, 600; radii 0, 4, 6, 10, 14px or full; spacing 2, 4, 6, 8, 12, 16, 24, 32, 48px; control heights 24, 28, 32px (36 and 40 for bars and big buttons).</li>
@@ -116,6 +116,7 @@
     <span class="od-spacer"></span>
     <button class="od-pill od-tool-comment" type="button" aria-pressed="false"><svg class="od-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Comments<span class="od-comment-count">3</span></button>
   </div>
+  <p>A doc that cannot be edited here (a teammate who can only read) shows no formatting tools and no Comment bubble, rather than tools that do nothing; what only reads stays: the outline, the word count, comments and history. For a teammate who can only read, the comments have no reply box, Resolve, Reopen or Undo, and history has no Restore.</p>
   <h3>Fields and choices</h3>
   <div class="ds-row">
     <input class="od-input" placeholder="Your name">
@@ -133,6 +134,15 @@
       <li><button type="button"><span class="od-setting-text"><span class="od-setting-label">Markdown<span class="od-setting-ext">.md .markdown</span></span><span class="od-setting-hint">Edit Markdown docs as formatted text.</span></span><span class="od-setting-state"><span>On</span><svg class="od-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></button></li>
     </ul>
   </div>
+  <h3>One of several, with its settings</h3>
+  <p>When exactly one of several is picked, such as the agent that runs every buddy, each is a row of <code>.od-choices</code>: a <code>.od-radio</code> (ink when picked), its name and what it is, the whole row its label. The picked one shows its settings under it, in <code>.od-choice-detail</code>, lined up with its name; the others stay closed.</p>
+  <div class="ds-box">
+    <ul class="od-choices" role="radiogroup" aria-label="Agents">
+      <li><label class="od-choice"><input class="od-radio" type="radio" name="ds-agent" checked><span class="od-setting-text"><span class="od-setting-label">Claude Code</span><span class="od-setting-hint">Anthropic's coding agent.</span></span></label>
+        <div class="od-choice-detail"><div class="od-setting"><span class="od-setting-text"><span class="od-setting-label">Model</span></span><input class="od-input" aria-label="Model"></div></div></li>
+      <li><label class="od-choice"><input class="od-radio" type="radio" name="ds-agent"><span class="od-setting-text"><span class="od-setting-label">Codex</span><span class="od-setting-hint">OpenAI's coding agent.</span></span></label></li>
+    </ul>
+  </div>
   <h3>Lists: current is ink on grey</h3>
   <div class="od-files ds-files">
     <ul class="od-files-tree">
@@ -142,6 +152,8 @@
     </ul>
   </div>
   <p>A sidebar is resized by dragging its edge: the cursor turns to <code>col-resize</code> and the edge shows a 2px <code>--text-faint</code> line; double-click the edge for the default width back.</p>
+  <h3>Team panel</h3>
+  <p>The Team button opens an <code>.od-panel</code>, 360px: a head with its title and, for the owner of a project, Invite link and New link (both secondary); then <code>.od-people-row</code>s in groups headed <code>.od-setting-group</code>: you, Teammates, AI buddies, ending with New AI buddy. A request to join is the first teammate: its row says Asks to join, and under it Read or Edit (a <code>.od-segmented</code>, Edit to start), Deny (secondary) and Allow, the panel's one primary button. A teammate's row says Can read or Can edit; its card has the same Read or Edit and Remove from this project (secondary, red). A teammate's page in a browser first asks their name in a card in the middle of the page.</p>
   <h3>Status bar</h3>
   <p>The plain view has a status bar under the page: <code>.od-statusbar</code>, 28px, 12px text in <code>--text-soft</code> on <code>--bg-soft</code>, a hairline <code>--border</code> on top. The caret's place is on the left; on the right text buttons, 22px, grey on hover and ink on grey while pressed or open, and a menu above them in the <code>.od-block-menu</code> style. Line numbers, whitespace marks (dots for spaces, arrows for tabs) are <code>--text-faint</code>; indent guides are <code>--border-strong</code>.</p>
   <div class="ds-box"><div class="od-statusbar"><span>Ln 12, Col 8 · 24 selected</span><span class="od-status-actions"><button type="button">Indent: 4 spaces</button><button type="button" aria-pressed="true">Wrap</button><button type="button">Whitespace</button></span></div></div>

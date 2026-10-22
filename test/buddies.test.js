@@ -1,5 +1,5 @@
 // Buddies (spec/PROJECT.md): Clippy, in every doc and changed in the user's
-// config folder, and a project's files in .opendoc/buddies/. Runs use the
+// config folder, and a project's files in .ponjo/buddies/. Runs use the
 // fake agent script.
 
 import { test } from 'node:test';
@@ -14,12 +14,12 @@ import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './hel
 const refused = (code) => (error) => error.code === code;
 const who = async (opened) => (await opened.state()).agents.map((a) => [a.name, a.about, a.where]);
 
-// A project folder with plan.md and the buddies `files` ({ name: text }) in .opendoc/buddies/.
+// A project folder with plan.md and the buddies `files` ({ name: text }) in .ponjo/buddies/.
 async function projectFolder(files = {}) {
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
+  const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
   await writeFile(join(folder, 'plan.md'), SAMPLE);
-  if (Object.keys(files).length > 0) await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
-  for (const [name, text] of Object.entries(files)) await writeFile(join(folder, '.opendoc', 'buddies', `${name}.md`), text);
+  if (Object.keys(files).length > 0) await mkdir(join(folder, '.ponjo', 'buddies'), { recursive: true });
+  for (const [name, text] of Object.entries(files)) await writeFile(join(folder, '.ponjo', 'buddies', `${name}.md`), text);
   return folder;
 }
 
@@ -87,7 +87,7 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
     for (const name of ['clippy', 'ada']) await assert.rejects(opened.call('saveSettings', { name }), /is taken/, 'your name is no buddy\'s');
   });
   // Any other doc has the same Clippy, and its runs say who it is now.
-  const doc = join(await mkdtemp(join(tmpdir(), 'opendoc-doc-')), 'notes.md');
+  const doc = join(await mkdtemp(join(tmpdir(), 'ponjo-doc-')), 'notes.md');
   await writeFile(doc, SAMPLE);
   await opening(doc, { settingsDir }, async (opened) => {
     assert.deepEqual(await who(opened), [mine]);
@@ -123,13 +123,13 @@ test('a folder opened from the home page reaches Clippy and its own; its Clippy.
   });
 });
 
-test('adding the first buddy to a project creates .opendoc/; buddies are made, renamed and deleted as files', async () => {
+test('adding the first buddy to a project creates .ponjo/; buddies are made, renamed and deleted as files', async () => {
   const settingsDir = await fakeConfig();
   const folder = await projectFolder();
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
-    await assert.rejects(readdir(join(folder, '.opendoc')), { code: 'ENOENT' });
+    await assert.rejects(readdir(join(folder, '.ponjo')), { code: 'ENOENT' });
     await opened.call('createBuddy', { buddy: { name: 'Critic', about: 'Checks claims.\n\nQuote lines.' } });
-    const written = await readFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'utf8');
+    const written = await readFile(join(folder, '.ponjo', 'buddies', 'Critic.md'), 'utf8');
     const id = /^---\nid: (b_[a-z0-9]{10})\n---\nChecks claims\.\n\nQuote lines\.\n$/.exec(written)?.[1];
     assert.ok(id, 'a new buddy gets a random id in its file');
     await opened.call('createBuddy', { buddy: { name: 'Ada' } });
@@ -141,11 +141,11 @@ test('adding the first buddy to a project creates .opendoc/; buddies are made, r
 
     const renamed = await opened.call('updateBuddy', { id, patch: { name: 'Reviewer' } });
     assert.deepEqual(renamed.agents.map((a) => a.name), ['Clippy', 'Ada', 'Reviewer']);
-    assert.deepEqual((await readdir(join(folder, '.opendoc', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
-    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), written, 'a rename keeps the id');
+    assert.deepEqual((await readdir(join(folder, '.ponjo', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
+    assert.equal(await readFile(join(folder, '.ponjo', 'buddies', 'Reviewer.md'), 'utf8'), written, 'a rename keeps the id');
     assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, id);
     await opened.call('deleteBuddy', { id });
-    assert.deepEqual(await readdir(join(folder, '.opendoc', 'buddies')), ['Ada.md']);
+    assert.deepEqual(await readdir(join(folder, '.ponjo', 'buddies')), ['Ada.md']);
     await assert.rejects(opened.call('deleteBuddy', { id }), refused('not_found'));
   });
 });
@@ -155,9 +155,9 @@ test('renaming a buddy whose file has no id keeps its old name as its id, so its
   await opening(join(folder, 'plan.md'), { settingsDir: await fakeConfig(), folder }, async (opened) => {
     const renamed = await opened.call('updateBuddy', { id: 'Critic', patch: { name: 'Reviewer' } });
     assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, 'Critic');
-    assert.equal(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), '---\nid: Critic\n---\nChecks every claim.\n');
+    assert.equal(await readFile(join(folder, '.ponjo', 'buddies', 'Reviewer.md'), 'utf8'), '---\nid: Critic\n---\nChecks every claim.\n');
     await opened.call('updateBuddy', { id: 'Critic', patch: { about: 'Changed.' } });
-    assert.match(await readFile(join(folder, '.opendoc', 'buddies', 'Reviewer.md'), 'utf8'), /^---\nid: Critic\n---\nChanged\.\n$/);
+    assert.match(await readFile(join(folder, '.ponjo', 'buddies', 'Reviewer.md'), 'utf8'), /^---\nid: Critic\n---\nChanged\.\n$/);
   });
 });
 
@@ -189,8 +189,8 @@ test('a buddy file changed outside the app, or by another window, shows at once'
     await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (b) => {
       await b.call('createBuddy', { buddy: { name: 'Ada' } });
       await until(() => a.events.some(([name, data]) => name === 'agents' && data.some((x) => x.name === 'Ada')), 'Ada in the other window');
-      await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
-      await writeFile(join(folder, '.opendoc', 'buddies', 'Critic.md'), 'Pulled from git.\n');
+      await mkdir(join(folder, '.ponjo', 'buddies'), { recursive: true });
+      await writeFile(join(folder, '.ponjo', 'buddies', 'Critic.md'), 'Pulled from git.\n');
       await until(() => a.events.some(([name, data]) => name === 'agents' && data.some((x) => x.name === 'Critic')), 'Critic from the folder');
       await mkdir(join(settingsDir, 'buddies'), { recursive: true });
       await writeFile(join(settingsDir, 'buddies', 'Clippy.md'), 'Edited by hand.\n');
@@ -203,7 +203,7 @@ test('a project cloned on another machine, or moved, has the same buddies and th
   const folder = await projectFolder({ Critic: 'Checks every claim.\n' });
   const here = await fakeConfig();
   const there = await fakeConfig();
-  const clone = join(await mkdtemp(join(tmpdir(), 'opendoc-clone-')), 'project');
+  const clone = join(await mkdtemp(join(tmpdir(), 'ponjo-clone-')), 'project');
   await cp(folder, clone, { recursive: true });
   const seen = await opening(join(folder, 'plan.md'), { settingsDir: here, folder }, (opened) => opened.state());
   const cloned = await opening(join(clone, 'plan.md'), { settingsDir: there, folder: clone }, (opened) => opened.state());

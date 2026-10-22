@@ -4,6 +4,6 @@
 # The project is read only: its files are the user's, not the copy.
 # The model is Settings > Agents' if set (agents/claude.json), else Claude Code's own.
 # @"…" attaches the copy as read, so Claude edits it without reading it first.
-exec claude -p "@\"$OPENDOC_DOC\"" --permission-mode acceptEdits --no-session-persistence \
-  ${OPENDOC_SETTING_MODEL:+--model "$OPENDOC_SETTING_MODEL"} \
-  ${OPENDOC_PROJECT:+--add-dir "$OPENDOC_PROJECT" --disallowedTools "Edit(/$OPENDOC_PROJECT/**)"}
+exec claude -p "@\"$PONJO_DOC\"" --permission-mode acceptEdits --no-session-persistence \
+  ${PONJO_SETTING_MODEL:+--model "$PONJO_SETTING_MODEL"} \
+  ${PONJO_PROJECT:+--add-dir "$PONJO_PROJECT" --disallowedTools "Edit(/$PONJO_PROJECT/**)"}

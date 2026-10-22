@@ -1,4 +1,4 @@
-# opendoc buddies and projects
+# Ponjo buddies and projects
 
 A **buddy** is someone you @mention in a doc: a name and who it is, in a
 markdown file. What does the work is an agent CLI
@@ -7,7 +7,7 @@ markdown file. What does the work is an agent CLI
 
 **Clippy** is in every doc; who it is is the user's to change, in
 `buddies/Clippy.md` in their config folder. Every other buddy
-belongs to a project, lives in its `.opendoc/buddies/` and travels with it.
+belongs to a project, lives in its `.ponjo/buddies/` and travels with it.
 A doc's comments are not here; they stay in its sidecar ([SPEC](SPEC.md)).
 
 ## 1. Projects
@@ -15,13 +15,13 @@ A doc's comments are not here; they stay in its sidecar ([SPEC](SPEC.md)).
 A **project** is a folder opened from the app's home page.
 
 ```
-.opendoc/
+.ponjo/
   buddies/
     <Name>.md
 ```
 
-- Only the opened folder's own `.opendoc/` counts, not one above or below it.
-- `.opendoc/` is created when the first buddy is added. It holds nothing
+- Only the opened folder's own `.ponjo/` counts, not one above or below it.
+- `.ponjo/` is created when the first buddy is added. It holds nothing
   machine-local: all of it may be committed.
 
 ## 2. Buddy files
@@ -60,6 +60,6 @@ looks the same on every machine.
 
 It edits the doc it answers in, and comments there as a human does, but
 cannot resolve; each run's edits can be undone. On the machine, it
-does whatever its agent CLI's own config allows; OpenDoc only tells it
+does whatever its agent CLI's own config allows; Ponjo only tells it
 where the project folder is
 ([agent config](../docs/agent-config.md#permissions)).

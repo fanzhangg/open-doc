@@ -1,4 +1,4 @@
-// The opendoc page: wires the editor, the comment margin, the people (the
+// The Ponjo page: wires the editor, the comment margin, the people (the
 // doc's buddies and you) and the doc in the doc host together. Typing goes
 // to the doc host as operations, which orders every edit and writes the doc
 // (web/client.js); others' edits (a buddy's, another program's) come back as
@@ -24,6 +24,7 @@ import { rulesOf } from '../src/rules/index.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
+import { askName, named } from './join.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { FORMAT_VERSION } from '../src/core/comments.js';
 
@@ -32,7 +33,7 @@ const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have m
 // than WAIT_FOR_PAUSE_MS: taking them in while keys arrive would stall the keys.
 const TYPING_PAUSE_MS = 600;
 const WAIT_FOR_PAUSE_MS = 3000;
-const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
+const COMMENTS_KEY = 'ponjo.comments'; // 'hidden' while the human keeps comments out of view
 
 const status = document.querySelector('.od-status');
 const missingBanner = document.querySelector('.od-missing');
@@ -51,6 +52,7 @@ let margin;
 let people;
 let history;
 let settings;
+let level; // what this page may do: 'read', 'write' or 'owner' (state())
 let defaultName;
 let inProject = false; // the doc was opened from a project folder
 let me; // your name
@@ -71,35 +73,59 @@ let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
 // The desktop app swaps one doc's page for another without a blank frame: it
-// shows this page once `opendocReady` resolves (the doc and the sidebar are
+// shows this page once `ponjoReady` resolves (the doc and the sidebar are
 // drawn), and before replacing it, or closing its window, asks it to let go
-// of its doc (`opendocLeave`): save the last edit, stop taking input, and say
-// how it was left, for the next page. `opendocStay` undoes that when the
+// of its doc (`ponjoLeave`): save the last edit, stop taking input, and say
+// how it was left, for the next page. `ponjoStay` undoes that when the
 // switch fails.
 let markReady;
-window.opendocReady = new Promise((resolve) => { markReady = resolve; });
-window.opendocLeave = async () => {
+window.ponjoReady = new Promise((resolve) => { markReady = resolve; });
+window.ponjoLeave = async () => {
   if (editor) await client.landed();
   document.body.inert = true;
   return { ...files?.state(), commentsHidden: !commentsShown() };
 };
-window.opendocStay = () => {
+window.ponjoStay = () => {
   document.body.inert = false;
 };
 
+// How the line to the host is, in a teammate's page (web/relay.js).
+const LINE = {
+  waiting: 'Waiting for the owner to let you in',
+  host: 'The host is offline: waiting for it to come back',
+  nohost: 'No one is sharing at this link now. It may be from an earlier time: ask for a new one. Waiting…',
+  relay: 'Cannot reach the relay: trying again',
+};
+function showLine(line) {
+  if (!line) setStatus('');
+  else setStatus(line.message ?? LINE[line.reason], 'error');
+}
+
 async function start() {
+  api.line(showLine);
+  // A teammate's page in a browser: their name, picked once, joins them.
+  if (!window.ponjoHost && !named()) await askName();
   let initial;
   try {
     initial = await api.state();
   } catch (error) {
+    if (error.code === 'name_taken') {
+      await askName(`${error.message}: pick another`);
+      location.reload();
+      return;
+    }
     document.body.textContent = `Could not load the doc: ${error.message}`;
     return;
   }
   defaultName = initial.defaultName;
   myId = initial.me.id;
   inProject = initial.project;
+  level = initial.level;
+  // A teammate who can only read sees no tool that would be refused: no reply, Resolve, Undo or Restore.
+  document.documentElement.toggleAttribute('data-reader', level === 'read');
+  // The settings are the owner's: anyone else's stay in this page.
   settings = createSettings(initial.settings, {
-    save: api.saveSettings,
+    save: level === 'owner' ? api.saveSettings : async () => settings.get(),
     onError: (error) => setStatus(`Settings not saved: ${error.message}`, 'error'),
   });
   me = settings.get().name ?? defaultName;
@@ -123,8 +149,9 @@ async function start() {
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
-  window.opendocDesktop?.onCommand((name) => chrome.command(name));
+  window.ponjoDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
   files = createFileList({
+    place: initial.place,
     onError: (message) => setStatus(message, 'error'),
     onCarry: (carry) => {
       if (carry.commentsHidden) showComments(false);
@@ -164,11 +191,12 @@ async function start() {
     panel: document.querySelector('.od-panel'),
     me: document.querySelector('.od-me'),
     getName: () => me,
-    getId: () => settings.get().id,
+    getId: () => myId,
     setName,
     getAbout: () => settings.get().about,
     setAbout: (about) => settings.set({ about }),
     project: () => inProject,
+    owner: () => level === 'owner',
     onResult: takeAgentResult,
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
@@ -180,6 +208,7 @@ async function start() {
   });
   setBuddies(initial.agents);
   people.render({ agents: initial.agents });
+  if (inProject && level === 'owner') api.team().then((team) => people.render({ team }), () => {});
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
@@ -251,18 +280,36 @@ async function start() {
   document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
   events.on('ops', (data) => client.receive(data));
+  events.on('cursors', (data) => {
+    client.cursors(data);
+    if (data.by) movedAt.set(data.by, Date.now());
+    paintMarks();
+    clearTimeout(settleCarets);
+    settleCarets = setTimeout(paintMarks, CARET_WORKING_MS); // names go once they stop
+  });
+  events.on('here', (data) => people.render({ here: data }));
+  // Where you are in the text, for the others; a reader has no caret.
+  document.addEventListener('selectionchange', () => {
+    if (level !== 'read') client.moved();
+  });
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.on('history', () => {
     history.changed();
     afterTyping('sidecar', refreshThreads); // a buddy's turn may now be marked conflict
   });
   events.on('agents', (data) => showAgents(data));
+  events.on('team', (data) => people.render({ team: data }));
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
     showDocName(data.doc);
     followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
+  // The owner set this teammate to Read or Edit: the page opens again as that.
+  events.on('level', () => {
+    reloading = true;
+    location.reload();
+  });
   // First on a new connection: the doc may have gone missing, or runs
   // started, since `state`, and the doc host may have started again.
   events.on('hello', (data) => {
@@ -284,10 +331,10 @@ function makeView(chosen, text) {
     name: docName,
     toolbar: document.querySelector('.od-toolbar'),
     onComment: requestComment,
+    onEdit: () => client.edited(),
     onChange: () => {
       hideRun();
       paintMarks();
-      client.flush();
     },
     // Clicking commented text selects its thread but keeps the caret in the doc.
     onMarkClick: (id) => {
@@ -299,7 +346,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
-    editable: chosen.editable,
+    editable: chosen.editable && level !== 'read',
     color: chosen.color,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),
@@ -342,8 +389,9 @@ async function remakeView(chosen) {
 
 // Leaving with typing that has not landed: hold the page until it has. A
 // browser asks before leaving; the desktop app retries closing until it is in.
+let reloading = false; // the page opens again as told: typing not landed is refused anyway
 window.addEventListener('beforeunload', (event) => {
-  if (client.idle()) return;
+  if (reloading || !client || client.idle()) return;
   event.preventDefault();
   event.returnValue = true;
   client.landed();
@@ -409,7 +457,7 @@ function setMissing(on) {
   missingBanner.hidden = !on;
   if (on) {
     const name = document.querySelector('.od-doc-name').textContent;
-    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside OpenDoc. Changes here are not being saved.`;
+    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside Ponjo. Changes here are not being saved.`;
     setStatus('Not saved: the doc is missing', 'error');
     return;
   }
@@ -518,15 +566,15 @@ function showReadOnly(problem) {
   readOnlyBanner.hidden = !problem;
   if (!problem) return;
   readOnlyBanner.querySelector('.od-banner-text').textContent = {
-    older: 'These comments are from an older OpenDoc, so they are read-only here.',
-    newer: 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.',
-    invalid: `This doc's comments file does not start with {"opendoc":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
+    older: 'These comments are from an older Ponjo, so they are read-only here.',
+    newer: 'These comments are from a newer Ponjo, so they are read-only here. Update Ponjo to add comments.',
+    invalid: `This doc's comments file does not start with {"comments":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
   }[problem];
   readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'newer';
-  readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.opendocDesktop;
+  readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.ponjoDesktop;
   const reveal = readOnlyBanner.querySelector('[data-action="reveal"]');
   reveal.textContent = REVEAL_LABEL;
-  reveal.hidden = problem === 'newer' || !window.opendocDesktop;
+  reveal.hidden = problem === 'newer' || !window.ponjoDesktop;
 }
 
 readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
@@ -534,10 +582,10 @@ readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click',
 });
 readOnlyBanner.querySelector('[data-action="start-over"]').addEventListener('click', () => {
   if (!window.confirm('Move this doc\'s comments file to the Trash and start new comments?\n\nIts comments are no longer shown here. You can put the file back from the Trash.')) return;
-  window.opendocDesktop.trashSidecar().catch((error) => setStatus(`Could not move the comments file: ${error.message}`, 'error'));
+  window.ponjoDesktop.trashSidecar().catch((error) => setStatus(`Could not move the comments file: ${error.message}`, 'error'));
 });
 readOnlyBanner.querySelector('[data-action="reveal"]').addEventListener('click', () => {
-  window.opendocDesktop.revealSidecar().catch(() => {});
+  window.ponjoDesktop.revealSidecar().catch(() => {});
 });
 
 // The Comments button shows or hides the margin and the highlights in the
@@ -597,7 +645,7 @@ function revealText(id) {
 
 // Comments are on selected text only.
 function requestComment() {
-  if (comments?.readOnly) return;
+  if (comments?.readOnly || level === 'read') return;
   const selection = editor.selection();
   if (!selection || selection.from === selection.to) return;
   if (narrow.matches) openSheet(true);
@@ -657,6 +705,11 @@ async function undoReply(id) {
 // the page, and with the buddy once it is no longer here.
 const cursors = new Map(); // buddy id -> anchor of the character before its cursor
 let working = new Set();
+// People's cursors are the host's (client.cursorsShown); each is named for
+// a while after it moves.
+const CARET_WORKING_MS = 3000;
+const movedAt = new Map(); // person id -> when their cursor last moved
+let settleCarets = null;
 
 function standAtWork(statuses) {
   const ids = new Set(statuses.map((a) => a.id));
@@ -760,6 +813,10 @@ function paintMarks() {
     const found = where(text, anchor);
     if (found) marks.push({ kind: 'cursor', at: found.end, by, working: working.has(by) });
   }
+  // People's, named while they move or type.
+  for (const { id, name, at } of client?.cursorsShown() ?? []) {
+    if (id !== myId && at <= text.length) marks.push({ kind: 'cursor', at, by: name, working: Date.now() - (movedAt.get(id) ?? 0) < CARET_WORKING_MS });
+  }
   editor.setMarks(marks);
   return marks;
 }
@@ -776,13 +833,13 @@ function anchorTops(items) {
 
 function showDocName(name) {
   docName = name;
-  document.title = `${name} — opendoc`;
+  document.title = `${name} — Ponjo`;
   document.querySelector('.od-doc-name').textContent = name;
 }
 
 // In the desktop app, clicking the doc name renames the doc (File > Rename).
 function offerRename() {
-  const desktop = window.opendocDesktop;
+  const desktop = window.ponjoDesktop;
   if (!desktop) return;
   const name = document.querySelector('.od-doc-name');
   Object.assign(name, { tabIndex: 0, title: 'Rename' });

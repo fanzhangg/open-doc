@@ -10,6 +10,7 @@ export default {
     'preview/*.js', // node preview/build.js and the stubs it bundles
     'scripts/*.{js,cjs}',
     'site/site.js', // site/*.html
+    'relay/worker.js', // loaded by wrangler (relay/wrangler.toml)
   ],
   ignoreDependencies: ['@fontsource-variable/inter'], // fonts copied by scripts/build.js
   ignoreBinaries: ['mktemp'], // a system tool (test/runner.test.js)

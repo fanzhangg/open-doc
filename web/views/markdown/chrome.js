@@ -88,18 +88,20 @@ function elements(markup) {
  * focus mode is on; Mod+Shift+F changes focus mode through `saveSettings`.
  *
  * @param {object} editor
+ * A read-only view (`editable` false) has no tools and no bubble.
+ *
  * @param {{ toolbar: HTMLElement, stage: HTMLElement, host: HTMLElement, onComment: () => void,
- *           settings: object, saveSettings: (patch: object) => void }} options
+ *           settings: object, saveSettings: (patch: object) => void, editable?: boolean }} options
  */
-export function createChrome(editor, { toolbar, stage, host, onComment, settings, saveSettings }) {
+export function createChrome(editor, { toolbar, stage, host, onComment, settings, saveSettings, editable = true }) {
   const tools = elements(TOOLS);
   const [bubble] = elements(BUBBLE);
   const [outlineNav] = elements(OUTLINE);
   const [card, popover] = elements(LINK);
   const count = Object.assign(document.createElement('span'), { className: 'od-count', title: 'Word count' });
-  toolbar.prepend(...tools);
+  if (editable) toolbar.prepend(...tools); // a read-only view has nothing to format or comment on
   toolbar.querySelector('.od-spacer').after(count);
-  stage.append(bubble);
+  if (editable) stage.append(bubble);
   stage.before(outlineNav);
   document.body.append(card, popover);
   const made = [...tools, count, bubble, outlineNav, card, popover];
@@ -188,7 +190,7 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
   }, { signal });
 
   function placeBubble() {
-    const rect = !pointerDown && editor.selectionRect();
+    const rect = editable && !pointerDown && editor.selectionRect();
     if (!rect) {
       bubble.hidden = true;
       return;
@@ -275,7 +277,7 @@ function setupLink(editor, { card, popover, host, canvas, signal }) {
   // `#heading` scrolls this doc; anything else is the app's to open.
   function follow(href) {
     if (href.startsWith('#')) editor.scrollToAnchor(href.slice(1));
-    else if (window.opendocDesktop) window.opendocDesktop.openLink(href).catch(() => {});
+    else if (window.ponjoDesktop) window.ponjoDesktop.openLink(href).catch(() => {});
     else window.open(href, '_blank', 'noopener');
   }
 

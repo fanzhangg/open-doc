@@ -10,7 +10,7 @@ import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 const me = { name: 'fzhan', kind: 'human' };
 const bot = { name: 'claude', kind: 'agent' };
 const edit = (author, extra = {}) => ({ kind: 'edit', author, ...extra });
-const configRoot = () => mkdtemp(join(tmpdir(), 'opendoc-config-'));
+const configRoot = () => mkdtemp(join(tmpdir(), 'ponjo-config-'));
 
 test('versions record who changed the doc and how much', async () => {
   const root = await configRoot();

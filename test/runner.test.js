@@ -9,6 +9,7 @@ import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mirrorDir } from '../src/host/mirror.js';
 import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
 import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
@@ -54,12 +55,12 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     assert.match(await readFile(docPath, 'utf8'), /the extra peak load\./);
 
     const [run] = await runs();
-    assert.deepEqual(run.files.sort(), ['plan.md', 'plan.md.opendoc.jsonl'], 'its folder holds only the copies');
+    assert.deepEqual(run.files.sort(), ['plan.md', 'plan.md.comments.jsonl'], 'its folder holds only the copies');
     assert.notEqual(run.cwd, dirname(docPath));
     assert.equal(join(basename(dirname(run.doc)), basename(run.doc)), join(basename(run.cwd), 'plan.md'), 'the copy, in its folder (macOS may name /var as /private/var)');
     assert.equal(run.buddy, 'Clippy');
     assert.equal(run.project, '');
-    assert.equal(run.opendoc, false, 'no opendoc to call');
+    assert.equal(run.ponjo, false, 'no ponjo to call');
     assert.deepEqual(run.settings, {}, 'an agent with no manifest has no settings');
     assert.match(run.prompt, /A general writing assistant/, 'Clippy is built in');
     assert.match(run.prompt, /fzhan: @Clippy replace/);
@@ -144,14 +145,17 @@ test('a comment that mentions no one asks no one; a buddy\'s reply asks no one',
   });
 });
 
-test('in project mode the run is told the project folder', { timeout: 30_000 }, async () => {
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
-  await withDoc(async ({ call, state, runs }) => {
+test('in project mode the run is told the project\'s mirror, which holds what the project shows', { timeout: 30_000 }, async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
+  await writeFile(join(folder, 'notes.md'), 'Notes.\n');
+  await writeFile(join(folder, '.env'), 'KEY=secret\n');
+  await withDoc(async ({ settingsDir, call, state, runs }) => {
     const id = await comment(call, '@Clippy look around');
     await until(async () => (await repliesIn(state, id)).length, 'the reply');
     const [run] = await runs();
-    assert.equal(run.project, folder);
-    assert.ok(run.prompt.includes(folder));
+    assert.equal(run.project, mirrorDir(folder, settingsDir));
+    assert.deepEqual(await readdir(run.project), ['notes.md']);
+    assert.ok(run.prompt.includes(run.project) && !run.prompt.includes(`${folder}/`));
     assert.match(run.prompt, /path in a comment is relative to the project folder/);
   }, { folder });
 });
@@ -169,7 +173,7 @@ test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async
   });
 });
 
-test('a run gets each of its agent\'s settings as OPENDOC_SETTING_<KEY>: the stored value or the default', { timeout: 30_000 }, async () => {
+test('a run gets each of its agent\'s settings as PONJO_SETTING_<KEY>: the stored value or the default', { timeout: 30_000 }, async () => {
   const docPath = await tempDoc();
   const settingsDir = await fakeConfig({ agents: { fake: { model: 'small', effort: 'high', other: 'x' }, claude: { model: 'opus' } } });
   await writeFile(join(settingsDir, 'agents', 'fake.json'), JSON.stringify({ name: 'Fake', settings: [
@@ -185,7 +189,7 @@ test('a run gets each of its agent\'s settings as OPENDOC_SETTING_<KEY>: the sto
     await call('comment', { anchor: null, body: '@Clippy quiet' });
     const [run] = await until(async () => (await fakeRuns(settingsDir)).length && fakeRuns(settingsDir), 'the run');
     assert.deepEqual(run.settings, {
-      OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_EFFORT: 'high', OPENDOC_SETTING_ENDPOINT: '', OPENDOC_SETTING_TRIES: '3', OPENDOC_SETTING_FAST: 'false', OPENDOC_SETTING_KEY: '',
+      PONJO_SETTING_MODEL: 'small', PONJO_SETTING_EFFORT: 'high', PONJO_SETTING_ENDPOINT: '', PONJO_SETTING_TRIES: '3', PONJO_SETTING_FAST: 'false', PONJO_SETTING_KEY: '',
     }, 'every field, only its agent\'s; none set is empty');
   } finally {
     await doc.close();
@@ -216,7 +220,7 @@ test('a secret is kept encrypted in the config folder, reaches its agent\'s run,
     const id = (await call('comment', { anchor: null, body: '@Clippy say done' })).id;
     await until(async () => (await call('state')).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
-    assert.deepEqual(run.settings, { OPENDOC_SETTING_MODEL: 'small', OPENDOC_SETTING_KEY: 'sk-fake-123' }, 'its own agent\'s only');
+    assert.deepEqual(run.settings, { PONJO_SETTING_MODEL: 'small', PONJO_SETTING_KEY: 'sk-fake-123' }, 'its own agent\'s only');
   } finally {
     await doc.close();
   }
@@ -227,15 +231,15 @@ test('a secret is kept encrypted in the config folder, reaches its agent\'s run,
 });
 
 test('the shipped scripts pass the project folder only when there is one', () => {
-  for (const name of ['claude', 'codex', 'opendoc']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
-  assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /set ADD=--add-dir "%OPENDOC_PROJECT%" --disallowedTools "Edit\(\/%P%\/\*\*\)"/, 'claude.cmd keeps the project read only');
+  for (const name of ['claude', 'codex', 'ponjo']) assert.match(readFileSync(join(ROOT, 'agents', `${name}.cmd`), 'utf8'), /\r\n/, `${name}.cmd has Windows line ends`);
+  assert.match(readFileSync(join(ROOT, 'agents', 'claude.cmd'), 'utf8'), /set ADD=--add-dir "%PONJO_PROJECT%" --disallowedTools "Edit\(\/%P%\/\*\*\)"/, 'claude.cmd keeps the project read only');
   assert.doesNotMatch(readFileSync(join(ROOT, 'agents', 'codex.cmd'), 'utf8'), /codex exec[^\r]*--add-dir/, 'Codex reads the project without it');
   if (process.platform === 'win32') return;
   // A fake `claude` and `codex` on PATH read the prompt (else writing it can
   // fail with EPIPE) and print the arguments they get.
   const bin = execFileSync('mktemp', ['-d']).toString().trim();
   execFileSync('sh', ['-c', `printf '#!/bin/sh\\ncat >/dev/null; echo "$@"\\n' > "${bin}/claude"; printf '#!/bin/sh\\ncat >/dev/null; while [ "$1" != "--output-last-message" ]; do shift; done; echo reply > "$2"\\n' > "${bin}/codex"; chmod +x "${bin}/claude" "${bin}/codex"`]);
-  const run = (name, project, model = '') => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, OPENDOC_PROJECT: project, OPENDOC_DOC: '/run/my doc.md', OPENDOC_SETTING_MODEL: model }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+  const run = (name, project, model = '') => execFileSync(join(ROOT, 'agents', name), { input: 'prompt', env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}`, PONJO_PROJECT: project, PONJO_DOC: '/run/my doc.md', PONJO_SETTING_MODEL: model }, stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
   assert.equal(run('claude', ''), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence', 'Claude gets the doc copy as already read');
   assert.equal(run('claude', '/work/my project'), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence --add-dir /work/my project --disallowedTools Edit(//work/my project/**)', 'the project is read only');
   assert.equal(run('claude', '', 'opus'), '-p @"/run/my doc.md" --permission-mode acceptEdits --no-session-persistence --model opus', 'the model, when set');
@@ -243,17 +247,17 @@ test('the shipped scripts pass the project folder only when there is one', () =>
 });
 
 test('the shipped agents are written when missing, then left alone; Reset writes one again', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-agents-'));
   await installAgents(dir, { platform: 'linux' });
   await installAgents(dir, { platform: 'win32' });
   const ids = async (platform) => (await listAgents(dir, platform)).map((a) => a.id);
-  assert.deepEqual([await ids('linux'), await ids('win32')], [['claude', 'codex', 'opendoc'], ['claude', 'codex', 'opendoc']]);
+  assert.deepEqual([await ids('linux'), await ids('win32')], [['claude', 'codex', 'ponjo'], ['claude', 'codex', 'ponjo']]);
   assert.deepEqual((await listAgents(dir, 'linux')).map((a) => [a.name, a.settings.map((f) => `${f.key}:${f.type}`).join()]), [
-    ['Claude Code', 'model:text'], ['Codex', 'model:text'], ['OpenDoc agent', 'provider:choice,endpoint:text,model:text,key:secret,effort:choice'],
+    ['Claude Code', 'model:text'], ['Codex', 'model:text'], ['Ponjo agent', 'provider:choice,endpoint:text,model:text,key:secret,effort:choice'],
   ], 'each with its manifest, all valid');
-  const windows = await mkdtemp(join(tmpdir(), 'opendoc-agents-'));
+  const windows = await mkdtemp(join(tmpdir(), 'ponjo-agents-'));
   await installAgents(windows, { platform: 'win32' });
-  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'opendoc.cmd', 'opendoc.json', 'opendoc.mjs'], 'with the program the OpenDoc agent runs');
+  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'ponjo.cmd', 'ponjo.json', 'ponjo.mjs'], 'with the program the Ponjo agent runs');
   await writeFile(join(agentsDir(dir), 'mine'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken.json'), '{ "name": ');

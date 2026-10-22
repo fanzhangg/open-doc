@@ -66,11 +66,11 @@ jobs:
           - platform: macos
             os: macos-latest
             args: --mac --arm64 --x64
-            app: release/mac-arm64/OpenDoc.app/Contents/MacOS/OpenDoc
+            app: release/mac-arm64/Ponjo.app/Contents/MacOS/Ponjo
           - platform: windows
             os: windows-latest
             args: --win --x64
-            app: release/win-unpacked/OpenDoc.exe
+            app: release/win-unpacked/Ponjo.exe
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -113,7 +113,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: opendoc-${{ runner.os }}
+          name: ponjo-${{ runner.os }}
           path: |
             release/*.dmg
             release/*.exe
@@ -131,12 +131,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix relay # wrangler, for the relay test (test/relay.test.js)
       - run: npm run build
       - run: xvfb-run -a npm test # the view contract tests open an Electron window
 
   perf:
     # The latency promise (docs/architecture.md, Latency): each view at its
-    # limits, typed in while a teammate's edits arrive. A few minutes.
+    # limits, typed in while a teammate's edits arrive, and a key to a
+    # teammate's page through the relay. A few minutes.
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -148,6 +150,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix relay # wrangler, for the typing promise (test/perf/typing.test.js)
       - run: xvfb-run -a npm run test:perf # opens an Electron window
 
   stress:

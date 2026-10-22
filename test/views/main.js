@@ -8,23 +8,29 @@
 // agent (test/fixtures/fake-agent.js). `collab:make` opens a doc of that
 // text in a project folder and hands the page a port to it, as a window
 // gets one; `collab:write` changes the file from outside; `collab:hold` and
-// `collab:release` hold Pilot's turns and let them go.
+// `collab:release` hold Pilot's turns and let them go. The project has a
+// link and Sam, a teammate who can edit; `collab:share` shares it through
+// the relay at PONJO_RELAY and answers the link's secret and room and
+// Sam's key (test/collab.test.js, test/perf/typing.test.js). VIEWS_SEARCH is the page's query, such as
+// `?delay=0`.
 
 import { app, BrowserWindow, ipcMain, MessageChannelMain, utilityProcess } from 'electron';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeTeam } from '../../src/store/team.js';
 import { fakeConfig, tempDoc } from '../helpers.js';
+import { idOf, roomOf } from '../relay/harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 app.commandLine.appendSwitch('disable-smooth-scrolling');
 app.whenReady().then(async () => {
   const window = new BrowserWindow({ width: 1000, height: 700, show: false, webPreferences: { backgroundThrottling: false, preload: join(here, 'preload.cjs') } });
-  window.loadFile(process.env.VIEWS_PAGE);
+  window.loadFile(process.env.VIEWS_PAGE, { search: process.env.VIEWS_SEARCH ?? '' });
 
   const config = await fakeConfig();
-  const host = utilityProcess.fork(join(here, '..', '..', 'desktop', 'doc-host.js'), [], { env: { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: config } });
+  const host = utilityProcess.fork(join(here, '..', '..', 'desktop', 'doc-host.js'), [], { env: { PONJO_RELAY: '', ...process.env, PONJO_CONFIG_DIR: config, FAKE_DIR: config } });
   const ready = new Promise((done) => host.once('message', done)); // { type: 'ready' }
   const asked = new Map();
   let nextId = 0;
@@ -45,10 +51,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:make', async (event, text) => {
     if (doc) await request('close', { docId: doc.docId });
     const path = await tempDoc(text);
-    await mkdir(join(dirname(path), '.opendoc', 'buddies'), { recursive: true });
-    await writeFile(join(dirname(path), '.opendoc', 'buddies', 'Pilot.md'), '\n');
-    const { docId } = await request('open', { docPath: path, folder: dirname(path) });
-    doc = { docId, path };
+    await mkdir(join(dirname(path), '.ponjo', 'buddies'), { recursive: true });
+    const folder = await realpath(dirname(path));
+    const secret = `s-${Math.random().toString(36).slice(2)}`;
+    const team = { secret, room: roomOf(secret), key: `k-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
+    await writeTeam(folder, { secret, members: [{ id: idOf(team.key), name: 'Sam', level: 'write' }] }, config);
+    await writeFile(join(dirname(path), '.ponjo', 'buddies', 'Pilot.md'), '\n');
+    const { docId } = await request('open', { docPath: path, folder });
+    doc = { docId, path, folder, team };
     const { port1, port2 } = new MessageChannelMain();
     await request('attach', { docId }, [port1]);
     window.webContents.postMessage('collab:port', null, [port2]);
@@ -56,4 +66,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('collab:write', (event, text) => writeFile(doc.path, text));
   ipcMain.handle('collab:hold', () => rm(join(config, 'release-Pilot'), { force: true }));
   ipcMain.handle('collab:release', () => writeFile(join(config, 'release-Pilot'), ''));
+  ipcMain.handle('collab:share', async () => {
+    await request('share', { folder: doc.folder });
+    return doc.team;
+  });
 });

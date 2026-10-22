@@ -1,12 +1,12 @@
 node_modules/
 dist/
 release/
+.wrangler/
 .DS_Store
 .claude/*
 !.claude/skills/
 !.claude/settings.json
 
-# OpenDoc's own comments and buddies: local only
-*.opendoc.json
-*.opendoc.jsonl
-.opendoc/
+# Ponjo's own comments and buddies: local only
+*.comments.jsonl
+.ponjo/

@@ -1,4 +1,6 @@
-# opendoc format — version 3
+# Comments format — version 3
+
+Ponjo is the reference implementation.
 
 The sidecar holds a doc's comments and nothing else. Buddies, their runs
 and versions are not part of the format (see
@@ -9,7 +11,7 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 ## 1. Files
 
 - A doc is a text file `X`, of any format. Its comments live in
-  `X.opendoc.jsonl` next to it; nothing of them goes into the doc.
+  `X.comments.jsonl` next to it; nothing of them goes into the doc.
 - A doc's **text** is its bytes decoded as UTF-8, without a leading byte
   order mark, with every CRLF or lone CR as LF. Anchors (§3) are on this
   text. A tool MUST NOT write a doc whose bytes are not UTF-8. It SHOULD
@@ -19,18 +21,16 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
   missing is orphaned: tools report it and MUST NOT delete it on their own.
 - Renaming a doc renames its sidecar.
 - Comments may be private and a repo public. A tool SHOULD, before writing a
-  sidecar inside a git work tree, add `*.opendoc.jsonl` to the repo's
+  sidecar inside a git work tree, add `*.comments.jsonl` to the repo's
   `info/exclude`, so a stray `git add .` does not publish them. Sharing
-  comments is then a choice: add `!*.opendoc.jsonl` after it.
-- Sidecars of earlier versions are not converted: a version 1 sidecar
-  (`X.opendoc.json`) is not read, and a version 2 one, whose anchors were on
-  a markdown doc's rendered text, is another version (§2).
-- In git, `*.opendoc.jsonl merge=union` SHOULD be set.
+  comments is then a choice: add `!*.comments.jsonl` after it.
+- A sidecar of another version is not converted (§2).
+- In git, `*.comments.jsonl merge=union` SHOULD be set.
 
 ## 2. Comments
 
 UTF-8 text, one JSON object per line, `\n` after each. The first line is
-`{"opendoc":3}`; a tool MUST NOT write a sidecar whose first line is not,
+`{"comments":3}`; a tool MUST NOT write a sidecar whose first line is not,
 and MAY show its comments read-only. Every other line is a comment. A tool
 MUST keep fields it does not understand.
 

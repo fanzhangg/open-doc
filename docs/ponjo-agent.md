@@ -1,4 +1,4 @@
-# OpenDoc Agent
+# Ponjo Agent
 
 An agent of our own, run like Claude Code and Codex: a script in
 `agents/` under the same [contract](agent-config.md#the-contract). Inside,
@@ -31,8 +31,8 @@ laptop runs (an 8B model tried) claim edits they did not make.
 | `read`, `propose` | the model, as tools |
 
 **`main`** is all the I/O, and all of the contract: it reads the prompt on
-stdin, the paths in `OPENDOC_DOC`, `OPENDOC_COMMENTS` and `OPENDOC_PROJECT`
-and its settings in `OPENDOC_SETTING_*`, calls `turn`, applies the edits to
+stdin, the paths in `PONJO_DOC`, `PONJO_COMMENTS` and `PONJO_PROJECT`
+and its settings in `PONJO_SETTING_*`, calls `turn`, applies the edits to
 the copies, prints the reply and exits 0. A run without a key fails at once,
 saying where to set it.
 
@@ -88,7 +88,7 @@ steps, and the turn fails.
 
 ```mermaid
 flowchart LR
-  runner["Runner"] -- "the contract" --> main["main<br>agents/opendoc"]
+  runner["Runner"] -- "the contract" --> main["main<br>agents/ponjo"]
   main --> turn["turn()"]
   turn -- "infer" --> api["Anthropic or<br>OpenAI-compatible API"]
   turn -- "readFile" --> files["the copies, the project"]

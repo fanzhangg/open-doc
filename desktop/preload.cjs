@@ -1,4 +1,4 @@
-// window.opendocDesktop: the few things a page may ask the desktop app to do,
+// window.ponjoDesktop: the few things a page may ask the desktop app to do,
 // all started by the user (a click or a key). The page never passes a full
 // path; the app shows its own dialog or looks the doc up in its own list (the
 // recent docs, or the docs of a folder window, which the app checks). A
@@ -26,7 +26,7 @@ window.addEventListener('drop', (event) => {
   const paths = [...event.dataTransfer.files].map((file) => webUtils.getPathForFile(file)).filter(Boolean);
   if (paths.length === 0) return;
   event.stopPropagation();
-  ipcRenderer.invoke('opendoc:action', 'drop', paths).catch(() => {});
+  ipcRenderer.invoke('ponjo:action', 'drop', paths).catch(() => {});
 }, true);
 
 // A drop that ends a drag in the sidebar leaves no user activation behind,
@@ -40,10 +40,10 @@ window.addEventListener('pointerup', (event) => {
 function act(action, arg) {
   const user = navigator.userActivation.isActive || Date.now() - released < 1000;
   if (!user) return Promise.reject(new Error('needs a click or a key press'));
-  return ipcRenderer.invoke('opendoc:action', action, arg);
+  return ipcRenderer.invoke('ponjo:action', action, arg);
 }
 
-// window.opendocHost: a doc page's line to its doc in the doc host
+// window.ponjoHost: a doc page's line to its doc in the doc host
 // (src/host/doc-service.js), over a message port the app hands the page
 // (windows.connectPage). `call(type, arg)` resolves to { result } or
 // { error: { message, code } }; `onEvent(fn)` hears the doc's events, and
@@ -55,7 +55,7 @@ let nextCall = 0;
 const calls = new Map();
 let listener = null;
 let early = [];
-ipcRenderer.on('opendoc:port', (event) => {
+ipcRenderer.on('ponjo:port', (event) => {
   port = event.ports[0];
   port.onmessage = ({ data }) => {
     if (data.event) {
@@ -69,9 +69,9 @@ ipcRenderer.on('opendoc:port', (event) => {
   };
   for (const message of unsent.splice(0)) port.postMessage(message);
 });
-ipcRenderer.send('opendoc:connect');
+ipcRenderer.send('ponjo:connect');
 
-contextBridge.exposeInMainWorld('opendocHost', {
+contextBridge.exposeInMainWorld('ponjoHost', {
   call: (type, arg) => new Promise((resolve) => {
     const id = ++nextCall;
     calls.set(id, resolve);
@@ -85,7 +85,7 @@ contextBridge.exposeInMainWorld('opendocHost', {
   },
 });
 
-contextBridge.exposeInMainWorld('opendocDesktop', {
+contextBridge.exposeInMainWorld('ponjoDesktop', {
   /** The home page: a folder, picked or made in the OS dialog, opens as a project. */
   openFolder: () => act('openFolder'),
   /**
@@ -93,7 +93,7 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
    * folder, `/` between folders), expanded (open subfolders), sidebar,
    * carry }, or null in a window with a single doc.
    */
-  folder: () => ipcRenderer.invoke('opendoc:action', 'folder'),
+  folder: () => ipcRenderer.invoke('ponjo:action', 'folder'),
   /** Show the folder's file `path` in this window if it is a doc; false if it is not. */
   openInFolder: (path) => act('openInFolder', String(path)),
   /** Follow a link in this doc: a URL, or a path from the doc's folder. */
@@ -118,12 +118,12 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   }),
   /** A command from a sidebar menu: { action: 'rename' | 'newFile', rel, kind }. */
   onFolderCommand: (callback) => {
-    ipcRenderer.on('opendoc:folder-command', (_event, { action, rel, kind }) => callback({ action: String(action), rel: String(rel), kind: String(kind) }));
+    ipcRenderer.on('ponjo:folder-command', (_event, { action, rel, kind }) => callback({ action: String(action), rel: String(rel), kind: String(kind) }));
   },
   showSidebar: (open) => act('folderSidebar', Boolean(open)),
   /** Files in the folder came or went, or this window started listing a folder. */
   onFolderChanged: (callback) => {
-    ipcRenderer.on('opendoc:folder-changed', () => callback());
+    ipcRenderer.on('ponjo:folder-changed', () => callback());
   },
   rename: () => act('rename'),
   /** Show the doc's sidecar in Finder, to fix it by hand. */
@@ -133,24 +133,24 @@ contextBridge.exposeInMainWorld('opendocDesktop', {
   /** Show the folder of the agent scripts. */
   showAgents: () => act('showAgents'),
   /** The start window's Settings > Agents: { agents, shipped, folder, secrets }, and resetting a shipped agent. */
-  agentScripts: () => ipcRenderer.invoke('opendoc:action', 'agentScripts'),
+  agentScripts: () => ipcRenderer.invoke('ponjo:action', 'agentScripts'),
   resetAgentScript: (name) => act('resetAgentScript', String(name)),
   /** Settings > Agents in any window: set agent `agent`'s secret `key` (an API key), or clear it with ''. */
   saveSecret: (agent, key, value) => act('saveSecret', { agent: String(agent), key: String(key), value: String(value) }),
   openRecent: (index) => act('openRecent', Number(index)),
-  recent: () => ipcRenderer.invoke('opendoc:action', 'recent'),
+  recent: () => ipcRenderer.invoke('ponjo:action', 'recent'),
   onRecentChanged: (callback) => {
-    ipcRenderer.on('opendoc:recent-changed', () => callback());
+    ipcRenderer.on('ponjo:recent-changed', () => callback());
   },
   /** The start window's settings (name and look), and saving a change to them. */
-  settings: () => ipcRenderer.invoke('opendoc:action', 'settings'),
+  settings: () => ipcRenderer.invoke('ponjo:action', 'settings'),
   saveSettings: (patch) => act('saveSettings', patch),
   /** The settings changed, here or in another window. */
   onSettingsChanged: (callback) => {
-    ipcRenderer.on('opendoc:settings-changed', () => callback());
+    ipcRenderer.on('ponjo:settings-changed', () => callback());
   },
-  /** Menu commands for the page: 'settings' or 'shortcuts'. */
+  /** Commands for the page: 'settings' or 'shortcuts' from the menu, 'team' from a notification. */
   onCommand: (callback) => {
-    ipcRenderer.on('opendoc:command', (_event, name) => callback(String(name)));
+    ipcRenderer.on('ponjo:command', (_event, name) => callback(String(name)));
   },
 });

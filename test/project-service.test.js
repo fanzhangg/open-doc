@@ -16,8 +16,8 @@ const notFound = (error) => error.code === 'not_found';
 
 // A project (its real path) holding `files` ({ path: text }), and a folder outside it.
 async function project(files) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
-  const outside = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-outside-')));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
+  const outside = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-outside-')));
   await writeFile(join(outside, 'secret.md'), 'outside\n');
   for (const [path, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, path)), { recursive: true });
@@ -28,7 +28,7 @@ async function project(files) {
 
 test('list: every file and folder the project shows, folders first, without dot names or a file\'s sidecar', async () => {
   const { root, outside, service } = await project({
-    'b.md': '', 'b.md.opendoc.jsonl': '', 'gone.md.opendoc.jsonl': '', 'a 10.txt': '', 'a 2.txt': '', '.env': '', '.DS_Store': '',
+    'b.md': '', 'b.md.comments.jsonl': '', 'gone.md.comments.jsonl': '', 'a 10.txt': '', 'a 2.txt': '', '.env': '', '.DS_Store': '',
     '.git/HEAD': '', '.github/ci.yml': '', 'node_modules/pkg/index.js': '', 'src/main.js': '', 'empty/.keep': '',
   });
   await symlink(join(root, 'src'), join(root, 'linked'), 'junction'); // a junction on Windows, which needs no admin rights
@@ -37,7 +37,7 @@ test('list: every file and folder the project shows, folders first, without dot 
   assert.deepEqual(await service.list(''), [
     { name: 'empty', folder: true }, { name: 'linked', folder: true }, { name: 'node_modules', folder: true }, { name: 'src', folder: true },
     { name: 'a 2.txt', folder: false }, { name: 'a 10.txt', folder: false }, { name: 'b.md', folder: false },
-    { name: 'gone.md.opendoc.jsonl', folder: false },
+    { name: 'gone.md.comments.jsonl', folder: false },
   ]);
   assert.deepEqual(await service.list('empty'), []);
   assert.deepEqual(await service.list('linked'), [{ name: 'main.js', folder: false }], 'a link that stays in the project');
@@ -45,7 +45,7 @@ test('list: every file and folder the project shows, folders first, without dot 
 });
 
 test('resolve: the real path of what the project shows; any other path is not found', async () => {
-  const { root, outside } = await project({ 'notes/a.md': '', '.env': '', 'docs/.secret': '', '.github/x.md': '', '.opendoc/buddies/x.md': '' });
+  const { root, outside } = await project({ 'notes/a.md': '', '.env': '', 'docs/.secret': '', '.github/x.md': '', '.ponjo/buddies/x.md': '' });
   await symlink(outside, join(root, 'out'), 'junction');
   await symlink(tmpdir(), join(root, 'tmp'), 'junction');
   await symlink(join(root, 'notes'), join(root, 'in'), 'junction');
@@ -54,7 +54,7 @@ test('resolve: the real path of what the project shows; any other path is not fo
   assert.equal(await resolve(root, 'in/a.md'), join(root, 'notes', 'a.md'), 'a link inside, as its real path');
   const refused = [
     '..', '../x', 'notes/../../x', 'notes/../a.md', './notes/a.md', 'notes//a.md', 'notes/', '/etc/passwd', join(root, 'notes', 'a.md'),
-    '.env', 'docs/.secret', '.github/x.md', '.opendoc/buddies/x.md', 'out/secret.md', 'tmp', 'missing.md', 'a\0b',
+    '.env', 'docs/.secret', '.github/x.md', '.ponjo/buddies/x.md', 'out/secret.md', 'tmp', 'missing.md', 'a\0b',
   ];
   for (const rel of refused) await assert.rejects(resolve(root, rel), notFound, rel);
   for (const rel of [null, undefined, 42, ['a.md'], { path: 'a.md' }]) await assert.rejects(resolve(root, rel), notFound, String(rel));

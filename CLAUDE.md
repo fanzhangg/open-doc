@@ -1,4 +1,4 @@
-# OpenDoc
+# Ponjo
 
 A markdown editor where people and AI buddies co-author docs.
 Product: docs/product-vision.md, docs/user-experience.md. Design: docs/architecture.md.

@@ -1,13 +1,12 @@
 # User Experience
 
-How people and AI buddies write together in OpenDoc. For why, see the
+How people and AI buddies write together in Ponjo. For why, see the
 [product vision](product-vision.md); for how it is built, see
-[architecture](architecture.md). What is marked *planned* is designed, not
-built: today one person writes with AI buddies.
+[architecture](architecture.md).
 
 ## Teammates
 
-*Planned.* A project is written by its team at the same time. Everyone on it
+A project is written by its team at the same time. Everyone on it
 is the **owner** (you), a **teammate** (another person) or an **AI buddy**,
 and in a doc they are alike: a face and a unique name, each edits and
 comments, can be @mentioned, and is named wherever the doc says who did
@@ -30,8 +29,9 @@ makes it and opens its card). Click a face anywhere for its card: a name that
 edits in place (yours, or an AI buddy's but not Clippy's; a renamed AI buddy
 keeps its comments, face and color), for an AI buddy who it is, a field right
 under it saved when you leave it, then Read or Edit for a teammate. A teammate and an AI buddy each have **Remove from this
-project** (an AI buddy's file is deleted; Clippy stays). Today the panel is
-the **Buddies** list: the AI buddies, their cards and New AI buddy.
+project** (an AI buddy's file is deleted; Clippy stays). In a doc opened
+on its own the panel has only you and Clippy; on a teammate's page, only
+the owner changes the team and the AI buddies.
 
 ## The basic loop
 
@@ -61,13 +61,23 @@ the **Buddies** list: the AI buddies, their cards and New AI buddy.
 
 ## Sharing a project
 
-*Planned.* **Invite link**, in the Team panel, gives one link for the
-project, permanent until you make a new one. Whoever opens it, in a browser
+**Invite link**, in the Team panel, copies one link for the project,
+permanent until you make a **New link**. Whoever opens it, in a browser
 with no install and no account, picks a name (not one already on the
 project) and waits. You get a notification; in the Team panel you pick Read
 or Edit (Edit to start) and **Allow**, or **Deny**. That is only the first
-time: then they see what you see, the file tree and every doc in the
-project. A new link ends every old one; **Remove** ends one person.
+time: then the link lets them in at once, to the project's first doc, with
+the project's sidebar: the same tree you see, where a click opens any doc
+in it (another file shows read only) and nothing can be renamed, moved,
+deleted or made. Which folders are open, and whether the sidebar shows,
+are kept in their browser. A new link
+ends every old one, and pages open on it close; **Remove** ends one person
+at once. A page turned away says why: a name taken, a request denied,
+removed, a link replaced, a doc not in the project, a name the project
+never shares (starting with `.`, or out of it). One that cannot reach the
+host says whether the relay cannot be reached, the host went away, or no
+one is sharing at the link. A teammate who can only read sees no tool that
+would be refused: no formatting, no reply box, Resolve, Undo or Restore.
 
 Your computer is the host, so the project is there only while it is awake and
 the app is open. The app keeps the computer awake while teammates are in. A
@@ -84,7 +94,7 @@ and the first line shows next to its name.
   is yours to change, once for all your docs (`buddies/Clippy.md` in your
   config folder); clear it for Clippy as it ships. Its name stays, and it
   cannot be removed.
-- **A project's** AI buddies live in its `.opendoc/buddies/` and travel with
+- **A project's** AI buddies live in its `.ponjo/buddies/` and travel with
   the folder (commit them). They answer only in that project's docs.
 - A doc opened on its own (from Finder, say) reaches only Clippy, even if it
   sits inside a project folder.
@@ -93,10 +103,10 @@ and the first line shows next to its name.
 
 Editing the files by hand works too: the app picks up changes at once. What
 runs every AI buddy is the agent picked in Settings > Agents (Claude Code,
-Codex, or the OpenDoc agent, which runs a cloud model you pick): a
+Codex, or the Ponjo agent, which runs a cloud model you pick): a
 program in `agents/` in your config folder that you may edit (see
-[agent config](agent-config.md)). Each agent has a page there with its
-settings (a model, an API key), kept apart from its program; an API key
+[agent config](agent-config.md)). The one picked shows its settings there,
+under it (a model, an API key), kept apart from its program; an API key
 shows only as set or not.
 
 ## Who asks whom
@@ -106,8 +116,9 @@ shows only as set or not.
   comment on a passage and the replies under it.
 - Resolving a thread stops its AI buddies at once, and nothing they did
   lands. Reopening asks no one.
-- Only people's comments ask: yours, and a teammate's who can edit
-  (*planned*). An AI buddy's reply asks no one, and neither does an `@name`
+- Only people's comments ask: yours, and a teammate's who can edit. A
+  turn acts as whoever asked it may when it ends: if they were removed or
+  set to Read meanwhile, nothing it did lands. An AI buddy's reply asks no one, and neither does an `@name`
   typed in the doc's text.
 - A comment that mentions several AI buddies asks each; they work at once.
 - Every run starts fresh with the doc, who the AI buddy is, who asked and the
@@ -128,11 +139,11 @@ shows only as set or not.
   it shows them in the text again (and scrolls to them), clicking again
   hides them. Edits changed since are left out. The reply only says why,
   or what you need to decide, and may be empty.
-- **Nothing a person types is lost** (*planned*). When two people change the same place
+- **Nothing a person types is lost.** When two people change the same place
   at once, both edits stay, in the order they reached the host. Text one
   deletes while the other types inside it keeps what was typed. If both
   replace the same word, both new words stay, to fix by hand.
-- **A person's typing is trusted** (*planned*). It is not marked by who typed it, and
+- **A person's typing is trusted.** It is not marked by who typed it, and
   when two people disagree they settle it outside the app, in a call.
 - **People win over AI buddies.** Where a person changed the same text while
   an AI buddy worked (or a change came from outside), theirs stays, the
@@ -142,20 +153,22 @@ shows only as set or not.
   those edits back, all at once, and keeps everything written since; where
   someone changed that text since, their text stays. **Cmd+Z** (Ctrl+Z)
   undoes your own typing, never anyone else's. **Undo** on an AI buddy's
-  reply undoes its run; its comments stay. Today it works on the computer
-  that ran the AI buddy; *planned*, in every window.
+  reply undoes its run; its comments stay. It works in every window of the
+  team.
 - **A failed run** replies with the end of its output, marked failed.
   @mention the AI buddy again to retry.
 
 ## Seeing teammates work
 
 - **Presence.** People's avatars are circles; each AI buddy's is a soft blob
-  with a face. They sit side by side in the header. A face shows its state
-  wherever it appears, the same for everyone: while an AI buddy works it
-  grows and its body rolls, where an AI buddy cannot answer or a person is
-  offline it is greyed out, and when a run fails it shakes and flashes red
-  once. No dots or badges.
-- **Cursor.** Every teammate in the doc (people: *planned*) has a cursor in their color, with
+  with a face. They sit side by side in the header: the people in the doc
+  with you, then the AI buddies. A face shows its state wherever it
+  appears, the same for everyone: while an AI buddy works it grows and its
+  body rolls, where an AI buddy cannot answer or a person is away (not in
+  the project now) it is greyed out, and when a run fails it shakes and
+  flashes red once. No dots or badges. In the Team panel you see which
+  teammates are here; a teammate sees who is here with them.
+- **Cursor.** Every teammate in the doc has a cursor in their color, with
   their name beside it while they work or type; otherwise it is a plain line.
   A person's stands where they are typing. An AI buddy asked to work stays
   in the doc until it is closed or the AI buddy is gone: at the passage it was
@@ -166,10 +179,10 @@ shows only as set or not.
 ## Around the doc
 
 - **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
-  who made it (a teammate, an AI buddy with the comment it answered, or a
-  program outside OpenDoc), a diff against the one before, and Restore. A version is
+  who made it (you, a teammate, both when you typed together, an AI buddy
+  with the comment it answered, or a program outside Ponjo), a diff against the one before, and Restore. A version is
   saved before and after each buddy edit, before each change from outside
-  OpenDoc, and for each undo and restore, so any of them can be restored.
+  Ponjo, and for each undo and restore, so any of them can be restored.
   History is kept in the config folder, never next to the doc.
 - **Changes from outside** (a `git pull`, another editor) show up live and
   merge with your typing. Where they overlap what you are typing, your typing
@@ -223,8 +236,6 @@ shows only as set or not.
   project, as AI buddies read it), Reveal, and Delete (to the Trash). Drag a
   row onto a folder to move it. A file's comments go with it when it is
   renamed, moved or deleted here.
-- **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
+- **Comments** are in `X.md.comments.jsonl` next to the doc, one per line, so
   they merge in git ([format](../spec/SPEC.md)). Moving a doc outside the app,
-  move this file with it. A sidecar from OpenDoc 1
-  (`X.md.opendoc.json`) is not read; a banner says so and the file is left
-  as it is.
+  move this file with it.

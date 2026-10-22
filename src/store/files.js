@@ -12,7 +12,7 @@ import { appendFile, mkdir, open, readFile, rename, rm, stat, writeFile } from '
 import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
-export const SIDECAR_SUFFIX = '.opendoc.jsonl';
+export const SIDECAR_SUFFIX = '.comments.jsonl';
 // Room for the longest doc the Plain text view edits (5,000,000 characters,
 // web/views/plain/index.js), at up to 4 bytes a character.
 export const MAX_TEXT_BYTES = 20 * 1024 * 1024;
@@ -57,7 +57,7 @@ export function encodeText(text, { bom = false, crlf = false } = {}) {
   return Buffer.from((bom ? BOM : '') + (crlf ? text.replace(/\n/g, '\r\n') : text));
 }
 
-export const hashText = (text) => hashBytes(Buffer.from(text));
+export const hashText = hashBytes; // a string is hashed as UTF-8, without a copy
 
 /** @returns {Promise<{ text: string, hash: string, form: { bom: boolean, crlf: boolean } }>} `hash` of the text */
 export async function readDoc(docPath) {
@@ -69,13 +69,17 @@ export async function readDoc(docPath) {
     throw error;
   }
   const decoded = decodeText(bytes);
-  if (!decoded) throw new StoreError('not_text', `${basename(docPath)} is not UTF-8 text, so OpenDoc does not open it`);
+  if (!decoded) throw new StoreError('not_text', `${basename(docPath)} is not UTF-8 text, so Ponjo does not open it`);
   return { ...decoded, hash: hashText(decoded.text) };
 }
 
-/** Write `text` over the doc in `form` (a new doc: \n, no BOM). */
-export function writeDoc(docPath, text, form) {
-  return writeAtomic(docPath, encodeText(text, form));
+/**
+ * Write `text` over the doc in `form` (a new doc: \n, no BOM); resolves to
+ * the file's stat as written, or null when `still()`, asked just before the
+ * new file takes the doc's place, resolves to false.
+ */
+export function writeDoc(docPath, text, form, still) {
+  return writeAtomic(docPath, encodeText(text, form), still);
 }
 
 /** The sidecar's text, or null when the doc has none yet. */
@@ -92,7 +96,7 @@ export async function readSidecarText(docPath) {
  * Write the sidecar. Comments may be private and the repo public, so inside
  * a git work tree its pattern first goes into the repo's `info/exclude`, a
  * file git never commits: nothing for the user to do, and a person who wants
- * to share comments adds `!*.opendoc.jsonl` after it. Checked at every write, so a folder
+ * to share comments adds `!*.comments.jsonl` after it. Checked at every write, so a folder
  * that becomes a repo later is covered; outside a repo or without git, no-op.
  */
 export async function writeSidecar(docPath, text) {
@@ -149,15 +153,22 @@ export async function lockFile(path, target) {
   }
 }
 
-// Write a temp file next to the target and rename it into place. On Windows a
-// rename can fail briefly while another process has the target open.
-export async function writeAtomic(path, content) {
+// Write a temp file next to the target and rename it into place, unless
+// `still()` says not to (null then); resolves to its stat as written, taken
+// before anyone else could change it. On Windows a rename can fail briefly
+// while another process has the target open.
+export async function writeAtomic(path, content, still = async () => true) {
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temp, content);
+  const written = await stat(temp);
+  if (!(await still())) {
+    await rm(temp, { force: true });
+    return null;
+  }
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(temp, path);
-      return;
+      return written;
     } catch (error) {
       if (attempt >= 20 || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) {
         await rm(temp, { force: true });

@@ -1,4 +1,4 @@
-# Contributing to OpenDoc
+# Contributing to Ponjo
 
 Thanks for helping. People and AI agents both contribute here; the same rules apply to both.
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenDoc Avatars</title>
+  <title>Ponjo Avatars</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
   <link rel="stylesheet" href="../dist/web/app.css">
@@ -12,7 +12,7 @@
 </head>
 <body>
 <header class="site-header">
-  <a class="site-brand" href="index.html"><img src="../build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
+  <a class="site-brand" href="index.html"><img src="../build/icon.svg" alt="" width="24" height="24"><span>Ponjo</span></a>
   <nav class="site-nav" aria-label="Pages">
     <a href="index.html">Download</a>
     <div class="site-dev">
@@ -59,8 +59,10 @@
     <li><strong>Away</strong>: greyed out. It does not answer in this doc.</li>
     <li><strong>Failed</strong>, a moment: when a run fails, its face shakes and flashes red, once. The thread says what happened.</li>
   </ul>
+  <p>A person has two states, the same way: <strong>here</strong>, as drawn, with the project open, and <strong>away</strong>, greyed out. In a doc, each person with you has a cursor in their colour, with their name beside it while they move or type, as a buddy's while it works.</p>
   <p>A finished run has no moment of its own: its edits light up in the text, in its colour. A face you point at grows the same way, and on its card a buddy moves as if at work, to greet you. With reduced motion, faces keep their size and nothing moves.</p>
   <div class="ds-box ds-faces" data-faces="states"></div>
+  <div class="ds-box ds-faces" data-faces="person-states"></div>
   <p>Faces have their own palette and gradient in <code>faces.js</code>, the one place outside the tokens with colour literals. Ink for features is <code>#1f1d24</code>.</p>
 
 </main>
@@ -101,6 +103,8 @@
     .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
   fill('states', [['idle', 'Ready'], ['working', 'Working'], ['away', 'Away'], ['idle', 'Failed']]
     .map(([presence, label]) => labelled(avatar('Clippy', { size: 44, presence }), label)));
+  fill('person-states', [['idle', 'Here'], ['away', 'Away']]
+    .map(([presence, label]) => labelled(avatar('Noor', { person: true, size: 44, presence }), label)));
   // The failed moment plays once in the app; here, every few seconds.
   const failed = document.querySelectorAll('[data-faces="states"] .od-avatar')[3];
   const flinch = () => { failed.classList.remove('od-failed'); void failed.offsetWidth; failed.classList.add('od-failed'); };

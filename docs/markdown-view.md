@@ -64,8 +64,9 @@ The view's settings, on its page in Settings > Views:
 - **Changes from outside** (`git pull`, another editor) glow for a moment,
   with who made them.
 - **Cursors:** an AI buddy's, at the passage it was asked about, with its
-  name while it works. A teammate's, where they type (*planned*).
-- **Two people typing** (*planned*): see [Many writers](#many-writers).
+  name while it works. A person's, where they type, with their name while
+  they move or type.
+- **Two people typing:** see [Many writers](#many-writers).
 
 ### Earlier versions
 
@@ -119,8 +120,10 @@ document.
   typing in it merge by character; that is checked by reading it back.
   Any other changed block is written in one common style. Worked out once
   per document.
-- **When:** `onChange` fires 200 ms after the person last changed the
-  document; the page then reads `getText`.
+- **When:** `onEdit` fires on every change the person makes; the page then
+  reads `getText`, unless an edit of theirs is on its way to the host.
+  `onChange` fires 200 ms after they last changed the document, for what
+  can wait for a pause (the marks).
 
 ### The contract
 
@@ -128,7 +131,7 @@ What every view has, in offsets on the doc's text (`test/views.test.js`):
 `getText`, `applyText`, `setMarks` (comments, a revision, cursors), the
 selection, `tops` and `scrollTo` (for the margin), `focus`, `undo` and
 `redo`, and a call when its settings change. Made with the text, whether it
-is editable, whether to colour its syntax (the plain view), and the page's callbacks: `onChange`, `onMarkClick`,
+is editable, whether to colour its syntax (the plain view), and the page's callbacks: `onEdit`, `onChange`, `onMarkClick`,
 `onLayout`, and, given a toolbar, `onComment`.
 
 ### What it does not know
@@ -160,17 +163,18 @@ change. The word count runs a few times a second at most.
 The host orders every edit as text operations on a revision
 ([Interfaces](architecture.md#interfaces)). Since the view already takes and
 gives text, the operations live in the page (`web/client.js`), with the
-contract as it is: plan A, in both views. Teammates typing at once are
-*planned* ([Sharing](architecture.md#sharing)); today the writers are the
-person, AI buddies and changes from outside.
+contract as it is: plan A, in both views. The writers are the owner,
+teammates who can edit ([Sharing](architecture.md#sharing)), AI buddies
+and changes from outside.
 
 ### Plan A: the view stays as it is
 
-1. **Typing out.** When typing pauses, `diffOps(the text the view last had,
-   getText())`, trimmed to the edit, goes to the host on `{ epoch, rev }` and
-   waits as pending.
+1. **Typing out.** On each change, while no edit is on its way,
+   `diffOps(the text the view last had, getText())`, trimmed to the edit,
+   goes to the host on `{ epoch, rev }` and waits as pending. Changes made
+   while one is on its way go out together when the host answers it.
 2. **Others in.** Before applying operations from the host, the page reads
-   `getText()` once more, so typing since the last pause is pending too;
+   `getText()` once more, so typing not read yet is pending too;
    transforms pending and incoming against each other; and shows the result
    with `applyText`.
 3. **Cursors** are marks, as an AI buddy's is.
@@ -193,7 +197,8 @@ person, AI buddies and changes from outside.
 4. **A block that changes kind** (a paragraph becomes a list item) is
    replaced whole, and a caret in it may move.
 5. **Undo across others' edits** in the same block.
-6. **Cost:** `getText` once per pause and once per batch from the host.
+6. **Cost:** `getText` once per edit sent (at most one a round trip to the
+   host) and once per batch from the host.
 
 ### Plan B, if plan A fails
 

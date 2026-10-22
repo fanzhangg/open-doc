@@ -1,6 +1,6 @@
 # Testing and CI/CD (draft)
 
-How OpenDoc is tested and shipped, derived from
+How Ponjo is tested and shipped, derived from
 [architecture](architecture.md), [SPEC](../spec/SPEC.md),
 [PROJECT](../spec/PROJECT.md) and [agent config](agent-config.md).
 Each test guards a rule there; a test that guards none is not needed.
@@ -33,7 +33,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
   comment says so.
 - **Any order or duplication of lines reads to the same threads** (property
   test). This is what makes `merge=union` safe.
-- Unknown major refused; a v1 sidecar not read and left byte for byte; a bad
+- Unknown major refused; a bad
   line reported, skipped and kept on rewrite; unknown fields kept.
 - Writing (§5): the file replaced whole, never torn; only a human sets
   `resolved`.
@@ -68,7 +68,7 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 ### Runner — integration, fake script
 
 - The script runs in a new folder holding only the copy, gets the prompt on
-  stdin and `OPENDOC_DOC`, `OPENDOC_PROJECT` and `OPENDOC_BUDDY`, and its stdout becomes the
+  stdin and `PONJO_DOC`, `PONJO_PROJECT` and `PONJO_BUDDY`, and its stdout becomes the
   reply; the folder is gone after.
 - **The human edits during a run**: the human's text stays and the reply is
   marked `conflict`; nothing asks the user.
@@ -83,13 +83,13 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 
 - `<Name>.md`: the file name is the name, the text who it is; a
   renamed file is a renamed buddy; a `Clippy.md` is not a buddy;
-  `.opendoc/` created with the first buddy; only the opened folder's counts.
+  `.ponjo/` created with the first buddy; only the opened folder's counts.
 - Doc mode reaches Clippy only, also inside a project folder.
 - Clippy's text is the user's `buddies/Clippy.md`, the same in every doc
   and in its runs; empty or missing, Clippy is as it ships; it keeps its
   name and cannot be deleted.
-- One agent script runs every buddy, with `OPENDOC_BUDDY` set;
-  **nothing in `.opendoc/` or a sidecar chooses a program**.
+- One agent script runs every buddy, with `PONJO_BUDDY` set;
+  **nothing in `.ponjo/` or a sidecar chooses a program**.
 - The same project's buddies have the same faces and colors everywhere;
   Clippy and up to seven buddies all have different colors.
 
@@ -100,6 +100,28 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - One app per machine; a second launch hands its files to the first.
 - The main flow: open a doc and a folder, @mention a buddy, the fake agent
   edits, Undo on its reply, Cmd+Z undoes only the human's edit, restore a version.
+
+### Sharing — two machines, by hand
+
+After each deploy of the relay (README, Deploying the relay). The owner on
+machine A runs the app from `main` with no `PONJO_RELAY`; the teammate is
+on machine B, on another network (a phone's hotspot will do), in a browser.
+
+1. **Invite.** A opens a project, Team > Invite link. The link is
+   `https://ponjo.app/team?room=…`. B opens it, picks a name, and
+   is told it waits for the owner.
+2. **Allow.** A is notified; in Team, Edit and Allow. B's page shows the
+   project's first doc, editable, in a moment. B reloads: in at once.
+3. **Both typing.** Both type in the same paragraph at once for a minute.
+   Each sees the other's keys as they type; nothing is lost, and the file
+   on A holds both. A sets B to Read: B's tools go; back to Edit.
+4. **Sleep and wake.** A sleeps (close the lid) for two minutes. B says the
+   host went away. A wakes: within 30 seconds B is back in the doc by
+   itself, with A's text, and both type again.
+5. **Idle.** Leave both untouched for ten minutes, then type: still live.
+6. **A new link ends the old one.** A makes a New link. B's page says the
+   link no longer works; B opens the new link and is in at once, without
+   Allow. A removes B: B's page says so.
 
 ## CI
 

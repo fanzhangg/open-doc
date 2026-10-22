@@ -4,30 +4,31 @@
 // @mentioned in the doc's comments (runner.js) and lands what each run
 // changed when it ends. It lives in the doc host; windows call it over a
 // message port (desktop/doc-host.js) and hear its events (ops, sidecar,
-// agents, settings, history, renamed, missing). In project mode its
-// project's files are read through ProjectService, at the same door.
+// agents, settings, history, renamed, missing, team). In project mode its
+// project's files are read through ProjectService, and its team changed
+// through Team (team.js), at the same door.
 
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile } from 'node:fs/promises';
-import { userInfo } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { appendedComments, askedOf, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
-import { SettingsError, agentSettings } from '../core/settings.js';
-import { apply, diffOps, transform } from '../core/ot.js';
+import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
+import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteWritten, readHistory, readVersion, recordVersion, writtenEdits } from '../store/history.js';
-import { configDir, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
+import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
+import { mirrorDir, syncMirror } from './mirror.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
+import { TeamError } from './team.js';
 
 /** A call refused: `code` says why ('bad_input', 'not_found', 'read_only', 'stale', 'forbidden'). */
 class DocError extends Error {
@@ -53,16 +54,17 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), handed to runs as OPENDOC_PROJECT. `secrets()` gives the agents'
- * secrets, decrypted ({ <agent>: { <key>: value } }, src/store/secrets.js),
- * handed to runs with the other settings. `emit(event, data)` hears
- * what changed. `call(type, arg, who)` runs a request of `who`'s (see
+ * mode), whose mirror (mirror.js) runs get as PONJO_PROJECT; `team`,
+ * its Team (team.js).
+ * `secrets()` gives the agents' secrets, decrypted ({ <agent>: { <key>:
+ * value } }, src/store/secrets.js), handed to runs with the other settings.
+ * `emit(event, data)` hears what changed. `call(type, arg, who)` runs a request of `who`'s (see
  * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
- * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null) => void, close: () => Promise<void> }>}
+ * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, leave: (id: string) => void, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, team: object | null) => void, close: () => Promise<void> }>}
  */
-export async function openDoc(docPath, { folder = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
+export async function openDoc(docPath, { folder = null, team = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
@@ -72,7 +74,11 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       const { settings } = await readSettings(settingsDir);
       return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir), secrets()[settings.agent]) };
     },
-    folder: () => folder,
+    // The project, as a run reads it: its mirror, up to date (none if that fails).
+    folder: () => folder && syncMirror(folder, mirrorDir(folder, settingsDir)).catch((error) => {
+      console.error('Could not mirror the project:', error);
+      return null;
+    }),
     human: async () => ({ name: (await me()).name, about: (await settingsWithId(settingsDir)).about.trim() }),
     finish: (result) => serial(() => finishRun(result)),
     onChange: broadcastAgents,
@@ -101,6 +107,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // buddy's `reply`.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
+  // `writtenStat` is the file's stat as this service last wrote it: a file
+  // that still has it is not read again (a doc of millions of characters
+  // takes tens of milliseconds), `form` how its lines end.
   let text = opened.text;
   let rev = 0;
   const epoch = newId('e');
@@ -108,7 +117,22 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   let logStart = 0;
   let written = text;
   let writtenHash = opened.hash;
+  let writtenStat = null;
+  let form = opened.form;
+  // Whether the file, as `now` (a stat, or null) says, is still as this service wrote it.
+  const ours = (now) => sameStat(now, writtenStat);
   let told = []; // landed edits not yet written and told to windows, as `ops` events
+  // Where each person has their cursor: id → { id, name, at },
+  // `at` an offset in the text at `toldRev`, the last rev windows were told
+  // of, so a window places it on its own text; told to every window as
+  // `cursors`, with `by`, whose cursor moved. Never queued behind writes.
+  const cursors = new Map();
+  let toldRev = 0;
+  const tellCursors = (by = null) => emit('cursors', { epoch, rev: toldRev, cursors: [...cursors.values()], by });
+  // The cursors on the text at `rev`.
+  const cursorsNow = () => [...cursors.values()].map((cursor) => ({
+    ...cursor, at: log.slice(toldRev - logStart, rev - logStart).reduce((at, landed) => mapOffset(at, landed.ops), cursor.at),
+  }));
   // Windows' edits the file holds that a service before this one may not
   // have told them of (noteWritten).
   const landedBefore = await writtenEdits(docPath, settingsDir, opened.hash);
@@ -129,26 +153,37 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
 
   // Write what landed, then tell every window: what a window has heard of is
   // in the file. A file changed outside since it was last written is merged
-  // first. A missing doc is not written; its edits are still told. Run in
-  // `serial`.
+  // first, and one changed while it was being written, just before it took
+  // the file's place, too, then written again. A missing doc is not
+  // written; its edits are still told. Run in `serial`.
   async function commit() {
-    if (!missing && text !== written) {
-      let disk = null;
-      try {
-        disk = await readDoc(docPath);
-      } catch (error) {
-        if (error.code !== 'no_doc') throw error;
+    while (!missing && text !== written) {
+      const before = await stat(docPath).catch(() => null);
+      if (!ours(before)) {
+        let disk;
+        try {
+          disk = await readDoc(docPath);
+        } catch (error) {
+          if (error.code !== 'no_doc') throw error;
+          break;
+        }
+        form = disk.form;
+        if (disk.hash !== writtenHash) await takeOutside(disk);
+        if (text === written) break;
       }
-      if (disk && disk.hash !== writtenHash) await takeOutside(disk);
-      if (disk && text !== written) {
-        writtenHash = hashText(text);
-        // A window told nothing yet, should this service stop now, learns from it its edit is in.
-        await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
-        await writeDoc(docPath, text, disk.form);
-        written = text;
-      }
+      writtenHash = hashText(text);
+      // A window told nothing yet, should this service stop now, learns from it its edit is in.
+      await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
+      const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before));
+      if (!wrote) continue;
+      writtenStat = wrote;
+      written = text;
     }
-    for (const event of told.splice(0)) emit('ops', event);
+    for (const event of told.splice(0)) {
+      for (const cursor of cursors.values()) cursor.at = mapOffset(cursor.at, event.ops);
+      toldRev = event.rev;
+      emit('ops', event);
+    }
   }
 
   // The doc's rules, as the settings are now.
@@ -164,7 +199,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (typing !== null) { // the typing the file held, a version before the outside one
       clearTimeout(typing);
       typing = null;
-      await noteVersion(written, { kind: 'edit', author: await me() });
+      await noteVersion(written, await typingChange());
     }
     await noteVersion(disk.text, { kind: 'external', author: null });
     const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
@@ -174,18 +209,26 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
   }
 
-  // Typing is a version once it pauses (src/store/history.js joins a burst
-  // of it into one), and before any edit that is not the person's.
+  // Typing is a version once everyone typing has paused (src/store/history.js
+  // joins a burst of it into one), and before any edit that is not theirs:
+  // one version, by each person who typed in it.
   let typing = null;
-  function typed() {
+  let typists = []; // who typed since the last version, as comments name them
+  function typed(who) {
+    if (!typists.some((t) => t.id === who.id)) typists.push(byOf(who));
     clearTimeout(typing);
     typing = setTimeout(() => serial(flushTyping), SAVE_DELAY_MS);
+  }
+  // The version's change for the typing so far; the next typing is a new burst.
+  async function typingChange() {
+    const [author = await me(), ...more] = typists.splice(0);
+    return { kind: 'edit', author, ...(more.length > 0 ? { authors: [author, ...more] } : {}) };
   }
   async function flushTyping() {
     if (typing === null) return;
     clearTimeout(typing);
     typing = null;
-    await noteVersion(text, { kind: 'edit', author: await me() });
+    await noteVersion(text, await typingChange());
   }
 
   // A window's edit: operations `ops` on rev `rev` of epoch `epoch`, moved over
@@ -194,7 +237,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // `conflict` in history. `id` names it in the `ops` event that tells it.
   // An epoch or rev this service no longer has is `stale`: the window takes
   // the text again (state) and sends its edit on that.
-  async function submit({ ops, rev: at, epoch: from, id } = {}) {
+  async function submit({ ops, rev: at, epoch: from, id } = {}, who) {
     if (!validOps(ops) || !Number.isInteger(at) || typeof id !== 'string') throw new DocError('bad_input', 'expected { ops, rev, epoch, id }');
     return serial(async () => {
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
@@ -206,7 +249,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       }
       if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
       land(ops, { id });
-      typed();
+      typed(who);
       await commit();
       for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
       if (overridden.length > 0) emit('history', {});
@@ -214,33 +257,48 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     });
   }
 
-  // A missing doc written back as it is here.
-  async function recreate() {
+  // A missing doc written back as it is here, by `who`.
+  async function recreate(who) {
     if (!missing) return {};
     await mkdir(dirname(docPath), { recursive: true });
     writtenHash = hashText(text);
     await noteWritten(docPath, settingsDir, writtenHash, log.map((landed) => landed.id).filter(Boolean));
-    await writeDoc(docPath, text);
+    writtenStat = await writeDoc(docPath, text, form);
     written = text;
-    await noteVersion(text, { kind: 'edit', author: await me() });
+    await noteVersion(text, { kind: 'edit', author: byOf(who) });
     return {};
   }
 
-  // Put the doc back the way it was in an earlier version, as the person's
+  // `who`'s cursor is at offset `at` of the text at rev `rev` of `epoch`;
+  // one from a rev windows are not all told of yet, or this service no
+  // longer has, is dropped (the next comes).
+  function cursor({ at, rev: from, epoch: of } = {}, who) {
+    if (!Number.isInteger(at) || at < 0 || !Number.isInteger(from)) throw new DocError('bad_input', 'expected { at, rev, epoch }');
+    if (of !== epoch || from < logStart || from > toldRev) return {};
+    const now = log.slice(from - logStart, toldRev - logStart).reduce((offset, landed) => mapOffset(offset, landed.ops), at);
+    cursors.set(who.id, { id: who.id, name: who.name, at: now });
+    tellCursors(who.id);
+    return {};
+  }
+
+  // Put the doc back the way it was in an earlier version, as `who`'s
   // edit: a new version, so the restore can itself be undone. Comments
   // stay; readers find their anchors in the restored text.
-  async function restoreVersion(body) {
+  async function restoreVersion(body, who) {
     const found = await readVersion(docPath, settingsDir, versionId(body?.id));
     if (!found) throw new DocError('not_found', 'no such version');
     await flushTyping();
     land(diffOps(text, found.text));
     await commit();
-    await noteVersion(text, { kind: 'restore', author: await me(), restoredFrom: body.id });
+    await noteVersion(text, { kind: 'restore', author: byOf(who), restoredFrom: body.id });
     return {};
   }
 
-  async function state() {
-    const { settings } = await readSettings(settingsDir);
+  // The doc as `who` sees it, and their `level`. The owner's settings and
+  // name are theirs alone: anyone else gets the default settings, and is
+  // `me` themselves.
+  async function state(who) {
+    const owner = can(who, 'owner');
     return {
       doc: basename(docPath),
       text,
@@ -248,11 +306,15 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       rev,
       landed: landedBefore,
       ...(await commentsView(text)),
-      settings,
-      defaultName: defaultName(),
-      me: await me(),
+      settings: owner ? (await readSettings(settingsDir)).settings : DEFAULT_SETTINGS,
+      defaultName: owner ? defaultName() : who.name,
+      me: owner ? await me() : byOf(who),
+      level: who.level,
       agents: agentStatuses(),
+      cursors: cursorsNow(),
       project: folder !== null, // whether buddies can be made here
+      // The project's name and the doc's path in it, for a teammate's sidebar.
+      place: folder && { name: basename(folder), path: relative(folder, await realpath(docPath).catch(() => docPath)).split(sep).join('/') },
     };
   }
 
@@ -313,19 +375,26 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   }
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
-  // only the comments of those who may write ask, and only the owner does
-  // until teammates join.
+  // only the comments of those who may write ask: the owner and the
+  // teammates who can edit. Each says who asked.
   async function asks() {
     if (closed) return [];
     const here = await buddies();
     if (here.length === 0) return [];
     const { lines, problem } = await readComments();
     if (problem) return []; // a buddy could not post its reply
-    const askers = [(await me()).id];
+    const editors = team ? (await team.list()).members.filter((m) => m.level === 'write').map((m) => m.id) : [];
+    const askers = [(await me()).id, ...editors];
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
-    return threads.flatMap((thread) => askedOf(thread, askers).map((id) => ({
-      threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here,
+    return threads.flatMap((thread) => [...askedBy(thread, askers)].map(([id, asker]) => ({
+      threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here, asker,
     })).filter((ask) => ask.buddy)); // a thread's opener may be gone
+  }
+
+  // The level of the person with id `id` now: the owner's, a teammate's, or null.
+  async function levelOf(id) {
+    if (id === (await me()).id) return 'owner';
+    return team ? team.levelOf(id) : null;
   }
 
   // The buddies the doc reaches, and which are at work.
@@ -358,10 +427,11 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // whose thread was resolved meanwhile is dropped whole. Its reply and
   // comments come just after the last comment it saw, so one written while
   // it worked still asks; the reply resolves the thread when the run asked
-  // to. The buddy acts with the level of whoever asked it, at most write:
-  // until teammates join only the owner asks, so it always may. Run in
-  // `serial`.
-  async function finishRun({ threadId, id: buddyId, name, base, seen, edited, comments, body, failed }) {
+  // to. The buddy acts with the level of whoever asked it, at most write,
+  // asked now: a run whose asker was removed or set to Read meanwhile lands
+  // nothing. Run in `serial`.
+  async function finishRun({ threadId, id: buddyId, name, asker, base, seen, edited, comments, body, failed }) {
+    if (!can({ level: await levelOf(asker) }, 'write')) return;
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
     if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
     let conflict = false;
@@ -394,8 +464,8 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // Undo a buddy's run (docs/architecture.md, Undoing changes): the edit
   // from the version after it back to the version before it, as an edit
   // that yields to everything landed since, so text anyone changed since
-  // stays. On the machine that has the versions.
-  async function undoReply(body) {
+  // stays. On the machine that has the versions; by `who`.
+  async function undoReply(body, who) {
     await chronicle;
     const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
     const found = edit && (await readVersion(docPath, settingsDir, edit.id));
@@ -404,7 +474,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     const after = found.text;
     land(transform(diffOps(after, found.before), diffOps(after, text), { yields: true, base: after, rules: await rules() }).ops, { yields: true });
     await commit();
-    await noteVersion(text, { kind: 'undo', author: await me(), undid: body.id });
+    await noteVersion(text, { kind: 'undo', author: byOf(who), undid: body.id });
     return commentsView(text);
   }
 
@@ -430,15 +500,18 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return projectBuddiesDir(folder);
   };
 
-  // A buddy can be called anything but Clippy or its owner's name.
+  // A buddy can be called anything but Clippy, its owner's or a teammate's name.
   async function checkBuddy(fields) {
     try {
       checkBuddyPatch(fields);
     } catch (error) {
       throw new DocError(error.code, error.message);
     }
-    if (fields.name !== undefined && [CLIPPY.name, (await me()).name].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
+    if (fields.name !== undefined && [CLIPPY.name, (await me()).name, ...(await teamNames())].some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
+
+  // The names of the teammates and of those asking to join.
+  const teamNames = async () => (team ? team.names() : []);
 
   // The buddy here with id `id`.
   async function buddyById(id) {
@@ -459,7 +532,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return { agents: agentStatuses() };
   }
 
-  // A new buddy, in this project's .opendoc/buddies/ (made if missing).
+  // A new buddy, in this project's .ponjo/buddies/ (made if missing).
   async function createBuddy({ buddy } = {}) {
     const fields = { about: '', ...buddy };
     await checkBuddy(fields);
@@ -497,11 +570,9 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return chronicle;
   }
 
-  // This user, as their comments name them: their id (made once, kept when
-  // the name changes) and name.
-  async function me() {
-    const settings = await settingsWithId(settingsDir);
-    return { id: settings.id, name: settings.name ?? defaultName(), kind: 'human' };
+  // This user, as their comments name them.
+  function me() {
+    return ownerOf(settingsDir);
   }
 
   // Watch both files and tell the page what changed, including the doc
@@ -524,6 +595,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
   // so a write of this service's is all before the read or all after it:
   // a read from before it is never taken for someone else's change.
   async function onDocChanged() {
+    if (!missing && ours(await stat(docPath).catch(() => null))) return true; // this service's own write
     let doc;
     try {
       doc = await readDoc(docPath);
@@ -593,13 +665,29 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
     return project;
   };
   const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
+  const inTeam = () => {
+    if (!team) throw new DocError('bad_input', 'a doc on its own has no team');
+    return team;
+  };
+  async function changeTeam(fn) {
+    await fn(inTeam());
+    return team.list();
+  }
+  // The owner's windows follow the team (desktop/doc-host.js sends `team` to
+  // theirs alone), and so do the asks: who may ask changes with it.
+  const followTeam = () => team?.onChange(async () => {
+    emit('team', await team.list());
+    await runner.reconcile();
+  }) ?? (() => {});
+  let stopFollowingTeam = followTeam();
   await syncAgents();
 
   // What a window may ask, by the level it needs (`can`). Each returns what
   // changed, for the window that asked.
   const calls = {
     read: {
-      state,
+      state: (body, who) => state(who),
+      cursor,
       async history() {
         await serial(flushTyping); // typing not paused yet is a version too
         await chronicle;
@@ -611,22 +699,26 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         return found;
       },
       // The project's files (project-service.js), `path` in the project.
+      // Its real path is the owner's alone.
       list: (body) => inProject().list(body?.path),
       read: (body) => inProject().read(body?.path),
-      open: (body) => inProject().open(body?.path),
+      async open(body, who) {
+        const opened = await inProject().open(body?.path);
+        return can(who, 'owner') ? opened : { path: body.path };
+      },
     },
     write: {
       submit,
-      recreate: () => serial(recreate),
+      recreate: (body, who) => serial(() => recreate(who)),
       comment: (body, who) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }, who),
-      restoreVersion: (body) => serial(() => restoreVersion(body)),
-      undoReply: (body) => serial(() => undoReply(body)),
+      restoreVersion: (body, who) => serial(() => restoreVersion(body, who)),
+      undoReply: (body, who) => serial(() => undoReply(body, who)),
     },
     owner: {
       async saveSettings(patch) {
         if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
-        // Your name is no buddy's here, as no buddy's is yours.
-        if (typeof patch?.name === 'string' && (await buddies()).some((b) => sameName(b.name, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
+        // Your name is no buddy's or teammate's here, as theirs are not yours.
+        if (typeof patch?.name === 'string' && [...(await buddies()).map((b) => b.name), ...(await teamNames())].some((n) => sameName(n, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
         try {
           return { settings: await updateSettings(patch, settingsDir) };
         } catch (error) {
@@ -644,6 +736,12 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
         await installAgents(settingsDir, { reset: body.name });
         return { agents: await listAgents(settingsDir) };
       },
+      // The project's team (team.js), each call answered with the team as it is then.
+      team: () => inTeam().list(),
+      allow: (body) => changeTeam((t) => t.allow(body?.id, body?.level)),
+      remove: (body) => changeTeam((t) => t.remove(body?.id)),
+      setLevel: (body) => changeTeam((t) => t.set(body?.id, { level: body?.level })),
+      link: () => changeTeam((t) => t.link()),
     },
   };
 
@@ -656,20 +754,27 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       try {
         return await calls[level][type](arg, who);
       } catch (error) {
-        if (error instanceof StoreError) throw new DocError(error.code, error.message);
+        if (error instanceof StoreError || error instanceof TeamError) throw new DocError(error.code, error.message);
         throw error;
       }
     },
     /** The owner of this machine, as a `who`. */
     owner: async () => ({ ...(await me()), level: 'owner' }),
+    /** Person `id` has no window or page on the doc any more: their cursor goes. */
+    leave(id) {
+      if (cursors.delete(id)) tellCursors();
+    },
     /** What a window hears first: whether the doc is missing, and who is at work. */
     hello: () => ({ missing, agents: agentStatuses() }),
     runner,
     docPath: () => docPath,
     moveTo,
-    setFolder(next) {
+    setFolder(next, nextTeam) {
       folder = next;
       project = folder ? projectService(folder) : null;
+      stopFollowingTeam();
+      team = nextTeam;
+      stopFollowingTeam = followTeam();
       stopWatchingProjectBuddies();
       stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
       syncAgents();
@@ -683,6 +788,7 @@ export async function openDoc(docPath, { folder = null, settingsDir = configDir(
       stopWatchingSettings();
       stopWatchingProjectBuddies();
       stopWatchingUserBuddies();
+      stopFollowingTeam();
       closed = true;
       await runner.stop();
     },
@@ -705,6 +811,9 @@ function validOps(ops) {
   return true;
 }
 
+// Whether stats `a` and `b` (or null) are of one file, unchanged.
+const sameStat = (a, b) => Boolean(a && b && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ino === b.ino);
+
 function versionId(id) {
   if (typeof id !== 'string' || !VERSION_ID.test(id)) throw new DocError('bad_input', 'invalid version id');
   return id;
@@ -716,20 +825,6 @@ async function fileHash(path) {
   } catch {
     return null;
   }
-}
-
-let cachedName;
-function defaultName() {
-  if (cachedName !== undefined) return cachedName;
-  let name = '';
-  try {
-    name = execFileSync('git', ['config', 'user.name'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    // no git, or no name configured
-  }
-  if (!name) name = userInfo().username;
-  cachedName = name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '').slice(0, 64) || 'me';
-  return cachedName;
 }
 
 // A line per run in the config folder's logs/runs.jsonl: what a slow or

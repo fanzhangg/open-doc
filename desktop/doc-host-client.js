@@ -28,8 +28,10 @@ const RESTART_WINDOW_MS = 60_000;
  * `setSecrets(secrets)` hands the host the agents' secrets, decrypted
  * (doc-host.js), and every host started after it; it resolves once the host
  * has them. `shutdown()` closes every doc and stops the host, for quitting.
+ * `onJoin({ folder, name })` hears that `name` asks to join the project in
+ * `folder`.
  */
-export function createDocHost({ fork, log = console.error }) {
+export function createDocHost({ fork, log = console.error, onJoin = () => {} }) {
   let child = null;
   let ready = false;
   let queue = [];
@@ -60,6 +62,7 @@ export function createDocHost({ fork, log = console.error }) {
       for (const queued of queue.splice(0)) child.postMessage(...queued);
       return;
     }
+    if (message?.type === 'join') return onJoin({ folder: message.folder, name: message.name });
     const call = pending.get(message?.id);
     if (!call) return;
     pending.delete(message.id);
@@ -90,8 +93,8 @@ export function createDocHost({ fork, log = console.error }) {
 
   // `transfer`: message ports that go with the request.
   function request(type, arg = {}, transfer = []) {
-    if (gaveUp) return Promise.reject(new Error('The doc host keeps stopping. Restart OpenDoc.'));
-    if (shuttingDown && !child) return Promise.reject(new Error('OpenDoc is quitting.'));
+    if (gaveUp) return Promise.reject(new Error('The doc host keeps stopping. Restart Ponjo.'));
+    if (shuttingDown && !child) return Promise.reject(new Error('Ponjo is quitting.'));
     if (!child) launch();
     return new Promise((resolve, reject) => {
       const id = ++nextId;
@@ -103,7 +106,7 @@ export function createDocHost({ fork, log = console.error }) {
   }
 
   async function openHostedDoc(docPath, { folder = null } = {}) {
-    if (shuttingDown) throw new Error('OpenDoc is quitting.');
+    if (shuttingDown) throw new Error('Ponjo is quitting.');
     let docId = (await request('open', { docPath, folder })).docId;
     let started = Promise.resolve();
     let closed = false;

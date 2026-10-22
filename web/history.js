@@ -244,8 +244,9 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
   // ---- words ----
 
   function authorLabel(version) {
+    if (version.authors) return version.authors.map((a) => a.name).join(', '); // people typing together
     if (version.author) return version.author.kind === 'agent' && version.author.id ? nameOf(version.author.id, version.author.name) : version.author.name;
-    return version.kind === 'opened' ? 'Opened' : 'Outside OpenDoc';
+    return version.kind === 'opened' ? 'Opened' : 'Outside Ponjo';
   }
 
   function describe(version) {

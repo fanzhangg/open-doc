@@ -7,7 +7,7 @@ import { openDoc } from '../src/host/doc-service.js';
 import { diffOps } from '../src/core/ot.js';
 
 // Keep tests away from the real user's settings file.
-process.env.OPENDOC_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'opendoc-config-'));
+process.env.PONJO_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'ponjo-config-'));
 
 export const SAMPLE = `# Q4 Launch Plan
 
@@ -22,7 +22,7 @@ See the [capacity doc](./capacity.md) for details.
 
 /** A fresh temp directory holding `plan.md`; returns the doc path. */
 export async function tempDoc(content = SAMPLE, name = 'plan.md') {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-test-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-test-'));
   const path = join(dir, name);
   await writeFile(path, content);
   return path;
@@ -36,7 +36,7 @@ const FAKE_AGENT = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fa
  * logs its runs to `runs.log` there.
  */
 export async function fakeConfig(settings = {}) {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await mkdir(join(dir, 'agents'));
   // On this process's binary, as Node when it is Electron's (test/views/main.js).
   await writeFile(join(dir, 'agents', 'fake'), `#!/bin/sh\nELECTRON_RUN_AS_NODE=1 exec "${process.execPath}" "${FAKE_AGENT}"\n`, { mode: 0o755 });
@@ -65,8 +65,8 @@ export async function openTestDoc(docPath, { buddies = null, ...options } = {}) 
   const events = [];
   if (buddies) {
     options.folder ??= dirname(docPath);
-    await mkdir(join(options.folder, '.opendoc', 'buddies'), { recursive: true });
-    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.opendoc', 'buddies', `${name}.md`), text);
+    await mkdir(join(options.folder, '.ponjo', 'buddies'), { recursive: true });
+    for (const [name, text] of Object.entries(buddies)) await writeFile(join(options.folder, '.ponjo', 'buddies', `${name}.md`), text);
   }
   const doc = await openDoc(docPath, { ...options, emit: (name, data) => events.push([name, data]) });
   const edit = async (next, from) => {

@@ -1,11 +1,12 @@
 // A stand-in for the doc host (src/host/doc-service.js) so the doc window
 // opens in a plain browser (preview/build.js): a sample doc, or with
 // `?folder` a sample project and the app's side of its sidebar
-// (window.opendocDesktop), read with the same src/core as the app. Kept in
+// (window.ponjoDesktop), read with the same src/core as the app. Kept in
 // sessionStorage, so switching docs (`?folder&doc=<path>`, a new page as
 // in the app) and reloading keep it; a new tab starts over.
 // Buddies don't run: one asked answers with a set reply after a moment.
-// No history, no undo, no menus.
+// No history, no undo, no menus. A project's team is a sample: Noor can
+// edit, Sam asks to join, and no link is made.
 
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { apply } from '../src/core/ot.js';
@@ -15,13 +16,13 @@ import { sameName } from '../src/core/mentions.js';
 import { DEFAULT_SETTINGS, agentOf, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
 import claude from '../agents/claude.json' with { type: 'json' };
 import codex from '../agents/codex.json' with { type: 'json' };
-import opendoc from '../agents/opendoc.json' with { type: 'json' };
+import ponjo from '../agents/ponjo.json' with { type: 'json' };
 
 const params = new URLSearchParams(location.search);
 const inFolder = params.has('folder');
-const KEY = `opendoc.preview.${inFolder ? 'folder' : 'doc'}`;
+const KEY = `ponjo.preview.${inFolder ? 'folder' : 'doc'}`;
 
-const WELCOME = `# Welcome to OpenDoc
+const WELCOME = `# Welcome to Ponjo
 
 This is a preview of the editor in a browser. Edit anything: changes stay in this tab.
 
@@ -51,7 +52,7 @@ Open a doc from the sidebar, rename one (F2), delete one (Delete) or drag it int
 
 We agreed to ship the preview first and ask for feedback before the next step.
 `,
-  'drafts/launch-post.md': `# Introducing OpenDoc
+  'drafts/launch-post.md': `# Introducing Ponjo
 
 Write plain Markdown with people and AI buddies, in comments next to the text.
 `,
@@ -66,7 +67,7 @@ const THREADS = inFolder
   ]
   : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: CLIPPY.name, answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
 
-const AGENTS = Object.entries({ claude, codex, opendoc }).map(([id, manifest]) => agentOf(id, manifest));
+const AGENTS = Object.entries({ claude, codex, ponjo }).map(([id, manifest]) => agentOf(id, manifest));
 const ai = (name) => ({ id: name, name, kind: 'ai' });
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -88,6 +89,7 @@ function seed() {
     settings, files, comments, clippy: null,
     buddies: inFolder ? [{ id: 'Editor', name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { id: 'Researcher', name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
     expanded: ['notes'], sidebar: true, carry: null,
+    team: { members: [{ id: 'p_noor', name: 'Noor', level: 'write' }], pending: [{ id: 'p_sam', name: 'Sam' }], link: null },
   };
 }
 
@@ -172,6 +174,12 @@ function checkBuddy(fields) {
   if (fields.name !== undefined && [CLIPPY.name, s.settings.name].some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
 }
 
+function changeTeam(fn) {
+  s.team = fn(s.team);
+  save();
+  return s.team;
+}
+
 function changedBuddies() {
   save();
   emit('agents', agents());
@@ -179,7 +187,7 @@ function changedBuddies() {
 }
 
 const calls = {
-  state: () => ({ doc: name(current), text: s.files[current], epoch, rev, ...view(), settings: s.settings, defaultName: 'you', me: me(), agents: agents(), project: inFolder }),
+  state: () => ({ doc: name(current), text: s.files[current], epoch, rev, ...view(), settings: s.settings, defaultName: 'you', me: me(), level: 'owner', agents: agents(), project: inFolder }),
   submit({ ops, rev: at, epoch: from, id }) {
     if (from !== epoch || at !== rev) throw Object.assign(new Error('the doc has moved on'), { code: 'stale' });
     s.files[current] = apply(s.files[current], ops);
@@ -195,7 +203,7 @@ const calls = {
     emit('settings', s.settings);
     return { settings: s.settings };
   },
-  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'opendoc'], folder: '(the desktop app\'s config folder)', secrets: {} }),
+  scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'ponjo'], folder: '(the desktop app\'s config folder)', secrets: {} }),
   resetScript: () => ({ agents: AGENTS }),
   createBuddy({ buddy }) {
     if (!inFolder) refuse('buddies other than Clippy belong to a project');
@@ -219,13 +227,18 @@ const calls = {
     s.buddies = s.buddies.filter((b) => b.id !== gone);
     return changedBuddies();
   },
+  team: () => s.team,
+  allow: ({ id, level }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: [...t.members, { ...t.pending.find((p) => p.id === id), level }] })),
+  remove: ({ id }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: t.members.filter((m) => m.id !== id) })),
+  setLevel: ({ id, level }) => changeTeam((t) => ({ ...t, members: t.members.map((m) => (m.id === id ? { ...m, level } : m)) })),
+  link: () => changeTeam((t) => ({ ...t, link: `${location.origin}${location.pathname.replace(/[^/]*$/, '')}team.html?room=${newId('r')}` })),
   history: () => ({ versions: [] }),
   version: () => refuse('no history in the preview'),
   restoreVersion: () => refuse('no history in the preview'),
   undoReply: () => refuse('no undo in the preview'),
 };
 
-window.opendocHost = {
+window.ponjoHost = {
   async call(type, arg) {
     try {
       return { result: structuredClone(await calls[type](arg ?? {})) };
@@ -251,7 +264,7 @@ if (inFolder) {
 
   // Show doc `path` here: as in the app, a new page, told how this one left things.
   async function open(path) {
-    s.carry = await window.opendocLeave();
+    s.carry = await window.ponjoLeave();
     save();
     location.search = `?folder&doc=${encodeURIComponent(path)}`;
   }
@@ -273,7 +286,7 @@ if (inFolder) {
   };
   calls.read = ({ path }) => ({ text: s.files[path] ?? '' });
 
-  window.opendocDesktop = {
+  window.ponjoDesktop = {
     folder() {
       const carry = s.carry;
       s.carry = null;

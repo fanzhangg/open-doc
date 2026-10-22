@@ -19,7 +19,7 @@ const SHELL_OWN = new Set(['PWD', 'OLDPWD', 'SHLVL', '_']);
 export function readLoginEnv({ shell = process.env.SHELL, timeout = 3000 } = {}) {
   if (!shell) return Promise.resolve(null);
   // Shell files may print anything; the environment is what is between the markers.
-  const marker = `__opendoc_${randomBytes(8).toString('hex')}__`;
+  const marker = `__ponjo_${randomBytes(8).toString('hex')}__`;
   const script = `printf '%s' '${marker}'; /usr/bin/env -0; printf '%s' '${marker}'`;
   return new Promise((resolve) => {
     let out = '';

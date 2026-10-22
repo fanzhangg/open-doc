@@ -46,10 +46,10 @@ import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
 
 const FLASH_MS = 6000;
-const highlightKey = new PluginKey('opendoc-highlights');
-const flashKey = new PluginKey('opendoc-flash');
-const linkKey = new PluginKey('opendoc-link');
-const FROM_DISK = 'opendoc-from-disk'; // meta of a change applied from disk, not typed
+const highlightKey = new PluginKey('ponjo-highlights');
+const flashKey = new PluginKey('ponjo-flash');
+const linkKey = new PluginKey('ponjo-link');
+const FROM_DISK = 'ponjo-from-disk'; // meta of a change applied from disk, not typed
 
 // A ProseMirror doc never changes, so its projection is worked out once per
 // doc, however often the marks, the margin ask.
@@ -140,19 +140,22 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  * - { kind: 'cursor', at, by, working }: buddy `by`'s cursor after the
  *   character before text offset `at`; `working` shows its name.
  *
- * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void,
+ * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void, onEdit?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
  *           toolbar?: HTMLElement, onComment?: () => void,
  *           settings?: object, saveSettings?: (patch: object) => void }} options
  */
+// `onChange` fires once the person pauses after changing the doc, `onEdit`
+// on each change they make.
 // `editable: false` makes a read-only view, such as an earlier version of the doc;
-// it shows diagrams as their source, so the changes in them can be seen.
+// it shows diagrams as their source, so the changes in them can be seen, and
+// its chrome has no formatting tools or Comment bubble.
 // Given a `toolbar`, the view puts its tools there and the rest of its chrome
 // around `stage`; its bubble's Comment button calls `onComment`. The chrome
 // follows the view's `settings` (web/views/markdown/index.js) and changes
 // them through `saveSettings` (the focus mode shortcut).
 export async function createMarkdownView({
-  stage, text, editable = true, onChange = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
+  stage, text, editable = true, onChange = () => {}, onEdit = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
   settings = null, saveSettings = () => {},
 }) {
   // The human changed the doc since `updated` last fired: any change not
@@ -160,6 +163,7 @@ export async function createMarkdownView({
   // What Milkdown plugins append (the empty line kept after a last table or code
   // block, which saves as nothing) follows from another change.
   let edited = false;
+  let editing = false; // the same, since onEdit last fired
   let chrome = null;
   const hooks = {
     onUpdate: () => chrome?.update(),
@@ -192,9 +196,17 @@ export async function createMarkdownView({
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .use($prose(() => new Plugin({
       appendTransaction(trs) {
-        if (trs.some((tr) => tr.docChanged && !tr.getMeta(FROM_DISK) && !tr.getMeta('appendedTransaction'))) edited = true;
+        if (trs.some((tr) => tr.docChanged && !tr.getMeta(FROM_DISK) && !tr.getMeta('appendedTransaction'))) edited = editing = true;
         return null;
       },
+      // Once the change is in the editor's state, getText reads it.
+      view: () => ({
+        update() {
+          if (!editing) return;
+          editing = false;
+          onEdit();
+        },
+      }),
     })))
     .create();
 
@@ -598,7 +610,7 @@ export async function createMarkdownView({
     chrome = createChrome({
       run, formatState, getText: currentText, selection, headings, scrollToHeading, scrollToAnchor,
       selectionRect, beginLink, endLink, linkRect, caretLink,
-    }, { toolbar, stage, host, onComment, settings, saveSettings });
+    }, { toolbar, stage, host, onComment, settings, saveSettings, editable });
   }
 
   return {

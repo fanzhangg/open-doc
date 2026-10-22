@@ -69,13 +69,11 @@ const DIALOG = `
     </section>
 
     <section class="od-settings-section" role="tabpanel" data-section="agents" hidden>
-      <div class="od-page-list">
-        <h2>Agents</h2>
-        <p class="od-settings-intro">What does a buddy's work: a program in <code class="od-agents-folder"></code>, with the prompt on stdin and the reply on stdout. One runs every buddy.</p>
-        <ul class="od-setting-pages"></ul>
-        <div class="od-setting-row">
-          <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
-        </div>
+      <h2>Agents</h2>
+      <p class="od-settings-intro">What does a buddy's work: a program in <code class="od-agents-folder"></code>, with the prompt on stdin and the reply on stdout. The one picked runs every buddy.</p>
+      <ul class="od-choices" role="radiogroup" aria-label="Agents"></ul>
+      <div class="od-setting-row">
+        <button type="button" class="od-secondary" data-action="show-agents" hidden>Show folder</button>
       </div>
     </section>
 
@@ -104,7 +102,8 @@ export function keyLabel(keys) {
  * each opening its own page.
  * `scripts` ({ list() → { agents, shipped, folder, secrets }, reset(id),
  * saveSecret(id, key, value), showFolder? }, see web/api.js) backs Agents:
- * a list of the agents, read again each time it shows, each opening its page.
+ * the agents, read again each time it shows, one of them picked to run
+ * every buddy, its settings open under it.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
  *           setName: (name: string) => boolean, onApply?: (settings: object) => void, views?: object[], rules?: object[],
  *           scripts: object }} options
@@ -112,22 +111,15 @@ export function keyLabel(keys) {
 export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], rules = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.od-settings');
-  // Views, Rules and Agents are lists of pages alike: `paint(settings)` shows their settings.
+  // Views and Rules are lists of pages alike: `read(settings, item)` gives an item's settings.
   const lists = [['views', 'Views', views, viewSettings], ['rules', 'Rules', rules, ruleSettings]].map(([kind, title, items, read]) => {
     const list = dialog.querySelector(`[data-section="${kind}"] .od-page-list`);
     const parts = items.map((item) => itemRowAndPage(kind, title, item, (patch) => store.set(patch)));
     list.querySelector('ul').append(...parts.map((part) => part.row));
     list.after(...parts.map((part) => part.page));
     if (items.length === 0) dialog.querySelector(`[role="tab"][data-section="${kind}"]`).remove();
-    const paint = (settings) => items.forEach((item, i) => {
-      const own = read(settings, item);
-      parts[i].state.textContent = item.always ? 'Always on' : own.enabled ? 'On' : 'Off';
-      parts[i].paint(own);
-    });
-    return { list, parts, paint };
+    return { list, items, parts, read };
   });
-  const agents = { list: dialog.querySelector('[data-section="agents"] .od-page-list'), parts: [], paint() {} };
-  lists.push(agents);
   hydrateIcons(dialog);
   const tabs = [...dialog.querySelectorAll('[role="tab"]')];
   const sections = [...dialog.querySelectorAll('.od-settings-section')];
@@ -137,10 +129,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   fillShortcuts(dialog.querySelector('.od-shortcuts-body'));
   dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
 
-  // The agents are read again each time Agents shows (the user may add
-  // one), and after a Reset, which leaves the page `id` open.
+  // The agents are read again each time Agents shows (the user may add one) and after a Reset.
   let secretsSet = {}; // which secrets are set: { <agent>: [<key>] }
-  async function listAgents(id = null) {
+  let paintAgents = () => {};
+  async function listAgents() {
     let found;
     try {
       found = await scripts.list();
@@ -149,8 +141,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     }
     secretsSet = found.secrets;
     dialog.querySelector('.od-agents-folder').textContent = found.folder;
-    for (const { page } of agents.parts) page.remove();
-    agents.parts = found.agents.map((agent) => agentRowAndPage(agent, found.shipped.includes(agent.id), {
+    const choices = found.agents.map((agent) => agentChoice(agent, found.shipped.includes(agent.id), {
       pick: () => set({ agent: agent.id }),
       change: (key, value) => set({ agents: { [agent.id]: { [key]: value } } }),
       saveSecret: async (key, value) => {
@@ -163,18 +154,15 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
         }
       },
       reset() {
-        if (window.confirm(`Reset ${agent.name} to what OpenDoc comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(() => listAgents(agent.id), () => {});
+        if (window.confirm(`Reset ${agent.name} to what Ponjo comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(listAgents, () => {});
       },
     }));
-    agents.list.querySelector('ul').replaceChildren(...agents.parts.map((part) => part.row));
-    agents.list.after(...agents.parts.map((part) => part.page));
-    hydrateIcons(dialog);
-    agents.paint = (settings) => found.agents.forEach((agent, i) => {
+    dialog.querySelector('[data-section="agents"] .od-choices').replaceChildren(...choices.map((choice) => choice.node));
+    paintAgents = (settings) => found.agents.forEach((agent, i) => {
       const secrets = Object.fromEntries((secretsSet[agent.id] ?? []).map((key) => [key, true]));
-      agents.parts[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secrets });
+      choices[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secrets });
     });
     apply();
-    showPage(agents, id);
   }
 
   function apply() {
@@ -183,7 +171,14 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     if (settings.theme === 'system') delete root.dataset.theme;
     else root.dataset.theme = settings.theme;
     for (const button of dialog.querySelectorAll('[data-theme-choice]')) button.setAttribute('aria-checked', String(button.dataset.themeChoice === settings.theme));
-    for (const list of lists) list.paint(settings);
+    for (const { items, parts, read } of lists) {
+      for (const [i, item] of items.entries()) {
+        const own = read(settings, item);
+        parts[i].state.textContent = item.always ? 'Always on' : own.enabled ? 'On' : 'Off';
+        parts[i].paint(own);
+      }
+    }
+    paintAgents(settings);
     if (document.activeElement !== nameInput) nameInput.value = getName();
     onApply(settings);
   }
@@ -270,10 +265,12 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   return { get: () => store.get(), set, open, toggle };
 }
 
-// The row of a view, a rule or an agent in its list (its name and
-// extensions, what it is, `state`) and its page: Back to the list `title`,
-// its name and what it is, then `nodes`.
-function rowAndPage(title, item, nodes) {
+// The row of a view or a rule (of `kind`) in its list (its name and
+// extensions, what it does, on or off) and its page: its switch, then the
+// fields it declares (shown while it is on, and while their `when` holds).
+// `state` says on or off in the row; `paint(own)` shows the item's settings
+// `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
+function itemRowAndPage(kind, title, item, save) {
   const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
   const name = el('span', 'od-setting-label', item.name);
   if (extensions.length > 0) name.append(el('span', 'od-setting-ext', extensions.join(' ')));
@@ -288,22 +285,7 @@ function rowAndPage(title, item, nodes) {
   open.append(summary, stateBox);
   const row = el('li');
   row.append(open);
-  const page = el('div');
-  page.dataset.page = item.id;
-  page.hidden = true;
-  const back = el('button', 'od-back', title);
-  back.type = 'button';
-  Object.assign(back.dataset, { action: 'back', icon: 'back' });
-  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), ...nodes);
-  return { row, page, state };
-}
 
-// A view's or a rule's (of `kind`) row and page: its switch, then the
-// fields it declares (shown while it is on, and while their `when` holds).
-// `state` says on or off in the row; `paint(own)` shows the item's settings
-// `own`; `save(patch)` saves a change. `title` is the list's, to go back to.
-function itemRowAndPage(kind, title, item, save) {
-  const extensions = (item.extensions ?? []).map((extension) => `.${extension}`);
   const change = (key, value) => save({ [kind]: { [item.id]: { [key]: value } } });
   const enabled = item.always
     ? alwaysOn()
@@ -313,7 +295,13 @@ function itemRowAndPage(kind, title, item, save) {
       change,
     );
   const fields = (item.settings ?? []).map((field) => fieldRow(field, item.id, change));
-  const { row, page, state } = rowAndPage(title, item, [enabled.node, ...fields.map((field) => field.node)]);
+  const page = el('div');
+  page.dataset.page = item.id;
+  page.hidden = true;
+  const back = el('button', 'od-back', title);
+  back.type = 'button';
+  Object.assign(back.dataset, { action: 'back', icon: 'back' });
+  page.append(back, el('h2', null, item.name), el('p', 'od-settings-intro', item.about), enabled.node, ...fields.map((field) => field.node));
   const paint = (own) => {
     enabled.paint(own);
     fields.forEach((field, i) => {
@@ -324,45 +312,43 @@ function itemRowAndPage(kind, title, item, save) {
   return { row, page, state, paint };
 }
 
-// An agent's row and page: whether it runs every buddy (a switch that picks
-// it, or On), the fields its manifest declares (shown while their `when`
-// holds), and Reset to Default for one OpenDoc ships. `pick()` makes it the
-// one; `change(key, value)` and `saveSecret(key, value)` save a field.
-// `paint(using, own)` shows whether it is the one and its settings `own`, a
-// secret as true when set.
-function agentRowAndPage(agent, shipped, { pick, change, saveSecret, reset }) {
+// An agent in Agents: a radio that picks it to run every buddy, its name
+// and what it is; and under it while it is picked, the fields its manifest
+// declares (shown while their `when` holds) and, for one Ponjo ships,
+// Reset to Default. `change(key, value)` and `saveSecret(key, value)` save a
+// field. `paint(using, own)` shows whether it is picked and its settings
+// `own`, a secret as true when set.
+function agentChoice(agent, shipped, { pick, change, saveSecret, reset }) {
+  const radio = el('input', 'od-radio');
+  Object.assign(radio, { type: 'radio', name: 'od-agent' });
+  radio.addEventListener('change', pick);
   const text = el('span', 'od-setting-text');
-  text.append(el('span', 'od-setting-label', 'Runs every buddy'), el('span', 'od-setting-hint', 'One agent does. Switch another on to use it instead.'));
-  const toggle = el('input', 'od-switch');
-  toggle.type = 'checkbox';
-  toggle.ariaLabel = 'Runs every buddy';
-  toggle.addEventListener('change', pick);
-  const on = el('span', 'od-setting-state', 'On');
-  const use = el('div', 'od-setting');
-  use.append(text, toggle, on);
+  text.append(el('span', 'od-setting-label', agent.name), el('span', 'od-setting-hint', agent.about));
+  const label = el('label', 'od-choice');
+  label.append(radio, text);
   const secret = (key) => agent.settings.find((field) => field.key === key).type === 'secret';
   const fields = agent.settings.map((field) => fieldRow(field, agent.id, (key, value) => (secret(key) ? saveSecret : change)(key, value)));
-  const nodes = [use, ...fields.map((field) => field.node)];
+  const detail = el('div', 'od-choice-detail');
+  detail.append(...fields.map((field) => field.node));
   if (shipped) {
     const buttons = el('div', 'od-setting-row');
     const button = el('button', 'od-secondary', 'Reset to Default');
     button.type = 'button';
     button.addEventListener('click', reset);
     buttons.append(button);
-    nodes.push(buttons);
+    detail.append(buttons);
   }
-  const { row, page, state } = rowAndPage('Agents', agent, nodes);
+  const node = el('li');
+  node.append(label, detail);
   const paint = (using, own) => {
-    state.textContent = using ? 'Runs every buddy' : '';
-    toggle.checked = using;
-    toggle.hidden = using;
-    on.hidden = !using;
+    radio.checked = using;
+    detail.hidden = !using || detail.childElementCount === 0;
     fields.forEach((field, i) => {
       field.node.hidden = !matches(agent.settings[i].when, own);
       field.paint(own);
     });
   };
-  return { row, page, state, paint };
+  return { node, paint };
 }
 
 // The Enabled row of a view that cannot be switched off: no switch.

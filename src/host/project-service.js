@@ -1,5 +1,5 @@
 // ProjectService: a project's files, the same for everyone. The owner's
-// windows and, planned, a teammate's page read the project only through
+// windows and a teammate's page read the project only through
 // it, so all see the same tree. A path names a file or folder by its place
 // in the project (`/` between folders, '' for the project itself); it is
 // resolved to its real path, which must be inside the project, and no part
@@ -58,7 +58,7 @@ export function projectService(root) {
     /**
      * What the folder `rel` holds: its subfolders, then its files, both by
      * name. Left out: what the project does not show, and each file's
-     * sidecar (`X.opendoc.jsonl` next to `X`); a sidecar whose file is gone
+     * sidecar (`X.comments.jsonl` next to `X`); a sidecar whose file is gone
      * shows, so it can be found and fixed. An unreadable folder is empty.
      * @returns {Promise<{ name: string, folder: boolean }[]>}
      */

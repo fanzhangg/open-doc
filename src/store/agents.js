@@ -1,7 +1,7 @@
 // Agents (docs/agent-config.md#agents): what runs a buddy's work, in the
 // config folder's `agents/`: the program `<name>` on macOS and Linux,
 // `<name>.cmd` on Windows, and its manifest `<name>.json`, if any. Claude
-// Code, Codex and the OpenDoc agent ship, written when missing; then they
+// Code, Codex and the Ponjo agent ship, written when missing; then they
 // are the user's. Never in a project: a shared folder must not decide what
 // runs on this machine.
 
@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { agentOf } from '../core/settings.js';
 import { configDir } from './settings.js';
 
-export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex', 'opendoc']);
+export const SHIPPED_AGENTS = Object.freeze(['claude', 'codex', 'ponjo']);
 // The files a shipped script runs, written next to it: one for both platforms.
-const PROGRAMS = { opendoc: ['opendoc.mjs'] };
+const PROGRAMS = { ponjo: ['ponjo.mjs'] };
 const SHIPPED_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'agents');
 const extension = (platform) => (platform === 'win32' ? '.cmd' : '');
 
