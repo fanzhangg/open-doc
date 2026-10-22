@@ -12,13 +12,13 @@ import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
-import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
+import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
 import { apply, diffOps, mapOffset, pastYield, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
-import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
+import { StoreError, formFor, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
@@ -146,7 +146,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   const landedBefore = await writtenEdits(docPath, settingsDir, opened.hash);
   const noteIds = () => [...landedBefore, ...log.map((landed) => landed.id).filter(Boolean)].slice(-LOG_SIZE);
   let writtenIds = landedBefore; // the ids noted for the file as last written
-  let unsaved = null; // a write that failed, tried again
+  const landedRevs = new Map(); // every window's edit landed here: its id → the rev it made
+  let retry = null; // a write that failed, tried again, `retryMs` after it
+  let retryMs = RETRY_MS;
+  let notSaved = null; // why the file does not hold the doc as windows were told, or null
 
   // Edit `ops` lands on the text, from a window (`id`, the window's name for
   // it) or from here: one that yields (a buddy's, with its `reply` and buddy
@@ -154,6 +157,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   function land(ops, meta = {}) {
     const event = { epoch, rev: rev + 1, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}), ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) };
     log.push(meta.yields ? { ops, base: text, reply: meta.reply, event } : { ops, id: meta.id, event });
+    if (meta.id) landedRevs.set(meta.id, rev + 1);
     if (log.length > LOG_SIZE) {
       log.shift();
       logStart++;
@@ -167,10 +171,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // in the file. A file changed outside since it was last written is merged
   // first, and one changed while it was being written, just before it took
   // the file's place, too, then written again. A missing doc is not
-  // written; its edits are still told. A write that fails is tried again
-  // until it is written, nothing told meanwhile. Run in `serial`.
+  // written; its edits are still told. A write that fails is tried again,
+  // twice as long after each time, until it is written, nothing told
+  // meanwhile; every window hears why it is not saved (`saved`), and when
+  // it is. Run in `serial`.
   async function commit() {
-    clearTimeout(unsaved);
+    clearTimeout(retry);
     let wroteAny = false; // its note says only that it is about to be
     try {
       while (!missing && text !== written) {
@@ -192,6 +198,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         const hash = hashText(text);
         const ids = noteIds();
         await noteWritten(docPath, settingsDir, hash, ids, writtenIds);
+        form = formFor(text, form);
         const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before)).catch(async (error) => {
           await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
           throw error;
@@ -204,9 +211,13 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         wroteAny = true;
       }
     } catch (error) {
-      unsaved = setTimeout(() => serial(commit).catch(() => {}), RETRY_MS);
+      retry = setTimeout(() => serial(commit).catch(() => {}), retryMs);
+      retryMs = Math.min(2 * retryMs, MAX_RETRY_MS);
+      tellSaved(unsavedReason(error));
       throw error;
     }
+    retryMs = RETRY_MS;
+    tellSaved(null);
     for (const event of told.splice(0)) {
       for (const cursor of cursors.values()) cursor.at = mapOffset(cursor.at, event.ops);
       toldRev = event.rev;
@@ -225,6 +236,19 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       await new Promise((done) => setTimeout(done, STILL_MS));
       if (tries === STILL_TRIES || sameStat(await stat(docPath).catch(() => null), was)) return disk;
     }
+  }
+
+  // Commit an edit that has landed whatever the file does: a write that
+  // fails is tried again (commit), and resolves to the `not_saved` error to
+  // give whoever asked once all else the edit needs is done; else null.
+  const committed = () => commit().then(() => null, (error) => new DocError('not_saved', unsavedReason(error)));
+
+  // Every window hears whether the file holds the doc as they were told
+  // (`error` null), or why not, as that changes.
+  function tellSaved(error) {
+    if (error === notSaved) return;
+    notSaved = error;
+    emit('saved', { error });
   }
 
   // The doc's rules, as the settings are now.
@@ -282,14 +306,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // the text again (state) and sends its edit on that.
   async function submit({ ops, rev: at, epoch: from, id } = {}, who) {
     if (!validOps(ops) || !Number.isInteger(at) || typeof id !== 'string') throw new DocError('bad_input', 'expected { ops, rev, epoch, id }');
-    const saved = () => commit().catch((error) => {
-      throw new DocError('not_saved', error.message);
-    });
     return serial(async () => {
-      const landedAt = from === epoch ? log.findIndex((landed) => landed.id === id) : -1;
-      if (landedAt !== -1) {
-        await saved();
-        return { rev: logStart + landedAt + 1 };
+      const landedAt = from === epoch && landedRevs.get(id);
+      if (landedAt) {
+        const failed = await committed();
+        if (failed) throw failed;
+        return { rev: landedAt };
       }
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
       const overridden = [];
@@ -320,9 +342,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       for (const [landed, now] of left) landed.left = now;
       land(ops, { id });
       typed(who);
-      await saved();
+      const failed = await committed();
       for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
       if (overridden.length > 0) emit('history', {});
+      if (failed) throw failed;
       return { rev };
     });
   }
@@ -361,7 +384,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (!found) throw new DocError('not_found', 'no such version');
     await flushTyping();
     land(diffOps(text, found.text));
-    await commit();
+    await committed(); // landed: windows hear if it is not saved
     await noteVersion(text, { kind: 'restore', author: byOf(who), restoredFrom: body.id });
     return {};
   }
@@ -380,6 +403,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       rev,
       ...(caught ? { events: log.slice(since.rev - logStart, toldRev - logStart).map((landed) => landed.event) } : {}),
       landed: landedBefore,
+      notSaved,
       ...(await commentsView(text)),
       settings: owner ? (await readSettings(settingsDir)).settings : DEFAULT_SETTINGS,
       defaultName: owner ? defaultName() : who.name,
@@ -468,8 +492,14 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
     return threads.flatMap((thread) => [...askedBy(thread, askers, taken)].map(([id, asker]) => ({
       threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here, asker,
-    })).filter((ask) => ask.buddy)); // a thread's opener may be gone
+    })).filter((ask) => ask.buddy // a thread's opener may be gone
+      && unposted.get(`${ask.threadId} ${ask.buddy.id}`) !== thread.comments.at(-1).id));
   }
+  // The asks a turn answered whose reply could not be written: thread and
+  // buddy → the thread's latest comment then. Not asked again until the
+  // thread has another comment, so a sidecar that cannot be written never
+  // makes a turn run, and its edit land, again and again.
+  const unposted = new Map();
 
   // The level of the person with id `id` now: the owner's, a teammate's, or null.
   async function levelOf(id) {
@@ -512,15 +542,18 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   async function finishRun({ threadId, id: buddyId, name, asker, base, seen, edited, comments, body, failed }) {
     if (!can({ level: await levelOf(asker) }, 'write')) return;
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
-    if (threadsOf(latest).find((t) => t.id === threadId)?.resolved) return;
+    const thread = threadsOf(latest).find((t) => t.id === threadId);
+    if (thread?.resolved) return;
     let conflict = false;
+    let anchor = null; // where its edit put the thread's text
     const id = newId('c');
     if (edited !== null && edited !== base && !missing) { // a doc gone has nothing to land on
       await flushTyping();
       const edit = transform(diffOps(base, edited), diffOps(base, text), { yields: true, base, rules: await rules() });
       conflict = edit.dropped;
       land(edit.ops, { yields: true, reply: id, by: buddyId });
-      await commit();
+      await committed(); // landed: windows hear if it is not saved, and the turn is answered
+      anchor = movedAnchor(thread?.anchor, base, edited, text);
       await noteVersion(text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id });
     }
     const by = { id: buddyId, name, kind: 'ai' };
@@ -532,10 +565,13 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(at).toISOString(), threads, own: threadId }) : { comments: [], resolves: false };
       const reply = {
         id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
-        ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),
+        ...(anchor ? { anchor } : {}), ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),
       };
       return [...lines, ...added.comments.map((comment) => ({ comment })), { comment: reply }];
-    }).catch((error) => console.error(`Could not post ${name}'s reply:`, error));
+    }).catch((error) => {
+      console.error(`Could not post ${name}'s reply:`, error);
+      unposted.set(`${threadId} ${buddyId}`, thread?.comments.at(-1).id);
+    });
   }
 
   // ---- undo ----
@@ -552,7 +588,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     await flushTyping();
     const after = found.text;
     land(transform(diffOps(after, found.before), diffOps(after, text), { yields: true, base: after, rules: await rules() }).ops, { yields: true });
-    await commit();
+    await committed(); // landed: windows hear if it is not saved
     await noteVersion(text, { kind: 'undo', author: byOf(who), undid: body.id });
     return commentsView(text);
   }
@@ -679,6 +715,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     try {
       doc = await readOutside();
     } catch (error) {
+      // Made not text outside: the doc stays as it is here, not saved, until the file is text again.
+      if (error.code === 'not_text') {
+        tellSaved(unsavedReason(error));
+        return true;
+      }
       if (error.code !== 'no_doc') throw error;
       if (!missing) {
         missing = true;
@@ -690,10 +731,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       missing = false;
       emit('missing', { missing: false, doc: basename(docPath) });
     }
-    if (doc.hash !== writtenHash) { // not this service's write: a change made outside
-      await takeOutside(doc);
-      await commit();
-    }
+    const outside = doc.hash !== writtenHash; // not this service's write: a change made outside
+    if (outside) await takeOutside(doc);
+    if (outside || notSaved) await commit();
     return true;
   }
 
@@ -870,7 +910,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
           }
         });
       } finally {
-        clearTimeout(unsaved);
+        clearTimeout(retry);
         stopWatching();
         stopWatchingSettings();
         stopWatchingProjectBuddies();
@@ -886,11 +926,21 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 const LOG_SIZE = 1000;
 // A write that failed is tried again after this long.
 const RETRY_MS = 500;
+const MAX_RETRY_MS = 10_000;
 // Typing is a version once it pauses this long.
 const SAVE_DELAY_MS = 800;
 // A file changed outside is taken once it is unchanged this long, waiting at most STILL_TRIES times.
 const STILL_MS = 50;
 const STILL_TRIES = 20;
+
+// Why a write failed, as a person reads it, and with no path: teammates hear it too.
+function unsavedReason(error) {
+  if (error.code === 'not_text') return 'the file was saved outside Ponjo as other than UTF-8 text';
+  if (error.code === 'ENOSPC') return 'the disk is full';
+  if (['EBUSY', 'ETXTBSY'].includes(error.code)) return 'another program is using the file';
+  if (['EACCES', 'EPERM', 'EROFS'].includes(error.code)) return 'the file or its folder cannot be written';
+  return 'the file cannot be written';
+}
 
 // Whether `ops` is an edit: { from, to, insert } in order, not overlapping.
 function validOps(ops) {

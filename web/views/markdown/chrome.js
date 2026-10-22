@@ -1,5 +1,5 @@
 // The Markdown view's chrome: its tools in the page's toolbar (reflecting the
-// formatting at the caret, the one place to format), a Comment bubble over
+// formatting at the caret; the standard keys format too), a Comment bubble over
 // selections, the link card and popover, a floating outline and focus mode.
 // The view makes it when the page gives it a toolbar
 // (web/views/markdown/view.js).
@@ -25,11 +25,11 @@ const TOOLS = `
   </div>
   <span class="pj-sep"></span>
   <div class="pj-tool-group">
-    <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" aria-label="Bold"></button>
-    <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" aria-label="Italic"></button>
-    <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" aria-label="Strikethrough"></button>
-    <button type="button" data-command="code" data-icon="code" data-tip="Inline code" aria-label="Inline code"></button>
-    <button type="button" data-command="link" data-icon="link" data-tip="Link" aria-label="Link" aria-haspopup="dialog"></button>
+    <button type="button" data-command="bold" data-icon="bold" data-tip="Bold" data-keys="Mod+B" aria-label="Bold"></button>
+    <button type="button" data-command="italic" data-icon="italic" data-tip="Italic" data-keys="Mod+I" aria-label="Italic"></button>
+    <button type="button" data-command="strike" data-icon="strike" data-tip="Strikethrough" data-keys="Mod+Shift+X" aria-label="Strikethrough"></button>
+    <button type="button" data-command="code" data-icon="code" data-tip="Inline code" data-keys="Mod+E" aria-label="Inline code"></button>
+    <button type="button" data-command="link" data-icon="link" data-tip="Link" data-keys="Mod+K" aria-label="Link" aria-haspopup="dialog"></button>
   </div>
   <span class="pj-sep"></span>
   <div class="pj-tool-group">
@@ -68,7 +68,7 @@ const LINK = `
     <button type="button" class="pj-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link" hidden></button>
   </div>`;
 
-const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
+const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block', front_matter: 'Front matter' };
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -244,6 +244,12 @@ export function createChrome(editor, { toolbar, stage, host, onComment, settings
   return {
     /** After every editor update: typing, selection, focus. */
     update,
+    /** Open the link popover for the selection, as the Link button does (Mod+K); true when there is one. */
+    link() {
+      if (!editable) return false;
+      link.toggle(buttons.find((b) => b.dataset.command === 'link'));
+      return true;
+    },
     applySettings,
     destroy() {
       done.abort();

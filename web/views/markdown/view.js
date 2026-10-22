@@ -29,12 +29,13 @@ import { trailing } from '@milkdown/kit/plugin/trailing';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { $prose, $shortcut, callCommand } from '@milkdown/kit/utils';
 import { lift } from '@milkdown/kit/prose/commands';
+import { keymap } from '@milkdown/kit/prose/keymap';
 import { addRowAfter, goToNextCell, isInTable } from '@milkdown/kit/prose/tables';
 import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { createAnchor, locate } from '../../../src/core/anchor.js';
-import { project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
+import { definesLinks, project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
 import { splice } from '../../../src/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
 import { editItems } from '../../review.js';
@@ -44,11 +45,14 @@ import { blocksOf, childPos, diffBlocks, pairRanges, parseRun, replaceBlocks, te
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
+import { createFind, matches } from '../../find.js';
 
 const FLASH_MS = 6000;
 const highlightKey = new PluginKey('ponjo-highlights');
 const flashKey = new PluginKey('ponjo-flash');
 const linkKey = new PluginKey('ponjo-link');
+const foundKey = new PluginKey('ponjo-found');
+const bidiKey = new PluginKey('ponjo-bidi');
 const FROM_DISK = 'ponjo-from-disk'; // meta of a change applied from disk, not typed
 
 // A ProseMirror doc never changes, so its projection is worked out once per
@@ -112,16 +116,33 @@ const tableTab = $shortcut(() => ({
 }));
 
 // Pasting a single URL over selected text links the text to it, as Docs and
-// Notion do; any other paste is the clipboard plugin's.
-const pasteLink = $prose(() => new Plugin({
+// Notion do. Plain text goes in as the text it is, a paragraph a line, as
+// typed text does (Markdown in it stays text); formatted text (HTML) is the
+// clipboard plugin's, but for images held in the page itself (`data:`,
+// `blob:`), whose bytes would land in the doc.
+const paste = $prose(() => new Plugin({
   props: {
-    handlePaste(view, event) {
-      const url = event.clipboardData?.getData('text/plain').trim();
+    handlePaste(view, event, slice) {
+      const data = event.clipboardData;
+      const url = data?.getData('text/plain').trim();
       const { selection: { empty, from, to, $from }, schema, tr } = view.state;
       const type = schema.marks.link;
-      if (empty || !/^(https?:\/\/|mailto:)\S+$/i.test(url) || !$from.parent.type.allowsMarkType(type)) return false;
-      view.dispatch(tr.removeMark(from, to, type).addMark(from, to, type.create({ href: url })));
+      if (!empty && /^(https?:\/\/|mailto:)\S+$/i.test(url) && $from.parent.type.allowsMarkType(type)) {
+        view.dispatch(tr.removeMark(from, to, type).addMark(from, to, type.create({ href: url })));
+        return true;
+      }
+      // ProseMirror's own slice of plain text: its lines as paragraphs, or as they are in code.
+      if (!data || data.types.includes('text/html') || data.types.includes('vscode-editor-data')) return false;
+      view.dispatch(tr.replaceSelection(slice).scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste'));
       return true;
+    },
+    transformPastedHTML(html) {
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      for (const image of template.content.querySelectorAll('img')) {
+        if (/^\s*(data|blob):/i.test(image.getAttribute('src') ?? '')) image.remove();
+      }
+      return template.innerHTML;
     },
   },
 }));
@@ -143,6 +164,39 @@ const taskBox = $prose(() => new Plugin({
     },
   },
 }));
+
+// A block holding right-to-left letters (Hebrew, Arabic…) runs the way its
+// text starts, as do the blocks in it: dir="auto". Each top-level block is
+// looked at once.
+const RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const directions = new WeakMap(); // a top-level node → the [from, to) of its blocks to mark, from its start
+const bidiPlugin = $prose(() => new Plugin({
+  key: bidiKey,
+  state: {
+    init: (_config, { doc }) => bidiOf(doc),
+    apply: (tr, set) => (tr.docChanged ? bidiOf(tr.doc) : set),
+  },
+  props: { decorations: (state) => bidiKey.getState(state) },
+}));
+
+function bidiOf(doc) {
+  const decorations = [];
+  doc.forEach((node, offset) => {
+    let own = directions.get(node);
+    if (!own) {
+      own = [];
+      if (RTL.test(node.textContent)) {
+        own.push([0, node.nodeSize]);
+        node.descendants((child, pos) => {
+          if (child.isBlock) own.push([pos + 1, pos + 1 + child.nodeSize]);
+        });
+      }
+      directions.set(node, own);
+    }
+    for (const [from, to] of own) decorations.push(Decoration.node(offset + from, offset + to, { dir: 'auto' }));
+  });
+  return DecorationSet.create(doc, decorations);
+}
 
 // Reports every view update, and marks the top-level block holding the caret
 // (for focus mode).
@@ -198,8 +252,17 @@ export async function createMarkdownView({
   let edited = false;
   let editing = false; // the same, since onEdit last fired
   let chrome = null;
+  let finder = null;
+  let foundIn = null; // the doc the find bar's matches were found in, while it has a query
+  let refind = 0;
   const hooks = {
-    onUpdate: () => chrome?.update(),
+    onUpdate: (v) => {
+      chrome?.update();
+      if (foundIn && v.state.doc !== foundIn) {
+        clearTimeout(refind);
+        refind = setTimeout(() => finder.changed(), 100); // not while the view updates, nor on every key
+      }
+    },
   };
   const host = stage.querySelector('.pj-editor');
   const editor = await Editor.make()
@@ -225,8 +288,16 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(pasteLink).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(taskBox)
-    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(taskBox)
+    .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(decorationPlugin(foundKey)).use(linkPlugin).use(bidiPlugin).use(uiPlugin(hooks))
+    // The standard keys format as the toolbar does; typed Markdown still stays text.
+    .use($prose(() => keymap({
+      'Mod-b': () => run('bold'),
+      'Mod-i': () => run('italic'),
+      'Mod-e': () => run('code'),
+      'Mod-Shift-x': () => run('strike'),
+      'Mod-k': () => Boolean(chrome?.link()),
+    })))
     .use($prose(() => new Plugin({
       appendTransaction(trs) {
         if (trs.some((tr) => tr.docChanged && !tr.getMeta(FROM_DISK) && !tr.getMeta('appendedTransaction'))) edited = editing = true;
@@ -304,9 +375,10 @@ export async function createMarkdownView({
   };
   const currentText = () => sourceOf(view().state.doc).text;
   const projectionCache = new Map(); // a block's text → its rendered lines
+  // A doc that may define links is projected whole: a block's links read by definitions elsewhere.
   const projected = (doc) => {
     const source = sourceOf(doc);
-    return (source.projection ??= source.blocks ? projectBlocks(source.text, source.blocks, projectionCache) : project(source.text));
+    return (source.projection ??= source.blocks && !definesLinks(source.text) ? projectBlocks(source.text, source.blocks, projectionCache) : project(source.text));
   };
 
   // Rendered ranges of the doc's text and of the editor's document are the
@@ -478,11 +550,13 @@ export async function createMarkdownView({
     table: () => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })),
   };
 
-  /** Run a named formatting command against the current selection. */
+  /** Run a named formatting command against the current selection; true, as a key's command. */
   function run(name) {
     const v = view();
-    commands[name]?.(v.state, (tr) => v.dispatch(tr));
+    // Front matter is source: nothing formats it.
+    if (editable && (name === 'undo' || name === 'redo' || blockType(v.state) !== 'front_matter')) commands[name]?.(v.state, (tr) => v.dispatch(tr));
     v.focus();
+    return true;
   }
 
   /**
@@ -680,6 +754,74 @@ export async function createMarkdownView({
     return { from: range.start, to: range.end };
   }
 
+  // ---- find (web/find.js): in what a reader sees ----
+
+  let found = []; // the document ranges of the matches, in `foundIn`
+  let query = '';
+
+  // { count, current }: how many matches, and which is selected (from 1; 0: none).
+  function foundState() {
+    const { from, to } = view().state.selection;
+    return { count: found.length, current: found.findIndex((r) => r.from === from && r.to === to) + 1 };
+  }
+
+  function paintFound() {
+    const v = view();
+    const { current } = foundState();
+    const decorations = found.map((r, i) => Decoration.inline(r.from, r.to, { class: i + 1 === current ? 'pj-found pj-found-current' : 'pj-found' }));
+    v.dispatch(v.state.tr.setMeta(foundKey, DecorationSet.create(v.state.doc, decorations)).setMeta('addToHistory', false));
+  }
+
+  const search = {
+    find(next) {
+      query = next;
+      const { doc } = view().state;
+      const projection = projectionOf(doc);
+      // Not in raw HTML, whose characters share the one position of its atom,
+      // nor in a diagram's hidden source.
+      found = matches(projection.text, query)
+        .filter(([start, end]) => projection.positions.subarray(start, end).every((p, i, all) => i === 0 || p > all[i - 1]))
+        .map(([start, end]) => docRange(projection, start, end))
+        .filter(({ from }) => !(editable && doc.resolve(from).parent.attrs.language === 'mermaid'));
+      foundIn = query ? doc : null;
+      paintFound();
+      return foundState();
+    },
+    step(back) {
+      if (found.length === 0) return foundState();
+      const v = view();
+      const { from, to } = v.state.selection;
+      const same = (r) => r.from === from && r.to === to;
+      const i = back ? found.findLastIndex((r) => r.to <= from && !same(r)) : found.findIndex((r) => r.from >= to && !same(r));
+      const next = found.at(i === -1 ? (back ? -1 : 0) : i);
+      v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, next.from, next.to)));
+      // Into view when it is not, below the find bar.
+      const canvas = stage.parentElement;
+      const box = canvas.getBoundingClientRect();
+      const { top, bottom } = v.coordsAtPos(next.from);
+      if (top < box.top + 80 || bottom > box.bottom - 16) canvas.scrollTop += top - (box.top + box.height / 2);
+      paintFound();
+      return foundState();
+    },
+    replace(text, all) {
+      const v = view();
+      const { from, to } = v.state.selection;
+      const targets = all ? found : found.filter((r) => r.from === from && r.to === to);
+      if (!editable || targets.length === 0) return search.step(false);
+      const tr = v.state.tr;
+      for (const r of [...targets].reverse()) tr.insertText(text, r.from, r.to);
+      v.dispatch(tr.setSelection(TextSelection.create(tr.doc, tr.mapping.map(targets.at(-1).to))));
+      search.find(query);
+      return all ? foundState() : search.step(false);
+    },
+    selected: () => {
+      const { state } = view();
+      return state.doc.textBetween(state.selection.from, state.selection.to, '\n');
+    },
+    focus: () => view().focus(),
+  };
+  finder = createFind(search, { host, editable });
+
   if (toolbar) {
     chrome = createChrome({
       run, formatState, getText: currentText, selection, headings, scrollToHeading, scrollToAnchor,
@@ -724,6 +866,8 @@ export async function createMarkdownView({
     redo: () => run('redo'),
     destroy() {
       chrome?.destroy();
+      finder.destroy();
+      clearTimeout(refind);
       host.removeEventListener('click', clickMark);
       return editor.destroy();
     },

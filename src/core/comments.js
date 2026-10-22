@@ -5,7 +5,8 @@
 // Pure, so the doc host and the page read a sidecar the same way.
 
 import { NAME_PATTERN, parseMentions } from './mentions.js';
-import { createAnchor } from './anchor.js';
+import { createAnchor, locate } from './anchor.js';
+import { diffOps, mapOffset } from './ot.js';
 
 export const FORMAT_VERSION = 3;
 const COMMENT_ID = /^c_[A-Za-z0-9_-]{6,}$/;
@@ -163,6 +164,33 @@ export function validAnchor(anchor) {
 const byTime = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
+ * Where a thread's `anchor`, on text `base`, is once `base` was edited into
+ * `edited` and that edit landed, the doc now `text` (§3): the text the edit
+ * put in place of its quote, when it changed it; else null, and it stays.
+ */
+export function movedAnchor(anchor, base, edited, text) {
+  const found = anchor && locate(base, anchor);
+  if (!found) return null;
+  const ops = diffOps(base, edited);
+  // Its start goes before what the edit put at it or over it, its end after.
+  let shift = 0;
+  let start = null;
+  for (const op of ops) {
+    if (op.from >= found.start) break;
+    if (op.to > found.start) {
+      start = op.from + shift;
+      break;
+    }
+    shift += op.insert.length - (op.to - op.from);
+  }
+  start ??= found.start + shift;
+  const end = mapOffset(found.end, ops);
+  if (start >= end || edited.slice(start, end) === base.slice(found.start, found.end)) return null;
+  const now = locate(text, createAnchor(edited, start, end));
+  return now && createAnchor(text, now.start, now.end);
+}
+
+/**
  * The threads in `comments` (§4): each `{ id, anchor, resolved, comments }`,
  * its first comment then its replies, ordered by `at`, then `id`; threads in
  * the order of their first comments. A thread is resolved when its latest
@@ -175,7 +203,8 @@ export function threadsOf(comments, mentionable = []) {
   return firsts.map((first) => {
     const all = [first, ...comments.filter((c) => c.thread === first.id).sort(byTime)]
       .map((c) => ({ ...c, mentions: parseMentions(c.body, mentionable) }));
-    return { id: first.id, anchor: first.anchor ?? null, resolved: all.at(-1).resolved === true, comments: all };
+    // On the latest anchor: a buddy's reply that rewrote the thread's text moves it (§3).
+    return { id: first.id, anchor: first.anchor ? all.findLast((c) => c.anchor).anchor : null, resolved: all.at(-1).resolved === true, comments: all };
   });
 }
 

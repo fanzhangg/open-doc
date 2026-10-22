@@ -1,5 +1,5 @@
 {
-  "description": "Reading a version 3 sidecar (spec/SPEC.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
+  "description": "Reading a version 3 sidecar (spec/SPEC.md §4) and finding @mentions (§6). Each reading case is a sidecar's lines; `threads` lists each thread's id, whether it is resolved, and its comments' ids in order; `anchors`, where given, the quote each thread is on; `bad` the line numbers (from 1) reported as not comments. Any order or duplication of the comment lines reads to the same threads.",
   "reading": [
     {
       "name": "a first comment and its replies, in order of at, then id",
@@ -178,6 +178,30 @@
         3,
         5
       ]
+    },
+    {
+      "name": "a thread is on its latest anchor: a buddy's reply that rewrote its text moves it",
+      "sidecar": [
+        "{\"comments\":3}",
+        "{\"id\":\"c_mvfirst\",\"anchor\":{\"exact\":\"TBD\",\"prefix\":\"The launch date is \",\"suffix\":\".\",\"start\":19},\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:00:00Z\",\"body\":\"@Clippy fill this in\"}",
+        "{\"id\":\"c_mvreply\",\"thread\":\"c_mvfirst\",\"anchor\":{\"exact\":\"the first week of March\",\"prefix\":\"The launch date is \",\"suffix\":\".\",\"start\":19},\"by\":{\"id\":\"Clippy\",\"name\":\"Clippy\",\"kind\":\"ai\"},\"at\":\"2026-10-01T10:01:00Z\",\"body\":\"\"}",
+        "{\"id\":\"c_mvlater\",\"thread\":\"c_mvfirst\",\"by\":{\"id\":\"u_alice01\",\"name\":\"alice\",\"kind\":\"human\"},\"at\":\"2026-10-01T10:02:00Z\",\"body\":\"Thanks\"}"
+      ],
+      "threads": [
+        {
+          "id": "c_mvfirst",
+          "resolved": false,
+          "comments": [
+            "c_mvfirst",
+            "c_mvreply",
+            "c_mvlater"
+          ]
+        }
+      ],
+      "bad": [],
+      "anchors": {
+        "c_mvfirst": "the first week of March"
+      }
     }
   ],
   "mentions": [

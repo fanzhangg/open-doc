@@ -9,7 +9,7 @@ designed, not built.
 
 1. **The file is Markdown; the view is a way to see it.** Saving keeps the
    bytes of every block no one changed, so `git diff` shows only real edits.
-2. **One way to format: the toolbar.** Typed Markdown is text.
+2. **Format with the toolbar, or its keys.** Typed Markdown is text.
 3. **The page is the writer's.** Tools sit at its edges; nothing but the
    text and the marks of others is drawn in it.
 4. **Every mark is someone's.** A comment, a revision and a cursor each show
@@ -25,14 +25,23 @@ designed, not built.
   quotes, code blocks, tables, rules, links, images, bold, italic,
   strikethrough, inline code and task lists, whose boxes tick with a click.
   Emphasis is read the CJK-friendly way: `**熟悉：**直接` is bold.
-- **The toolbar** is the one way to format, and shows the formatting at the
-  caret: undo and redo, the block style (Normal text, headings, code block),
-  bold, italic, strikethrough, inline code, lists, quote, divider, table,
-  link.
+- **The toolbar** formats, and shows the formatting at the caret: undo and
+  redo, the block style (Normal text, headings, code block), bold, italic,
+  strikethrough, inline code, lists, quote, divider, table, link. The
+  standard keys do the same: Mod+B bold, Mod+I italic, Mod+E inline code,
+  Mod+Shift+X strikethrough, Mod+K a link.
 - **Typed Markdown stays text**: `**x**`, `## ` or `- ` is what it says, and
-  is saved escaped. **Pasted Markdown is formatted.**
-- **Keys:** Undo, Redo and Comment, and focus mode (Ctrl+Shift+F). Enter and
-  Tab work in lists and tables; Tab in a table's last cell adds a row;
+  is saved escaped. **Pasted plain text stays text** too, a line a
+  paragraph; pasted formatted text (from a web page or another editor)
+  keeps its formatting, but not images held in the page itself (`data:`),
+  which would put their bytes in the file.
+- **Front matter** (YAML between `---` lines at the top) shows as its
+  source, muted, typed into as text; nothing formats it.
+- **Link definitions** (`[d]: https://…`) are kept as written, and so is
+  every reference link (`[docs][d]`) in a block not changed but by typing.
+- **Keys:** Undo, Redo, the formatting above, Comment, Find, and focus
+  mode (Ctrl+Shift+F). Enter and Tab work in lists and tables; Tab in a
+  table's last cell adds a row;
   Delete at the start of a list item deletes forward, as in any text.
 - **Links.** At the caret a card says where a link goes: open it, edit it or
   remove it. The link button opens a popover for the URL: Enter applies, an
@@ -43,6 +52,14 @@ designed, not built.
   hidden and cannot be typed into; a click selects the whole block, to
   comment on or delete. An AI buddy changes it, asked in a comment.
 - Images in the file show; the view does not insert them.
+- **Find and replace** (Mod+F; Mod+Alt+F with Replace), as in every view: a
+  bar at the page's top right finds what a reader sees, not the markup,
+  ignoring case; every match is marked, the current one stronger, with how
+  many there are. Enter or Mod+G goes to the next, Shift for the one before;
+  Escape closes it and selects the match. Replace and Replace all are the
+  person's own edit, undone with Cmd+Z. A view that cannot be edited finds
+  only.
+- **Right to left:** a block of Hebrew or Arabic runs the way its text starts.
 
 ### Reading
 
@@ -77,7 +94,7 @@ change in one can be seen.
 ### Not here
 
 Editing Markdown source (switch the view off: Ctrl+Shift+T), typed shortcuts and a slash
-menu (the toolbar is the one way), inserting images, and who typed which
+menu (the toolbar and its keys format), inserting images, and who typed which
 characters.
 
 ## Architecture
@@ -95,6 +112,7 @@ characters.
 | Blocks | `web/views/markdown/blocks.js` | which top-level blocks differ, and replacing only those |
 | Revision | `web/review.js`, `web/marks.js` | edits found in the text now, drawn as a revision |
 | Diagrams | `web/diagrams.js` | a mermaid block as its diagram |
+| Find | `web/find.js` | the find bar, the same in every view; the view finds and replaces |
 
 ### Two texts meet in a third
 
@@ -157,8 +175,10 @@ block of the text it was given pairs with a block of its document,
 `getText` writes only the blocks changed since and splices them in, and
 `applyText` parses only the blocks where the new text differs, with a kept
 block on either side that must read as before. Both projections are kept
-per block. A doc whose blocks do not pair up (a link definition has no
-block in the document) is worked out whole. Milkdown's own walks of the
+per block. Link definitions lie between the blocks, as written; a doc
+that has one is parsed and projected whole, since a block's links read by
+them, and a block it changed other than by typing is saved by a splice of
+the whole doc. A doc whose blocks do not pair up is worked out whole. Milkdown's own walks of the
 whole doc on every change are left out (heading ids, unused) or kept to
 the changed blocks (ordered list labels; `web/markdown-schema.js`), and
 focus mode fades blocks by an attribute the chrome sets, not by the

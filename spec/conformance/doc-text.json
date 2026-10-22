@@ -1,5 +1,5 @@
 {
-  "description": "A doc's text (SPEC.md §1): its bytes decoded as UTF-8, without a byte order mark, every line end as LF; `text` null when the bytes are not UTF-8. `written` is the file a tool writes back for that same text: the byte order mark kept, CRLF throughout when the file had any. Bytes are hex.",
+  "description": "A doc's text (SPEC.md §1): its bytes decoded as UTF-8, without a byte order mark, every line end as LF; `text` null when the bytes are not UTF-8. `written` is the file a tool writes back for that same text: the byte order mark kept, each line ending as it did. Bytes are hex.",
   "cases": [
     {
       "name": "LF lines are the text as it is",
@@ -20,16 +20,16 @@
       "written": "efbbbf6f6e650a"
     },
     {
-      "name": "mixed line ends: any CRLF writes CRLF everywhere",
+      "name": "mixed line ends: each line ends as it did",
       "bytes": "6f6e650d0a74776f0a7468726565",
       "text": "one\ntwo\nthree",
-      "written": "6f6e650d0a74776f0d0a7468726565"
+      "written": "6f6e650d0a74776f0a7468726565"
     },
     {
-      "name": "a lone CR is a line end",
+      "name": "a lone CR is a line end, and stays one on disk",
       "bytes": "6f6e650d74776f",
       "text": "one\ntwo",
-      "written": "6f6e650a74776f"
+      "written": "6f6e650d74776f"
     },
     {
       "name": "CJK text in UTF-8",

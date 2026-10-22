@@ -6,7 +6,7 @@
 import { Fragment, Mark } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import { Transform, replaceStep } from '@milkdown/kit/prose/transform';
-import { blockRanges, definesLinks, project } from '../../../src/markdown/project.js';
+import { blockRanges, definesLinks, project, startsFrontMatter } from '../../../src/markdown/project.js';
 import { projectDoc } from '../../pm-text.js';
 import { splice } from '../../../src/markdown/splice.js';
 import { sameEnd, sameStart } from '../../../src/core/diff.js';
@@ -171,11 +171,17 @@ export function childPos(doc, index) {
  * that changed, with a kept one on either side, written into `given`. A
  * block only typed or deleted in keeps its own bytes but for those
  * characters (typedInto); any other run is written by `serialize` (nodes →
- * markdown) and spliced in as a save is (src/markdown/splice.js). Returns
- * { text, blocks }, `blocks` the ranges of `doc`'s children in `text`, or
- * null when a run does not pair up with them.
+ * markdown) and spliced in as a save is (src/markdown/splice.js). In a doc
+ * that may define links (definesLinks), a block's links read with the
+ * doc's definitions, the text between its blocks, and a run not only typed
+ * into is left to a save of the whole doc. Returns { text, blocks },
+ * `blocks` the ranges of `doc`'s children in `text`, or null when a run
+ * does not pair up with them, or is left so.
  */
 export function textOfDoc(doc, base, given, blocks, serialize, parse) {
+  const links = definesLinks(given);
+  const between = (i) => given.slice(i > 0 ? blocks[i - 1].end : 0, i < blocks.length ? blocks[i].start : given.length);
+  const definitions = links ? blocks.map((_, i) => between(i)).concat(between(blocks.length)).join('').trim() : '';
   let text = '';
   let from = 0; // how much of `given` is passed
   let a = 0;
@@ -197,7 +203,7 @@ export function textOfDoc(doc, base, given, blocks, serialize, parse) {
     for (let k = 0; k < count; k++) {
       const { start, end } = blocks[run.a0 + k];
       const node = doc.child(run.b0 + k);
-      const own = node === base.child(run.a0 + k) ? given.slice(start, end) : typedInto(given.slice(start, end), node, parse);
+      const own = node === base.child(run.a0 + k) ? given.slice(start, end) : typedInto(given.slice(start, end), node, parse, definitions);
       if (own === null) return null;
       piece += given.slice(at, start);
       ranges.push({ start: piece.length, end: piece.length + own.length });
@@ -215,9 +221,12 @@ export function textOfDoc(doc, base, given, blocks, serialize, parse) {
     text += given.slice(from, start);
     let found = typed(run);
     if (!found) {
+      if (links) return null;
       const nodes = [];
       for (let k = run.b0; k < run.b1; k++) nodes.push(doc.child(k));
-      const piece = splice(given.slice(start, end), serialize(nodes).replace(/\n$/, ''));
+      const written = serialize(nodes).replace(/\n$/, '');
+      if (start > 0 && (startsFrontMatter(given.slice(start, end)) || startsFrontMatter(written))) return null;
+      const piece = splice(given.slice(start, end), written);
       const ranges = pairRanges(nodes, blockRanges(piece), run.b1 === doc.childCount);
       if (!ranges) return null;
       found = { piece, ranges };
@@ -241,9 +250,11 @@ const TASK = /^([ \t>]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])\]/gm;
  * character. Null when that does not read as `node` (`parse`: markdown →
  * document), such as when formatting changed or typed Markdown would read
  * as syntax; then the editor writes the block in its own style.
+ * `definitions` are the doc's link definitions, for its links to read as in the doc.
  */
-export function typedInto(source, node, parse) {
-  const before = project(source);
+export function typedInto(source, node, parse, definitions = '') {
+  const parsed = (block) => parse(definitions ? `${block}\n\n${definitions}` : block);
+  const before = project(definitions ? `${source}\n\n${definitions}` : source);
   const after = projectDoc(node.type.schema.topNodeType.create(null, [node])).text;
   // No text changed: tasks were ticked or unticked, so each `[ ]` or `[x]` says what its item does.
   if (before.text === after) {
@@ -253,7 +264,7 @@ export function typedInto(source, node, parse) {
     });
     let i = 0;
     const candidate = source.replace(TASK, (_, head, mark) => `${head}${checked[i++] ? mark.trim() || 'x' : ' '}]`);
-    const read = parse(candidate);
+    const read = parsed(candidate);
     if (read.childCount === 1 && sameBlock(read.child(0), node)) return candidate;
   }
   const max = Math.min(before.text.length, after.length);
@@ -272,7 +283,7 @@ export function typedInto(source, node, parse) {
   for (const [from, to] of spans) {
     for (const text of [inserted, inserted.replace(/[\\`*_{}[\]()#+\-.!|<>~&]/g, '\\$&')]) {
       const candidate = source.slice(0, from) + text + source.slice(to);
-      const read = parse(candidate);
+      const read = parsed(candidate);
       if (read.childCount === 1 && sameBlock(read.child(0), node)) return candidate;
     }
   }
@@ -285,12 +296,12 @@ export function typedInto(source, node, parse) {
  * only the blocks covering where the two differ, with a kept one on either
  * side: { from, to, nodes, blocks }, children [from, to) of `doc` to be
  * `nodes`, and the ranges of the new children in `next`. Null when that is
- * not sure to read as the whole text would: `next` may define a link
+ * not sure to read as the whole text would: either text may define a link
  * (definesLinks), the change is outside every block, or a kept block reads
  * differently on its own (a fence opened in the change runs on past it).
  */
 export function parseRun(doc, text, blocks, next, parse) {
-  if (definesLinks(next)) return null;
+  if (definesLinks(text) || definesLinks(next)) return null;
   const head = sameStart(text, next);
   const tail = sameEnd(text, next, Math.min(text.length, next.length) - head);
   const changedEnd = text.length - tail;
@@ -305,6 +316,7 @@ export function parseRun(doc, text, blocks, next, parse) {
   const start = blocks[from].start;
   const shift = next.length - text.length;
   const piece = next.slice(start, blocks[to - 1].end + shift);
+  if (start > 0 && startsFrontMatter(piece)) return null;
   const nodes = parse(piece).content.content;
   const ranges = pairRanges(nodes, blockRanges(piece), to === doc.childCount);
   if (!ranges) return null;
@@ -318,10 +330,10 @@ export function parseRun(doc, text, blocks, next, parse) {
 
 /**
  * The ranges in `text` of the children of `doc`, its document, or null when
- * they do not pair up or `text` may define a link (definesLinks).
+ * they do not pair up. Link definitions lie between them (blockRanges).
  */
 export function blocksOf(doc, text) {
-  return definesLinks(text) ? null : pairRanges(doc.content.content, blockRanges(text), true);
+  return pairRanges(doc.content.content, blockRanges(text), true);
 }
 
 /**

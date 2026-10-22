@@ -123,7 +123,7 @@ flowchart TD
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
 | ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
-| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js` |
+| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js`; every view's find bar is `find.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Relay (`relay/`) | a Cloudflare Worker at `share.ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
@@ -152,7 +152,7 @@ The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
 is; line numbers, wrapping, font size, whitespace marks, indent guides and
 indentation are its settings, with a status bar (`status.js`) whose menu and
 toggles save the same settings. The Markdown view (`web/views/markdown/`, [design](markdown-view.md)) is
-WYSIWYG; its toolbar (the only formatting entry), outline, focus mode and
+WYSIWYG; its toolbar (and the standard keys), outline, focus mode and
 word count are parts of it, switched by its settings, not separate extensions.
 It maps the doc's text to its own document through the rendered text, and
 saves each block the user did not change as it was written.
@@ -205,7 +205,7 @@ but the A rules always hold and the person is told.
 | A2 | Nothing lost: what a person typed and nobody deleted ends up in the file, through crashes, power loss and dropped lines. |
 | A3 | Nothing twice: an edit lands at most once, through resends, restarts and write failures. |
 | A4 | People first: people's edits merge by character. A buddy, an outside change and an undo of a buddy yield to a person. What yielded comes back once, and can be found in history. |
-| A5 | Text intact: no split surrogate pair, no U+FFFD; CRLF and BOM kept; unchanged blocks saved byte for byte. |
+| A5 | Text intact: no split surrogate pair, no U+FFFD; each line's end (LF, CRLF, CR), the BOM and the file's permissions kept; unchanged blocks saved byte for byte. |
 | A6 | Shown is saved: whatever the page shows as saved is in the file; anything not saved is marked, with the reason. |
 
 **B. Latency**, median and p95, the network aside, within the limits. The
@@ -245,6 +245,7 @@ numbers are `LATENCY` in `web/views/index.js`, which the tests read:
 | D5 | The view never rewrites: after `applyText(t)`, `getText() === t`; a view's own normalisation is never saved as anyone's edit. |
 | D6 | Clear marks: a teammate's typing shows only by their cursor; a buddy's change is flagged with its name; outside changes and restores glow. |
 | D7 | Drafts stay: a comment being written, and its anchor, survive others' edits. |
+| D8 | Comments follow their text: a thread stays on its text through others' edits, and through its buddy rewriting that text. |
 
 **E. State:**
 
@@ -352,11 +353,17 @@ notes as written to the file, kept through every restart and every change
 made outside since. An edit is landed
 at most once: one whose fate a window does not know (the line dropped
 before the answer) is sent again as it was, same id, same rev, and the
-host answers one it already landed with its rev, never landing it again; a
-window never moves such an edit. A write that fails (a read-only file, a
-lock, a full disk) is not a refusal: the edit has landed, `submit` answers
-`not_saved`, the window says Not saved and why, and the host writes it once
-it can, trying again every half second, and tells it then. When the doc
+host answers one it already landed with its rev, never landing it again,
+however long ago; a window never moves such an edit. A write that fails (a
+read-only file, a lock, a full disk, a file made other than UTF-8 outside)
+is not a refusal: the edit has landed, `submit` answers `not_saved`, and
+the host writes it once it can, trying again half a second after, then
+twice as long each time up to 10 seconds, and tells it then. A buddy's turn,
+an undo and a restore that land meanwhile are landed all the same: the
+turn is answered, and runs no more until its thread has another comment,
+even if its reply could not be written. Every window hears whether the file
+holds what they were told (`saved`, with why not), and `state` says it
+too (`notSaved`), so a page shows Not saved, and why, exactly while it is so. When the doc
 host started again, a window gets a new port and catches up, as a
 teammate's page does on a new line. The log holds the last 1,000 edits, for windows' edits only: a buddy's turn, an
 outside change and an undo each have their base text (the turn's copy, the
@@ -379,7 +386,7 @@ does not yield: an undo must not give way to a buddy's edit.
 | --- | --- | --- |
 | Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`, `mapOffset(at, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
+| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
 | Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
@@ -422,11 +429,12 @@ when read. Nothing stores it.
   again, nor when the watch fires for that write: a doc of millions of
   characters takes tens of milliseconds to read and hash, on every key
   (#235).
-- Every file is written whole: a temporary file in the same folder,
-  renamed over it.
+- Every file is written whole: a temporary file in the same folder, with
+  the file's permissions, renamed over it.
 - Above the files, a doc is its text: UTF-8, no byte order mark, lines
-  ending in `\n`. The file's byte order mark and CRLF line ends are put
-  back when it is written; a file that is not UTF-8 does not open.
+  ending in `\n`. The file's byte order mark and each line's end are put
+  back when it is written, a new line ending as the line before it; a file
+  that is not UTF-8 does not open.
 
 ### Undoing changes
 

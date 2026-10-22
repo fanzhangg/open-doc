@@ -180,6 +180,9 @@ shows only as set or not.
 
 ## Around the doc
 
+- **Find and replace** (Ctrl+F; Ctrl+Alt+F with Replace), in every view and
+  in history: what a reader sees, every match marked, Enter for the next.
+  Replacing is your own edit, undone with Ctrl+Z.
 - **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
   who made it (you, a teammate, both when you typed together, an AI buddy
   with the comment it answered, or a program outside Ponjo), a diff against the one before, and Restore. A version is
@@ -204,12 +207,12 @@ shows only as set or not.
   editor, and merges changes as plain text unless a rule gives it rules of its
   own. Both built-in ones are for Markdown and on by default.
   The **Markdown view** ([design](markdown-view.md)): its toolbar, outline and focus mode (Ctrl+Shift+F)
-  are part of it. The toolbar is the only way to format: typed Markdown such
-  as `## `, `**x**` or `- ` stays text (saved escaped), and the only
-  shortcuts are Undo, Redo and Comment. To write Markdown by hand, switch the
+  are part of it. The toolbar formats, and so do the standard keys (Mod+B,
+  Mod+I, Mod+E, Mod+Shift+X, Mod+K); typed Markdown such as `## `, `**x**`
+  or `- ` stays text (saved escaped). To write Markdown by hand, switch the
   view off (Ctrl+Shift+T, again to switch back); `.md` then opens in the plain
-  editor. Pasted Markdown is still
-  formatted.
+  editor. Pasted plain text stays text too; pasted formatted text keeps
+  its formatting.
   The **Markdown rule**: a buddy's edit or a change from outside merges
   into a line you changed too only where that keeps how the line renders;
   where it would not, your text stays, as when you both change the same

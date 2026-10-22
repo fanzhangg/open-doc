@@ -2,13 +2,14 @@
 // document. The editor and the rendered-text conformance tests both use this
 // list, so the tests check the document the page really builds.
 
-import { $prose, $remark } from '@milkdown/kit/utils';
+import { $node, $prose, $remark } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
 import {
   bulletListSchema, commonmark, imageSchema, linkSchema, listItemSchema, orderedListSchema, syncHeadingIdPlugin, syncListOrderPlugin,
 } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
+import { withFrontMatter } from '../src/markdown/project.js';
 
 // CommonMark does not close `**熟悉：**直接` (a run after full-width
 // punctuation, before a CJK letter); this reads and writes it as bold, the
@@ -32,6 +33,36 @@ const image = imageSchema.extendSchema((schema) => (ctx) => {
 
 // Text typed right after a link is not part of it.
 const link = linkSchema.extendSchema((schema) => (ctx) => ({ ...schema(ctx), inclusive: false }));
+
+// YAML front matter reads as the core projection reads it (withFrontMatter):
+// one block of source, shown and saved as written, which nothing formats.
+const frontMatterSyntax = $remark('frontMatter', () => function frontMatter() {
+  const parse = this.parser;
+  this.parser = (markdown, file) => withFrontMatter(String(markdown), (text) => parse(text, file));
+  const data = this.data();
+  (data.toMarkdownExtensions ??= []).push({ handlers: { yaml: (node) => (node.value ? `---\n${node.value}\n---` : '---\n---') } });
+});
+const frontMatterNode = $node('front_matter', () => ({
+  content: 'text*',
+  group: 'block',
+  marks: '',
+  code: true,
+  defining: true,
+  parseDOM: [{ tag: 'pre.pj-front-matter', preserveWhitespace: 'full', priority: 60 }],
+  toDOM: () => ['pre', { class: 'pj-front-matter' }, ['code', 0]],
+  parseMarkdown: {
+    match: ({ type }) => type === 'yaml',
+    runner: (state, node, type) => {
+      state.openNode(type);
+      if (node.value) state.addText(node.value);
+      state.closeNode();
+    },
+  },
+  toMarkdown: {
+    match: (node) => node.type.name === 'front_matter',
+    runner: (state, node) => state.addNode('yaml', undefined, node.textContent),
+  },
+}));
 
 // On every change Milkdown walks the whole doc twice: to give each heading
 // an id, and to keep ordered list items' labels in step. In a long doc that
@@ -84,4 +115,4 @@ const swapped = new Map([
 const FORMATTING = /^(InputRule<|Keymap<(emphasis|strong|inlineCode|paragraph|heading|blockquote|codeBlock|bulletListKeymap|orderedList|strikethrough)>)/;
 const kept = (plugin) => !FORMATTING.test(plugin.meta?.displayName ?? '');
 
-export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly].flat().filter(kept);
+export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly, frontMatterSyntax, frontMatterNode].flat().filter(kept);

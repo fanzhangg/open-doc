@@ -21,6 +21,9 @@
     { "name": "nested lists and block quotes contribute their blocks", "markdown": "- outer\n  - inner\n\n> quoted\n> more", "text": "outer\ninner\nquoted more" },
     { "name": "code block content is kept as written", "markdown": "```js\nconst  a = 1;\n  indented\n```", "text": "const  a = 1;\n  indented" },
     { "name": "thematic break has no text", "markdown": "above\n\n---\n\nbelow", "text": "above\nbelow" },
-    { "name": "CJK-friendly emphasis", "markdown": "**熟悉：**直接上手", "text": "熟悉：直接上手" }
+    { "name": "CJK-friendly emphasis", "markdown": "**熟悉：**直接上手", "text": "熟悉：直接上手" },
+    { "name": "YAML front matter counts as written, like code", "markdown": "---\ntitle:  Plan\n\n- tag\n---\n\n# Plan", "text": "title:  Plan\n\n- tag\nPlan" },
+    { "name": "a thematic break later on is no front matter", "markdown": "Intro.\n\n---\nnot: front\n---", "text": "Intro.\nnot: front" },
+    { "name": "link definitions have no text; references read as their links", "markdown": "See [docs][d] and [d].\n\n[d]: https://example.com \"Docs\"", "text": "See docs and d." }
   ]
 }

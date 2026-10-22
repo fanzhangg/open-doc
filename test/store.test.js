@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readdir, stat, utimes, writeFile } from 'node:fs/promises';
+import { chmod, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { decodeText, encodeText, lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic, writeSidecar } from '../src/store/files.js';
+import { decodeText, encodeText, formFor, lockFile, moveDoc, readSidecarText, sidecarPath, writeAtomic, writeSidecar } from '../src/store/files.js';
 import { watchDoc } from '../src/store/watch.js';
 import { tempDoc } from './helpers.js';
 
@@ -18,6 +18,20 @@ for (const c of docText) {
     if (c.written) assert.equal(encodeText(decoded.text, decoded.form).toString('hex'), c.written);
   });
 }
+
+test('A5: a later text of a file of mixed line ends: a line kept ends as it did, a new one as the line before it', () => {
+  const { text, form } = decodeText(Buffer.from('one\r\ntwo\nthree\rfour'));
+  assert.equal(encodeText(text, form).toString(), 'one\r\ntwo\nthree\rfour');
+  const next = text.replace('two\n', 'two\nnew\n').replace('one\n', '');
+  assert.equal(encodeText(next, formFor(next, form)).toString(), 'two\nnew\nthree\rfour');
+});
+
+test('a file written whole keeps its permissions', { skip: process.platform === 'win32' && 'no permission bits there' }, async () => {
+  const docPath = await tempDoc();
+  await chmod(docPath, 0o600);
+  await writeAtomic(docPath, 'private\n');
+  assert.equal((await stat(docPath)).mode & 0o777, 0o600);
+});
 
 const LINE = '{"id":"c_store0001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"note"}';
 

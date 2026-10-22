@@ -17,6 +17,7 @@ for (const c of reading) {
   test(`reading: ${c.name}`, () => {
     const parsed = read(c.sidecar);
     assert.deepEqual(shape(threadsOf(comments(parsed))), c.threads);
+    for (const [id, exact] of Object.entries(c.anchors ?? {})) assert.equal(threadsOf(comments(parsed)).find((t) => t.id === id).anchor.exact, exact);
     assert.deepEqual(parsed.bad.map((b) => b.line), c.bad);
     for (const [id, body] of Object.entries(c.bodies ?? {})) assert.equal(comments(parsed).find((x) => x.id === id).body, body);
   });
