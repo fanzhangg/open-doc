@@ -17,9 +17,9 @@ export const SETTINGS_FILE = 'settings.json';
 /** The per-user config folder; `PONJO_CONFIG_DIR` overrides it. */
 export function configDir(env = process.env, platform = process.platform, home = homedir()) {
   if (env.PONJO_CONFIG_DIR) return env.PONJO_CONFIG_DIR;
-  if (platform === 'win32') return join(env.APPDATA || join(home, 'AppData', 'Roaming'), 'OpenDoc');
-  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'OpenDoc');
-  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'opendoc');
+  if (platform === 'win32') return join(env.APPDATA || join(home, 'AppData', 'Roaming'), 'Ponjo');
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'Ponjo');
+  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'ponjo');
 }
 
 export const settingsPath = (dir = configDir()) => join(dir, SETTINGS_FILE);

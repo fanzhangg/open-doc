@@ -5,23 +5,23 @@
 ; Explorer's right-click menu. It never makes itself the default app: the user
 ; picks that in Windows. Uninstalling removes only what was added here.
 
-!define OPENDOC_PROGID "OpenDoc.md"
-!define PONJO_MARK "OpenDoc"
+!define PONJO_PROGID "Ponjo.md"
+!define PONJO_MARK "Ponjo"
 
 !macro openDocRegisterType EXT
-  WriteRegNone SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${OPENDOC_PROGID}"
+  WriteRegNone SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${PONJO_PROGID}"
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\SupportedTypes" ".${EXT}" ""
 !macroend
 
 !macro openDocUnregisterType EXT
-  DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${OPENDOC_PROGID}"
+  DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "${PONJO_PROGID}"
 !macroend
 
 !macro customInstall
   ; The file type Ponjo opens docs as.
-  WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}" "" "Markdown Document"
-  WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\DefaultIcon" "" '"$INSTDIR\resources\app\build\document.ico",0'
-  WriteRegStr SHCTX "Software\Classes\${OPENDOC_PROGID}\shell\open\command" "" '"$appExe" "%1"'
+  WriteRegStr SHCTX "Software\Classes\${PONJO_PROGID}" "" "Markdown Document"
+  WriteRegStr SHCTX "Software\Classes\${PONJO_PROGID}\DefaultIcon" "" '"$INSTDIR\resources\app\build\document.ico",0'
+  WriteRegStr SHCTX "Software\Classes\${PONJO_PROGID}\shell\open\command" "" '"$appExe" "%1"'
 
   ; The app itself, as Windows lists it in "Open with".
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}" "FriendlyAppName" "${PRODUCT_NAME}"
@@ -46,7 +46,7 @@
 !macro customUnInstall
   !insertmacro openDocUnregisterType "md"
   !insertmacro openDocUnregisterType "markdown"
-  DeleteRegKey SHCTX "Software\Classes\${OPENDOC_PROGID}"
+  DeleteRegKey SHCTX "Software\Classes\${PONJO_PROGID}"
   DeleteRegKey SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}"
 
   ClearErrors

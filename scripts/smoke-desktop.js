@@ -10,7 +10,7 @@
 // the app listens on no port, that a doc host that stops is started again, and
 // that a setting survives a relaunch.
 //
-//   node scripts/smoke-desktop.js [path to OpenDoc.exe]
+//   node scripts/smoke-desktop.js [path to Ponjo.exe]
 //
 // Without a path it tests the packaged app in release/ if there is one, else
 // the app from this checkout. Settings and the Electron profile go to a temp
@@ -26,9 +26,9 @@ import { launchElectron, waitFor } from './devtools.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGED = {
-  win32: join(root, 'release', 'win-unpacked', 'OpenDoc.exe'),
+  win32: join(root, 'release', 'win-unpacked', 'Ponjo.exe'),
   linux: join(root, 'release', 'linux-unpacked', 'ponjo'),
-  darwin: join(root, 'release', 'mac', 'OpenDoc.app', 'Contents', 'MacOS', 'OpenDoc'),
+  darwin: join(root, 'release', 'mac', 'Ponjo.app', 'Contents', 'MacOS', 'Ponjo'),
 }[process.platform];
 
 const given = process.argv[2] && resolve(process.argv[2]);

@@ -33,11 +33,11 @@ const isMac = process.platform === 'darwin';
 const REVEAL_LABEL = isMac ? 'Reveal in Finder' : process.platform === 'win32' ? 'Show in File Explorer' : 'Show in Folder';
 const DOC_HOST = join(dirname(fileURLToPath(import.meta.url)), 'doc-host.js');
 
-app.setName('OpenDoc');
+app.setName('Ponjo');
 app.enableSandbox();
 
 // One app for every launch: a second launch (double-clicking a doc while the
-// app runs, `OpenDoc x.md` in a shell) hands its docs to this one and quits.
+// app runs, `Ponjo x.md` in a shell) hands its docs to this one and quits.
 const launchPaths = pathsFromArgs(process.argv, launchContext());
 if (!app.requestSingleInstanceLock({ paths: launchPaths })) {
   app.exit(0);

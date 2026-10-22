@@ -66,11 +66,11 @@ jobs:
           - platform: macos
             os: macos-latest
             args: --mac --arm64 --x64
-            app: release/mac-arm64/OpenDoc.app/Contents/MacOS/OpenDoc
+            app: release/mac-arm64/Ponjo.app/Contents/MacOS/Ponjo
           - platform: windows
             os: windows-latest
             args: --win --x64
-            app: release/win-unpacked/OpenDoc.exe
+            app: release/win-unpacked/Ponjo.exe
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:

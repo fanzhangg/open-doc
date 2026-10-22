@@ -18,7 +18,7 @@
 
   window.ponjoDesktop = {
     openFolder: () => log('Open project…'),
-    agentScripts: () => Promise.resolve({ agents: [{ id: 'claude', name: 'Claude Code', about: '', settings: [] }, { id: 'codex', name: 'Codex', about: '', settings: [] }], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/OpenDoc/agents', secrets: {} }),
+    agentScripts: () => Promise.resolve({ agents: [{ id: 'claude', name: 'Claude Code', about: '', settings: [] }, { id: 'codex', name: 'Codex', about: '', settings: [] }], shipped: ['claude', 'codex'], folder: '~/Library/Application Support/Ponjo/agents', secrets: {} }),
     resetAgentScript: (name) => log(`Reset ${name}`),
     saveSecret: (agent, key) => log(`Set ${agent}'s ${key}`),
     showAgents: () => log('Show folder'),
