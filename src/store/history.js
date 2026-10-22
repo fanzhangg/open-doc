@@ -143,21 +143,26 @@ export async function markConflict(docPath, root, reply) {
 
 /**
  * Note, before the doc is written, the edits the file will hold once it is:
- * the ids of windows' edits, and the hash it will have. A doc host that
- * starts again reads them (writtenEdits), so a window learns its edit is in
- * the file though it never heard so.
+ * the ids of windows' edits, and the hash it will have; `before`, the ids
+ * already written. A doc host that starts again reads them (writtenEdits),
+ * so a window learns its edit is in the file though it never heard so.
  */
-export async function noteWritten(docPath, root, hash, ids) {
+export async function noteWritten(docPath, root, hash, ids, before = ids) {
   const dir = historyDir(docPath, root);
   await mkdir(dir, { recursive: true });
-  await writeAtomic(join(dir, 'written.json'), JSON.stringify({ hash, ids }));
+  await writeAtomic(join(dir, 'written.json'), JSON.stringify({ hash, ids, before }));
 }
 
-/** The ids noteWritten noted, if the doc's file now has the `hash` it noted; else none. */
+/**
+ * The ids noteWritten noted, if the doc's file now has the `hash` it noted;
+ * else those already written before: the write never happened, or the file
+ * changed outside since, which keeps what was written landed.
+ */
 export async function writtenEdits(docPath, root, hash) {
   try {
     const noted = JSON.parse(await readFile(join(historyDir(docPath, root), 'written.json'), 'utf8'));
-    return noted?.hash === hash && Array.isArray(noted.ids) ? noted.ids : [];
+    const ids = noted?.hash === hash ? noted.ids : noted?.before;
+    return Array.isArray(ids) ? ids : [];
   } catch {
     return [];
   }

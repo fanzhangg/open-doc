@@ -80,6 +80,22 @@ test('A3: an edit sent again with its id lands once, and is answered as it was',
   });
 });
 
+test('A3: an edit written, then the file changed outside before the host starts again: it still knows the edit landed', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const settingsDir = await fakeConfig();
+  let host = await openDoc(docPath, { settingsDir, emit: () => {} });
+  const before = await host.call('state', {}, await host.owner());
+  await host.call('submit', { ops: [{ from: 0, to: 0, insert: 'Hello ' }], rev: before.rev, epoch: before.epoch, id: 'page.1' }, await host.owner());
+  await host.close();
+  await writeFile(docPath, `Hello ${SAMPLE}More.\n`); // git pull, while the app is closed
+  host = await openDoc(docPath, { settingsDir, emit: () => {} });
+  try {
+    assert.deepEqual((await host.call('state', {}, await host.owner())).landed, ['page.1'], 'the page does not send it again');
+  } finally {
+    await host.close();
+  }
+});
+
 test('C5: state since a rev gives the events missed, as they were told, while the log holds them', async () => {
   await withDoc(async ({ call, edit, state, events }) => {
     const before = await state();
