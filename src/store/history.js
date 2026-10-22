@@ -7,6 +7,7 @@
 // so it never shows up in the doc's folder or in git:
 //   <config>/history/<key>/index.json   the versions, oldest first
 //   <config>/history/<key>/<sha256>.md  each version's text, by content
+//   <config>/history/<key>/taken.json   the comments this host took (noteTaken)
 // `key` is derived from the doc's absolute path; renaming a doc in Ponjo
 // moves its history along (moveHistory).
 //
@@ -161,6 +162,36 @@ export async function writtenEdits(docPath, root, hash) {
     return [];
   }
 }
+
+/**
+ * Note, before the sidecar is written, that this host took `comment`, a
+ * person's: only such a comment asks a buddy (src/host/doc-service.js,
+ * asks). `ids` are the comments the sidecar holds; the notes of others are
+ * dropped.
+ */
+export async function noteTaken(docPath, root, comment, ids) {
+  const dir = historyDir(docPath, root);
+  const kept = new Set(ids);
+  const taken = Object.fromEntries(Object.entries(await readTakenFile(dir)).filter(([id]) => kept.has(id)));
+  await mkdir(dir, { recursive: true });
+  await writeAtomic(join(dir, 'taken.json'), JSON.stringify({ ...taken, [comment.id]: takenHash(comment) }));
+}
+
+/** A check of whether this host took a comment as it now reads: its thread, author and body unchanged. */
+export async function readTaken(docPath, root) {
+  const taken = await readTakenFile(historyDir(docPath, root));
+  return (comment) => taken[comment.id] === takenHash(comment);
+}
+
+async function readTakenFile(dir) {
+  try {
+    return JSON.parse(await readFile(join(dir, 'taken.json'), 'utf8')) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+const takenHash = (c) => hashText(JSON.stringify([c.thread ?? null, c.by.id, c.body]));
 
 /**
  * The doc was renamed from `fromPath` to `toPath`: its history follows. A

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { askedOf, newComment, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
+import { askedBy, askedOf, newComment, parseSidecar, peopleOf, serializeSidecar, threadsOf } from '../src/core/comments.js';
 import { parseMentions } from '../src/core/mentions.js';
 
 const { reading, mentions } = JSON.parse(readFileSync(new URL('../spec/conformance/sidecar.json', import.meta.url), 'utf8'));
@@ -99,6 +99,19 @@ test('who is asked: whom an asker\'s comment @mentions, or with no mention the t
   assert.deepEqual(askedOf(thread([ada, 'This is stale.'], [me, 'Update it']), ['u_me000001']), ['Ada'], 'the buddy that opened the thread is one of its buddies');
   assert.deepEqual(askedOf(thread([me, '@Clippy look'], [clippy, 'Done.'], [other, 'and this']), ['u_me000001']), [], "another user's follow-up asks no one");
   assert.deepEqual(peopleOf([...thread([me, 'a'], [{ ...me, name: 'me2' }, 'b']).comments]), [{ id: 'u_me000001', name: 'me2' }], 'a human goes by the name in their latest comment');
+});
+
+test('a comment that was not taken asks no one; the others ask as before', () => {
+  const me = { id: 'u_me000001', name: 'me', kind: 'human' };
+  const clippy = { id: 'Clippy', name: 'Clippy', kind: 'ai' };
+  const thread = (...list) => threadsOf(list.map(([who, body], i) => ({ id: `c_comment${i}`, ...(i ? { thread: 'c_comment0' } : {}), by: who, at: `2026-10-01T10:0${i}:00Z`, body })), [{ id: 'Clippy', name: 'Clippy' }, { id: 'Ada', name: 'Ada' }])[0];
+  const notFirst = (c) => c.id !== 'c_comment0';
+  const asked = (t, taken) => [...askedBy(t, ['u_me000001'], taken)];
+  assert.deepEqual(asked(thread([me, '@Clippy look']), (c) => false), []);
+  assert.deepEqual(asked(thread([me, '@Clippy look'], [me, '@Ada too']), notFirst), [['Ada', 'u_me000001']]);
+  assert.deepEqual(asked(thread([me, '@Clippy look'], [me, 'and this']), notFirst), [], 'nor is one it @mentioned a buddy of the thread');
+  assert.deepEqual(asked(thread([me, '@Clippy look'], [clippy, 'Done.'], [me, 'and this']), (c) => c.id !== 'c_comment2'), [], 'its answer stands');
+  assert.deepEqual(asked(thread([me, '@Clippy look'], [clippy, 'Done.'], [me, 'and this']), () => true), [['Clippy', 'u_me000001']]);
 });
 
 test('a renamed buddy is still the one asked and the one who answered: ids, not names', () => {

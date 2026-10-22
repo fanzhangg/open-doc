@@ -192,14 +192,18 @@ export function askedOf(thread, askers) {
   return [...askedBy(thread, askers).keys()];
 }
 
-/** The same, each with who asked it: Map(buddy id → the id of the latest of `askers` who asks it). */
-export function askedBy(thread, askers) {
+/**
+ * The same, each with who asked it: Map(buddy id → the id of the latest of
+ * `askers` who asks it). `taken(comment)` says whether a comment of theirs
+ * may ask: one that does not is skipped.
+ */
+export function askedBy(thread, askers, taken = () => true) {
   const asked = new Map();
   if (thread.resolved) return asked;
   const theirs = [thread.comments[0].by.id].filter((id) => !askers.includes(id));
   thread.comments.forEach((c, i) => {
     if (c.resolved) asked.clear();
-    if (!askers.includes(c.by.id) || c.body.trim() === '') return;
+    if (!askers.includes(c.by.id) || c.body.trim() === '' || !taken(c)) return;
     for (const id of c.mentions.length > 0 ? c.mentions : theirs) {
       const answered = thread.comments.slice(i + 1).some((r) => r.by.id === id);
       if (!answered && !askers.includes(id)) asked.set(id, c.by.id);

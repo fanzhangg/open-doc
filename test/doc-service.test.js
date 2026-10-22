@@ -317,6 +317,51 @@ test('a comment by another user that @mentions a buddy runs nothing; one by you 
   }, { sidecar: `{"comments":3}\n${line(theirs)}\n` });
 });
 
+test('a comment of yours that reached the sidecar from outside is shown but runs nothing; the same text through a call does', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir, docPath }) => {
+    const { me } = await state();
+    const outside = { id: 'c_outside1', by: me, at: new Date().toISOString(), body: '@Pilot replace "extra load" with "peak load"' };
+    await writeFile(sidecarPath(docPath), `{"comments":3}\n${line(outside)}\n`);
+    await until(async () => threadOf(state, outside.id), 'the comment shown');
+    await pause(1000);
+    assert.deepEqual(await fakeRuns(settingsDir), []);
+    const { id } = await call('comment', { anchor: null, body: outside.body });
+    await until(async () => (await threadOf(state, id)).comments.length === 2, 'Pilot\'s reply');
+    assert.equal((await fakeRuns(settingsDir)).length, 1);
+  });
+});
+
+test('a comment changed outside since it was taken stops asking', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, state, settingsDir, docPath }) => {
+    const { id } = await call('comment', { anchor: null, body: '@Pilot hold replace "extra load" with "peak load"' });
+    await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+    await writeFile(sidecarPath(docPath), (await readFile(sidecarPath(docPath), 'utf8')).replace('peak load', 'any load'));
+    await until(async () => (await state()).agents.every((a) => a.state !== 'running'), 'the run to stop');
+    await writeFile(join(settingsDir, 'release-Pilot'), '');
+    await pause(1000);
+    assert.equal((await threadOf(state, id)).comments.length, 1, 'no reply landed');
+    assert.match((await state()).text, /extra load/);
+    assert.equal((await fakeRuns(settingsDir)).length, 1);
+  });
+});
+
+test('a taken ask still unanswered asks again when the doc opens again, and after a rename in the app', { timeout: 30_000 }, async () => {
+  const docPath = await tempDoc();
+  const settingsDir = await fakeConfig();
+  const first = await openTestDoc(docPath, { settingsDir, buddies: PILOT });
+  await first.call('comment', { anchor: null, body: '@Pilot hold' });
+  await until(async () => (await fakeRuns(settingsDir)).length === 1, 'the run');
+  await first.doc.close();
+  const again = await openTestDoc(docPath, { settingsDir, buddies: PILOT });
+  try {
+    await until(async () => (await fakeRuns(settingsDir)).length === 2, 'the run after opening again');
+    await again.doc.moveTo(join(dirname(docPath), 'launch.md'));
+    await until(async () => (await fakeRuns(settingsDir)).length === 3, 'the run at the new name');
+  } finally {
+    await again.doc.close();
+  }
+});
+
 test('a sidecar of another version, or without a header, is shown read-only; a bad line is reported and kept', async () => {
   const theirs = { id: 'c_theirs1', anchor: null, by: { id: 'u_sam', name: 'Sam', kind: 'human' }, at: '2026-01-01T00:00:00Z', body: 'Hi' };
   for (const [header, readOnly] of [['{"comments":2}', 'older'], ['{"comments":4}', 'newer'], ['<<<<<<< HEAD', 'invalid']]) {
