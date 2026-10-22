@@ -9,17 +9,19 @@
 import { apply, diffOps, mapOffset, pastYield, transform } from '../src/core/ot.js';
 
 /**
- * Keep `view` ({ getText, selection }) in the host's order: `call(type,
+ * Keep `view` ({ getText, selection, composing? }) in the host's order: `call(type,
  * arg)` asks the doc host (`state`, `submit`); `show(text, ops, event)`
  * shows others' edits, `ops` as they changed the view's text, `event` the
  * host's `ops` event (null for the edits of a host that started again);
  * `rules()`, the doc's rules (rulesOf), as the host judges an edit that
- * yields; `caughtUp(state)` hears the host's `state` each catch-up brings.
+ * yields; `caughtUp(state)` hears the host's `state` each catch-up brings,
+ * `onLine(online)` whether the line to the host is up: false once a call
+ * fails as `offline`, true again once the page has caught up.
  * Start it with the host's `state`; call `edited()` on every change the
  * person makes in the view, and `moved()` when their caret moves; give it
  * each `ops` and `cursors` event, and `catchUp()` on a new connection.
  */
-export function createClient({ view, call, show, rules, caughtUp = () => {}, onError = () => {} }) {
+export function createClient({ view, call, show, rules, caughtUp = () => {}, onLine = () => {}, onError = () => {} }) {
   const name = Math.random().toString(36).slice(2);
   let sends = 0;
   let epoch = null;
@@ -34,6 +36,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
   let sent = null;
   let plain = null; // the first as it would be had nothing yielded to it
   let reading = false; // the host says this page may only read: nothing goes out, nothing is dropped
+  let composed = false; // typing was read during an IME composition, not sent yet
   let catching = null; // a catch-up on its way; events meanwhile wait in `held`
   let again = false; // and one more asked for meanwhile
   let held = [];
@@ -58,9 +61,14 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
     });
   }
 
-  // The first edit not landed goes out, unless one is on its way.
+  // The first edit not landed goes out, unless one is on its way. Nothing
+  // goes out during an IME composition; what was read meanwhile goes as one.
   function next() {
-    if (sent !== null || catching || reading) return;
+    if (sent !== null || catching || reading || view.composing?.()) return;
+    if (composed) {
+      composed = false;
+      pending = [diffOps(confirmed, last)].filter((ops) => ops.length > 0);
+    }
     if (pending.length > 0) {
       sent = { ops: pending[0], rev, epoch, id: `${name}.${++sends}` };
       plain = pending[0];
@@ -80,7 +88,10 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
       if (sent === submit) client.catchUp();
     }, (error) => {
       if (sent !== submit) return;
-      if (error.code === 'offline') submit.lost = true; // sent again on the next connection
+      if (error.code === 'offline') { // sent again on the next connection
+        submit.lost = true;
+        onLine(false);
+      }
       else if (error.code === 'not_saved') onError(error); // landed: told once it is written
       else if (error.code === 'forbidden') { // set to Read meanwhile: kept, and sent again once back at Edit
         submit.lost = true;
@@ -97,6 +108,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
   function flush() {
     const text = view.getText();
     if (text === last) return;
+    composed ||= Boolean(view.composing?.());
     pending.push(diffOps(last, text, view.selection()?.to));
     last = text;
     next();
@@ -222,7 +234,8 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
         if (state.epoch === epoch && state.rev === rev) cursors = state.cursors ?? [];
         reading = state.level === 'read';
         caughtUp(state);
-      })().catch(onError).finally(() => {
+        onLine(true);
+      })().catch((error) => (error.code === 'offline' ? onLine(false) : onError(error))).finally(() => {
         catching = null;
         if (again) {
           again = false;

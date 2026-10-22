@@ -372,3 +372,65 @@ test('A4: a line deleted outside while two people each have an edit on it on its
   for (const p of pages) assert.equal(p.view.text, expected);
   await host.close();
 });
+
+test('D4: nothing goes out during an IME composition, though others\' edits arrive; what it made goes out as one edit', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const sent = [];
+  let composing = false;
+  const view = { text: TEXT, getText: () => view.text, selection: () => null, composing: () => composing };
+  const client = createClient({
+    view,
+    call: (type, arg) => {
+      if (type === 'submit') sent.push(arg.ops.map((op) => op.insert).join(''));
+      return host.call(type, arg);
+    },
+    show: (text) => { view.text = text; },
+    rules: () => [],
+  });
+  receive = (event) => client.receive(event);
+  client.start(await host.call('state'));
+  composing = true;
+  let was = 'Alpha';
+  for (const typed of ['n', 'ni', 'nihao']) {
+    view.text = view.text.replace(was, `Alpha ${typed}`);
+    was = `Alpha ${typed}`;
+    client.edited();
+    // Another's edit lands meanwhile: the page reads what is composed so far.
+    const now = await host.call('state');
+    await host.call('submit', { ops: [{ from: now.text.length, to: now.text.length, insert: '.' }], rev: now.rev, epoch: now.epoch, id: `other.${typed}` });
+  }
+  assert.deepEqual(sent, [], 'pinyin sent');
+  view.text = view.text.replace('nihao', '你好');
+  composing = false;
+  client.edited();
+  await client.landed();
+  assert.deepEqual(sent.map((typed) => typed.trim()), ['你好'], 'one edit, what was composed');
+  assert.equal(await readFile(docPath, 'utf8'), `${TEXT.replace('Alpha', 'Alpha 你好')}...`);
+  await host.close();
+});
+
+test('C6: a page whose line drops says it is offline, stays editable, and is back once it has caught up', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const wire = line(host);
+  const view = { text: TEXT, getText: () => view.text, selection: () => null };
+  const lines = [];
+  const client = createClient({ view, call: wire.call, show: (text) => { view.text = text; }, rules: () => [], onLine: (online) => lines.push(online) });
+  receive = wire.events((event) => client.receive(event));
+  client.start(await host.call('state'));
+  wire.up = false;
+  view.text = view.text.replace('one', 'one typed');
+  client.edited();
+  await until(() => lines.includes(false), 'the page told it is offline');
+  view.text = view.text.replace('two', 'two typed'); // still editable
+  client.edited();
+  wire.up = true;
+  await client.catchUp(); // the host's hello on the line made again
+  await client.landed();
+  assert.equal(lines.at(-1), true);
+  assert.equal(await readFile(docPath, 'utf8'), TEXT.replace('one', 'one typed').replace('two', 'two typed'));
+  await host.close();
+});

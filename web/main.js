@@ -69,6 +69,7 @@ let typedAt = -Infinity; // when the human last typed in the doc
 let shownAgents = ''; // the agent statuses on screen, as JSON
 let shownComments = ''; // the comments on screen, as JSON
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
+let offline = false; // the line to the doc host is down (client.onLine)
 let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
@@ -139,13 +140,19 @@ async function start() {
   showSize(made, openedText);
   editor = await makeView(made, initial.text);
   client = createClient({
-    view: { getText: () => editor.getText(), selection: () => editor.selection() },
+    view: { getText: () => editor.getText(), selection: () => editor.selection(), composing: () => editor.composing() },
     call: (type, arg) => api[type](arg),
     show: showLanded,
     rules: () => rulesOf(docName, settings.get()),
     caughtUp: (state) => {
       applyComments(state);
       if (state.level !== level) setLevel(state.level);
+    },
+    // Offline the same way alone or shared: a call to the doc host fails as `offline`.
+    onLine: (online) => {
+      if (!online) setStatus('Offline: what you type stays here, and is saved once the line is back', 'error');
+      else if (offline) setStatus('');
+      offline = !online;
     },
     onError: (error) => setStatus(`Not saved: ${error.message}`, 'error'),
   });
