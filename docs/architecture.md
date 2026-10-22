@@ -581,7 +581,13 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
     and agent scripts; and all a teammate who can edit may.
   - *A teammate's access*, Read or Edit (write), set when the owner allows
     them and changed in the Team panel. Edit is everything the owner does in
-    a doc: edit, comment, resolve, ask AI buddies.
+    a doc: edit, comment, resolve, ask AI buddies. A page is told `level`
+    when it changes and catches up; every catch-up brings the page's level,
+    so a page away at the change, or one whose edit is refused as
+    `forbidden`, learns it then. It opens again as the new level. Typing it
+    can no longer save is kept, never dropped: shown as it was left, in a
+    view that cannot be edited, to copy, with Not saved; and saved if the
+    page is set back to Edit.
   - *An AI buddy* acts with the level of whoever asked it, at most write.
   - A comment's `kind` (`human`, `ai`) says only whether an agent is behind
     it; it decides nothing.

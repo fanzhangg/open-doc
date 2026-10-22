@@ -9,7 +9,8 @@
 // The protocol fuzz (docs/testing-ci.md, Editing tests): a real DocService
 // on a temp file and 1 to 4 pages (web/client.js), each on a fake line that
 // delays, drops (calls fail `offline`) and loses events, while the host
-// starts again, its writes fail and the file changes outside. Each case is
+// starts again, its writes fail, the file changes outside and teammates are
+// set to Read and back. Each case is
 // a list of steps made from a seed, run one step at a time, so a seed runs
 // the same every time. A fixed 300 seeds, or random ones for STRESS_MINUTES;
 // a failing case is shrunk to the fewest steps that still fail and printed,
@@ -80,7 +81,7 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
 });
 
 const REGRESSIONS = JSON.parse(await readFile(new URL('regressions.json', import.meta.url), 'utf8'));
-const STEPS = ['type', 'type', 'type', 'up', 'up', 'up', 'down', 'down', 'down', 'down', 'lose', 'drop', 'connect', 'restart', 'readOnly', 'writable', 'outside'];
+const STEPS = ['type', 'type', 'type', 'up', 'up', 'up', 'down', 'down', 'down', 'down', 'lose', 'drop', 'connect', 'restart', 'readOnly', 'writable', 'outside', 'level'];
 
 // A case made from `seed`: { pages, crlf, deletes, steps }, each step
 // [kind, page, a, b] with `a` and `b` in [0, 1), where it acts.
@@ -139,14 +140,16 @@ async function run(c) {
   const outsideTokens = [];
   const pages = [];
   for (let k = 0; k < c.pages; k++) {
-    const page = { k, online: true, up: [], down: [], held: [], errors: [] };
-    const who = k === 0 ? () => owner : () => ({ id: `p_${k}`, name: `P${k}`, kind: 'human', level: 'write' });
+    // The first is the owner; the others teammates who can edit, or read.
+    const page = { k, online: true, up: [], down: [], held: [], errors: [], level: k === 0 ? 'owner' : 'write' };
+    const who = k === 0 ? () => owner : () => ({ id: `p_${k}`, name: `P${k}`, kind: 'human', level: page.level });
     page.view = { text: '', getText: () => page.view.text, selection: () => null };
     page.client = createClient({
       view: page.view,
       call: (type, arg) => new Promise((resolve, reject) => (page.online ? page.up : page.held).push({ type, arg, who, resolve, reject })),
       show: (text) => { page.view.text = text; },
       rules: () => [],
+      caughtUp: (state) => { page.reading = state.level === 'read'; }, // its view can no longer be typed in
       onError: (error) => page.errors.push(error),
     });
     const state = await host.call('state', {}, who());
@@ -175,8 +178,13 @@ async function run(c) {
   const take = (page) => {
     const { event, answer, hello } = page.down.shift();
     if (event) page.client.receive(event);
-    else if (hello) page.client.catchUp();
+    else if (hello) page.client.catchUp(); // or `level`
     else answer.resolve();
+  };
+  // The owner sets teammate `page` to `level`: a page online is told.
+  const setLevel = (page, level) => {
+    page.level = level;
+    if (page.online) page.down.push({ hello: true });
   };
   const connect = (page) => {
     page.online = true;
@@ -187,7 +195,7 @@ async function run(c) {
   try {
     for (const [kind, k, a, b] of c.steps) {
       const page = pages[k % pages.length];
-      if (kind === 'type') {
+      if (kind === 'type' && !page.reading) {
         const text = page.view.text;
         const from = offset(text, a);
         if (c.deletes && b < 0.3) page.view.text = text.slice(0, from) + text.slice(offset(text, Math.min(1, a + b / 10)));
@@ -204,6 +212,7 @@ async function run(c) {
         if (lost !== -1) page.down.splice(lost, 1);
       } else if (kind === 'drop' && page.online) drop(page);
       else if (kind === 'connect' && !page.online) connect(page);
+      else if (kind === 'level' && page.k > 0) setLevel(page, page.level === 'read' ? 'write' : 'read');
       else if (kind === 'restart') {
         for (const each of pages) if (each.online) drop(each);
         const old = host;
@@ -233,9 +242,11 @@ async function run(c) {
       }
       for (let i = 0; i < 5; i++) await turn();
     }
-    // The writers stop; the lines come back and carry all there is.
+    // The writers stop; the lines come back and carry all there is, and
+    // everyone may edit again: what was typed while set to Read lands too.
     if (!writable) await readOnly(docPath, false);
     for (const page of pages) if (!page.online) connect(page);
+    for (const page of pages) if (page.level === 'read') setLevel(page, 'write');
     const deadline = Date.now() + 20_000;
     for (;;) {
       let moved = false;
@@ -287,7 +298,7 @@ async function shrink(c) {
 }
 
 const minutes = Number(process.env.STRESS_MINUTES ?? 0);
-test('A1 A2 A3 A5 C1 C3 C4 C5: pages on lines that fail, a host that starts again, writes that fail, outside changes: one text everywhere, nothing lost or twice', { timeout: minutes * 60_000 + 600_000 }, async () => {
+test('A1 A2 A3 A5 C1 C3 C4 C5 C7: pages on lines that fail, a host that starts again, writes that fail, outside changes, levels that change: one text everywhere, nothing lost or twice', { timeout: minutes * 60_000 + 600_000 }, async () => {
   const cases = REGRESSIONS.map((c, k) => ({ name: `regression ${k}`, c }));
   if (minutes > 0) {
     const end = Date.now() + minutes * 60_000;
