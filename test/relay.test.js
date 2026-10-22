@@ -387,9 +387,11 @@ test('the relay limits pages, message sizes and rooms, so it is no free pipe', a
     assert.equal((await host.closed).code, 1009, 'a host too');
     assert.equal((await pages[1].closed).code, 4000, 'its pages told the host is gone');
 
-    let refused = 0;
-    for (let k = 0; k < 60; k++) if ((await connect(`/rooms/${roomOf(`s${k}`)}?secret=s${k}`)).refused) refused++;
-    assert.ok(refused > 0, 'an address opens at most 60 rooms a minute');
+    // The limit counts in minutes on the clock, so rooms opened across the
+    // turn of one fill two of them: twice the 60 and one more overflow one.
+    let refused = false;
+    for (let k = 0; k <= 2 * 60 && !refused; k++) refused = Boolean((await connect(`/rooms/${roomOf(`s${k}`)}?secret=s${k}`)).refused);
+    assert.ok(refused, 'an address opens at most 60 rooms a minute');
   } finally {
     for (const socket of sockets) socket.close();
     await limited.stop();
