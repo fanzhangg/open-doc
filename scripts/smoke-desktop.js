@@ -77,7 +77,7 @@ step('first launch, on two docs and a .js file');
 let app = await launch([...docs, code]);
 for (const [i, doc] of docs.entries()) {
   const name = doc.split(/[\\/]/).at(-1);
-  const page = await app.page(name);
+  const page = await app.page(name, 90_000); // a busy Windows runner can take over 30 s to open the second
   const loaded = await page.evaluate(`(async () => {
     for (let i = 0; i < 100 && !document.querySelector('.ProseMirror'); i++) await new Promise((r) => setTimeout(r, 100));
     return { title: document.title, text: document.querySelector('.ProseMirror')?.textContent ?? '' };

@@ -24,10 +24,10 @@ export async function launchElectron(exe, args, { env }) {
   return {
     pid: child.pid,
     devtoolsPort,
-    // The page whose title starts with `name`, once there.
-    async page(name) {
+    // The page whose title starts with `name`, once there, within `ms`.
+    async page(name, ms = 30_000) {
       const target = await waitFor(async () => (await (await fetch(`${base}/json`)).json())
-        .find((t) => t.type === 'page' && t.title.startsWith(name)), 30_000, `the ${name} window`);
+        .find((t) => t.type === 'page' && t.title.startsWith(name)), ms, `the ${name} window`);
       const cdp = await connect(target.webSocketDebuggerUrl);
       return {
         send: (method, params) => cdp.send(method, params),
