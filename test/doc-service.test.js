@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { appendFile, chmod, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, open, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -78,6 +78,40 @@ test('A3: an edit sent again with its id lands once, and is answered as it was',
     assert.deepEqual(await call('submit', submit), { rev: 1 }, 'sent again: the line dropped before its answer');
     assert.equal(await readFile(docPath, 'utf8'), `> Hello ${SAMPLE}`);
   });
+});
+
+test('A3: an edit written, then the file changed outside before the host starts again: it still knows the edit landed', async () => {
+  const docPath = await tempDoc(SAMPLE);
+  const settingsDir = await fakeConfig();
+  let host = await openDoc(docPath, { settingsDir, emit: () => {} });
+  const before = await host.call('state', {}, await host.owner());
+  await host.call('submit', { ops: [{ from: 0, to: 0, insert: 'Hello ' }], rev: before.rev, epoch: before.epoch, id: 'page.1' }, await host.owner());
+  await host.close();
+  await writeFile(docPath, `Hello ${SAMPLE}More.\n`); // git pull, while the app is closed
+  host = await openDoc(docPath, { settingsDir, emit: () => {} });
+  try {
+    assert.deepEqual((await host.call('state', {}, await host.owner())).landed, ['page.1'], 'the page does not send it again');
+  } finally {
+    await host.close();
+  }
+});
+
+test('A2 C3: typing that lands while another program is half way through writing the file waits for the rest, and keeps both', async () => {
+  const docPath = await tempDoc('one\n');
+  const host = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: () => {} });
+  try {
+    const owner = await host.owner();
+    const before = await host.call('state', {}, owner);
+    const writing = await open(docPath, 'w'); // emptied, the rest still to come
+    const typed = host.call('submit', { ops: [{ from: 3, to: 3, insert: ' A' }], rev: before.rev, epoch: before.epoch, id: 'page.1' }, owner);
+    await new Promise((done) => setTimeout(done, 10));
+    await writing.writeFile('one\ntwo\n');
+    await writing.close();
+    await typed;
+    assert.equal(await readFile(docPath, 'utf8'), 'one A\ntwo\n');
+  } finally {
+    await host.close();
+  }
 });
 
 test('C5: state since a rev gives the events missed, as they were told, while the log holds them', async () => {

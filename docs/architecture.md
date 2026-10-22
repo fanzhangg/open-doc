@@ -349,7 +349,8 @@ doc host started again) or a log that no longer reaches back does it take
 `diffOps(the text it last heard, the new text)` as what landed and move
 its typing over that, as it was typed; its edit on its way is in that text
 if the answer lists it as `landed`, the ids the doc's history folder
-notes for the file as it is, kept through every restart. An edit is landed
+notes as written to the file, kept through every restart and every change
+made outside since. An edit is landed
 at most once: one whose fate a window does not know (the line dropped
 before the answer) is sent again as it was, same id, same rev, and the
 host answers one it already landed with its rev, never landing it again,
@@ -418,7 +419,10 @@ when read. Nothing stores it.
   changes, it tells every window; a doc it did not write is a change from
   outside: saved to history first, then landed as an edit that yields, from
   the text the file held when last written. Where it overlaps what was typed
-  since, the typing wins and the outside version is only in history.
+  since, the typing wins and the outside version is only in history. It is
+  taken once the file is unchanged for 50 ms (up to a second): another
+  program may be half way through writing it, emptied with the rest to
+  come.
 - Before writing, DocService checks the file is still what it last wrote;
   if not, it lands the outside change first, the same way. A file whose
   size, mtime and inode are still those of its own last write is not read

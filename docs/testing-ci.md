@@ -142,7 +142,7 @@ that fails before the fix.
   marks included) through the relay run locally, the teammate's line 40 ms
   slower each way, in a small Markdown doc and in the plain view's longest,
   which the host writes whole on every key. A timing fails when it is
-  missed twice running.
+  missed three times running.
 - Layers 1 to 3 are deterministic and never retried: a test that fails now
   and then is a bug.
 

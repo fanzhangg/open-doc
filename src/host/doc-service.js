@@ -175,13 +175,14 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // it is. Run in `serial`.
   async function commit() {
     clearTimeout(retry);
+    let wroteAny = false; // its note says only that it is about to be
     try {
       while (!missing && text !== written) {
         const before = await stat(docPath).catch(() => null);
         if (!ours(before)) {
           let disk;
           try {
-            disk = await readDoc(docPath);
+            disk = await readOutside();
           } catch (error) {
             if (error.code !== 'no_doc') throw error;
             break;
@@ -190,18 +191,22 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
           if (disk.hash !== writtenHash) await takeOutside(disk);
           if (text === written) break;
         }
-        // A window told nothing yet, should this service stop now, learns from it its edit is in,
-        // whether the file then holds this text or, the write not done, the one before.
+        // A window told nothing yet, should this service stop now, learns from it its edit is in;
+        // if the write fails, the note is again of what the file holds.
         const hash = hashText(text);
         const ids = noteIds();
-        await noteWritten(docPath, settingsDir, { hash, ids }, { hash: writtenHash, ids: writtenIds });
+        await noteWritten(docPath, settingsDir, hash, ids, writtenIds);
         form = formFor(text, form);
-        const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before));
+        const wrote = await writeDoc(docPath, text, form, async () => sameStat(await stat(docPath).catch(() => null), before)).catch(async (error) => {
+          await noteWritten(docPath, settingsDir, writtenHash, writtenIds);
+          throw error;
+        });
         if (!wrote) continue;
         writtenHash = hash;
         writtenIds = ids;
         writtenStat = wrote;
         written = text;
+        wroteAny = true;
       }
     } catch (error) {
       retry = setTimeout(() => serial(commit).catch(() => {}), retryMs);
@@ -215,6 +220,19 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       for (const cursor of cursors.values()) cursor.at = mapOffset(cursor.at, event.ops);
       toldRev = event.rev;
       emit('ops', event);
+    }
+    // Written now, so landed even if the file changes outside before the next write.
+    if (wroteAny) await noteWritten(docPath, settingsDir, writtenHash, writtenIds).catch(() => {});
+  }
+
+  // The file as changed outside, once it holds still: another program may be
+  // half way through writing it, emptied with the rest to come.
+  async function readOutside() {
+    for (let tries = 1; ; tries++) {
+      const was = await stat(docPath).catch(() => null);
+      const disk = await readDoc(docPath);
+      await new Promise((done) => setTimeout(done, STILL_MS));
+      if (tries === STILL_TRIES || sameStat(await stat(docPath).catch(() => null), was)) return disk;
     }
   }
 
@@ -250,7 +268,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
     written = disk.text;
     writtenHash = disk.hash;
-    await noteWritten(docPath, settingsDir, { hash: writtenHash, ids: writtenIds }); // the edits it holds, those of the text it changed
+    await noteWritten(docPath, settingsDir, writtenHash, writtenIds); // the edits written so far: landed, though the file now holds another's
     land(ops, { yields: true });
     if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
   }
@@ -334,10 +352,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   async function recreate(who) {
     if (!missing) return {};
     await mkdir(dirname(docPath), { recursive: true });
-    writtenHash = hashText(text);
-    writtenIds = noteIds();
-    await noteWritten(docPath, settingsDir, { hash: writtenHash, ids: writtenIds });
+    const ids = noteIds();
+    await noteWritten(docPath, settingsDir, hashText(text), ids, writtenIds);
     writtenStat = await writeDoc(docPath, text, form);
+    writtenHash = hashText(text);
+    writtenIds = ids;
     written = text;
     await noteVersion(text, { kind: 'edit', author: byOf(who) });
     return {};
@@ -693,7 +712,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (!missing && ours(await stat(docPath).catch(() => null))) return true; // this service's own write
     let doc;
     try {
-      doc = await readDoc(docPath);
+      doc = await readOutside();
     } catch (error) {
       // Made not text outside: the doc stays as it is here, not saved, until the file is text again.
       if (error.code === 'not_text') {
@@ -906,6 +925,9 @@ const RETRY_MS = 500;
 const MAX_RETRY_MS = 10_000;
 // Typing is a version once it pauses this long.
 const SAVE_DELAY_MS = 800;
+// A file changed outside is taken once it is unchanged this long, waiting at most STILL_TRIES times.
+const STILL_MS = 50;
+const STILL_TRIES = 20;
 
 // Why a write failed, as a person reads it, and with no path: teammates hear it too.
 function unsavedReason(error) {
