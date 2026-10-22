@@ -111,6 +111,21 @@ const tableTab = $shortcut(() => ({
   },
 }));
 
+// Pasting a single URL over selected text links the text to it, as Docs and
+// Notion do; any other paste is the clipboard plugin's.
+const pasteLink = $prose(() => new Plugin({
+  props: {
+    handlePaste(view, event) {
+      const url = event.clipboardData?.getData('text/plain').trim();
+      const { selection: { empty, from, to, $from }, schema, tr } = view.state;
+      const type = schema.marks.link;
+      if (empty || !/^(https?:\/\/|mailto:)\S+$/i.test(url) || !$from.parent.type.allowsMarkType(type)) return false;
+      view.dispatch(tr.removeMark(from, to, type).addMark(from, to, type.create({ href: url })));
+      return true;
+    },
+  },
+}));
+
 // Reports every view update, and marks the top-level block holding the caret
 // (for focus mode).
 const uiPlugin = (hooks) => $prose(() => new Plugin({
@@ -192,7 +207,7 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(pasteLink).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(linkPlugin).use(uiPlugin(hooks))
     .use($prose(() => new Plugin({
       appendTransaction(trs) {
