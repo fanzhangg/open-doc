@@ -1,7 +1,7 @@
 # Checks every pull request and push to main. The gate, on Windows and macOS:
 # lint, the installers, and a smoke test that opens a doc in the packaged
 # app. Pushes to main that pass it replace the "nightly" pre-release
-# (https://github.com/fanzhangg/open-doc/releases/tag/nightly), so a build
+# (https://github.com/ponjo-app/ponjo/releases/tag/nightly), so a build
 # that cannot open a doc never replaces a working one. The unit tests run
 # once, on Linux, and report without holding back the nightly; the buddy
 # concurrency stress test (npm run test:stress) and the latency promise

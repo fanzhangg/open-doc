@@ -57,7 +57,7 @@ const flashField = StateField.define({
  *           onMarkClick?: (id: string) => void, onLayout?: () => void, onComment?: () => void }} options
  */
 export async function createPlainView({ stage, text, name, settings, saveSettings = () => {}, editable = true, color = true, onChange = () => {}, onEdit = () => {}, onMarkClick = () => {}, onLayout = () => {}, onComment = null }) {
-  const host = stage.querySelector('.od-editor');
+  const host = stage.querySelector('.pj-editor');
   stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
   let bubble = null;
@@ -174,7 +174,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
     const flashes = [];
     if (by) {
       const added = edits.map(({ start, insert }) => [start, start + insert.length]);
-      if (!buddy) flashes.push(...added.filter(([from, to]) => from < to).map(([from, to]) => Decoration.mark({ class: 'od-flash', flashId }).range(from, to)));
+      if (!buddy) flashes.push(...added.filter(([from, to]) => from < to).map(([from, to]) => Decoration.mark({ class: 'pj-flash', flashId }).range(from, to)));
       flashes.push(Decoration.widget({ widget: new Flag(by, buddy ? buddyColor(by) : null), side: -1, flashId }).range(added[0][0]));
     }
     view.dispatch({
@@ -236,14 +236,14 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
 // Markdown view's bubble; hidden while the pointer is still selecting.
 function createBubble(view, { stage, host, onComment }) {
   const template = document.createElement('template');
-  template.innerHTML = `<div class="od-bubble" role="toolbar" aria-label="Selection" hidden>
-    <button type="button" class="od-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
+  template.innerHTML = `<div class="pj-bubble" role="toolbar" aria-label="Selection" hidden>
+    <button type="button" class="pj-bubble-comment" data-action="comment" data-icon="comment" data-tip="Comment" data-keys="Mod+Alt+M">Comment</button>
   </div>`;
   hydrateIcons(template.content);
   const bubble = template.content.firstElementChild;
   stage.append(bubble);
   const canvas = stage.parentElement; // scrolls the page
-  const page = host.closest('.od-page');
+  const page = host.closest('.pj-page');
   const done = new AbortController();
   const { signal } = done;
   let pointerDown = false;
@@ -308,12 +308,12 @@ function decorations(marks, toDoc) {
     const to = toDoc(mark.to);
     if (mark.kind === 'comment') {
       if (from < to) {
-        ranges.push(Decoration.mark({ class: mark.active ? 'od-hl od-hl-active' : 'od-hl', attributes: { 'data-thread': mark.id } }).range(from, to));
+        ranges.push(Decoration.mark({ class: mark.active ? 'pj-hl pj-hl-active' : 'pj-hl', attributes: { 'data-thread': mark.id } }).range(from, to));
       }
       continue;
     }
     const { removed, by, replay } = mark;
-    const className = (kind) => `${by ? (kind === 'ins' ? 'od-buddy-edit' : 'od-buddy-del') : `od-mark-${kind}`}${replay ? ' od-replay' : ''}`;
+    const className = (kind) => `${by ? (kind === 'ins' ? 'pj-buddy-edit' : 'pj-buddy-del') : `pj-mark-${kind}`}${replay ? ' pj-replay' : ''}`;
     const style = by ? `--buddy: ${buddyColor(by)}` : '';
     if (removed) ranges.push(Decoration.widget({ widget: new Removed(removed, className('del'), style, replay), side: -1 }).range(from));
     if (from < to) ranges.push(Decoration.mark({ class: className('ins'), attributes: { style, 'data-replay': String(replay) } }).range(from, to));
@@ -370,10 +370,10 @@ class Flag extends WidgetType {
 
   toDOM() {
     const wrap = document.createElement('span');
-    wrap.className = 'od-flag';
+    wrap.className = 'pj-flag';
     if (this.color) wrap.style.cssText = `--buddy: ${this.color}; --buddy-ink: #1f1d24`;
     const label = document.createElement('span');
-    label.className = 'od-flag-label';
+    label.className = 'pj-flag-label';
     label.textContent = this.name;
     wrap.append(label);
     return wrap;

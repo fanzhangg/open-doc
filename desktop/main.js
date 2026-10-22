@@ -9,7 +9,7 @@ import { BrowserWindow, Menu, Notification, app, clipboard, dialog, ipcMain, nat
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents, readAgent } from '../src/store/agents.js';
 import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
@@ -23,7 +23,7 @@ import {
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
 import { resolve as resolveInProject } from '../src/host/project-service.js';
-import { docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc } from './folder.js';
+import { docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberFolderDoc, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -864,10 +864,11 @@ async function openInFolder(win, rel) {
   return true;
 }
 
-// A link followed in a doc: the web goes to the browser; a path, from the
-// doc's own place, opens as a doc or folder dropped on the app would.
+// A link followed in a doc: the web goes to the browser; a path (linkURL)
+// opens as a doc or folder dropped on the app would.
 async function openLink(win, href) {
-  const url = new URL(String(href), pathToFileURL(windows.docFor(win).docPath));
+  const { docPath, folder } = windows.docFor(win);
+  const url = linkURL(String(href), docPath, folder);
   if (url.protocol === 'file:') await openPath(fileURLToPath(url), { parent: win });
   else windows.openExternal(url.href);
 }

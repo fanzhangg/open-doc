@@ -50,13 +50,13 @@ let ids = 0; // gradient ids, unique per page
 export function appIcon() {
   const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'Ponjo' });
   const defs = node('defs', {});
-  const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
+  const gradient = node('linearGradient', { id: 'pj-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
   gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
   defs.append(gradient);
   // A faint ink edge keeps the tile apart from white backgrounds (Windows, browser tabs).
   svg.append(defs, node('rect', {
     x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
-    fill: 'url(#od-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
+    fill: 'url(#pj-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
   }));
   const avatar = agentFace(CLIPPY.name);
   const mark = node('g', { transform: 'translate(50 50) scale(0.64) translate(-50 -50)' });
@@ -77,9 +77,9 @@ export function documentIcon() {
   );
   const [defs, clippy] = agentFace(CLIPPY.name).children;
   const halo = clippy.cloneNode(true);
-  halo.querySelector('.od-face-look').remove();
+  halo.querySelector('.pj-face-look').remove();
   for (const [key, value] of Object.entries({ fill: '#fff', stroke: '#fff', 'stroke-width': '12', 'stroke-linejoin': 'round' })) {
-    halo.querySelector('.od-face-body').setAttribute(key, value);
+    halo.querySelector('.pj-face-body').setAttribute(key, value);
   }
   const mark = node('g', { transform: 'translate(-2 34) scale(0.62)' });
   mark.append(halo, clippy);
@@ -95,8 +95,8 @@ export const personFace = (name) => face(name, drawn(name), 'circle');
 
 function face(name, look, kind = look.body) {
   const body = drawBody(kind, name);
-  const svg = node('svg', { viewBox: '0 0 100 100', class: 'od-face', 'aria-hidden': 'true' });
-  const id = `od-face-${++ids}`;
+  const svg = node('svg', { viewBox: '0 0 100 100', class: 'pj-face', 'aria-hidden': 'true' });
+  const id = `pj-face-${++ids}`;
   const gradient = node('radialGradient', { id, cx: '0.34', cy: '0.28', r: '0.9' });
   const stops = [buddyColor(name, 0.08), buddyColor(name), buddyColor(name, -0.07)];
   gradient.append(...[0, 0.55, 1].map((offset, i) => node('stop', { offset: String(offset), 'stop-color': stops[i] })));
@@ -105,8 +105,8 @@ function face(name, look, kind = look.body) {
 
   // The whole face tilts a touch, body and all.
   const tilted = node('g', { transform: `rotate(${f(look.tilt)} 50 50)` });
-  const features = node('g', { class: 'od-face-look' });
-  tilted.append(node('path', { class: 'od-face-body', d: body.d, fill: `url(#${id})` }), features);
+  const features = node('g', { class: 'pj-face-look' });
+  tilted.append(node('path', { class: 'pj-face-body', d: body.d, fill: `url(#${id})` }), features);
   svg.append(defs, tilted);
   drawFace(features, look, body.cy, colorOf(name)[2]);
   return svg;

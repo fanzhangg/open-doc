@@ -6,8 +6,8 @@
 (() => {
   let settings = { name: 'you', theme: 'system', agent: 'claude', agents: {} };
   const recent = [
-    { name: 'open-doc', folder: '~/Workplace' },
-    { name: 'docs', folder: '~/Workplace/open-doc' },
+    { name: 'ponjo', folder: '~/Workplace' },
+    { name: 'docs', folder: '~/Workplace/ponjo' },
     { name: 'Board Games', folder: '~/Library/CloudStorage/GoogleDrive/My Drive/2026' },
   ];
 

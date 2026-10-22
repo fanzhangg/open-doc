@@ -93,7 +93,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // is open: that one stays.
   function peek(name, kind, from) {
     if (showing && !hovered) return false;
-    const header = Boolean(from.closest('.od-header'));
+    const header = Boolean(from.closest('.pj-header'));
     showing = keyOf(name, kind);
     viewOnly = !header;
     hovered = true;
@@ -111,7 +111,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // A click on a name: its card, editable, where it is.
   function pin(name, kind, from) {
     const which = keyOf(name, kind);
-    if (showing !== which || viewOnly || hovered) toggle(which, from.closest('.od-header') ? null : from);
+    if (showing !== which || viewOnly || hovered) toggle(which, from.closest('.pj-header') ? null : from);
   }
 
   function keyOf(name, kind) {
@@ -173,8 +173,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (key !== painted) {
       painted = key;
       root.replaceChildren(...people.map((name) => {
-        const wrap = el('span', 'od-agent');
-        const face = el('button', 'od-agent-face');
+        const wrap = el('span', 'pj-agent');
+        const face = el('button', 'pj-agent-face');
         face.type = 'button';
         face.dataset.person = name;
         face.setAttribute('aria-label', `${name} · In this doc`);
@@ -183,14 +183,14 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
         wrap.append(face);
         return wrap;
       }), ...faces.map(({ id, name, mode, failed }) => {
-        const wrap = el('span', 'od-agent');
+        const wrap = el('span', 'pj-agent');
         wrap.dataset.presence = mode;
-        const face = el('button', 'od-agent-face');
+        const face = el('button', 'pj-agent-face');
         face.type = 'button';
         face.dataset.agent = name;
         face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
         face.append(avatar(name, 'agent', false, id));
-        if (failed) face.firstChild.classList.add('od-failed');
+        if (failed) face.firstChild.classList.add('pj-failed');
         namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
         wrap.append(face);
         return wrap;
@@ -216,11 +216,11 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // A person's card is an agent's with less on it: face, name, where they
   // stand.
   function personHead(name, standing) {
-    const head = el('div', 'od-profile');
-    const pic = el('span', 'od-profile-face');
+    const head = el('div', 'pj-profile');
+    const pic = el('span', 'pj-profile-face');
     pic.append(avatar(name, 'human'));
-    const who = el('div', 'od-profile-who');
-    who.append(el('div', 'od-profile-name', name), el('div', 'od-profile-sub', standing));
+    const who = el('div', 'pj-profile-who');
+    who.append(el('div', 'pj-profile-name', name), el('div', 'pj-profile-sub', standing));
     head.append(pic, who);
     return head;
   }
@@ -228,13 +228,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // Yours works as an agent's does: a click on your name edits it in place.
   function meCard() {
     if (viewOnly) return [personHead(getName(), 'You')];
-    const head = el('div', 'od-profile');
-    const pic = el('span', 'od-profile-face');
+    const head = el('div', 'pj-profile');
+    const pic = el('span', 'pj-profile-face');
     pic.append(avatar(getName(), 'human'));
-    const who = el('div', 'od-profile-who');
-    who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'od-profile-sub', 'You'));
+    const who = el('div', 'pj-profile-who');
+    who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'pj-profile-sub', 'You'));
     head.append(pic, who);
-    const about = el('textarea', 'od-input od-profile-about');
+    const about = el('textarea', 'pj-input pj-profile-about');
     about.value = getAbout();
     about.placeholder = 'Who you are, what you write, how you like to work. Every buddy that answers you reads it.';
     about.spellcheck = true;
@@ -249,23 +249,23 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const present = here.find((p) => same(p.name, name));
     if (!teammate) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc')];
     if (viewOnly) return [personHead(name, LEVEL[teammate.level])];
-    const level = el('div', 'od-teammate-row');
+    const level = el('div', 'pj-teammate-row');
     level.append(levelChoice(teammate.level, (next) => changeTeam(() => api.setLevel(teammate.id, next))));
-    const remove = el('button', 'od-secondary od-danger', 'Remove from this project');
+    const remove = el('button', 'pj-secondary pj-danger', 'Remove from this project');
     remove.type = 'button';
     remove.addEventListener('click', async () => {
       if (!window.confirm(`Remove ${teammate.name} from this project?\n\nTheir pages close at once. Their comments stay.`)) return;
       await changeTeam(() => api.remove(teammate.id));
       toggle('team');
     });
-    const removeRow = el('div', 'od-teammate-row');
+    const removeRow = el('div', 'pj-teammate-row');
     removeRow.append(remove);
     return [personHead(name, 'Teammate'), level, removeRow];
   }
 
   // Read or Edit, Edit to start: `pick(level)` hears a change.
   function levelChoice(level, pick) {
-    const choice = el('div', 'od-segmented');
+    const choice = el('div', 'pj-segmented');
     choice.setAttribute('role', 'radiogroup');
     choice.setAttribute('aria-label', 'Access');
     for (const [value, label] of [['read', 'Read'], ['write', 'Edit']]) {
@@ -288,9 +288,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       team = await request();
       paintCard();
     } catch (failure) {
-      const error = el('div', 'od-input-error', failure.message);
-      panel.querySelector('.od-input-error')?.remove();
-      panel.querySelector('.od-card-head, .od-profile')?.after(error);
+      const error = el('div', 'pj-input-error', failure.message);
+      panel.querySelector('.pj-input-error')?.remove();
+      panel.querySelector('.pj-card-head, .pj-profile')?.after(error);
     }
   }
 
@@ -301,37 +301,37 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // teammates and changes anything, and sees who is away, greyed; a
   // teammate sees who is here.
   function teamCard() {
-    const head = el('div', 'od-card-head');
-    head.append(el('div', 'od-card-title', 'Team'));
+    const head = el('div', 'pj-card-head');
+    head.append(el('div', 'pj-card-title', 'Team'));
     if (team) head.append(inviteButtons());
-    const list = el('div', 'od-people-list');
+    const list = el('div', 'pj-people-list');
     list.append(meRow());
     if (team) {
-      list.append(el('div', 'od-setting-group', 'Teammates'), ...team.pending.map(pendingRow), ...team.members.map(memberRow));
-      if (team.pending.length + team.members.length === 0) list.append(el('div', 'od-people-none', 'No one yet: send them the invite link.'));
+      list.append(el('div', 'pj-setting-group', 'Teammates'), ...team.pending.map(pendingRow), ...team.members.map(memberRow));
+      if (team.pending.length + team.members.length === 0) list.append(el('div', 'pj-people-none', 'No one yet: send them the invite link.'));
     } else if (here.some((p) => !isMe(p))) {
-      list.append(el('div', 'od-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
+      list.append(el('div', 'pj-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
     }
-    list.append(el('div', 'od-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
+    list.append(el('div', 'pj-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
     return project() && owner() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
   }
 
   // Invite link copies the project's one link, made the first time; New link ends every old one.
   function inviteButtons() {
-    const buttons = el('div', 'od-people-invite');
-    const copy = el('button', 'od-secondary', 'Invite link');
+    const buttons = el('div', 'pj-people-invite');
+    const copy = el('button', 'pj-secondary', 'Invite link');
     copy.type = 'button';
     copy.prepend(icon('link'));
     copy.addEventListener('click', async () => {
       if (!team.link) await changeTeam(() => api.link());
       if (!team.link) return;
       await navigator.clipboard.writeText(team.link);
-      const copied = panel.querySelector('.od-people-invite .od-secondary');
+      const copied = panel.querySelector('.pj-people-invite .pj-secondary');
       if (copied) copied.lastChild.textContent = 'Copied';
     });
     buttons.append(copy);
     if (team.link) {
-      const renew = el('button', 'od-secondary', 'New link');
+      const renew = el('button', 'pj-secondary', 'New link');
       renew.type = 'button';
       renew.addEventListener('click', () => {
         if (window.confirm('Make a new invite link?\n\nEvery old link stops working, and pages open on it close. Teammates on the project stay, and join again from the new link.')) changeTeam(() => api.link());
@@ -342,10 +342,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   }
 
   function meRow() {
-    const row = el('div', 'od-people-row');
-    const open = el('button', 'od-people-open');
+    const row = el('div', 'pj-people-row');
+    const open = el('button', 'pj-people-open');
     open.type = 'button';
-    open.append(avatar(getName(), 'human', true), el('span', 'od-people-name', getName()), el('span', 'od-people-role', 'You'));
+    open.append(avatar(getName(), 'human', true), el('span', 'pj-people-name', getName()), el('span', 'pj-people-role', 'You'));
     open.addEventListener('click', () => toggle('me'));
     row.append(open);
     return row;
@@ -353,18 +353,18 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // Someone asking to join: Read or Edit (Edit to start), and Allow or Deny.
   function pendingRow({ id, name }) {
-    const wrap = el('div', 'od-people-pending');
-    const row = el('div', 'od-people-row');
-    row.append(avatar(name, 'human', true), el('span', 'od-people-name', name), el('span', 'od-people-role', 'Asks to join'));
+    const wrap = el('div', 'pj-people-pending');
+    const row = el('div', 'pj-people-row');
+    row.append(avatar(name, 'human', true), el('span', 'pj-people-name', name), el('span', 'pj-people-role', 'Asks to join'));
     let level = 'write';
-    const actions = el('div', 'od-people-actions');
-    const deny = el('button', 'od-secondary', 'Deny');
+    const actions = el('div', 'pj-people-actions');
+    const deny = el('button', 'pj-secondary', 'Deny');
     deny.type = 'button';
     deny.addEventListener('click', () => changeTeam(() => api.remove(id)));
-    const allow = el('button', 'od-primary', 'Allow');
+    const allow = el('button', 'pj-primary', 'Allow');
     allow.type = 'button';
     allow.addEventListener('click', () => changeTeam(() => api.allow(id, level)));
-    actions.append(levelChoice(level, (next) => { level = next; }), el('span', 'od-spacer'), deny, allow);
+    actions.append(levelChoice(level, (next) => { level = next; }), el('span', 'pj-spacer'), deny, allow);
     wrap.append(row, actions);
     return wrap;
   }
@@ -373,25 +373,25 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // A person, greyed while away.
   function personRow(name, role, presence) {
-    const row = el('div', 'od-people-row');
+    const row = el('div', 'pj-people-row');
     row.dataset.presence = presence;
-    const open = el('button', 'od-people-open');
+    const open = el('button', 'pj-people-open');
     open.type = 'button';
-    open.append(avatar(name, 'human', true), el('span', 'od-people-name', name), el('span', 'od-people-role', role));
+    open.append(avatar(name, 'human', true), el('span', 'pj-people-name', name), el('span', 'pj-people-role', role));
     open.addEventListener('click', () => toggle(`person:${name}`));
     row.append(open);
     return row;
   }
 
   function buddyRow(status) {
-    const row = el('div', 'od-people-row');
-    const open = el('button', 'od-people-open');
+    const row = el('div', 'pj-people-row');
+    const open = el('button', 'pj-people-open');
     open.type = 'button';
-    open.append(avatar(status.name, 'agent', true, status.id), el('span', 'od-people-name', status.name), el('span', 'od-people-role', tagline(status) || WHERE[status.where]));
+    open.append(avatar(status.name, 'agent', true, status.id), el('span', 'pj-people-name', status.name), el('span', 'pj-people-role', tagline(status) || WHERE[status.where]));
     open.addEventListener('click', () => toggle(`agent:${status.name}`));
     row.append(open);
     if (status.where === 'project' && owner()) {
-      const remove = el('button', 'od-icon-btn od-people-delete');
+      const remove = el('button', 'pj-icon-btn pj-people-delete');
       remove.type = 'button';
       remove.dataset.tip = `Delete ${status.name}`;
       remove.setAttribute('aria-label', `Delete ${status.name}`);
@@ -406,17 +406,17 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   }
 
   function newBuddyRow() {
-    const row = el('label', 'od-people-row od-people-new');
-    const plus = el('span', 'od-people-new-face');
+    const row = el('label', 'pj-people-row pj-people-new');
+    const plus = el('span', 'pj-people-new-face');
     plus.append(icon('plus'));
-    const field = el('input', 'od-people-new-name');
+    const field = el('input', 'pj-people-new-name');
     field.type = 'text';
     field.placeholder = 'New buddy';
     field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name), ...(team ? [...team.members, ...team.pending].map((p) => p.name) : [])]);
     field.maxLength = 64;
     field.spellcheck = false;
     field.setAttribute('aria-label', "New buddy's name");
-    const error = el('div', 'od-input-error');
+    const error = el('div', 'pj-input-error');
     error.hidden = true;
     const failed = (message) => {
       error.textContent = message;
@@ -431,7 +431,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       try {
         take(await api.createBuddy({ name }));
         toggle(`agent:${name}`);
-        panel.querySelector('.od-profile-about')?.focus();
+        panel.querySelector('.pj-profile-about')?.focus();
       } catch (failure) {
         failed(failure.message);
       }
@@ -447,8 +447,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const parts = [cardHead(name)];
     if (status && !viewOnly) parts.push(aboutField(status));
     if (!status) {
-      const problem = el('div', 'od-profile-problem');
-      problem.append(el('div', 'od-profile-problem-text', `None of your buddies is called ${name}, so it does not answer here.`));
+      const problem = el('div', 'pj-profile-problem');
+      problem.append(el('div', 'pj-profile-problem-text', `None of your buddies is called ${name}, so it does not answer here.`));
       parts.push(problem);
     }
     return parts;
@@ -457,15 +457,15 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // The top of a buddy's card: its face, name, who it is, and edit.
   function cardHead(name) {
     const status = statusOf(name);
-    const head = el('div', 'od-profile');
+    const head = el('div', 'pj-profile');
     head.dataset.presence = modeOf(status);
-    const pic = el('span', 'od-profile-face');
+    const pic = el('span', 'pj-profile-face');
     pic.append(avatar(name, 'agent', false, idOf(name)));
-    const who = el('div', 'od-profile-who');
+    const who = el('div', 'pj-profile-who');
     // Click the name to edit it right there.
-    who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'od-profile-name', name));
-    if (viewOnly && introOf(name)) who.append(el('div', 'od-profile-slogan', introOf(name)));
-    who.append(el('div', 'od-profile-sub od-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
+    who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'pj-profile-name', name));
+    if (viewOnly && introOf(name)) who.append(el('div', 'pj-profile-slogan', introOf(name)));
+    who.append(el('div', 'pj-profile-sub pj-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
     return head;
   }
@@ -473,7 +473,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // Who `agent` is, all of it, to change right there: saved when the field
   // is left. Clippy's, cleared, is Clippy as it ships.
   function aboutField(agent) {
-    const field = el('textarea', 'od-input od-profile-about');
+    const field = el('textarea', 'pj-input pj-profile-about');
     field.value = agent.about;
     field.placeholder = 'Who it is, what to do, what to leave alone, how to reply. The first line shows next to its name.';
     field.spellcheck = true;
@@ -493,14 +493,14 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   // leaving the field saves it, Escape puts it back.
   function inPlace(agent, placeholder) {
     if (!editing) {
-      const text = el('div', 'od-profile-name od-editable', agent.name);
+      const text = el('div', 'pj-profile-name pj-editable', agent.name);
       text.tabIndex = 0;
       text.setAttribute('role', 'button');
       text.setAttribute('aria-label', `Rename ${agent.name}`);
       const start = () => {
         editing = true;
         paintCard();
-        const field = panel.querySelector('.od-inline-input');
+        const field = panel.querySelector('.pj-inline-input');
         field?.focus();
         field?.select();
       };
@@ -508,7 +508,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       text.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); start(); } });
       return text;
     }
-    const field = el('input', 'od-profile-name od-inline-input');
+    const field = el('input', 'pj-profile-name pj-inline-input');
     field.type = 'text';
     field.value = agent.name;
     field.placeholder = placeholder;
@@ -566,12 +566,12 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   function fail(field, message) {
     editing = true;
     paintCard();
-    const again = panel.querySelector('.od-inline-input');
+    const again = panel.querySelector('.pj-inline-input');
     if (!again) return;
     again.value = field.value;
     again.setAttribute('aria-invalid', 'true');
-    const error = el('div', 'od-input-error', message);
-    panel.querySelector('.od-profile')?.after(error);
+    const error = el('div', 'pj-input-error', message);
+    panel.querySelector('.pj-profile')?.after(error);
     again.focus();
   }
 
@@ -654,7 +654,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   };
 }
 
-const FAILED_MS = 1000; // how long a failed run's moment plays (app.css: .od-failed)
+const FAILED_MS = 1000; // how long a failed run's moment plays (app.css: .pj-failed)
 
 // Where a buddy stands in this doc, on its card under its name.
 const STANDING = { working: 'Working…', away: 'Not running here' };

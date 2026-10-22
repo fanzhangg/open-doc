@@ -38,13 +38,13 @@ const NOT_SHOWN = {
 export function createFileList({ place = null, onError = () => {}, onCarry = () => {} } = {}) {
   const owner = Boolean(window.ponjoDesktop); // only the owner changes files
   const desktop = window.ponjoDesktop ?? (place && browserFolder(place));
-  const aside = document.querySelector('.od-files');
-  const head = aside.querySelector('.od-files-head');
-  const tree = aside.querySelector('.od-files-tree');
-  const filter = aside.querySelector('.od-files-filter');
-  const toggle = document.querySelector('.od-files-toggle');
-  const preview = document.querySelector('.od-preview');
-  const previewName = document.querySelector('.od-preview-name');
+  const aside = document.querySelector('.pj-files');
+  const head = aside.querySelector('.pj-files-head');
+  const tree = aside.querySelector('.pj-files-tree');
+  const filter = aside.querySelector('.pj-files-filter');
+  const toggle = document.querySelector('.pj-files-toggle');
+  const preview = document.querySelector('.pj-preview');
+  const previewName = document.querySelector('.pj-preview-name');
   if (!desktop?.folder) return { ready: Promise.resolve(), state: () => ({}) };
   let view = null;
   let lists = new Map(); // what the top folder ('') and each open subfolder hold: [{ name, folder }]
@@ -92,8 +92,8 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
       }
       if (filter.value) everything = await allFiles();
     }
-    aside.querySelector('.od-files-name').textContent = view.name;
-    aside.querySelector('.od-files-name').title = view.name;
+    aside.querySelector('.pj-files-name').textContent = view.name;
+    aside.querySelector('.pj-files-name').title = view.name;
     if (previewing && lists.get(parentOf(previewing))?.some(({ name }) => name === nameOf(previewing)) === false) closePreview();
     const focused = tree.contains(document.activeElement) ? document.activeElement.closest('[role="treeitem"]')?.dataset.path : null;
     tree.replaceChildren(...(filter.value ? matches() : items('', 1)));
@@ -157,7 +157,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
       pattern.lastIndex = 0;
       return pattern.test(path);
     });
-    if (!found.length) return [el('li', 'od-files-none', 'No files match')];
+    if (!found.length) return [el('li', 'pj-files-none', 'No files match')];
     function branch(paths, base, level) {
       const names = [...new Set(paths.map((path) => path.slice(base.length).split('/')[0]))];
       return names.map((name) => {
@@ -174,7 +174,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
           children.append(...branch(inside, `${at}/`, level + 1));
           item.append(children);
         } else {
-          const label = node.querySelector('.od-files-label');
+          const label = node.querySelector('.pj-files-label');
           let from = 0;
           pattern.lastIndex = 0;
           const hits = [...at.matchAll(pattern)].filter(({ 0: hit }) => hit);
@@ -250,15 +250,15 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   // A row: a file or a folder, named by `path`, its place in the folder.
   function row(kind, path, label, level) {
-    const node = el('div', `od-files-row od-files-${kind}`);
+    const node = el('div', `pj-files-row pj-files-${kind}`);
     node.setAttribute('role', 'treeitem');
     node.setAttribute('aria-level', String(level));
     node.tabIndex = -1;
     node.title = path;
     node.dataset.path = path;
     node.dataset.kind = kind;
-    if (kind === 'folder') node.append(icon('chevron', 'od-icon od-files-chevron'));
-    node.append(icon(kind), el('span', 'od-files-label', label));
+    if (kind === 'folder') node.append(icon('chevron', 'pj-icon pj-files-chevron'));
+    node.append(icon(kind), el('span', 'pj-files-label', label));
     return node;
   }
 
@@ -287,14 +287,14 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   // ---- rows, focus and opening ----
 
-  const rows = () => [...tree.querySelectorAll('.od-files-row[data-path]')].filter((node) => !node.closest('[hidden]'));
-  const rowFor = (path) => tree.querySelector(`.od-files-row[data-path="${CSS.escape(path)}"]`);
+  const rows = () => [...tree.querySelectorAll('.pj-files-row[data-path]')].filter((node) => !node.closest('[hidden]'));
+  const rowFor = (path) => tree.querySelector(`.pj-files-row[data-path="${CSS.escape(path)}"]`);
   const visibleRow = (path) => rows().find((node) => node.dataset.path === path) ?? null;
   const shown = () => previewing ?? view?.current;
 
   // One row takes Tab; the arrows move between the others.
   function rove(node) {
-    for (const other of tree.querySelectorAll('.od-files-row[tabindex="0"]')) other.tabIndex = -1;
+    for (const other of tree.querySelectorAll('.pj-files-row[tabindex="0"]')) other.tabIndex = -1;
     if (node) node.tabIndex = 0;
   }
 
@@ -319,7 +319,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
   }
 
   function markShown() {
-    for (const node of tree.querySelectorAll('.od-files-file')) {
+    for (const node of tree.querySelectorAll('.pj-files-file')) {
       if (node.dataset.path === shown()) node.setAttribute('aria-current', 'page');
       else node.removeAttribute('aria-current');
     }
@@ -348,7 +348,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
       return;
     }
     previewName.textContent = nameOf(path);
-    preview.replaceChildren(result.problem ? el('p', 'od-preview-note', NOT_SHOWN[result.problem]) : el('pre', 'od-preview-text', result.text));
+    preview.replaceChildren(result.problem ? el('p', 'pj-preview-note', NOT_SHOWN[result.problem]) : el('pre', 'pj-preview-text', result.text));
     document.documentElement.setAttribute('data-preview', '');
     preview.scrollIntoView({ block: 'start' });
     if (floating) closeFloating();
@@ -414,19 +414,19 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
    * runs when the field closes without one, as it does empty.
    */
   function nameField(node, { value, selection = [0, value.length], placeholder, label, check, commit, cancel = () => {} }) {
-    const name = node.querySelector('.od-files-label');
-    const input = el('input', 'od-files-input');
+    const name = node.querySelector('.pj-files-label');
+    const input = el('input', 'pj-files-input');
     Object.assign(input, { type: 'text', value, placeholder, spellcheck: false, autocomplete: 'off' });
     input.setAttribute('aria-label', label);
-    const error = el('div', 'od-files-error');
-    error.id = `od-files-error-${Math.random().toString(36).slice(2)}`;
+    const error = el('div', 'pj-files-error');
+    error.id = `pj-files-error-${Math.random().toString(36).slice(2)}`;
     error.setAttribute('role', 'alert');
     error.hidden = true;
     input.setAttribute('aria-describedby', error.id);
     name.hidden = true;
     name.after(input);
     node.after(error);
-    node.classList.add('od-files-editing');
+    node.classList.add('pj-files-editing');
     let busy = false;
     field = { input };
 
@@ -441,7 +441,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
       input.remove();
       error.remove();
       name.hidden = false;
-      node.classList.remove('od-files-editing');
+      node.classList.remove('pj-files-editing');
     };
     const drop = () => {
       close();
@@ -532,10 +532,10 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     const level = parent ? parent.split('/').length + 1 : 1;
     const node = row('file', '', '', level);
     delete node.dataset.path;
-    node.classList.add('od-files-new');
+    node.classList.add('pj-files-new');
     item.append(node);
     // First among the files, under the folders.
-    group.insertBefore(item, [...group.children].find((child) => child.querySelector(':scope > .od-files-file')) ?? null);
+    group.insertBefore(item, [...group.children].find((child) => child.querySelector(':scope > .pj-files-file')) ?? null);
     nameField(node, {
       value: '',
       placeholder: 'Name',
@@ -556,19 +556,19 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
   function dropTarget(x, y) {
     const under = document.elementFromPoint(x, y);
     if (!under || !aside.contains(under)) return null;
-    const node = under.closest('.od-files-row[data-path]');
+    const node = under.closest('.pj-files-row[data-path]');
     if (node) return node.dataset.kind === 'folder' ? node.dataset.path : parentOf(node.dataset.path);
-    return under.closest('.od-files-tree, .od-files-head') ? '' : null;
+    return under.closest('.pj-files-tree, .pj-files-head') ? '' : null;
   }
 
   function startDrag() {
     drag.started = true;
-    const ghost = el('div', 'od-files-ghost');
+    const ghost = el('div', 'pj-files-ghost');
     ghost.append(icon(drag.kind), el('span', null, nameOf(drag.path)));
     document.body.append(ghost);
     drag.ghost = ghost;
-    drag.node.classList.add('od-files-dragged');
-    aside.classList.add('od-files-dragging');
+    drag.node.classList.add('pj-files-dragged');
+    aside.classList.add('pj-files-dragging');
     const scroll = () => {
       if (!drag?.started) return;
       if (drag.speed) tree.scrollTop += drag.speed;
@@ -586,11 +586,11 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     drag.target = ok ? target : null;
     const lit = ok ? (target ? rowFor(target) : head) : null;
     if (lit !== drag.lit) {
-      drag.lit?.classList.remove('od-files-drop');
-      lit?.classList.add('od-files-drop');
+      drag.lit?.classList.remove('pj-files-drop');
+      lit?.classList.add('pj-files-drop');
       drag.lit = lit;
     }
-    aside.classList.toggle('od-files-nodrop', !ok);
+    aside.classList.toggle('pj-files-nodrop', !ok);
     // A closed folder held under the pointer opens.
     const hovered = target ? rowFor(target) : null;
     if (hovered !== drag.hovered) {
@@ -609,9 +609,9 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     cancelAnimationFrame(done.frame);
     clearTimeout(done.opener);
     done.ghost.remove();
-    done.lit?.classList.remove('od-files-drop');
-    done.node.classList.remove('od-files-dragged');
-    aside.classList.remove('od-files-dragging', 'od-files-nodrop');
+    done.lit?.classList.remove('pj-files-drop');
+    done.node.classList.remove('pj-files-dragged');
+    aside.classList.remove('pj-files-dragging', 'pj-files-nodrop');
     justDragged = true;
     setTimeout(() => { justDragged = false; }, 0);
     if (!drop || done.target === null) return;
@@ -627,7 +627,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   tree.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || field || !owner) return;
-    const node = event.target.closest('.od-files-row[data-path]');
+    const node = event.target.closest('.pj-files-row[data-path]');
     if (!node) return;
     drag = { node, path: node.dataset.path, kind: node.dataset.kind, x: event.clientX, y: event.clientY, pointerId: event.pointerId, started: false, target: null };
   });
@@ -650,21 +650,21 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   tree.addEventListener('click', (event) => {
     if (justDragged) return;
-    const node = event.target.closest('.od-files-row[data-path]');
+    const node = event.target.closest('.pj-files-row[data-path]');
     if (!node) return;
     rove(node);
     activate(node);
   });
   aside.addEventListener('contextmenu', (event) => {
     if (field || !owner || event.target.closest('input')) return;
-    const node = event.target.closest('.od-files-row[data-path]');
-    if (!node && !event.target.closest('.od-files-tree')) return;
+    const node = event.target.closest('.pj-files-row[data-path]');
+    if (!node && !event.target.closest('.pj-files-tree')) return;
     event.preventDefault();
     if (node) rove(node);
     menu(node);
   });
   tree.addEventListener('keydown', (event) => {
-    const node = event.target.closest?.('.od-files-row[data-path]');
+    const node = event.target.closest?.('.pj-files-row[data-path]');
     if (!node || field || event.target !== node) return;
     const list = rows();
     const at = list.indexOf(node);
@@ -692,7 +692,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     event.preventDefault();
   });
   tree.addEventListener('focusin', (event) => {
-    const node = event.target.closest?.('.od-files-row[data-path]');
+    const node = event.target.closest?.('.pj-files-row[data-path]');
     if (node) rove(node);
   });
 
@@ -739,7 +739,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 
   // Drag the sidebar's edge to resize it; double-click it for the default
   // width back. Every window shares the width last dragged to.
-  const handle = aside.querySelector('.od-files-resize');
+  const handle = aside.querySelector('.pj-files-resize');
   const setWidth = (px) => {
     if (px) document.documentElement.style.setProperty('--files-w', `${px}px`);
     else document.documentElement.style.removeProperty('--files-w');
@@ -754,7 +754,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     if (event.button !== 0) return;
     event.preventDefault();
     handle.setPointerCapture(event.pointerId);
-    document.documentElement.classList.add('od-files-resizing');
+    document.documentElement.classList.add('pj-files-resizing');
     let width = 0;
     const move = (e) => {
       width = Math.round(Math.min(MAX_WIDTH_PX, Math.max(MIN_WIDTH_PX, e.clientX)));
@@ -763,7 +763,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     handle.addEventListener('pointermove', move);
     handle.addEventListener('lostpointercapture', () => {
       handle.removeEventListener('pointermove', move);
-      document.documentElement.classList.remove('od-files-resizing');
+      document.documentElement.classList.remove('pj-files-resizing');
       try {
         if (width) localStorage.setItem(WIDTH_KEY, String(width));
       } catch {

@@ -35,12 +35,12 @@ const TYPING_PAUSE_MS = 600;
 const WAIT_FOR_PAUSE_MS = 3000;
 const COMMENTS_KEY = 'ponjo.comments'; // 'hidden' while the human keeps comments out of view
 
-const status = document.querySelector('.od-status');
-const missingBanner = document.querySelector('.od-missing');
-const readOnlyBanner = document.querySelector('.od-read-only');
-const noticeBanner = document.querySelector('.od-notice');
-const resolvedToggle = document.querySelector('.od-show-resolved');
-const commentsToggle = document.querySelector('.od-tool-comment');
+const status = document.querySelector('.pj-status');
+const missingBanner = document.querySelector('.pj-missing');
+const readOnlyBanner = document.querySelector('.pj-read-only');
+const noticeBanner = document.querySelector('.pj-notice');
+const resolvedToggle = document.querySelector('.pj-show-resolved');
+const commentsToggle = document.querySelector('.pj-tool-comment');
 // In a narrow window the comments rise from the bottom over the page: closed
 // until the Comments button or commented text opens them. The highlights stay.
 const narrow = window.matchMedia('(max-width: 900px)');
@@ -159,7 +159,7 @@ async function start() {
     },
   });
 
-  margin = createCommentMargin(document.querySelector('.od-margin'), {
+  margin = createCommentMargin(document.querySelector('.pj-margin'), {
     onCreate: createThread,
     onCancelDraft: () => {
       pendingSelection = null;
@@ -186,10 +186,10 @@ async function start() {
   });
 
   people = createPeople({
-    root: document.querySelector('.od-agents'),
-    invite: document.querySelector('.od-invite'),
-    panel: document.querySelector('.od-panel'),
-    me: document.querySelector('.od-me'),
+    root: document.querySelector('.pj-agents'),
+    invite: document.querySelector('.pj-invite'),
+    panel: document.querySelector('.pj-panel'),
+    me: document.querySelector('.pj-me'),
     getName: () => me,
     getId: () => myId,
     setName,
@@ -201,7 +201,7 @@ async function start() {
   });
   const who = (chip) => [chip.dataset.mention, chip.dataset.mentionKind, chip];
   createNameCards({
-    card: document.querySelector('.od-panel'),
+    card: document.querySelector('.pj-panel'),
     peek: (chip) => people.peek(...who(chip)),
     pin: (chip) => people.pin(...who(chip)),
     unpeek: () => people.unpeek(),
@@ -249,7 +249,7 @@ async function start() {
     if (event.key === 'Escape') hideRun(); // even when the editor took it
   });
   document.addEventListener('pointerdown', (event) => {
-    if (!sheetOpen() || event.target.closest('.od-margin, .od-tool-comment, .od-show-resolved, [data-thread], .od-bubble')) return;
+    if (!sheetOpen() || event.target.closest('.pj-margin, .pj-tool-comment, .pj-show-resolved, [data-thread], .pj-bubble')) return;
     openSheet(false);
   });
   history = createHistory({
@@ -273,11 +273,11 @@ async function start() {
     }
   });
   // Clicking empty page space deselects the active comment, as in Docs.
-  document.querySelector('.od-canvas').addEventListener('mousedown', (event) => {
-    if (!event.target.closest('.od-card, [data-thread], .od-bubble')) select(null);
+  document.querySelector('.pj-canvas').addEventListener('mousedown', (event) => {
+    if (!event.target.closest('.pj-card, [data-thread], .pj-bubble')) select(null);
   });
 
-  document.querySelector('.od-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
+  document.querySelector('.pj-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
   events.on('ops', (data) => client.receive(data));
   events.on('cursors', (data) => {
@@ -326,10 +326,10 @@ async function start() {
 // The doc's text in the view `chosen` (from viewFor), in the page's stage.
 function makeView(chosen, text) {
   return chosen.createView({
-    stage: document.querySelector('.od-stage'),
+    stage: document.querySelector('.pj-stage'),
     text,
     name: docName,
-    toolbar: document.querySelector('.od-toolbar'),
+    toolbar: document.querySelector('.pj-toolbar'),
     onComment: requestComment,
     onEdit: () => client.edited(),
     onChange: () => {
@@ -456,8 +456,8 @@ function setMissing(on) {
   missing = on;
   missingBanner.hidden = !on;
   if (on) {
-    const name = document.querySelector('.od-doc-name').textContent;
-    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside Ponjo. Changes here are not being saved.`;
+    const name = document.querySelector('.pj-doc-name').textContent;
+    missingBanner.querySelector('.pj-banner-text').textContent = `${name} was moved or deleted outside Ponjo. Changes here are not being saved.`;
     setStatus('Not saved: the doc is missing', 'error');
     return;
   }
@@ -519,7 +519,7 @@ function showSize(chosen, text) {
 function paintNotice() {
   const notice = comments?.notice ? { text: comments.notice } : sizeNotice;
   noticeBanner.hidden = !notice;
-  noticeBanner.querySelector('.od-banner-text').textContent = notice?.text ?? '';
+  noticeBanner.querySelector('.pj-banner-text').textContent = notice?.text ?? '';
   const action = noticeBanner.querySelector('[data-action="any-size"]');
   action.hidden = !notice?.action;
   action.textContent = notice?.action ?? '';
@@ -548,7 +548,7 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   people?.render({ people: writers });
   paintNotice();
   const open = threads.filter((t) => !t.resolved).length;
-  commentsToggle.querySelector('.od-comment-count').textContent = open > 0 ? String(open) : '';
+  commentsToggle.querySelector('.pj-comment-count').textContent = open > 0 ? String(open) : '';
   paintEmpty();
   if (edits?.[runLanded]) {
     showRun(runLanded, { scroll: false, stand: true });
@@ -565,7 +565,7 @@ function showReadOnly(problem) {
   document.documentElement.toggleAttribute('data-read-only', Boolean(problem));
   readOnlyBanner.hidden = !problem;
   if (!problem) return;
-  readOnlyBanner.querySelector('.od-banner-text').textContent = {
+  readOnlyBanner.querySelector('.pj-banner-text').textContent = {
     older: 'These comments are from an older Ponjo, so they are read-only here.',
     newer: 'These comments are from a newer Ponjo, so they are read-only here. Update Ponjo to add comments.',
     invalid: `This doc's comments file does not start with {"comments":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
@@ -578,7 +578,7 @@ function showReadOnly(problem) {
 }
 
 readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
-  window.open('https://github.com/fanzhangg/open-doc/releases/tag/nightly');
+  window.open('https://github.com/ponjo-app/ponjo/releases/tag/nightly');
 });
 readOnlyBanner.querySelector('[data-action="start-over"]').addEventListener('click', () => {
   if (!window.confirm('Move this doc\'s comments file to the Trash and start new comments?\n\nIts comments are no longer shown here. You can put the file back from the Trash.')) return;
@@ -640,7 +640,7 @@ function paintCommentsToggle() {
 
 // Bring a thread's text into view above the sheet.
 function revealText(id) {
-  document.querySelector(`.od-page [data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  document.querySelector(`.pj-page [data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 // Comments are on selected text only.
@@ -834,17 +834,17 @@ function anchorTops(items) {
 function showDocName(name) {
   docName = name;
   document.title = `${name} — Ponjo`;
-  document.querySelector('.od-doc-name').textContent = name;
+  document.querySelector('.pj-doc-name').textContent = name;
 }
 
 // In the desktop app, clicking the doc name renames the doc (File > Rename).
 function offerRename() {
   const desktop = window.ponjoDesktop;
   if (!desktop) return;
-  const name = document.querySelector('.od-doc-name');
+  const name = document.querySelector('.pj-doc-name');
   Object.assign(name, { tabIndex: 0, title: 'Rename' });
   name.setAttribute('role', 'button');
-  name.classList.add('od-renamable');
+  name.classList.add('pj-renamable');
   const rename = () => desktop.rename().catch(() => {});
   name.addEventListener('click', rename);
   name.addEventListener('keydown', (event) => {
@@ -856,7 +856,7 @@ function offerRename() {
 }
 
 function paintNameChip() {
-  const button = document.querySelector('.od-me');
+  const button = document.querySelector('.pj-me');
   button.replaceChildren(avatar(me, 'human'));
   namecardFor(button, me, 'human', 'instant');
   button.setAttribute('aria-label', `You (${me})`);
@@ -883,8 +883,8 @@ function setStatus(text, state = 'saved') {
   const problem = state === 'error';
   status.hidden = !problem;
   status.dataset.state = state;
-  status.querySelector('.od-status-text').textContent = problem ? text : '';
-  status.querySelector('.od-status-icon').replaceChildren(...(problem ? [icon('alert')] : []));
+  status.querySelector('.pj-status-text').textContent = problem ? text : '';
+  status.querySelector('.pj-status-icon').replaceChildren(...(problem ? [icon('alert')] : []));
   status.title = problem ? text : '';
 }
 
