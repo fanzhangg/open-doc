@@ -278,7 +278,9 @@ the host first; a buddy's turn that loses part of it so is marked
 lands on the text in memory, the file is written, and only then does it go
 to every window as `ops` (`{ epoch, rev, ops, id }`, `id` the window's name
 for its own edit; `yields`, and a buddy's `reply` and `by`): a window
-rebases what it has typed and not yet heard back (`web/client.js`). The
+rebases what it has typed and not yet heard back (`web/client.js`). Its
+own edit's event comes before the answer to its `submit`, so an answer
+without one means the event was lost: the window takes the text again. The
 epoch changes when the doc host starts: a window that sees a new one takes
 `diffOps(the text it last heard, the new text)` as what landed and rebases
 on that, the same function again; its edit on its way is in that text if

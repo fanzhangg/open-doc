@@ -2,10 +2,10 @@
 # lint, the installers, and a smoke test that opens a doc in the packaged
 # app. Pushes to main that pass it replace the "nightly" pre-release
 # (https://github.com/ponjo-app/ponjo/releases/tag/nightly), so a build
-# that cannot open a doc never replaces a working one. The unit tests run
-# once, on Linux, and report without holding back the nightly; the buddy
-# concurrency stress test (npm run test:stress) and the latency promise
-# (npm run test:perf) do hold it back.
+# that cannot open a doc never replaces a working one. The unit tests (npm
+# test), the buddy concurrency stress test (npm run test:stress) and the
+# latency promise (npm run test:perf) run once, on Linux, and hold it back
+# too.
 #
 # A pull request that changes only docs (docs/ or a top-level *.md) skips the
 # installers, the tests and the stress test: the `changes` job decides, and
@@ -169,7 +169,7 @@ jobs:
       - run: npm run test:stress
 
   release:
-    needs: [build, stress, perf] # not test: flaky unit tests show on the PR but do not hold back the nightly
+    needs: [build, test, stress, perf]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

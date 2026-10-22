@@ -134,6 +134,12 @@ on machine B, on another network (a phone's hotspot will do), in a browser.
 | Release | version tag | all of main, draft release | blocks publishing |
 
 - A PR that changes `spec/` changes `spec/conformance/` too.
+- The nightly is built only when `npm test`, `npm run test:stress` and
+  `npm run test:perf` pass too (`release` in `.github/workflows/desktop.yml`).
+- A test that fails now and then is a bug, in the code or the test: it is
+  fixed, never retried or skipped. Each relay a test starts is its own,
+  with nothing kept on disk (`test/relay/harness.js`), so a limit one test
+  fills never refuses another.
 - CI holds no model API keys.
 
 ## CD
