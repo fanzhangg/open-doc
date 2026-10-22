@@ -108,7 +108,7 @@ machine A runs the app from `main` with no `PONJO_RELAY`; the teammate is
 on machine B, on another network (a phone's hotspot will do), in a browser.
 
 1. **Invite.** A opens a project, Team > Invite link. The link is
-   `https://opendoc.ponjo.app/team?room=…`. B opens it, picks a name, and
+   `https://ponjo.app/team?room=…`. B opens it, picks a name, and
    is told it waits for the owner.
 2. **Allow.** A is notified; in Team, Edit and Allow. B's page shows the
    project's first doc, editable, in a moment. B reloads: in at once.
