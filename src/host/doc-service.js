@@ -92,10 +92,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   let lastSettings = null;
   let missing = false; // the doc was moved or deleted on disk while open
   // Writes to the doc and its sidecar, and the edits landing, run one at a
-  // time, so a rename never lands in the middle of a save.
+  // time, so a rename never lands in the middle of a save; none once closed
+  // (a write tried again, a change seen, while it closed).
   let writes = Promise.resolve();
+  let closed = false;
   const serial = (fn) => {
-    const run = writes.then(fn);
+    const run = writes.then(() => (closed ? undefined : fn()));
     writes = run.catch(() => {});
     return run;
   };
@@ -486,7 +488,6 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   }
 
   // The buddies or the sidecar changed: show who is here, and start the runs due.
-  let closed = false;
   async function syncAgents() {
     if (closed) return;
     try {
@@ -861,8 +862,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     async close() {
       try {
         await serial(async () => {
-          await commit();
-          await flushTyping();
+          try {
+            await commit();
+            await flushTyping();
+          } finally {
+            closed = true;
+          }
         });
       } finally {
         clearTimeout(unsaved);
@@ -871,7 +876,6 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         stopWatchingProjectBuddies();
         stopWatchingUserBuddies();
         stopFollowingTeam();
-        closed = true;
         await runner.stop();
       }
     },
