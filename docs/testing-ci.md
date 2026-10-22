@@ -125,7 +125,7 @@ that fails before the fix.
   read-only), make an outside change, land a buddy's edit and change a
   level. Each seed makes a list of steps, run one at a time, so it runs
   the same every time. On a pull request, a fixed 300 seeds on Linux and
-  Windows (under a minute); nightly, 30 minutes of random seeds, as a
+  Windows (a few minutes); nightly, 30 minutes of random seeds, as a
   scheduled run of the same `stress` job. A failing seed is shrunk to the
   fewest steps that still fail and printed; the pull request that fixes it
   adds them to `test/stress/regressions.json`, which every run replays.
