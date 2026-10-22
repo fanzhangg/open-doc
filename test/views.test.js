@@ -197,6 +197,8 @@ for (const name of VIEWS) {
     })()`);
     await run(`view.setMarks(${mark(false)})`);
     assert.equal(await before(), 'Some bold words');
+    await run(`view.setMarks(${JSON.stringify([{ kind: 'cursor', at: text.indexOf('bold'), by: 'Clippy' }])})`);
+    assert.equal(await before(), 'Some ', 'after markup: before the next character');
     assert.equal(await run(`getComputedStyle(document.querySelector('.pj-cursor-name')).display`), 'none');
     await run(`view.setMarks(${mark(true)})`);
     assert.equal(await run(`getComputedStyle(document.querySelector('.pj-cursor-name')).display`), 'block');
@@ -211,6 +213,11 @@ for (const name of VIEWS) {
     assert.deepEqual(await run('view.selection()'), { from: text.indexOf('bold'), to: text.indexOf('bold') + 4 });
     await select('words', 2, 2);
     assert.deepEqual(await run('view.selection()'), { from: text.indexOf('words') + 2, to: text.indexOf('words') + 2 });
+    const lines = '# Title\n\nPara.\n';
+    await make(name, lines);
+    await select('Title', 5, 5);
+    const end = lines.indexOf('\n');
+    assert.deepEqual(await run('view.selection()'), { from: end, to: end }, 'the end of a line, not the next line');
   });
 
   test(`${name} view: tops places offsets outside the viewport, and scrollTo brings one in`, async () => {
