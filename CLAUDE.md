@@ -1,6 +1,6 @@
 # Ponjo
 
-A markdown editor where people and AI buddies co-author docs.
+A text editor where people and AI buddies co-author files; Markdown is one of its views.
 Product: docs/product-vision.md, docs/user-experience.md. Design: docs/architecture.md.
 Comment format: spec/SPEC.md. Commands: README.md "Development".
 Before any commit, push or PR: the verify-before-push skill.
