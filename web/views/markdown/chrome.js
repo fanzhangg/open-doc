@@ -68,7 +68,7 @@ const LINK = `
     <button type="button" class="pj-icon-btn" data-action="unlink" data-icon="unlink" data-tip="Remove link" aria-label="Remove link" hidden></button>
   </div>`;
 
-const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block' };
+const BLOCK_LABELS = { paragraph: 'Normal text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', h4: 'Heading 4', h5: 'Heading 5', h6: 'Heading 6', code_block: 'Code block', front_matter: 'Front matter' };
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 

@@ -395,6 +395,52 @@ test('markdown view: pasting a URL over selected text links the text; other past
   assert.equal(await getText(), 'See [the plan](https://example.com/plan) not a link.\n');
 });
 
+test('A5: markdown view: plain text pastes as the text it is; pasted HTML keeps its formatting but leaves out images held in the page', async () => {
+  const paste = (text, html = null) => run(`(() => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', ${JSON.stringify(text)});
+    if (${JSON.stringify(html)}) clipboardData.setData('text/html', ${JSON.stringify(html)});
+    document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  })()`);
+  await make('markdown', 'Start.\n');
+  await select('Start.', 6, 6);
+  await paste(' open __init__.py');
+  assert.equal(await getText(), 'Start. open \\_\\_init\\_\\_\\.py\n', 'Markdown in plain text stays text');
+  await make('markdown', 'Start.\n');
+  await select('Start.', 6, 6);
+  await paste('# not a heading\n# nor this');
+  assert.equal(await getText(), 'Start.# not a heading\n\n\\# nor this\n', 'a line a paragraph');
+  await make('markdown', 'Start.\n');
+  await select('Start.', 6, 6);
+  await paste('Look here', `<p>Look <b>here</b><img src="data:image/png;base64,${'A'.repeat(5000)}"><img src="https://example.com/a.png" alt="pic"></p>`);
+  assert.equal(await getText(), 'Start.Look **here**![pic](https://example.com/a.png "pic")\n');
+});
+
+test('A5: markdown view: typing in a doc that defines links keeps its definitions, and its reference links as written', async () => {
+  const text = 'Para A.\n\nPara B sees [docs][d] and [d].\n\n[d]: https://example.com "Docs"\n';
+  await make('markdown', text);
+  await select('Para A.', 6, 6);
+  await type('Z');
+  assert.equal(await getText(), text.replace('Para A.', 'Para AZ.'));
+  await select('Para B sees ', 12, 12);
+  await type('Z');
+  assert.equal(await getText(), text.replace('Para A.', 'Para AZ.').replace('sees [docs]', 'sees Z[docs]'));
+});
+
+test('A5: markdown view: front matter shows as source, which nothing formats, and is saved as written', async () => {
+  const text = '---\ntitle:  Plan\ntags: [a, b]\n---\n\n# Plan\n\nBody.\n';
+  await make('markdown', text, { toolbar: true });
+  assert.equal(await run(`document.querySelector('.ProseMirror').firstElementChild.matches('pre.pj-front-matter')`), true);
+  assert.equal(await run(`document.querySelectorAll('.ProseMirror h1, .ProseMirror h2, .ProseMirror hr').length`), 1, 'no rule, no heading of its own');
+  await select('title:  Plan', 0, 5);
+  await run(`contract.tool('bold')`);
+  await run(`contract.tool('h1')`);
+  assert.equal(await getText(), text);
+  await select('title:  Plan', 12, 12);
+  await type('s');
+  assert.equal(await getText(), text.replace('Plan\ntags', 'Plans\ntags'));
+});
+
 test('markdown view: a task list item shows its box; clicking it ticks the item, saved as written otherwise', async () => {
   await make('markdown', '* [ ] one\n* [X] two\n\nAfter.\n');
   // A press in the box, in the item's gutter.

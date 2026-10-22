@@ -35,7 +35,7 @@ import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { createAnchor, locate } from '../../../src/core/anchor.js';
-import { project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
+import { definesLinks, project, projectBlocks, renderedRange, sourceRange } from '../../../src/markdown/project.js';
 import { splice } from '../../../src/markdown/splice.js';
 import { docRange, projectDoc, selectionSpan, textRange } from '../../pm-text.js';
 import { editItems } from '../../review.js';
@@ -116,16 +116,33 @@ const tableTab = $shortcut(() => ({
 }));
 
 // Pasting a single URL over selected text links the text to it, as Docs and
-// Notion do; any other paste is the clipboard plugin's.
-const pasteLink = $prose(() => new Plugin({
+// Notion do. Plain text goes in as the text it is, a paragraph a line, as
+// typed text does (Markdown in it stays text); formatted text (HTML) is the
+// clipboard plugin's, but for images held in the page itself (`data:`,
+// `blob:`), whose bytes would land in the doc.
+const paste = $prose(() => new Plugin({
   props: {
-    handlePaste(view, event) {
-      const url = event.clipboardData?.getData('text/plain').trim();
+    handlePaste(view, event, slice) {
+      const data = event.clipboardData;
+      const url = data?.getData('text/plain').trim();
       const { selection: { empty, from, to, $from }, schema, tr } = view.state;
       const type = schema.marks.link;
-      if (empty || !/^(https?:\/\/|mailto:)\S+$/i.test(url) || !$from.parent.type.allowsMarkType(type)) return false;
-      view.dispatch(tr.removeMark(from, to, type).addMark(from, to, type.create({ href: url })));
+      if (!empty && /^(https?:\/\/|mailto:)\S+$/i.test(url) && $from.parent.type.allowsMarkType(type)) {
+        view.dispatch(tr.removeMark(from, to, type).addMark(from, to, type.create({ href: url })));
+        return true;
+      }
+      // ProseMirror's own slice of plain text: its lines as paragraphs, or as they are in code.
+      if (!data || data.types.includes('text/html') || data.types.includes('vscode-editor-data')) return false;
+      view.dispatch(tr.replaceSelection(slice).scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste'));
       return true;
+    },
+    transformPastedHTML(html) {
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      for (const image of template.content.querySelectorAll('img')) {
+        if (/^\s*(data|blob):/i.test(image.getAttribute('src') ?? '')) image.remove();
+      }
+      return template.innerHTML;
     },
   },
 }));
@@ -271,7 +288,7 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(pasteLink).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(taskBox)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(taskBox)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(decorationPlugin(foundKey)).use(linkPlugin).use(bidiPlugin).use(uiPlugin(hooks))
     // The standard keys format as the toolbar does; typed Markdown still stays text.
     .use($prose(() => keymap({
@@ -358,9 +375,10 @@ export async function createMarkdownView({
   };
   const currentText = () => sourceOf(view().state.doc).text;
   const projectionCache = new Map(); // a block's text → its rendered lines
+  // A doc that may define links is projected whole: a block's links read by definitions elsewhere.
   const projected = (doc) => {
     const source = sourceOf(doc);
-    return (source.projection ??= source.blocks ? projectBlocks(source.text, source.blocks, projectionCache) : project(source.text));
+    return (source.projection ??= source.blocks && !definesLinks(source.text) ? projectBlocks(source.text, source.blocks, projectionCache) : project(source.text));
   };
 
   // Rendered ranges of the doc's text and of the editor's document are the
@@ -515,7 +533,8 @@ export async function createMarkdownView({
   /** Run a named formatting command against the current selection; true, as a key's command. */
   function run(name) {
     const v = view();
-    if (editable) commands[name]?.(v.state, (tr) => v.dispatch(tr));
+    // Front matter is source: nothing formats it.
+    if (editable && (name === 'undo' || name === 'redo' || blockType(v.state) !== 'front_matter')) commands[name]?.(v.state, (tr) => v.dispatch(tr));
     v.focus();
     return true;
   }

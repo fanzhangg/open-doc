@@ -75,3 +75,19 @@ test('empty documents', () => {
   assert.equal(splice('', 'hello\n'), 'hello\n');
   assert.equal(splice('hello\n', ''), '');
 });
+
+test('A5: reference links and their definitions stay as written, whichever block the editor changed', () => {
+  // The editor writes links inline and keeps no definitions.
+  const old = 'One.\n\nSee [docs][d] and ![pic][p].\n\n[d]: https://example.com\n[p]: a.png "Pic"\n\nLast.\n';
+  const inline = (text) => text.replace('[docs][d]', '[docs](https://example.com)').replace('![pic][p]', '![pic](a.png "Pic")').replace(/\n\[d\]:.*\n.*\n/, '');
+  assert.equal(splice(old, inline(old).replace('One.', 'One typed.')), old.replace('One.', 'One typed.'));
+  assert.equal(splice(old, inline(old).replace('Last.', 'Last typed.')), old.replace('Last.', 'Last typed.'));
+  // The block changed takes the editor's style; the definitions stay where they were.
+  assert.equal(splice(old, inline(old).replace('See', 'Now see')), old.replace('See [docs][d] and ![pic][p].', 'Now see [docs](https://example.com) and ![pic](a.png "Pic").'));
+});
+
+test('A5: front matter is one block, kept as written', () => {
+  const old = '---\ntitle:   Plan\n---\n\n# Plan\n';
+  assert.equal(splice(old, '---\ntitle:   Plan\n---\n\n# Plan typed\n'), '---\ntitle:   Plan\n---\n\n# Plan typed\n');
+  assert.equal(splice(old, '---\ntitle: Plan\n---\n\n# Plan\n'), '---\ntitle: Plan\n---\n\n# Plan\n', 'a change of its spaces is a change');
+});

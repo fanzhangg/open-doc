@@ -31,7 +31,14 @@ designed, not built.
   standard keys do the same: Mod+B bold, Mod+I italic, Mod+E inline code,
   Mod+Shift+X strikethrough, Mod+K a link.
 - **Typed Markdown stays text**: `**x**`, `## ` or `- ` is what it says, and
-  is saved escaped. **Pasted Markdown is formatted.**
+  is saved escaped. **Pasted plain text stays text** too, a line a
+  paragraph; pasted formatted text (from a web page or another editor)
+  keeps its formatting, but not images held in the page itself (`data:`),
+  which would put their bytes in the file.
+- **Front matter** (YAML between `---` lines at the top) shows as its
+  source, muted, typed into as text; nothing formats it.
+- **Link definitions** (`[d]: https://…`) are kept as written, and so is
+  every reference link (`[docs][d]`) in a block not changed but by typing.
 - **Keys:** Undo, Redo, the formatting above, Comment, Find, and focus
   mode (Ctrl+Shift+F). Enter and Tab work in lists and tables; Tab in a
   table's last cell adds a row;
@@ -168,8 +175,10 @@ block of the text it was given pairs with a block of its document,
 `getText` writes only the blocks changed since and splices them in, and
 `applyText` parses only the blocks where the new text differs, with a kept
 block on either side that must read as before. Both projections are kept
-per block. A doc whose blocks do not pair up (a link definition has no
-block in the document) is worked out whole. Milkdown's own walks of the
+per block. Link definitions lie between the blocks, as written; a doc
+that has one is parsed and projected whole, since a block's links read by
+them, and a block it changed other than by typing is saved by a splice of
+the whole doc. A doc whose blocks do not pair up is worked out whole. Milkdown's own walks of the
 whole doc on every change are left out (heading ids, unused) or kept to
 the changed blocks (ordered list labels; `web/markdown-schema.js`), and
 focus mode fades blocks by an attribute the chrome sets, not by the

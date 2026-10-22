@@ -211,8 +211,8 @@ shows only as set or not.
   Mod+I, Mod+E, Mod+Shift+X, Mod+K); typed Markdown such as `## `, `**x**`
   or `- ` stays text (saved escaped). To write Markdown by hand, switch the
   view off (Ctrl+Shift+T, again to switch back); `.md` then opens in the plain
-  editor. Pasted Markdown is still
-  formatted.
+  editor. Pasted plain text stays text too; pasted formatted text keeps
+  its formatting.
   The **Markdown rule**: a buddy's edit or a change from outside merges
   into a line you changed too only where that keeps how the line renders;
   where it would not, your text stays, as when you both change the same

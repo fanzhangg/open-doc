@@ -5,8 +5,8 @@
 //
 // Built from the CommonMark + GFM tree, with emphasis read the CJK-friendly
 // way (`**熟悉：**直接` is bold): each text block (paragraph, heading, table
-// cell, code block, raw HTML block) is a line, lines joined by `\n`, empty
-// ones skipped; inside one, text, inline code and inline HTML count as
+// cell, code block, raw HTML block, YAML front matter) is a line, lines
+// joined by `\n`, empty ones skipped; inside one, text, inline code and inline HTML count as
 // written, and the children of emphasis, strong, strikethrough and links;
 // images, footnote references and definitions count for nothing; a hard
 // break is a space; outside code blocks whitespace runs become one space and
@@ -18,7 +18,8 @@ import { gfm } from 'micromark-extension-gfm';
 import { cjkFriendlyExtension } from 'micromark-extension-cjk-friendly';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 
-const TEXT_BLOCKS = new Set(['paragraph', 'heading', 'tableCell', 'code', 'html']);
+const TEXT_BLOCKS = new Set(['paragraph', 'heading', 'tableCell', 'code', 'html', 'yaml']);
+const SOURCE_BLOCKS = new Set(['code', 'yaml']); // their text as written, whitespace and all
 const CONTAINERS = new Set([
   'root', 'blockquote', 'list', 'listItem', 'table', 'tableRow', 'footnoteDefinition',
 ]);
@@ -67,10 +68,14 @@ export function projectBlocks(markdown, blocks, cache) {
  */
 export const definesLinks = (markdown) => /^[ \t>*+\-\d.)]*\[[^\]\n]+\]:/m.test(markdown);
 
-/** The range { start, end } of each top-level block of `markdown`. */
+/**
+ * The range { start, end } of each top-level block of `markdown`. A link
+ * definition is not a block: the editor's document has none, and its text
+ * stays as written between the blocks.
+ */
 export function blockRanges(markdown) {
   return parseMarkdown(markdown).children
-    .filter((node) => node.position)
+    .filter((node) => node.position && node.type !== 'definition')
     .map((node) => ({ start: node.position.start.offset, end: node.position.end.offset }));
 }
 
@@ -88,12 +93,38 @@ function joined(lines, markdown) {
   return { text, offsets, source: markdown };
 }
 
+const FRONT_MATTER = /^---[ \t]*\n(?:([\s\S]*?)\n)?(?:---|\.\.\.)[ \t]*(?=\n|$)/;
+
+/**
+ * Whether `markdown` starts with what reads as front matter (withFrontMatter).
+ * A part of a doc past its start that does is read with the whole doc: there
+ * it is a rule and the blocks after it.
+ */
+export const startsFrontMatter = (markdown) => FRONT_MATTER.test(markdown);
+
 /** The markdown syntax tree (mdast) that the projection is built from. */
 export function parseMarkdown(markdown) {
-  return fromMarkdown(markdown, {
+  return withFrontMatter(markdown, (text) => fromMarkdown(text, {
     extensions: [gfm(), cjkFriendlyExtension()],
     mdastExtensions: [gfmFromMarkdown()],
-  });
+  }));
+}
+
+/**
+ * The tree `parse` (markdown → mdast) makes of `markdown`, with the YAML
+ * front matter it starts with, if any, as its first child, `{ type: 'yaml',
+ * value }`: as GitHub, Jekyll and Hugo read it, a `---` line first, up to
+ * the next `---` or `...` line. The rest is read as if the front matter were
+ * blank lines, so its offsets hold. The editor reads it so too
+ * (web/markdown-schema.js).
+ */
+export function withFrontMatter(markdown, parse) {
+  const found = FRONT_MATTER.exec(markdown);
+  if (!found) return parse(markdown);
+  const end = found[0].length;
+  const tree = parse(found[0].replace(/[^\n]/g, ' ') + markdown.slice(end));
+  tree.children.unshift({ type: 'yaml', value: found[1] ?? '', position: { start: { offset: 0 }, end: { offset: end } } });
+  return tree;
 }
 
 /** Source range `[start, end)` covering rendered range `[start, end)`. */
@@ -146,12 +177,12 @@ export function renderedRange({ text, offsets }, start, end) {
 function collectBlocks(node, source, lines) {
   if (TEXT_BLOCKS.has(node.type)) {
     const chars = [];
-    if (node.type === 'code' || node.type === 'html') {
+    if (node.type === 'code' || node.type === 'html' || node.type === 'yaml') {
       alignValue(node.value, node, source, chars);
     } else {
       for (const child of node.children) collectInline(child, source, chars);
     }
-    const line = node.type === 'code' ? toLine(chars) : collapse(chars);
+    const line = SOURCE_BLOCKS.has(node.type) ? toLine(chars) : collapse(chars);
     if (line.text.length > 0) lines.push(line);
     return;
   }

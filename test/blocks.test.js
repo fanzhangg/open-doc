@@ -138,17 +138,33 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
   assert.ok(typedOwn > runs / 4, `${typedOwn} of ${runs} typed into in their own style`);
 });
 
-test('a doc that defines a link, at any depth, is read whole', async () => {
+test('a doc that defines a link, at any depth, pairs up but is read whole', async () => {
   const parse = await editorParser();
   for (const definition of ['[a]: https://x', '> [a]: https://x', '- [a]: https://x', '1. > [^a]: a note']) {
     const text = `${definition}\n\nOne.\n\nTwo.\n\nSee [a] here.\n\nLast.\n`;
     const doc = parse(text);
-    assert.equal(blocksOf(doc, text), null, definition);
+    const blocks = blocksOf(doc, text);
+    assert.ok(blocks, definition);
+    assert.equal(parseRun(doc, text, blocks, text.replace('Two.', 'Too.'), parse), null, definition);
     // Even from a doc that paired up, a change that defines one is read whole.
     const plain = text.replace(definition, 'Plain.');
-    const blocks = blocksOf(parse(plain), plain);
-    assert.ok(blocks);
-    assert.equal(parseRun(parse(plain), plain, blocks, text, parse), null, definition);
+    assert.equal(parseRun(parse(plain), plain, blocksOf(parse(plain), plain), text, parse), null, definition);
+  }
+});
+
+test('A5: typing in a doc that defines links keeps its definitions, and its links as written', async () => {
+  const parse = await editorParser();
+  const serialize = await editorSerializer();
+  const serializeNodes = (nodes) => serialize(parse('').type.create(null, nodes));
+  const definitions = '[a]: https://x\n[b]: https://y "Why"';
+  const text = `[a]: https://x\n\nOne.\n\nSee [a] and [b][a] here.\n\n[b]: https://y "Why"\n`;
+  const base = parse(text);
+  const blocks = blocksOf(base, text);
+  assert.equal(base.childCount, 2, 'the document has no definitions');
+  for (const [i, was] of [[0, 'One.'], [1, 'See [a] and [b][a] here.']]) {
+    const edited = parse(`${was}typed\n\n${definitions}`).child(0);
+    const after = base.copy(Fragment.from(base.content.content.map((node, k) => (k === i ? edited : node))));
+    assert.equal(textOfDoc(after, base, text, blocks, serializeNodes, parse).text, text.replace(was, `${was}typed`), was);
   }
 });
 
