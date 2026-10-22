@@ -323,7 +323,15 @@ both changed one line in places apart and the doc's rules allow a character
 merge there; what was dropped comes back (a buddy's reply says `conflict`).
 It yields to a person's edit that started before it too, though it reached
 the host first; a buddy's turn that loses part of it so is marked
-`conflict` on its version in history, since its reply is already written. Of two edits that yield, the first to land wins. An edit
+`conflict` on its version in history, since its reply is already written.
+It yields to all such edits together: each moves over it as the ones
+before left it, merged with them by character (`pastYield`), so what it
+gave back comes back once, with every edit in it; the log keeps what they
+left of it. A page moves its edit on its way the same way, and takes the
+host's when an earlier person's edit made it land otherwise; typing not
+sent yet moves over what is left of the edit that yields, by character. An
+edit sent again after the host started again gives back nothing: that
+host no longer knows what yielded to it. Of two edits that yield, the first to land wins. An edit
 lands on the text in memory, the file is written, and only then does it go
 to every window as `ops` (`{ epoch, rev, ops, id }`, `id` the window's name
 for its own edit; `yields`, and a buddy's `reply` and `by`): a window

@@ -16,7 +16,7 @@ import { appendedComments, askedBy, newComment, newId, parseSidecar, peopleOf, s
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
-import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
+import { apply, diffOps, mapOffset, pastYield, transform } from '../core/ot.js';
 import { rulesOf } from '../rules/index.js';
 import { StoreError, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
 import { VERSION_ID, markConflict, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
@@ -109,7 +109,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // one that made rev `logStart + k + 1` at k, to move a window's edit from
   // an older rev, to know a window's edit sent again, and to tell a window
   // what it missed: { ops, id, event }, and the `base` text of one that
-  // yields, with a buddy's `reply`.
+  // yields, with a buddy's `reply`, and `left`, what people's edits from
+  // before it left of it (pastYield), the last landed at rev `end`.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
   // `writtenStat` is the file's stat as this service last wrote it: a file
@@ -276,12 +277,31 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       }
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
       const overridden = [];
-      for (const landed of log.slice(at - logStart)) {
-        const moved = transform(ops, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base, rules: await rules() });
+      const left = []; // what each edit that yields is left as, once this lands
+      for (let k = at - logStart; k < log.length; k++) {
+        const landed = log[k];
+        if (landed.base === undefined) {
+          ops = transform(ops, landed.ops).ops;
+          continue;
+        }
+        // An edit that yields, there since: it yields to this one, which
+        // started before it, as the people's edits before this one left it.
+        const was = landed.left ?? { ops: landed.ops, text: landed.base };
+        const moved = pastYield(ops, was, await rules());
         if (moved.dropped && landed.reply) overridden.push(landed.reply);
-        ops = moved.ops;
+        left.push([landed, { ...moved.left, end: rev + 1 }]);
+        if (!landed.left) {
+          ops = moved.ops;
+          continue;
+        }
+        // From the text the ones before left, to the text before the next
+        // edit that yields after them, or now.
+        const next = log.findIndex((later, j) => j >= was.end - logStart && later.base !== undefined);
+        ops = transform(moved.ops, diffOps(apply(was.text, was.ops), next === -1 ? text : log[next].base)).ops;
+        k = next === -1 ? log.length : next - 1;
       }
       if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
+      for (const [landed, now] of left) landed.left = now;
       land(ops, { id });
       typed(who);
       await saved();

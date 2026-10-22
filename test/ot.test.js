@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
+import { apply, diffOps, mapOffset, pastYield, transform } from '../src/core/ot.js';
 import { lineMatches, sameEnd, sameStart } from '../src/core/diff.js';
 import { DEFAULT_SETTINGS } from '../src/core/settings.js';
 import { rulesOf } from '../src/rules/index.js';
@@ -294,4 +294,33 @@ test('an edit that yields yields to one that started before it, too, though it r
   assert.equal(apply(buddy, transform(diffOps(base, base.replace('launch', 'start')), landed, { landedYields: true, base }).ops), buddy.replace('public launch', 'start'));
   const apart = base.replace('gather', 'collect');
   assert.equal(apply(buddy, transform(diffOps(base, apart), landed, { landedYields: true, base }).ops), buddy.replace('gather', 'collect'), 'apart in one line: merged by character');
+});
+
+test('A4: a line an edit that yields deletes, while people each have an edit on it from before it, comes back once, with every edit, in any order they land', () => {
+  let seed = 11;
+  const random = (n) => {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    return (seed >>> 16) % n;
+  };
+  const base = 'One two.\nThree four five.\nSix.\n';
+  const line = 'Three four five.\n';
+  const at = base.indexOf(line);
+  const yielding = { ops: [{ from: at, to: at + line.length, insert: '' }], text: base };
+  for (let round = 0; round < 200; round++) {
+    // Each person types a word of their own somewhere in the line.
+    const people = Array.from({ length: 2 + random(3) }, (_, k) => {
+      const from = at + random(line.length);
+      return [{ from, to: from, insert: `<${k}>` }];
+    });
+    let text = apply(base, yielding.ops);
+    let was = yielding;
+    for (const ops of people) {
+      const moved = pastYield(ops, was);
+      text = apply(text, moved.ops);
+      was = moved.left;
+    }
+    assert.equal(text.split('\n').length, base.split('\n').length, `the line once: ${JSON.stringify(text)}`);
+    for (let k = 0; k < people.length; k++) assert.equal(text.split(`<${k}>`).length, 2, `each edit once: ${JSON.stringify(text)}`);
+    assert.equal(text.replace(/<\d>/g, ''), base, 'the line as it was, around them');
+  }
 });

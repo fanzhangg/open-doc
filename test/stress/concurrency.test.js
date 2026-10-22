@@ -226,17 +226,18 @@ async function run(c) {
       } else if (kind === 'writable' && !writable) {
         writable = true;
         await readOnly(docPath, false);
-      } else if (kind === 'outside' && writable && pages.length === 1) {
-        // Another program adds a line: the host takes it, and tells it. With
-        // one page only: two pages that each made an edit before it would
-        // each give it back (#265).
+      } else if (kind === 'outside' && writable) {
+        // Another program adds a line, or deletes one that holds nothing
+        // typed: the host takes it, and tells it.
         const was = host.yields;
-        const bytes = await readFile(docPath, 'utf8');
-        const lines = bytes.split(/(?<=\n)/);
-        const at = Math.floor(a * (lines.length + 1));
-        const line = `‹o${number()}›\n`;
-        outsideTokens.push(line);
-        lines.splice(at, 0, c.crlf ? line.replace('\n', '\r\n') : line);
+        const lines = (await readFile(docPath, 'utf8')).split(/(?<=\n)/);
+        const plain = lines.map((line, k) => [line, k]).filter(([line]) => !/[‹›]/.test(line) && line.trim() !== '');
+        if (b < 0.5 && plain.length > 0) lines.splice(plain[Math.floor(a * plain.length)][1], 1);
+        else {
+          const line = `‹o${number()}›\n`;
+          outsideTokens.push(line);
+          lines.splice(Math.floor(a * (lines.length + 1)), 0, c.crlf ? line.replace('\n', '\r\n') : line);
+        }
         await writeFile(docPath, lines.join(''));
         await until(() => host.yields > was, 'the outside change taken', 10_000);
       }
@@ -269,12 +270,13 @@ async function run(c) {
     if (c.crlf && /(?<!\r)\n/.test(await readFile(docPath, 'utf8'))) return 'A5: the file lost its CRLF';
     if (/�|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text)) return `A5: a broken character: ${JSON.stringify(text)}`;
     // Each character is there no more times than anyone wrote it and, when
-    // no one deleted, at least as many as the pages typed: where it is, of
-    // two places an edit could be, does not count.
+    // no page deleted, at least as many times as the pages typed it (other
+    // programs delete only what holds nothing typed): where it is, of two
+    // places an edit could be, does not count.
     const twice = (text.match(TOKEN) ?? []).filter((token, k, all) => all.indexOf(token) !== k);
     const now = characters(text);
     const most = characters(FIRST, ...typedTokens, ...outsideTokens);
-    const least = characters(FIRST, ...typedTokens);
+    const least = characters(...typedTokens);
     if (twice.length > 0 || [...now].some(([char, n]) => n > (most.get(char) ?? 0))) return `A3: landed twice: ${twice.join(' ')} in ${JSON.stringify(text)}`;
     if (!c.deletes && [...least].some(([char, n]) => (now.get(char) ?? 0) < n)) return `A2: typing lost, in ${JSON.stringify(text)}`;
     return null;
