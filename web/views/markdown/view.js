@@ -46,10 +46,10 @@ import { cursorNode } from '../../marks.js';
 import { createChrome } from './chrome.js';
 
 const FLASH_MS = 6000;
-const highlightKey = new PluginKey('opendoc-highlights');
-const flashKey = new PluginKey('opendoc-flash');
-const linkKey = new PluginKey('opendoc-link');
-const FROM_DISK = 'opendoc-from-disk'; // meta of a change applied from disk, not typed
+const highlightKey = new PluginKey('ponjo-highlights');
+const flashKey = new PluginKey('ponjo-flash');
+const linkKey = new PluginKey('ponjo-link');
+const FROM_DISK = 'ponjo-from-disk'; // meta of a change applied from disk, not typed
 
 // A ProseMirror doc never changes, so its projection is worked out once per
 // doc, however often the marks, the margin ask.

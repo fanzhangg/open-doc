@@ -1,6 +1,6 @@
 # User Experience
 
-How people and AI buddies write together in OpenDoc. For why, see the
+How people and AI buddies write together in Ponjo. For why, see the
 [product vision](product-vision.md); for how it is built, see
 [architecture](architecture.md).
 
@@ -103,7 +103,7 @@ and the first line shows next to its name.
 
 Editing the files by hand works too: the app picks up changes at once. What
 runs every AI buddy is the agent picked in Settings > Agents (Claude Code,
-Codex, or the OpenDoc agent, which runs a cloud model you pick): a
+Codex, or the Ponjo agent, which runs a cloud model you pick): a
 program in `agents/` in your config folder that you may edit (see
 [agent config](agent-config.md)). The one picked shows its settings there,
 under it (a model, an API key), kept apart from its program; an API key
@@ -180,9 +180,9 @@ shows only as set or not.
 
 - **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
   who made it (you, a teammate, both when you typed together, an AI buddy
-  with the comment it answered, or a program outside OpenDoc), a diff against the one before, and Restore. A version is
+  with the comment it answered, or a program outside Ponjo), a diff against the one before, and Restore. A version is
   saved before and after each buddy edit, before each change from outside
-  OpenDoc, and for each undo and restore, so any of them can be restored.
+  Ponjo, and for each undo and restore, so any of them can be restored.
   History is kept in the config folder, never next to the doc.
 - **Changes from outside** (a `git pull`, another editor) show up live and
   merge with your typing. Where they overlap what you are typing, your typing
@@ -238,6 +238,6 @@ shows only as set or not.
   renamed, moved or deleted here.
 - **Comments** are in `X.md.opendoc.jsonl` next to the doc, one per line, so
   they merge in git ([format](../spec/SPEC.md)). Moving a doc outside the app,
-  move this file with it. A sidecar from OpenDoc 1
+  move this file with it. A version 1 sidecar
   (`X.md.opendoc.json`) is not read; a banner says so and the file is left
   as it is.

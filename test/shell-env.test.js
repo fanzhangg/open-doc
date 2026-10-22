@@ -9,7 +9,7 @@ const unix = process.platform !== 'win32';
 
 /** A fake login shell: prints `noise`, then runs the script it is given. */
 async function fakeShell(body) {
-  const path = join(await mkdtemp(join(tmpdir(), 'opendoc-shell-')), 'shell');
+  const path = join(await mkdtemp(join(tmpdir(), 'ponjo-shell-')), 'shell');
   await writeFile(path, `#!/bin/sh\n${body}\n`);
   await chmod(path, 0o755);
   return path;

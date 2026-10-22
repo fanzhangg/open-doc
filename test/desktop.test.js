@@ -14,7 +14,7 @@ import {
 } from '../desktop/folder.js';
 import { tempDoc } from './helpers.js';
 
-const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-desktop-'));
+const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-desktop-'));
 
 const SIDECAR = '{"opendoc":3}\n{"id":"c_desk00001","by":{"id":"u_alice01","name":"alice","kind":"human"},"at":"2026-10-01T10:00:00Z","body":"hi"}\n';
 

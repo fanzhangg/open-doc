@@ -16,7 +16,7 @@ const who = async (opened) => (await opened.state()).agents.map((a) => [a.name, 
 
 // A project folder with plan.md and the buddies `files` ({ name: text }) in .opendoc/buddies/.
 async function projectFolder(files = {}) {
-  const folder = await mkdtemp(join(tmpdir(), 'opendoc-project-'));
+  const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
   await writeFile(join(folder, 'plan.md'), SAMPLE);
   if (Object.keys(files).length > 0) await mkdir(join(folder, '.opendoc', 'buddies'), { recursive: true });
   for (const [name, text] of Object.entries(files)) await writeFile(join(folder, '.opendoc', 'buddies', `${name}.md`), text);
@@ -87,7 +87,7 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
     for (const name of ['clippy', 'ada']) await assert.rejects(opened.call('saveSettings', { name }), /is taken/, 'your name is no buddy\'s');
   });
   // Any other doc has the same Clippy, and its runs say who it is now.
-  const doc = join(await mkdtemp(join(tmpdir(), 'opendoc-doc-')), 'notes.md');
+  const doc = join(await mkdtemp(join(tmpdir(), 'ponjo-doc-')), 'notes.md');
   await writeFile(doc, SAMPLE);
   await opening(doc, { settingsDir }, async (opened) => {
     assert.deepEqual(await who(opened), [mine]);
@@ -203,7 +203,7 @@ test('a project cloned on another machine, or moved, has the same buddies and th
   const folder = await projectFolder({ Critic: 'Checks every claim.\n' });
   const here = await fakeConfig();
   const there = await fakeConfig();
-  const clone = join(await mkdtemp(join(tmpdir(), 'opendoc-clone-')), 'project');
+  const clone = join(await mkdtemp(join(tmpdir(), 'ponjo-clone-')), 'project');
   await cp(folder, clone, { recursive: true });
   const seen = await opening(join(folder, 'plan.md'), { settingsDir: here, folder }, (opened) => opened.state());
   const cloned = await opening(join(clone, 'plan.md'), { settingsDir: there, folder: clone }, (opened) => opened.state());

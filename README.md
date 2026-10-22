@@ -1,11 +1,11 @@
-# <img src="build/logo.svg" alt="OpenDoc" width="280" height="80">
+# <img src="build/logo.svg" alt="Ponjo" width="212" height="80">
 
 An editor to co-author local text files with your human and AI buddies.
 
 - **Real-time collaboration, humans and AI buddies together:** You and your AI buddies edit, comment and @mention in the same doc at the same time. No handoffs, no syncing between tools.
 - **You are in control:** AI buddies work beside you through comments and edits. Every change an AI buddy makes is shown and can be undone in one click, so they never take over your doc.
 - **Teammates in a browser:** Invite people to a project with a link. They open it in a browser, with no install or account, and once you let them in they read or edit any doc in it with you, seeing who is here and where each person's cursor is. Your computer hosts the project, so it is shared while the app is open.
-- **Open & private:** Open source, plain text files with an open comment format, and works with any command-line agent. Your docs stay on your machine: teammates' edits pass through a relay that stores nothing, and OpenDoc keeps nothing on a server.
+- **Open & private:** Open source, plain text files with an open comment format, and works with any command-line agent. Your docs stay on your machine: teammates' edits pass through a relay that stores nothing, and Ponjo keeps nothing on a server.
 
 Still not convinced? See the [online demo](https://fanzhangg.github.io/open-doc/preview/?folder)
 
@@ -30,7 +30,7 @@ npm install
 npm run build                 # bundle the editor into dist/web
 npm run desktop               # build and launch the desktop app
 npm run desktop -- path/to/doc.md   # open a doc (or a folder) directly
-OPENDOC_RELAY=ws://127.0.0.1:8787 npm run desktop   # share through the relay run locally (`npx wrangler dev` in relay/, after the build), not wss://ponjo.app
+PONJO_RELAY=ws://127.0.0.1:8787 npm run desktop   # share through the relay run locally (`npx wrangler dev` in relay/, after the build), not wss://ponjo.app
 
 npm run lint
 npm ci --prefix relay         # once: wrangler, which runs the relay locally for the tests

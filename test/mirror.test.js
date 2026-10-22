@@ -16,8 +16,8 @@ async function filesIn(dir) {
 }
 
 test('the mirror holds what the project shows: no hidden names, links out, node_modules, binaries or files past 20 MB', async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
-  const outside = await mkdtemp(join(tmpdir(), 'opendoc-outside-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
+  const outside = await mkdtemp(join(tmpdir(), 'ponjo-outside-'));
   await writeFile(join(outside, 'secret.md'), 'secret\n');
   await mkdir(join(root, 'notes', 'deep'), { recursive: true });
   await mkdir(join(root, '.git'));
@@ -34,7 +34,7 @@ test('the mirror holds what the project shows: no hidden names, links out, node_
   await symlink(join(root, 'plan.md'), join(root, 'alias.md'));
   await symlink(outside, join(root, 'linked'), 'junction');
 
-  const settingsDir = await mkdtemp(join(tmpdir(), 'opendoc-config-'));
+  const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   const dir = await syncMirror(root, mirrorDir(root, settingsDir));
   assert.ok(dir.startsWith(join(settingsDir, 'mirrors')));
   assert.deepEqual(await filesIn(dir), ['alias.md', 'notes/deep/a.txt', 'plan.md', 'plan.md.opendoc.jsonl']);
@@ -42,10 +42,10 @@ test('the mirror holds what the project shows: no hidden names, links out, node_
 });
 
 test('a sync copies what changed, drops what went, and puts back what an agent changed in the mirror', async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'opendoc-project-')));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
   await writeFile(join(root, 'plan.md'), 'Plan.\n');
   await writeFile(join(root, 'notes.md'), 'Notes.\n');
-  const dir = mirrorDir(root, await mkdtemp(join(tmpdir(), 'opendoc-config-')));
+  const dir = mirrorDir(root, await mkdtemp(join(tmpdir(), 'ponjo-config-')));
   await syncMirror(root, dir);
 
   await writeFile(join(root, 'plan.md'), 'Plan, longer.\n');

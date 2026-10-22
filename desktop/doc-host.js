@@ -26,7 +26,7 @@
 // The host says `{ type: 'ready' }` once it can take them, and
 // `{ type: 'join', folder, name }` when someone asks to join a project.
 //
-// The relay is at OPENDOC_RELAY (a ws: or wss: URL; empty: no sharing), by
+// The relay is at PONJO_RELAY (a ws: or wss: URL; empty: no sharing), by
 // default the one deployed (relay/wrangler.toml), and a link opens the
 // teammate's page it serves, at the same origin, with the room.
 
@@ -39,16 +39,16 @@ import { createTeam } from '../src/host/team.js';
 import { renameFile } from './files.js';
 import { firstDoc, listDocs } from './folder.js';
 
-const RELAY = process.env.OPENDOC_RELAY ?? 'wss://ponjo.app';
+const RELAY = process.env.PONJO_RELAY ?? 'wss://ponjo.app';
 
 // An Electron utility process; plain Node's child_process.fork in the tests.
 const channel = process.parentPort
   ? { listen: (fn) => process.parentPort.on('message', (event) => fn(event.data, event.ports)), send: (message) => process.parentPort.postMessage(message) }
   : { listen: (fn) => process.on('message', (message) => fn(message, [])), send: (message) => process.send(message) };
 
-// For the smoke test: while the file `OPENDOC_HOLD_SAVES` names exists, the answer
+// For the smoke test: while the file `PONJO_HOLD_SAVES` names exists, the answer
 // to an edit waits, so the test can type while one is on its way.
-const holdSaves = process.env.OPENDOC_HOLD_SAVES;
+const holdSaves = process.env.PONJO_HOLD_SAVES;
 const held = async () => {
   while (holdSaves && existsSync(holdSaves)) await new Promise((done) => setTimeout(done, 50));
 };

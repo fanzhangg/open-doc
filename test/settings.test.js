@@ -10,11 +10,11 @@ import { markdown } from '../web/views/markdown/index.js';
 import { markdownRule } from '../src/rules/markdown.js';
 
 const MARKDOWN_DEFAULTS = { font: 'sans', width: 'normal', outline: true, focus: false, wordCount: false };
-const tempDir = () => mkdtemp(join(tmpdir(), 'opendoc-settings-'));
+const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-settings-'));
 
 test('configDir follows each OS convention and the override', () => {
   const home = '/home/u';
-  assert.equal(configDir({ OPENDOC_CONFIG_DIR: '/x' }, 'win32', home), '/x');
+  assert.equal(configDir({ PONJO_CONFIG_DIR: '/x' }, 'win32', home), '/x');
   assert.equal(configDir({ APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, 'win32', home), join('C:\\Users\\u\\AppData\\Roaming', 'OpenDoc'));
   assert.equal(configDir({}, 'darwin', home), join(home, 'Library', 'Application Support', 'OpenDoc'));
   assert.equal(configDir({ XDG_CONFIG_HOME: '/cfg' }, 'linux', home), join('/cfg', 'opendoc'));
@@ -201,7 +201,7 @@ test('agents: a manifest declares the fields; one that is not valid leaves the a
   const none = { id: 'bot', name: 'bot', about: '', settings: [] };
   for (const bad of [null, [], 'Bot', { name: '' }, { name: 'Bot', about: 3 }, { name: 'Bot', settings: {} }]) assert.deepEqual(agentOf('bot', bad), none, JSON.stringify(bad));
   for (const field of [
-    { key: 'Model', type: 'text', label: 'Model', default: '' }, // a key names OPENDOC_SETTING_<KEY>: lower case only
+    { key: 'Model', type: 'text', label: 'Model', default: '' }, // a key names PONJO_SETTING_<KEY>: lower case only
     { key: 'a-b', type: 'text', label: 'A', default: '' },
     { key: 'model', type: 'url', label: 'Model', default: '' },
     { key: 'model', type: 'text', default: '' },

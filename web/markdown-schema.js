@@ -39,7 +39,7 @@ const link = linkSchema.extendSchema((schema) => (ctx) => ({ ...schema(ctx), inc
 // heading's text), so they are left out; labels are kept in step as
 // Milkdown does, but only in the top-level blocks a change touched.
 const listOrder = $prose((ctx) => new Plugin({
-  key: new PluginKey('opendoc-list-order'),
+  key: new PluginKey('ponjo-list-order'),
   appendTransaction(transactions, oldState, { doc, tr }) {
     if (transactions.some((t) => t.getMeta('addToHistory') === false || !t.isGeneric)) return null;
     const start = oldState.doc.content.findDiffStart(doc.content);

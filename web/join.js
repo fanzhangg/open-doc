@@ -5,8 +5,8 @@
 
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
-const KEY = 'opendoc.key';
-const NAME = 'opendoc.name';
+const KEY = 'ponjo.key';
+const NAME = 'ponjo.name';
 const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a letter or digit';
 
 function stored(item) {

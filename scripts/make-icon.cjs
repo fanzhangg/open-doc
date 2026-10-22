@@ -53,9 +53,9 @@ app.whenReady().then(async () => {
   const svg = await draw('appIcon');
   writeFileSync(join(build, 'icon.svg'), svg + '\n');
   const mark = svg.replace('<svg ', '<svg x="0" y="0" width="80" height="80" ');
-  const logo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 270 80" width="270" height="80" role="img" aria-label="OpenDoc">
+  const logo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 80" width="204" height="80" role="img" aria-label="Ponjo">
     <style>text{fill:#1f1d24;font:600 38px Inter,"Segoe UI",sans-serif;letter-spacing:-1px}@media(prefers-color-scheme:dark){text{fill:#f4f2ec}}</style>
-    ${mark}<text x="82" y="54">OpenDoc</text>
+    ${mark}<text x="82" y="54">Ponjo</text>
   </svg>`;
   writeFileSync(join(build, 'logo.svg'), logo + '\n');
   const documentSvg = await draw('documentIcon');
@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
     writeFileSync(join(build, `${name}.icns`), icns(png));
   }
   window.destroy();
-  console.log('Generated application and document SVG, PNG (1024px), ICO (16-256px), ICNS (16-1024px), and the OpenDoc wordmark.');
+  console.log('Generated application and document SVG, PNG (1024px), ICO (16-256px), ICNS (16-1024px), and the Ponjo wordmark.');
   app.quit();
 }).catch((error) => {
   console.error(error);

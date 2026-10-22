@@ -14,7 +14,7 @@
 //
 // Without a path it tests the packaged app in release/ if there is one, else
 // the app from this checkout. Settings and the Electron profile go to a temp
-// folder, so a running OpenDoc and the user's settings are not touched. The
+// folder, so a running Ponjo and the user's settings are not touched. The
 // app is driven over the DevTools protocol, the one port it opens here.
 
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ import { launchElectron, waitFor } from './devtools.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGED = {
   win32: join(root, 'release', 'win-unpacked', 'OpenDoc.exe'),
-  linux: join(root, 'release', 'linux-unpacked', 'opendoc'),
+  linux: join(root, 'release', 'linux-unpacked', 'ponjo'),
   darwin: join(root, 'release', 'mac', 'OpenDoc.app', 'Contents', 'MacOS', 'OpenDoc'),
 }[process.platform];
 
@@ -36,7 +36,7 @@ const packaged = given ?? (PACKAGED && existsSync(PACKAGED) ? PACKAGED : null);
 const exe = packaged ?? createRequire(import.meta.url)('electron');
 const appArgs = packaged ? [] : [join(root, 'desktop', 'main.js')];
 
-const work = mkdtempSync(join(tmpdir(), 'opendoc-smoke-'));
+const work = mkdtempSync(join(tmpdir(), 'ponjo-smoke-'));
 const docs = ['plan.md', 'notes.md'].map((name) => {
   const doc = join(work, name);
   copyFileSync(join(root, 'test', 'fixtures', 'plan.md'), doc);
@@ -54,7 +54,7 @@ chmodSync(join(config, 'agents', 'fake'), 0o755);
 writeFileSync(join(config, 'agents', 'fake.cmd'), `@node "${fake}"\r\n`);
 writeFileSync(join(config, 'settings.json'), JSON.stringify({ agent: 'fake' }));
 const hold = join(work, 'hold-saves'); // while it exists, the doc host holds back the answer to a save (desktop/doc-host.js)
-const env = { ...process.env, OPENDOC_CONFIG_DIR: config, FAKE_DIR: work, OPENDOC_HOLD_SAVES: hold };
+const env = { ...process.env, PONJO_CONFIG_DIR: config, FAKE_DIR: work, PONJO_HOLD_SAVES: hold };
 delete env.ELECTRON_RUN_AS_NODE;
 
 const step = (text) => console.log(`smoke: ${text}`);
@@ -82,7 +82,7 @@ for (const [i, doc] of docs.entries()) {
     for (let i = 0; i < 100 && !document.querySelector('.ProseMirror'); i++) await new Promise((r) => setTimeout(r, 100));
     return { title: document.title, text: document.querySelector('.ProseMirror')?.textContent ?? '' };
   })()`);
-  check(loaded.title === `${name} — opendoc`, `a window shows ${name} (${loaded.title})`);
+  check(loaded.title === `${name} — Ponjo`, `a window shows ${name} (${loaded.title})`);
   check(loaded.text.includes('Q4 Launch Plan'), `the editor loaded ${name}`);
   check(await answers(page, 'Q4 Launch Plan', `Q${i + 1} Launch Plan`, doc), `a buddy answers in ${name} and its edit lands`);
 }
@@ -106,7 +106,7 @@ check(revision === 'Howdy', `the buddy's revision shows (${revision})`);
 check(await undoesOwnOnly(plain, code, 'Howdy', 'Hiya'), 'Cmd+Z after a buddy\'s edit undoes your typing, not the buddy\'s edit');
 check(await undoesReply(plain, code, 'Howdy'), 'Undo on the reply takes the buddy\'s edit back');
 const first = await app.page('plan.md');
-const saved = await first.evaluate(`window.opendocHost.call('saveSettings', { views: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
+const saved = await first.evaluate(`window.ponjoHost.call('saveSettings', { views: { markdown: { font: 'serif' } } }).then((r) => Boolean(r.result))`);
 check(saved, 'a setting was saved');
 
 step('the Markdown view, off and on');
@@ -154,7 +154,7 @@ step('relaunch');
 app = await launch([docs[0]]);
 const relaunched = await app.page('plan.md');
 // From the settings the page got, not from how the editor shows them: the editor is off by now.
-const second = await waitFor(() => relaunched.evaluate(`window.opendocHost.call('state').then((r) => r.result.settings.views.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
+const second = await waitFor(() => relaunched.evaluate(`window.ponjoHost.call('state').then((r) => r.result.settings.views.markdown?.font)`), 15_000, 'the settings').catch(() => undefined);
 check(second === 'serif', `the setting survived the relaunch (font: ${second})`);
 await app.quit();
 
@@ -166,7 +166,7 @@ process.exit(failed ? 1 : 0);
 // reply is in and the doc on disk has the new title.
 async function answers(page, from, title, doc) {
   const replied = await page.evaluate(`(async () => {
-    const call = async (type, arg) => (await window.opendocHost.call(type, arg)).result;
+    const call = async (type, arg) => (await window.ponjoHost.call(type, arg)).result;
     const { id } = await call('comment', { anchor: null, body: '@Clippy replace "${from}" with "${title}"' });
     for (let i = 0; i < 200; i++) {
       const thread = (await call('state'))?.threads.find((t) => t.id === id);
@@ -184,7 +184,7 @@ async function commentShows(page, text, quote) {
   const start = text.indexOf(quote);
   const end = start + quote.length;
   const anchor = { exact: quote, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(end, end + 32), start };
-  const id = await page.evaluate(`window.opendocHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
+  const id = await page.evaluate(`window.ponjoHost.call('comment', ${JSON.stringify({ anchor, body: 'A better name?' })}).then((r) => r.result.id)`);
   return waitFor(() => page.evaluate(`document.querySelector('.od-stage [data-thread="${id}"]')?.textContent === ${JSON.stringify(quote)}`), 15_000, 'the highlight')
     .then(() => id, () => false);
 }
@@ -228,7 +228,7 @@ async function ownSettingsApply(page) {
 
 // How many versions of its doc the history of `page` holds.
 function versionCount(page) {
-  return page.evaluate(`window.opendocHost.call('history').then((r) => r.result.versions.length)`);
+  return page.evaluate(`window.ponjoHost.call('history').then((r) => r.result.versions.length)`);
 }
 
 // Select `quote` in the doc in `page` and click the bubble's Comment: true

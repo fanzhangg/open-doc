@@ -1,11 +1,11 @@
 // Talks to the doc in the doc host (src/host/doc-service.js) through the
-// line the desktop app's preload gives the page (window.opendocHost), or in
+// line the desktop app's preload gives the page (window.ponjoHost), or in
 // a plain browser through the relay (relay.js).
 
 import { identity } from './join.js';
 import { relayHost } from './relay.js';
 
-const host = window.opendocHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
+const host = window.ponjoHost ?? relayHost(location.origin.replace(/^http/, 'ws'), new URLSearchParams(location.search), identity);
 
 async function call(type, arg) {
   const { result, error } = await host.call(type, arg);
@@ -43,7 +43,7 @@ export const api = {
   line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
-   * OpenDoc comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   * Ponjo comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
    */
   scripts: () => call('scripts'),
   /** Write shipped agent `name` (its program and manifest) again as it came. */

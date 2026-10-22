@@ -54,7 +54,7 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), whose mirror (mirror.js) runs get as OPENDOC_PROJECT; `team`,
+ * mode), whose mirror (mirror.js) runs get as PONJO_PROJECT; `team`,
  * its Team (team.js).
  * `secrets()` gives the agents' secrets, decrypted ({ <agent>: { <key>:
  * value } }, src/store/secrets.js), handed to runs with the other settings.

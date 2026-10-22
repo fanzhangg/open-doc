@@ -72,7 +72,7 @@ let app;
 let page;
 
 before(async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'opendoc-perf-'));
+  const dir = await mkdtemp(join(tmpdir(), 'ponjo-perf-'));
   await build({
     entryPoints: [join(root, 'test', 'collab', 'page.js')], outfile: join(dir, 'page.js'),
     bundle: true, format: 'iife', external: ['mermaid'], logLevel: 'error',

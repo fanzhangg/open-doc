@@ -69,7 +69,7 @@ export async function readDoc(docPath) {
     throw error;
   }
   const decoded = decodeText(bytes);
-  if (!decoded) throw new StoreError('not_text', `${basename(docPath)} is not UTF-8 text, so OpenDoc does not open it`);
+  if (!decoded) throw new StoreError('not_text', `${basename(docPath)} is not UTF-8 text, so Ponjo does not open it`);
   return { ...decoded, hash: hashText(decoded.text) };
 }
 

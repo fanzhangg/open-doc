@@ -7,7 +7,7 @@ import { createSettings } from './settings.js';
 import { setupSettings, setupTooltips } from './settings-dialog.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 
-const desktop = window.opendocDesktop;
+const desktop = window.ponjoDesktop;
 const list = document.querySelector('.od-recent ul');
 const empty = document.querySelector('.od-recent-empty');
 

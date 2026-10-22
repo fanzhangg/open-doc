@@ -48,7 +48,7 @@ let ids = 0; // gradient ids, unique per page
 // icon grid (824 of 1024). macOS 26 shrinks an icon that does not fill this
 // shape onto a grey plate.
 export function appIcon() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc' });
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'Ponjo' });
   const defs = node('defs', {});
   const gradient = node('linearGradient', { id: 'od-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
   gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
@@ -68,7 +68,7 @@ export function appIcon() {
 // Clippy's face overlaps the folded page; its white halo cuts the page edge
 // where they cross.
 export function documentIcon() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'OpenDoc document' });
+  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'Ponjo document' });
   svg.append(
     node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
     node('path', { d: 'M28 88V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),

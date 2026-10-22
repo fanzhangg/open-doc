@@ -1,4 +1,4 @@
-// The opendoc page: wires the editor, the comment margin, the people (the
+// The Ponjo page: wires the editor, the comment margin, the people (the
 // doc's buddies and you) and the doc in the doc host together. Typing goes
 // to the doc host as operations, which orders every edit and writes the doc
 // (web/client.js); others' edits (a buddy's, another program's) come back as
@@ -33,7 +33,7 @@ const ON_DISK = 'Edited on disk'; // a change no collaborator is known to have m
 // than WAIT_FOR_PAUSE_MS: taking them in while keys arrive would stall the keys.
 const TYPING_PAUSE_MS = 600;
 const WAIT_FOR_PAUSE_MS = 3000;
-const COMMENTS_KEY = 'opendoc.comments'; // 'hidden' while the human keeps comments out of view
+const COMMENTS_KEY = 'ponjo.comments'; // 'hidden' while the human keeps comments out of view
 
 const status = document.querySelector('.od-status');
 const missingBanner = document.querySelector('.od-missing');
@@ -73,19 +73,19 @@ let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
 // The desktop app swaps one doc's page for another without a blank frame: it
-// shows this page once `opendocReady` resolves (the doc and the sidebar are
+// shows this page once `ponjoReady` resolves (the doc and the sidebar are
 // drawn), and before replacing it, or closing its window, asks it to let go
-// of its doc (`opendocLeave`): save the last edit, stop taking input, and say
-// how it was left, for the next page. `opendocStay` undoes that when the
+// of its doc (`ponjoLeave`): save the last edit, stop taking input, and say
+// how it was left, for the next page. `ponjoStay` undoes that when the
 // switch fails.
 let markReady;
-window.opendocReady = new Promise((resolve) => { markReady = resolve; });
-window.opendocLeave = async () => {
+window.ponjoReady = new Promise((resolve) => { markReady = resolve; });
+window.ponjoLeave = async () => {
   if (editor) await client.landed();
   document.body.inert = true;
   return { ...files?.state(), commentsHidden: !commentsShown() };
 };
-window.opendocStay = () => {
+window.ponjoStay = () => {
   document.body.inert = false;
 };
 
@@ -104,7 +104,7 @@ function showLine(line) {
 async function start() {
   api.line(showLine);
   // A teammate's page in a browser: their name, picked once, joins them.
-  if (!window.opendocHost && !named()) await askName();
+  if (!window.ponjoHost && !named()) await askName();
   let initial;
   try {
     initial = await api.state();
@@ -149,7 +149,7 @@ async function start() {
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
-  window.opendocDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
+  window.ponjoDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
   files = createFileList({
     place: initial.place,
     onError: (message) => setStatus(message, 'error'),
@@ -457,7 +457,7 @@ function setMissing(on) {
   missingBanner.hidden = !on;
   if (on) {
     const name = document.querySelector('.od-doc-name').textContent;
-    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside OpenDoc. Changes here are not being saved.`;
+    missingBanner.querySelector('.od-banner-text').textContent = `${name} was moved or deleted outside Ponjo. Changes here are not being saved.`;
     setStatus('Not saved: the doc is missing', 'error');
     return;
   }
@@ -566,15 +566,15 @@ function showReadOnly(problem) {
   readOnlyBanner.hidden = !problem;
   if (!problem) return;
   readOnlyBanner.querySelector('.od-banner-text').textContent = {
-    older: 'These comments are from an older OpenDoc, so they are read-only here.',
-    newer: 'These comments are from a newer OpenDoc, so they are read-only here. Update OpenDoc to add comments.',
+    older: 'These comments are from an older Ponjo, so they are read-only here.',
+    newer: 'These comments are from a newer Ponjo, so they are read-only here. Update Ponjo to add comments.',
     invalid: `This doc's comments file does not start with {"opendoc":${FORMAT_VERSION}}, so comments are read-only. Fix the file to add comments.`,
   }[problem];
   readOnlyBanner.querySelector('[data-action="update"]').hidden = problem !== 'newer';
-  readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.opendocDesktop;
+  readOnlyBanner.querySelector('[data-action="start-over"]').hidden = !window.ponjoDesktop;
   const reveal = readOnlyBanner.querySelector('[data-action="reveal"]');
   reveal.textContent = REVEAL_LABEL;
-  reveal.hidden = problem === 'newer' || !window.opendocDesktop;
+  reveal.hidden = problem === 'newer' || !window.ponjoDesktop;
 }
 
 readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
@@ -582,10 +582,10 @@ readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click',
 });
 readOnlyBanner.querySelector('[data-action="start-over"]').addEventListener('click', () => {
   if (!window.confirm('Move this doc\'s comments file to the Trash and start new comments?\n\nIts comments are no longer shown here. You can put the file back from the Trash.')) return;
-  window.opendocDesktop.trashSidecar().catch((error) => setStatus(`Could not move the comments file: ${error.message}`, 'error'));
+  window.ponjoDesktop.trashSidecar().catch((error) => setStatus(`Could not move the comments file: ${error.message}`, 'error'));
 });
 readOnlyBanner.querySelector('[data-action="reveal"]').addEventListener('click', () => {
-  window.opendocDesktop.revealSidecar().catch(() => {});
+  window.ponjoDesktop.revealSidecar().catch(() => {});
 });
 
 // The Comments button shows or hides the margin and the highlights in the
@@ -833,13 +833,13 @@ function anchorTops(items) {
 
 function showDocName(name) {
   docName = name;
-  document.title = `${name} — opendoc`;
+  document.title = `${name} — Ponjo`;
   document.querySelector('.od-doc-name').textContent = name;
 }
 
 // In the desktop app, clicking the doc name renames the doc (File > Rename).
 function offerRename() {
-  const desktop = window.opendocDesktop;
+  const desktop = window.ponjoDesktop;
   if (!desktop) return;
   const name = document.querySelector('.od-doc-name');
   Object.assign(name, { tabIndex: 0, title: 'Rename' });

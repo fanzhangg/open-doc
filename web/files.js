@@ -18,8 +18,8 @@ import { icon } from './icons.js';
 const DRAG_SLOP_PX = 4;
 const OPEN_ON_HOVER_MS = 700;
 const SCROLL_EDGE_PX = 28; // a drag this close to the tree's top or bottom scrolls it
-const FILTER_KEY = 'opendoc.filesFilter:'; // + the folder's name: what was typed in its filter
-const WIDTH_KEY = 'opendoc.filesWidth'; // the sidebar width the human dragged to, in px
+const FILTER_KEY = 'ponjo.filesFilter:'; // + the folder's name: what was typed in its filter
+const WIDTH_KEY = 'ponjo.filesWidth'; // the sidebar width the human dragged to, in px
 const MIN_WIDTH_PX = 180;
 const MAX_WIDTH_PX = 480;
 const isMac = /Mac/.test(navigator.platform);
@@ -36,8 +36,8 @@ const NOT_SHOWN = {
  * and `state()`, how this page leaves it.
  */
 export function createFileList({ place = null, onError = () => {}, onCarry = () => {} } = {}) {
-  const owner = Boolean(window.opendocDesktop); // only the owner changes files
-  const desktop = window.opendocDesktop ?? (place && browserFolder(place));
+  const owner = Boolean(window.ponjoDesktop); // only the owner changes files
+  const desktop = window.ponjoDesktop ?? (place && browserFolder(place));
   const aside = document.querySelector('.od-files');
   const head = aside.querySelector('.od-files-head');
   const tree = aside.querySelector('.od-files-tree');
@@ -789,7 +789,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
 // page of the same link on it, which the host lets in at once; the tree is
 // read again when the page is back in front.
 function browserFolder({ name, path }) {
-  const KEY = 'opendoc.folder';
+  const KEY = 'ponjo.folder';
   let kept = {};
   try {
     kept = JSON.parse(localStorage.getItem(KEY)) ?? {};

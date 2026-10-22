@@ -2,7 +2,7 @@
 
 ## Overview
 
-How OpenDoc is built, in three parts. [The app](#the-app): the doc host, a
+How Ponjo is built, in three parts. [The app](#the-app): the doc host, a
 background process that does every file write and runs the AI buddies, and
 the windows you edit in. [A buddy's turn](#a-buddys-turn): AI buddies are
 agents that answer comments, and a turn is one AI buddy answering one
@@ -28,7 +28,7 @@ with a way to fix it.
 2. **Only the app writes them.** An agent gets only a copy. Any other
    change (other editors, `git pull`) is seen and merged.
 3. **An agent is a filter:** prompt on stdin, copies of the doc and its
-   comments to edit, reply on stdout. It knows nothing of OpenDoc and
+   comments to edit, reply on stdout. It knows nothing of Ponjo and
    remembers nothing.
 4. **No one resolves a conflict by hand.** Between people, nothing typed is
    dropped: the host orders their edits and merges them by character. An
@@ -378,7 +378,7 @@ written only by the app.
 | File | Holds |
 | --- | --- |
 | `settings.json` | the user's id and name; editor preferences; views', rules' and agents' settings; which agent runs buddies |
-| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the OpenDoc agent ship |
+| `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with |
@@ -400,7 +400,7 @@ buddies run only on docs open in a window.
 1. Runner copies the doc and its sidecar into a new private folder and runs
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
-   `OPENDOC_BUDDY` (the name is for the script; the app goes by id). In
+   `PONJO_BUDDY` (the name is for the script; the app goes by id). In
    project mode the project is its mirror, brought up to date first: a copy
    in the config folder of what ProjectService shows, but `node_modules`
    and files that are not text or are over 20 MB, so an agent never learns
@@ -475,7 +475,7 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
   the room, lets no one pose as the host. The app's own doc host shares a
   project, at its link, once a doc of it opens, so a teammate's page gets
   the owner's edits straight from the host that orders them. The app's
-  relay is `wss://ponjo.app` unless `OPENDOC_RELAY` names another
+  relay is `wss://ponjo.app` unless `PONJO_RELAY` names another
   (empty: nothing is shared).
 - **Limits**, so the relay is no free pipe and stays within the Workers
   free plan: at most 20 pages in a room (one more is turned away, `full`),

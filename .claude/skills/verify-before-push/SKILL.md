@@ -1,6 +1,6 @@
 ---
 name: verify-before-push
-description: Checks to run in the opendoc repo before committing or pushing a change, and how to ship it. Use before any commit, push, or PR here. A push to main rebuilds the nightly installers that users download.
+description: Checks to run in the Ponjo repo before committing or pushing a change, and how to ship it. Use before any commit, push, or PR here. A push to main rebuilds the nightly installers that users download.
 ---
 
 # Verify before you push
