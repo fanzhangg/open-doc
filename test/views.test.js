@@ -230,6 +230,25 @@ test('markdown view: pasting a URL over selected text links the text; other past
   assert.equal(await getText(), 'See [the plan](https://example.com/plan) not a link.\n');
 });
 
+test('markdown view: a task list item shows its box; clicking it ticks the item, saved as written otherwise', async () => {
+  await make('markdown', '* [ ] one\n* [X] two\n\nAfter.\n');
+  // A press in the box, in the item's gutter.
+  const tick = async (quote) => {
+    const { x, y } = await run(`(() => {
+      const item = [...document.querySelectorAll('.ProseMirror li')].find((li) => li.textContent === ${JSON.stringify(quote)});
+      const box = getComputedStyle(item, '::before');
+      const rect = item.getBoundingClientRect();
+      return { x: rect.left + parseFloat(box.left) + parseFloat(box.width) / 2, y: rect.top + parseFloat(box.top) + parseFloat(box.height) / 2 };
+    })()`);
+    for (const type of ['mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+  };
+  assert.deepEqual(await run(`[...document.querySelectorAll('.ProseMirror li')].map((li) => [li.dataset.checked, getComputedStyle(li).listStyleType])`), [['false', 'none'], ['true', 'none']]);
+  await tick('one');
+  assert.equal(await getText(), '* [x] one\n* [X] two\n\nAfter.\n');
+  await tick('two');
+  assert.equal(await getText(), '* [x] one\n* [ ] two\n\nAfter.\n');
+});
+
 test('plain view: line numbers and font size follow the settings; the status bar follows the caret', async () => {
   await make('plain', 'ab\ncd\n');
   assert.equal(await run(`document.querySelectorAll('.cm-lineNumbers').length`), 1);

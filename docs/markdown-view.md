@@ -23,8 +23,8 @@ designed, not built.
 
 - CommonMark and GFM, as formatted text: headings, paragraphs, lists,
   quotes, code blocks, tables, rules, links, images, bold, italic,
-  strikethrough and inline code. Emphasis is read the CJK-friendly way:
-  `**熟悉：**直接` is bold.
+  strikethrough, inline code and task lists, whose boxes tick with a click.
+  Emphasis is read the CJK-friendly way: `**熟悉：**直接` is bold.
 - **The toolbar** is the one way to format, and shows the formatting at the
   caret: undo and redo, the block style (Normal text, headings, code block),
   bold, italic, strikethrough, inline code, lists, quote, divider, table,
