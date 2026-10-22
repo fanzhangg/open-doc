@@ -578,7 +578,7 @@ function showReadOnly(problem) {
 }
 
 readOnlyBanner.querySelector('[data-action="update"]').addEventListener('click', () => {
-  window.open('https://github.com/fanzhangg/open-doc/releases/tag/nightly');
+  window.open('https://github.com/ponjo-app/ponjo/releases/tag/nightly');
 });
 readOnlyBanner.querySelector('[data-action="start-over"]').addEventListener('click', () => {
   if (!window.confirm('Move this doc\'s comments file to the Trash and start new comments?\n\nIts comments are no longer shown here. You can put the file back from the Trash.')) return;

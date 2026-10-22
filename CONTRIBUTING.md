@@ -6,7 +6,7 @@ Thanks for helping. People and AI agents both contribute here; the same rules ap
 
 - What we build and why: [product vision](docs/product-vision.md), [user experience](docs/user-experience.md).
 - How it is built: [architecture](docs/architecture.md). Comment format: [SPEC](spec/SPEC.md).
-- Try it without installing: the [online demo](https://fanzhangg.github.io/open-doc/preview/?folder).
+- Try it without installing: the [online demo](https://ponjo.app/preview/?folder).
 
 ## Pick an issue
 
@@ -35,7 +35,7 @@ npm test
 
 - Read your own diff hunk by hunk.
 - Keep it minimal: code only for what the issue needs, no unused abstractions, config or dependencies.
-- UI changes follow the design system: [design](site/design.html) and [avatars](site/avatars.html) ([live](https://fanzhangg.github.io/open-doc/design.html)).
+- UI changes follow the design system: [design](site/design.html) and [avatars](site/avatars.html) ([live](https://ponjo.app/design.html)).
 - Build paths with `node:path`, never by joining strings with `/`: CI runs on Windows and macOS.
 - Don't loosen lint rules (`eslint.config.js`, `.dependency-cruiser.js`, `knip.config.js`) to get a change through. If a rule blocks you, ask in the issue.
 
