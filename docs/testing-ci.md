@@ -129,8 +129,7 @@ that fails before the fix.
   scheduled run of the same `stress` job. A failing seed is shrunk to the
   fewest steps that still fail and printed; the pull request that fixes it
   adds them to `test/stress/regressions.json`, which every run replays. Not
-  yet: buddies and level changes, and outside changes while more than one
-  page edits.
+  yet: buddies, and outside changes while more than one page edits.
 - **Layer 3** runs each scenario for each other writer (a teammate, a
   buddy, an outside change) in each view (Markdown, Plain).
 - **Layer 4**: `test/perf/latency.test.js` opens each view at its limits,

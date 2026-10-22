@@ -143,7 +143,10 @@ async function start() {
     call: (type, arg) => api[type](arg),
     show: showLanded,
     rules: () => rulesOf(docName, settings.get()),
-    caughtUp: applyComments,
+    caughtUp: (state) => {
+      applyComments(state);
+      if (state.level !== level) setLevel(state.level);
+    },
     onError: (error) => setStatus(`Not saved: ${error.message}`, 'error'),
   });
   client.start(initial);
@@ -306,11 +309,9 @@ async function start() {
     followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
-  // The owner set this teammate to Read or Edit: the page opens again as that.
-  events.on('level', () => {
-    reloading = true;
-    location.reload();
-  });
+  // The owner set this teammate to Read or Edit; an offline page hears it
+  // when it catches up on its next connection.
+  events.on('level', () => client.catchUp());
   // First on a new connection: the doc may have gone missing, or runs
   // started, since `state`, and the doc host may have started again.
   events.on('hello', (data) => {
@@ -374,6 +375,11 @@ function followViews() {
 
 async function remakeView(chosen) {
   await client.landed();
+  await swapView(chosen);
+}
+
+// The view made again, from the text it shows.
+async function swapView(chosen) {
   const old = editor;
   const text = old.getText();
   const next = await makeView(chosen, text);
@@ -384,6 +390,22 @@ async function remakeView(chosen) {
   paintMarks();
   margin.layout();
   await history.viewChanged();
+}
+
+// The page may now do what `next` allows ('read' or 'write'): it opens
+// again as that. Typing that can no longer be saved stays as it is shown, to
+// copy, in a view that cannot be edited; it is saved if the page may write again.
+async function setLevel(next) {
+  level = next;
+  if (client.idle()) {
+    reloading = true;
+    location.reload();
+    return;
+  }
+  document.documentElement.toggleAttribute('data-reader', level === 'read');
+  await swapView(made);
+  if (level === 'read') setStatus('Not saved: you can only read this doc now. Your last typing is shown as you left it, to copy.', 'error');
+  else setStatus('');
 }
 
 // ---- others' edits ----

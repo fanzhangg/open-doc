@@ -315,3 +315,32 @@ test('A3: the edits a host wrote and never told of stay known through any number
   assert.equal(await readFile(docPath, 'utf8'), expected);
   await host.close();
 });
+
+test('C7: a page set to Read while away learns it as it catches up; its typing is kept, not dropped, and saved once it may write again', async () => {
+  const docPath = await tempDoc(TEXT);
+  let receive = () => {};
+  const doc = await openDoc(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
+  const sam = { id: 'p_sam', name: 'Sam', kind: 'human', level: 'write' };
+  const view = { text: TEXT, getText: () => view.text, selection: () => null };
+  const levels = [];
+  const client = createClient({
+    view,
+    call: (type, arg) => doc.call(type, arg, sam),
+    show: (text) => { view.text = text; },
+    rules: () => [],
+    caughtUp: (state) => levels.push(state.level),
+  });
+  receive = (event) => client.receive(event);
+  client.start(await doc.call('state', {}, sam));
+  sam.level = 'read'; // the page never told
+  view.text = view.text.replace('Beta two', 'Beta two typed');
+  client.flush();
+  await until(() => levels.includes('read'), 'the page told it may only read');
+  assert.equal(client.idle(), false, 'the typing kept');
+  assert.equal(await readFile(docPath, 'utf8'), TEXT);
+  sam.level = 'write';
+  await client.catchUp(); // the `level` event, or the next connection
+  await client.landed();
+  assert.equal(await readFile(docPath, 'utf8'), TEXT.replace('Beta two', 'Beta two typed'));
+  await doc.close();
+});

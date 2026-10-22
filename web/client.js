@@ -29,9 +29,12 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
   let pending = []; // the view's edits not landed yet, each on the one before; the first sent once `sent`
   // The submit the first was sent as, { ops, rev, epoch, id }: `landed` once
   // the host says so, `refused` when it will not take it, `lost` when the
-  // line dropped before it answered, so it is sent again as it was.
+  // line dropped before it answered, or it came while the page could only
+  // read, so it is sent again as it was.
   let sent = null;
+  let reading = false; // the host says this page may only read: nothing goes out, nothing is dropped
   let catching = null; // a catch-up on its way; events meanwhile wait in `held`
+  let again = false; // and one more asked for meanwhile
   let held = [];
   let idle = [];
   let cursors = []; // people's cursors: [{ id, name, at }], `at` in `confirmed`
@@ -56,7 +59,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
 
   // The first edit not landed goes out, unless one is on its way.
   function next() {
-    if (sent !== null || catching) return;
+    if (sent !== null || catching || reading) return;
     if (pending.length > 0) {
       sent = { ops: pending[0], rev, epoch, id: `${name}.${++sends}` };
       post(sent);
@@ -77,8 +80,10 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
       if (sent !== submit) return;
       if (error.code === 'offline') submit.lost = true; // sent again on the next connection
       else if (error.code === 'not_saved') onError(error); // landed: told once it is written
-      else if (error.code === 'forbidden') onError(error); // not this page's to send (set to Read meanwhile)
-      else {
+      else if (error.code === 'forbidden') { // set to Read meanwhile: kept, and sent again once back at Edit
+        submit.lost = true;
+        client.catchUp();
+      } else {
         if (error.code !== 'stale') onError(error);
         submit.refused = true;
         client.catchUp();
@@ -169,6 +174,7 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
   const client = {
     start(state) {
       ({ epoch, rev, cursors = [] } = state);
+      reading = state.level === 'read';
       confirmed = last = state.text;
     },
     flush,
@@ -182,24 +188,36 @@ export function createClient({ view, call, show, rules, caughtUp = () => {}, onE
       else take(event);
     },
     /**
-     * Catch up with the host: on a new connection, an `ops` event missed,
-     * an edit refused as `stale`, or one answered whose event never came.
+     * Catch up with the host: on a new connection, a level changed, an
+     * `ops` event missed, an edit refused as `stale` or `forbidden`, or one
+     * answered whose event never came.
      * One `state` from this page's rev: the events missed, taken as they
-     * would have been, or the text again (retake). Nothing changes before
-     * it answers. Then an edit lost on the line goes again.
+     * would have been, or the text again (retake), and the page's level.
+     * Nothing changes before it answers. Then an edit lost on the line, or
+     * refused while the page could only read, goes again, if it now may.
      */
     catchUp() {
-      catching ??= (async () => {
+      if (catching) {
+        again = true; // its answer may be from before what asks again
+        return catching;
+      }
+      catching = (async () => {
         const state = await call('state', { since: { epoch, rev } });
         flush();
         if (state.events) for (const event of state.events) take(event);
         else if (!retake(state)) sent.lost = true;
         if (state.epoch === epoch && state.rev === rev) cursors = state.cursors ?? [];
+        reading = state.level === 'read';
         caughtUp(state);
       })().catch(onError).finally(() => {
         catching = null;
+        if (again) {
+          again = false;
+          client.catchUp();
+          return;
+        }
         for (const event of held.splice(0)) take(event);
-        if (sent?.lost) {
+        if (sent?.lost && !reading) {
           sent.lost = false;
           post(sent);
         } else flush();
