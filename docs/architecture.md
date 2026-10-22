@@ -230,7 +230,7 @@ numbers are `LATENCY` in `web/views/index.js`, which the tests read:
 | C3 | An outside change while typing: my text stays; the outside version goes to history. |
 | C4 | A write that fails (a read-only file, a lock, a full disk): the page says Not saved, and why. Once the file can be written, the typing is saved, exactly once. |
 | C5 | Reconnect: within 5 s of the line or the host coming back (30 s for a host waking from sleep), the page has caught up on text, comments, cursors and level. Typing done while away lands once. |
-| C6 | Offline shows: within 15 s of the line dropping, a half-open socket included, the page says Offline. It stays editable and says Not saved. |
+| C6 | Offline shows: within 15 s of the line dropping, a half-open socket included, the page says Offline. It stays editable and says Not saved. Not yet: a half-open socket, or a line that drops while nothing is on its way on the desktop, shows only once a call fails. |
 | C7 | Level: a level change applies within 2 s online, and on reconnect offline. Typing that can no longer be saved is never dropped silently: the page says so and shows that text, to copy. |
 | C8 | Isolation: one page's bad request or oversized message never disconnects the others. Not yet: an answer over 8 MB (`MAX_MESSAGE` in `relay/worker.js`; `web/files.js` reads a whole file on a doc switch) makes the relay close the host's socket, and so every page. |
 
@@ -385,7 +385,7 @@ does not yield: an undo must not give way to a buddy's edit.
 | ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agents | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
 | Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
-| View | the doc's editor: what a person sees and types in | its contract as today (`getText`, `applyText(text, { by, ops })` with the operations that made `text`, after which `getText()` is `text`, `setMarks`, the selection); the page turns its text into operations and back (`web/client.js`, [plan A](markdown-view.md#many-writers)) |
+| View | the doc's editor: what a person sees and types in | its contract as today (`getText`, `applyText(text, { by, ops })` with the operations that made `text`, after which `getText()` is `text` and the line on top of the page is where it was, `setMarks`, the selection, and `composing()`, while an IME composition is on: its text goes out only once it ends, as one edit); the page turns its text into operations and back (`web/client.js`, [plan A](markdown-view.md#many-writers)) |
 | Shell | windows, menus, dialogs, recent docs | an open doc's files only through `DocService` (renaming through `DocService.move`), the sidebar through ProjectService; the settings and agent scripts through Store and Config |
 | Agent | edit its copy, append to its sidecar, print a reply | none: it cannot call anything |
 
@@ -531,7 +531,9 @@ teammate who can edit does what the owner does. Doc mode has no sharing.
 - **One host.** The owner's doc host holds the files, does every write and
   runs the AI buddies, as always. A teammate's page is a client of it: it
   keeps only what it shows, and a reload resyncs it from the host. While the
-  host is offline no one edits; the app keeps the computer awake while
+  host is offline a page says Offline, alone or shared alike (a call to the
+  doc host fails as `offline`; `onLine` in `web/client.js`), stays editable,
+  and saves what was typed once it has caught up; the app keeps the computer awake while
   teammates are in, and a page waits and reconnects by itself.
 - **A relay** (`relay/worker.js`, a Cloudflare Worker, one Durable Object
   per room) joins the host's outgoing WebSocket to each teammate's, over

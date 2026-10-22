@@ -234,12 +234,23 @@ export async function createMarkdownView({
       },
       // Once the change is in the editor's state, getText reads it.
       view: () => ({
-        update() {
-          if (!editing) return;
+        update(v) {
+          if (!editing || v.composing) return; // typing in an IME composition is the person's once it ends
           editing = false;
           onEdit();
         },
       }),
+      props: {
+        handleDOMEvents: {
+          compositionend: (v) => {
+            setTimeout(() => {
+              if (!editing || v.composing) return;
+              editing = false;
+              onEdit();
+            });
+          },
+        },
+      },
     })))
     .create();
 
@@ -662,6 +673,8 @@ export async function createMarkdownView({
     /** The doc's text as saving would write it. */
     getText: currentText,
     applyText,
+    /** Whether an IME composition is on: its text is not the person's yet. */
+    composing: () => view().composing,
     /** Draw `marks` (see above) in place of the ones drawn. */
     setMarks(next) {
       marks = next;

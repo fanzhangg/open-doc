@@ -115,6 +115,42 @@ for (const name of VIEWS) {
     assert.equal(await run(`document.querySelector('.pj-buddy-edit').textContent`), 'Howdy');
   });
 
+  test(`D2: ${name} view: when others add lines above, the line on top of the page keeps its place`, async () => {
+    const lines = Array.from({ length: 300 }, (_, k) => `Line ${k}.\n\n`).join('');
+    await run(`document.querySelector('.pj-canvas').style.height = '100vh'`); // the window's own scroller, as in the app
+    await make(name, lines);
+    const top = () => run(`(() => {
+      const canvas = document.querySelector('.pj-canvas');
+      const top = canvas.getBoundingClientRect().top;
+      return [...canvas.querySelectorAll('.ProseMirror p, .cm-line')].find((line) => line.textContent && line.getBoundingClientRect().bottom > top)?.textContent ?? null;
+    })()`);
+    await run(`(() => {
+      const canvas = document.querySelector('.pj-canvas');
+      canvas.scrollTop = canvas.scrollHeight / 2;
+    })()`);
+    const seen = await waitFor(top, 5000, 'the lines in view drawn');
+    const added = Array.from({ length: 40 }, (_, k) => `Added ${k}.\n\n`).join('');
+    await run(`view.applyText(${JSON.stringify(added + lines)}, { by: 'Someone', ops: [{ from: 0, to: 0, insert: ${JSON.stringify(added)} }] })`);
+    assert.match(seen, /^Line \d+\.$/);
+    assert.equal(await waitFor(top, 5000, 'the lines in view drawn again'), seen);
+    await run(`document.querySelector('.pj-canvas').style.height = ''`);
+  });
+
+  test(`D4: ${name} view: nothing is sent mid-composition; others' edits arriving meanwhile lose or double nothing`, async () => {
+    await make(name, 'Say hi.\n\nAnd more.\n');
+    await select('hi', 2, 2);
+    for (const typed of ['n', 'ni', 'nih', 'nihao']) await page.send('Input.imeSetComposition', { text: typed, selectionStart: typed.length, selectionEnd: typed.length });
+    assert.deepEqual(await run('contract.edits'), [], 'pinyin is not the person\'s edit');
+    assert.equal(await run('view.composing()'), true);
+    // Another's edit lands while the person composes, in another paragraph.
+    const text = await getText();
+    await run(`view.applyText(${JSON.stringify(text.replace('more', 'much more'))}, { by: 'Someone', ops: [{ from: ${text.indexOf('more')}, to: ${text.indexOf('more')}, insert: 'much ' }] })`);
+    await page.send('Input.insertText', { text: '你好' });
+    await new Promise((done) => setTimeout(done, 50));
+    assert.equal(await getText(), 'Say hi你好.\n\nAnd much more.\n');
+    assert.deepEqual(await run('contract.edits'), ['Say hi你好.\n\nAnd much more.\n'], 'only what was composed is the edit');
+  });
+
   test(`${name} view: applyText is outside the undo history and keeps the caret`, async () => {
     await make(name, 'Alpha.\n\nBeta.\n');
     await select('Beta.', 5, 5);

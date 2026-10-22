@@ -60,6 +60,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
   const host = stage.querySelector('.pj-editor');
   stage.dataset.plain = ''; // the page runs edge to edge (app.css)
   let changeTimer = 0;
+  let composed = false; // typed in a composition not ended yet
   let bubble = null;
   let destroyed = false;
   let status = null;
@@ -95,10 +96,14 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
         history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField,
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {
-          if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk))) {
-            onEdit();
-            clearTimeout(changeTimer);
-            changeTimer = setTimeout(onChange, CHANGE_MS);
+          // Typing during an IME composition is the person's once it ends.
+          if (update.transactions.some((tr) => tr.docChanged && !tr.annotation(fromDisk)) || (composed && !view.composing)) {
+            composed = view.composing;
+            if (!composed) {
+              onEdit();
+              clearTimeout(changeTimer);
+              changeTimer = setTimeout(onChange, CHANGE_MS);
+            }
           }
           // Lines measured as they scroll into view move what is below them.
           if ((update.heightChanged || update.geometryChanged) && !update.docChanged) onLayout();
@@ -167,6 +172,9 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
     crlf = isCrlf(next);
     textOf = { doc: view.state.doc, text: next };
     if (changes.empty) return; // only how lines end changed
+    // The line at the top of what is shown, which the page scrolls past.
+    const scroller = host.closest('.pj-canvas') ?? document.scrollingElement;
+    const shown = view.lineBlockAtHeight(scroller.getBoundingClientRect().top - view.documentTop);
     const flashId = Symbol('flash');
     const flashes = [];
     if (by) {
@@ -183,6 +191,8 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
       effects: flashes.length > 0 ? addFlash.of(flashes) : [],
       annotations: [Transaction.addToHistory.of(false), fromDisk.of(true)],
     });
+    // It keeps its place on screen, whatever came or went above it.
+    scroller.scrollTop += view.lineBlockAt(changes.mapPos(shown.from, 1)).top - shown.top;
     textOf = { doc: view.state.doc, text: next };
     reindent(next);
     if (flashes.length > 0) setTimeout(() => view.dispatch({ effects: dropFlash.of(flashId) }), FLASH_MS);
@@ -193,6 +203,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
 
     getText: currentText,
     applyText,
+    composing: () => view.composing,
     setMarks(marks) {
       if (painted?.doc === view.state.doc && JSON.stringify(painted.marks) === JSON.stringify(marks)) return;
       painted = { doc: view.state.doc, marks };
