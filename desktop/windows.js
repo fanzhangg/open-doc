@@ -71,11 +71,12 @@ export const windowOf = (docPath) => docs.get(docPath) ?? null;
 
 /**
  * Open `path` in its window, or focus the window it already has. With
- * `folder` (a real path), a new window lists that folder's docs; a window the
- * doc already has as a single doc starts listing them.
+ * `folder` (a real path), a new window lists that folder's docs, its
+ * subfolders `expanded` open; a window the doc already has as a single doc
+ * starts listing them.
  * @returns {Promise<{ entry: object, created: boolean }>}
  */
-export async function openDoc(path, { folder = null } = {}) {
+export async function openDoc(path, { folder = null, expanded = [] } = {}) {
   const docPath = await realpath(path);
   const open = docs.get(docPath);
   if (open) {
@@ -84,12 +85,12 @@ export async function openDoc(path, { folder = null } = {}) {
     return { entry: open, created: false };
   }
   if (!opening.has(docPath)) {
-    opening.set(docPath, createDocWindow(docPath, folder).finally(() => opening.delete(docPath)));
+    opening.set(docPath, createDocWindow(docPath, folder, expanded).finally(() => opening.delete(docPath)));
   }
   return { entry: await opening.get(docPath), created: true };
 }
 
-async function createDocWindow(docPath, folder) {
+async function createDocWindow(docPath, folder, expanded) {
   const hosted = await hooks.openHostedDoc(docPath, { folder });
   const win = new BrowserWindow({
     ...nextBounds(),
@@ -101,7 +102,7 @@ async function createDocWindow(docPath, folder) {
     webPreferences: securePreferences(),
   });
   const entry = {
-    win, view: null, hosted, docPath, folder: null, expanded: new Set(), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
+    win, view: null, hosted, docPath, folder: null, expanded: new Set(expanded), sidebar: true, carry: null, pending: null, stopWatching: null, switching: null, left: false,
   };
   entry.view = createView(entry, hosted);
   win.contentView.addChildView(entry.view);
