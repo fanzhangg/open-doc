@@ -143,7 +143,7 @@ and files.
 
 ### Cost
 
-The view keeps the latency promise ([Latency](architecture.md#latency)) up
+The view keeps the latency promise ([Editing](architecture.md#editing), B) up
 to 100,000 characters, with no block over 10,000; a longer doc opens in the
 plain view, which offers this one anyway. A parse or a serialize of a long doc takes hundreds of milliseconds, so the
 view works a few top-level blocks at a time (`blocks.js`): while each

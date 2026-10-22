@@ -102,6 +102,45 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - The main flow: open a doc and a folder, @mention a buddy, the fake agent
   edits, Undo on its reply, Cmd+Z undoes only the human's edit, restore a version.
 
+### Editing tests
+
+One set of tests for the rules in [Editing](architecture.md#editing),
+alone and shared alike: what changes is parameters, never the path. Every
+test title starts with its rule id (`A3: a dropped line never lands an
+edit twice`), and a check in `npm test` fails when a rule id in that table
+has no test. Every editing bug fix comes with a test, named by its rule id,
+that fails before the fix.
+
+| Layer | Covers | Where |
+| --- | --- | --- |
+| 1. Properties of `src/core/ot.js` | A1 A3 A4 A5 | `npm test` |
+| 2. Protocol fuzz | A1–A6, C1, C3–C5, C7 | `npm run test:stress` (`test/stress/concurrency.test.js`) |
+| 3. Named scenarios in real views | D1–D7, C2, C6, C8, E1 | `npm test` (the views and collab harnesses) |
+| 4. Timings | B1–B7, C5, C6 | `npm run test:perf` |
+| 5. By hand | C5, C6 on a real network | [two machines](#sharing--two-machines-by-hand) |
+
+- **Layer 2** runs a real DocService on temp files with 1 to 4 clients
+  (`web/client.js`) over a fake line that can delay, drop the line (calls
+  fail `offline`), lose an event, restart the host, fail a write (the file
+  read-only), make an outside change, land a buddy's edit and change a
+  level. A fake clock, seeded and deterministic. On a pull request, a fixed
+  300 seeds on Linux and Windows (about 2 minutes); nightly, 30 minutes of
+  random seeds, as a scheduled run of the same `stress` job. A failing seed
+  is shrunk and printed; the pull request that fixes it adds it to
+  `test/stress/regressions.json`, which every run replays.
+- **Layer 3** runs each scenario for each other writer (a teammate, a
+  buddy, an outside change) in each view (Markdown, Plain).
+- **Layer 4**: `test/perf/latency.test.js` opens each view at its limits,
+  in the doc shape that costs it most, and types while a teammate's edits
+  arrive; `test/perf/typing.test.js` times each key the owner types to its
+  character on a teammate's page (the browser build, its applyText and
+  marks included) through the relay run locally, the teammate's line 40 ms
+  slower each way, in a small Markdown doc and in the plain view's longest,
+  which the host writes whole on every key. A timing fails when it is
+  missed twice running.
+- Layers 1 to 3 are deterministic and never retried: a test that fails now
+  and then is a bug.
+
 ### Sharing — two machines, by hand
 
 After each deploy of the relay (README, Deploying the relay). The owner on
@@ -130,7 +169,7 @@ on machine B, on another network (a phone's hotspot will do), in a browser.
 | --- | --- | --- | --- |
 | PR | push to a PR | lint; unit and conformance (Node and browser); integration on Linux, macOS, Windows; web build | blocks merge |
 | main | merge | all of PR, e2e on three platforms, nightly installers | blocks the nightly build |
-| Nightly | schedule | long merge fuzz, stress | opens an issue |
+| Nightly | schedule | the `stress` job, 30 minutes of random seeds | opens an issue |
 | Release | version tag | all of main, draft release | blocks publishing |
 
 - A PR that changes `spec/` changes `spec/conformance/` too.
