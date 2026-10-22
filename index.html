@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Download OpenDoc</title>
-<meta name="description" content="Co-author Markdown docs with your AI buddies. Download OpenDoc for macOS or Windows.">
+<title>Download Ponjo</title>
+<meta name="description" content="Co-author Markdown docs with your AI buddies. Download Ponjo for macOS or Windows.">
 <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./dist/web/app.css?v=8fb2f74">
-<link rel="stylesheet" href="site.css?v=8fb2f74">
+<link rel="stylesheet" href="./dist/web/app.css?v=2cd527a">
+<link rel="stylesheet" href="site.css?v=2cd527a">
 </head>
 <body>
 <header class="site-header">
-  <a class="site-brand" href="index.html"><img src="./build/icon.svg" alt="" width="24" height="24"><span>OpenDoc</span></a>
+  <a class="site-brand" href="index.html"><img src="./build/icon.svg" alt="" width="24" height="24"><span>Ponjo</span></a>
   <nav class="site-nav" aria-label="Pages">
     <a href="index.html" aria-current="page">Download</a>
     <div class="site-dev">
@@ -31,12 +31,12 @@
 <main class="dl-page">
   <section class="hero">
     <span class="od-avatar od-avatar-agent" data-presence="working" id="clippy"></span>
-    <h1>OpenDoc</h1>
+    <h1>Ponjo</h1>
     <p class="tagline">Co-author Markdown docs with your AI buddies</p>
     <span class="version">Nightly build · early preview</span>
   </section>
 
-  <p class="mobile-note" id="mobile-note">OpenDoc is a desktop app. Open this page on your Mac or Windows PC to download it.</p>
+  <p class="mobile-note" id="mobile-note">Ponjo is a desktop app. Open this page on your Mac or Windows PC to download it.</p>
 
   <section class="platforms">
     <a class="od-secondary" href="https://github.com/fanzhangg/open-doc/releases/download/nightly/OpenDoc-0.1.0-arm64.dmg" title="macOS · Apple Silicon">
@@ -50,10 +50,10 @@
   </section>
 </main>
 <script type="module">
-  import { agentFace } from './dist/web/faces.js?v=8fb2f74';
+  import { agentFace } from './dist/web/faces.js?v=2cd527a';
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))) document.getElementById('mobile-note').style.display = 'block';
   document.getElementById('clippy').append(agentFace('Clippy'));
 </script>
-<script type="module" src="site.js?v=8fb2f74"></script>
+<script type="module" src="site.js?v=2cd527a"></script>
 </body>
 </html>
