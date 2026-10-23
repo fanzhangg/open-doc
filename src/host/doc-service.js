@@ -4,9 +4,9 @@
 // @mentioned in the doc's comments (runner.js) and lands what each run
 // changed when it ends. It lives in the doc host; windows call it over a
 // message port (desktop/doc-host.js) and hear its events (ops, sidecar,
-// agents, settings, history, renamed, missing, team). In project mode its
-// project's files are read through ProjectService, and its team changed
-// through Team (team.js), at the same door.
+// agents, settings, history, renamed, missing, room). In project mode its
+// project's files are read through ProjectService, and its room run
+// through Room (room.js), at the same door.
 
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
@@ -28,7 +28,7 @@ import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_A
 import { mirrorDir, snapshotMirror } from './mirror.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
-import { TeamError } from './team.js';
+import { RoomError } from './room.js';
 
 /**
  * A call refused: `code` says why ('bad_input', 'not_found', 'read_only',
@@ -58,17 +58,17 @@ const byOf = ({ id, name, kind }) => ({ id, name, kind });
  * Settings (src/store/agents.js). `settingsDir` is the user's config folder
  * (default: the per-user one): settings, buddies and agent scripts.
  * `folder` is the project folder the doc was opened from (null in doc
- * mode), whose mirror (mirror.js) runs get as PONJO_PROJECT; `team`,
- * its Team (team.js).
+ * mode), whose mirror (mirror.js) runs get as PONJO_PROJECT; `room`,
+ * its Room (room.js).
  * `secrets()` gives the agents' secrets, decrypted ({ <agent>: { <key>:
  * value } }, src/store/secrets.js), handed to runs with the other settings.
  * `emit(event, data)` hears what changed. `call(type, arg, who)` runs a request of `who`'s (see
  * `calls`), `owner()` being the `who` of this machine's user;
  * `moveTo(newPath, move)` renames the doc while it is open (`move` defaults
  * to moveDoc and may return the final path).
- * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, leave: (id: string) => void, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, team: object | null) => void, close: () => Promise<void> }>}
+ * @returns {Promise<{ call: (type: string, arg: object | undefined, who: object) => Promise<object>, owner: () => Promise<object>, leave: (id: string) => void, hello: () => object, runner: Runner, docPath: () => string, moveTo: (newPath: string, move?: Function) => Promise<string>, setFolder: (folder: string | null, room: object | null) => void, close: () => Promise<void> }>}
  */
-export async function openDoc(docPath, { folder = null, team = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
+export async function openDoc(docPath, { folder = null, room = null, settingsDir = configDir(), secrets = () => ({}), emit = () => {} } = {}) {
   const opened = await readDoc(docPath); // fail early on a missing doc
   const broadcastAgents = () => emit('agents', agentStatuses());
   const runner = new Runner({
@@ -443,7 +443,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 
   // The asks waiting on a buddy now (docs/architecture.md, Who answers):
   // only the comments of those who may write ask: the owner and the
-  // teammates who can edit, and only those this host took (comment), as
+  // players who can edit, and only those this host took (comment), as
   // they were taken: one that reached the sidecar another way is shown but
   // asks no one. Each says who asked.
   async function asks() {
@@ -452,7 +452,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (here.length === 0) return [];
     const { lines, problem } = await readComments();
     if (problem) return []; // a buddy could not post its reply
-    const editors = team ? (await team.list()).members.filter((m) => m.level === 'write').map((m) => m.id) : [];
+    const editors = (room?.list()?.players ?? []).filter((p) => p.level === 'write').map((p) => p.id);
     const askers = [(await me()).id, ...editors];
     const taken = await readTaken(docPath, settingsDir);
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
@@ -473,10 +473,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // makes a turn run, and its edit land, again and again.
   const unposted = new Map();
 
-  // The level of the person with id `id` now: the owner's, a teammate's, or null.
+  // The level of the person with id `id` now: the owner's, a player's, or null.
   async function levelOf(id) {
     if (id === (await me()).id) return 'owner';
-    return team ? team.levelOf(id) : null;
+    return room?.levelOf(id) ?? null;
   }
 
   // The buddies the doc reaches, and which are at work.
@@ -626,7 +626,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   const dirOf = (where) => (where === 'project' ? projectBuddiesDir(folder) : userBuddiesDir(settingsDir));
 
   // A buddy can be called anything but another buddy's name here (not
-  // buddy `id`'s), its owner's or a teammate's.
+  // buddy `id`'s), its owner's or a player's.
   async function checkBuddy(fields, id = null) {
     try {
       checkBuddyPatch(fields);
@@ -634,12 +634,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       throw new DocError(error.code, error.message);
     }
     if (fields.name === undefined) return;
-    const taken = [...(await buddies()).filter((b) => b.id !== id).map((b) => b.name), (await me()).name, ...(await teamNames())];
+    const taken = [...(await buddies()).filter((b) => b.id !== id).map((b) => b.name), (await me()).name, ...playerNames()];
     if (taken.some((n) => sameName(fields.name, n))) throw new DocError('bad_input', `the name ${fields.name} is taken`);
   }
 
-  // The names of the teammates and of those asking to join.
-  const teamNames = async () => (team ? team.names() : []);
+  // The names of the players in the project's room.
+  const playerNames = () => room?.names() ?? [];
 
   // The buddy here with id `id`.
   async function buddyById(id) {
@@ -793,21 +793,21 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     return project;
   };
   const stopWatchingUserBuddies = watchFolder(userBuddiesDir(settingsDir), syncAgents);
-  const inTeam = () => {
-    if (!team) throw new DocError('bad_input', 'a doc on its own has no team');
-    return team;
+  const inRoom = () => {
+    if (!room) throw new DocError('bad_input', 'a doc on its own has no room');
+    return room;
   };
-  async function changeTeam(fn) {
-    await fn(inTeam());
-    return team.list();
+  async function changeRoom(fn) {
+    await fn(inRoom());
+    return room.list();
   }
-  // The owner's windows follow the team (desktop/doc-host.js sends `team` to
+  // The owner's windows follow the room (desktop/doc-host.js sends `room` to
   // theirs alone), and so do the asks: who may ask changes with it.
-  const followTeam = () => team?.onChange(async () => {
-    emit('team', await team.list());
+  const followRoom = () => room?.onChange(async () => {
+    emit('room', room.list());
     await runner.reconcile();
   }) ?? (() => {});
-  let stopFollowingTeam = followTeam();
+  let stopFollowingRoom = followRoom();
   await syncAgents();
 
   // What a window may ask, by the level it needs (`can`). Each returns what
@@ -847,8 +847,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     owner: {
       async saveSettings(patch) {
         if (patch && Object.hasOwn(patch, 'id')) throw new DocError('bad_input', 'your id cannot be changed');
-        // Your name is no buddy's or teammate's here, as theirs are not yours.
-        if (typeof patch?.name === 'string' && [...(await buddies()).map((b) => b.name), ...(await teamNames())].some((n) => sameName(n, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
+        // Your name is no buddy's or player's here, as theirs are not yours.
+        if (typeof patch?.name === 'string' && [...(await buddies()).map((b) => b.name), ...playerNames()].some((n) => sameName(n, patch.name))) throw new DocError('bad_input', `the name ${patch.name} is taken`);
         try {
           return { settings: await updateSettings(patch, settingsDir) };
         } catch (error) {
@@ -866,12 +866,13 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         await installAgents(settingsDir, { reset: body.name });
         return { agents: await listAgents(settingsDir) };
       },
-      // The project's team (team.js), each call answered with the team as it is then.
-      team: () => inTeam().list(),
-      allow: (body) => changeTeam((t) => t.allow(body?.id, body?.level)),
-      remove: (body) => changeTeam((t) => t.remove(body?.id)),
-      setLevel: (body) => changeTeam((t) => t.set(body?.id, { level: body?.level })),
-      link: () => changeTeam((t) => t.link()),
+      // The project's room (room.js), each call answered with the room as it is then.
+      room: () => inRoom().list(),
+      openRoom: () => changeRoom((r) => r.open()),
+      closeRoom: () => changeRoom((r) => { r.close(); }),
+      lockRoom: (body) => changeRoom((r) => r.lock(body?.locked)),
+      setLevel: (body) => changeRoom((r) => r.setLevel(body?.id, body?.level)),
+      kick: (body) => changeRoom((r) => r.kick(body?.id)),
     },
   };
 
@@ -884,7 +885,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       try {
         return await calls[level][type](arg, who);
       } catch (error) {
-        if (error instanceof StoreError || error instanceof TeamError) throw new DocError(error.code, error.message);
+        if (error instanceof StoreError || error instanceof RoomError) throw new DocError(error.code, error.message);
         throw error;
       }
     },
@@ -899,12 +900,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     runner,
     docPath: () => docPath,
     moveTo,
-    setFolder(next, nextTeam) {
+    setFolder(next, nextRoom) {
       folder = next;
       project = folder ? projectService(folder) : null;
-      stopFollowingTeam();
-      team = nextTeam;
-      stopFollowingTeam = followTeam();
+      stopFollowingRoom();
+      room = nextRoom;
+      stopFollowingRoom = followRoom();
       stopWatchingProjectBuddies();
       stopWatchingProjectBuddies = folder ? watchFolder(projectBuddiesDir(folder), syncAgents) : () => {};
       syncAgents();
@@ -926,7 +927,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         stopWatchingSettings();
         stopWatchingProjectBuddies();
         stopWatchingUserBuddies();
-        stopFollowingTeam();
+        stopFollowingRoom();
         await runner.stop();
       }
     },

@@ -19,23 +19,22 @@
 //     owner: the app's own calls, as the sidebar's `open`
 //   attach { docId }, with a message port: a window's page talks to the doc
 //     over it (`serve`)
-//   share { folder }: teammates' pages reach the project in `folder` (a
-//     real path) through the relay, if it has a link (`share`); answered
-//     once the host is in its room. Opening a doc of the project does it too.
 //   closeAll
-// The host says `{ type: 'ready' }` once it can take them, and
-// `{ type: 'join', folder, name }` when someone asks to join a project.
+// The host says `{ type: 'ready' }` once it can take them.
 //
-// The relay is at PONJO_RELAY (a ws: or wss: URL; empty: no sharing), by
-// default the one deployed (relay/wrangler.toml), and a link opens the
-// teammate's page it serves, at the same origin, with the room.
+// A project's room (src/host/room.js) opens when the owner asks it at the
+// door (`openRoom`), and ends when they close it, or close the project's
+// last window: every page is turned away, `closed`. The relay is at
+// PONJO_RELAY (a ws: or wss: URL; empty: no sharing), by default the one
+// deployed (relay/wrangler.toml), and a link opens the player's page it
+// serves, at the same origin, with the room.
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { openDoc } from '../src/host/doc-service.js';
 import { projectService } from '../src/host/project-service.js';
-import { createTeam } from '../src/host/team.js';
+import { createRoom } from '../src/host/room.js';
 import { renameFile } from './files.js';
 import { firstDoc, listDocs } from './folder.js';
 
@@ -55,14 +54,13 @@ const held = async () => {
 
 // docId → { service, folder, ports: Map(port → its who), opens: how many
 // times the app has it open }. A doc is open once however many reach it:
-// the app's windows and teammates' pages share it, and it closes when
+// the app's windows and players' pages share it, and it closes when
 // neither has it.
 const docs = new Map();
 let nextId = 0;
 let secrets = {};
-// The real path of each project folder a doc was opened in → { team, sharing },
-// `sharing` while teammates' pages reach it (`share`).
-const projects = new Map();
+// The real path of each project folder a doc was opened in → its Room.
+const rooms = new Map();
 
 // Docs open and close one at a time, so a doc is never open twice.
 let opening = Promise.resolve();
@@ -82,41 +80,29 @@ function docAt(docPath, folder) {
     }
     const docId = ++nextId;
     const entry = { service: null, folder, ports: new Map(), opens: 0 };
-    entry.service = await openDoc(docPath, { folder, team: folder && teamOf(folder), secrets: () => secrets, emit: (event, data) => {
-      for (const [port, { level }] of entry.ports) if ((event !== 'settings' && event !== 'team') || level === 'owner') port.postMessage({ event, data });
+    entry.service = await openDoc(docPath, { folder, room: folder && roomOf(folder), secrets: () => secrets, emit: (event, data) => {
+      for (const [port, { level }] of entry.ports) if ((event !== 'settings' && event !== 'room') || level === 'owner') port.postMessage({ event, data });
     } });
     docs.set(docId, entry);
-    if (folder) startSharing(folder).catch((error) => console.error(error));
     return docId;
   });
 }
 
-// The Team of the project at real path `folder`, made once; a new link
-// shares the project at it, ending the one before.
-function teamOf(folder) {
-  if (!projects.has(folder)) {
-    const team = createTeam(folder, { linkOf: RELAY && ((secret) => `${RELAY.replace(/^ws/, 'http')}/team?room=${roomOf(secret)}`) });
-    projects.set(folder, { team, sharing: null });
-    team.onChange(() => startSharing(folder).catch((error) => console.error(error)));
+// The Room of the project at real path `folder`, made once.
+function roomOf(folder) {
+  if (!rooms.has(folder)) {
+    const room = createRoom(folder, { host: RELAY ? (secret) => share(folder, room, secret) : null });
+    rooms.set(folder, room);
   }
-  return projects.get(folder).team;
+  return rooms.get(folder);
 }
 
-// Share the project at real path `folder`, whose team is made, at its
-// link, unless it has none, there is no relay, or it is shared there
-// already; resolves once the host is in the room.
-async function startSharing(folder) {
-  const project = projects.get(folder);
-  const secret = await project.team.secret();
-  if (!RELAY || !secret) return;
-  if (project.sharing?.secret !== secret) {
-    project.sharing?.stop('link_replaced');
-    project.sharing = share(folder, project.team, secret);
-  }
-  await project.sharing.joined;
+// The room of the project at `folder` ends once the app has none of its docs open.
+function closeRoomIfLeft(folder) {
+  if (folder && ![...docs.values()].some((entry) => entry.folder === folder && entry.opens > 0)) rooms.get(folder)?.close();
 }
 
-const roomOf = (secret) => createHash('sha256').update(secret).digest('hex');
+const hash = (text) => createHash('sha256').update(text).digest('hex');
 
 // Close doc `docId` once neither the app nor a page has it.
 function release(docId) {
@@ -148,15 +134,17 @@ const handlers = {
       found.ports.delete(port);
       port.close();
     }
+    closeRoomIfLeft(found.folder);
     await release(docId);
   },
   // `moved`: the doc is already at `toPath` (its folder moved); the doc follows it.
   moveTo: ({ docId, toPath, moved }) => docOf(docId).service.moveTo(toPath, moved ? async () => toPath : renameFile),
   running: ({ docId }) => docOf(docId).service.runner.statuses().map((s) => s.name),
   setFolder({ docId, folder }) {
+    const was = docOf(docId).folder;
     docOf(docId).folder = folder;
-    docOf(docId).service.setFolder(folder, folder && teamOf(folder));
-    if (folder) startSharing(folder).catch((error) => console.error(error));
+    docOf(docId).service.setFolder(folder, folder && roomOf(folder));
+    closeRoomIfLeft(was);
   },
   secrets({ secrets: next }) {
     secrets = next;
@@ -169,14 +157,9 @@ const handlers = {
     const entry = docOf(docId);
     return serve(entry, ports[0], () => entry.service.owner());
   },
-  async share({ folder }) {
-    const real = await realpath(folder);
-    teamOf(real);
-    await startSharing(real);
-  },
   async closeAll() {
-    for (const project of projects.values()) project.sharing?.stop();
-    projects.clear();
+    await Promise.allSettled([...rooms.values()].map((room) => room.close()));
+    rooms.clear();
     const all = [...docs.values()];
     docs.clear();
     await Promise.allSettled(all.map((d) => d.service.close()));
@@ -235,50 +218,61 @@ function tellHere(folder) {
 }
 
 /**
- * Share the project in `folder` through the relay in the room of `secret`:
- * one WebSocket for every teammate's page, each a peer the relay numbers. A
- * page names its doc by its path in the project (`?doc=`; none: the
- * project's first doc), and who it is: `key`, made once in its browser
- * (the teammate's id is its hash, so no one who sees an id can pose as
- * them), and `name`. A teammate on `team` is served as a window is, at
- * their level (read or write); anyone else asks to join and waits, told
- * `waiting`, until the owner allows them. A page whose teammate is removed,
- * or turned down, is turned away at once. A connection that drops is made
- * again. `joined` resolves once the host is first in the room; `stop(reason)`
- * ends it, turning every page away with `reason` if one is given (else the
- * relay tells them the host is offline).
+ * Put `room`, the project in `folder`'s, on the relay, in the relay's room
+ * named by the SHA-256 of `secret`: one WebSocket for every player's page,
+ * each a peer the relay numbers. The host's first message proves it holds
+ * `secret`. A page's first names its doc by its path in the project (`doc`;
+ * none: the project's first) and who it is: `key`, made once in its browser
+ * (the player's id is its hash, so no one who sees an id can pose as them),
+ * and `name`. The page joins the room (room.js) and is served as a window
+ * is, at its player's level; one the room refuses (`locked`, `kicked`) is
+ * turned away, and so is one whose player is kicked. A connection that
+ * drops is made again. Returns { link, joined: resolves once the host is
+ * first in the room, rejects if its line drops before; stop(reason): ends
+ * it, turning every page away with `reason` if one is given, and resolves
+ * once the line is closed }.
  */
-function share(folder, team, secret) {
+function share(folder, room, secret) {
   const project = projectService(folder);
-  const peers = new Map(); // peer → { port, id, doc, admitted }
+  const peers = new Map(); // peer → { port, id, doc, level: null until it is served }
   let socket = null;
   let stopped = false;
+  let hosting = false; // the relay took the host in once
   let join;
-  const joined = new Promise((done) => { join = done; });
+  let fail;
+  const joined = new Promise((done, failed) => {
+    join = done;
+    fail = failed;
+  });
 
   let retry = RECONNECT_MS;
 
   function connect() {
-    socket = new WebSocket(`${RELAY}/rooms/${roomOf(secret)}?secret=${encodeURIComponent(secret)}`);
-    socket.addEventListener('open', () => {
-      retry = RECONNECT_MS;
-      join();
-    });
-    socket.addEventListener('message', ({ data }) => take(JSON.parse(data)));
+    if (stopped) return;
+    const line = new WebSocket(`${RELAY}/rooms/${hash(secret)}?host`);
+    socket = line;
+    line.addEventListener('open', () => line.send(JSON.stringify({ secret })));
+    line.addEventListener('message', ({ data }) => take(JSON.parse(data)));
     // A connection refused fires `error` alone, one that drops `close` too.
     let lost = false;
     const drop = () => {
       if (lost) return;
       lost = true;
       for (const peer of [...peers.keys()]) gone(peer);
-      if (!stopped) setTimeout(connect, retry);
+      if (!hosting) return fail(new Error('the relay cannot be reached'));
+      setTimeout(connect, retry);
       retry = Math.min(2 * retry, MAX_RECONNECT_MS);
     };
-    socket.addEventListener('error', drop);
-    socket.addEventListener('close', drop);
+    line.addEventListener('error', drop);
+    line.addEventListener('close', drop);
   }
 
-  async function take({ peer, open, data, close }) {
+  async function take({ hosting: taken, peer, open, data, close }) {
+    if (taken) {
+      hosting = true;
+      retry = RECONNECT_MS;
+      return join();
+    }
     if (close) return gone(peer);
     if (!open) return peers.get(peer)?.port.receive(data);
     const port = peerPort((frame) => {
@@ -294,26 +288,16 @@ function share(folder, team, secret) {
       }
       socket.send(text);
     });
-    const id = typeof open.key === 'string' && open.key.length >= 16 ? `p_${roomOf(open.key).slice(0, 24)}` : null;
-    const entry = { port, id, doc: open.doc ?? '', admitted: false, level: null };
+    const id = typeof open.key === 'string' && open.key.length >= 16 ? `p_${hash(open.key).slice(0, 24)}` : null;
+    const entry = { port, id, doc: typeof open.doc === 'string' ? open.doc : '', level: null };
     peers.set(peer, entry);
-    let joining;
     try {
-      joining = await team.join({ id, name: open.name });
+      await room.join({ id, name: open.name });
     } catch (error) {
       return turnAway(peer, error.code ?? 'bad_input');
     }
-    entry.level = await team.levelOf(id);
-    if (joining === 'member') return admit(peer);
-    if (joining === 'asked') channel.send({ type: 'join', folder, name: open.name });
-    port.postMessage({ event: 'waiting' });
-  }
-
-  // Serve the page of `peer`, whose teammate is on the team, its doc.
-  async function admit(peer) {
-    const entry = peers.get(peer);
-    if (!entry || entry.admitted) return;
-    entry.admitted = true;
+    if (peers.get(peer) !== entry) return; // gone meanwhile
+    entry.level = room.levelOf(id);
     // A name no project shares: a part starting with `.` (`..` too), or empty (an absolute path).
     if (entry.doc && entry.doc.split('/').some((part) => !part || part.startsWith('.'))) return turnAway(peer, 'hidden');
     try {
@@ -321,25 +305,23 @@ function share(folder, team, secret) {
       const docId = await docAt((await project.open(path)).path, folder);
       entry.port.docId = docId;
       if (peers.get(peer) !== entry) return release(docId); // gone meanwhile
-      await serve(docs.get(docId), entry.port, async () => ({
-        id: entry.id, name: await team.nameOf(entry.id), kind: 'human', level: await team.levelOf(entry.id),
-      }));
+      await serve(docs.get(docId), entry.port, () => ({ id, name: room.nameOf(id), kind: 'human', level: room.levelOf(id) }));
     } catch {
       turnAway(peer, 'not_found'); // no such doc in the project
     }
   }
 
-  // The team changed: a page whose teammate was allowed is served, one whose
-  // teammate's level changed is told `level`, and one whose teammate is no
-  // longer on it, or was turned down, is turned away.
-  const stopFollowing = team.onChange(async () => {
+  // The room changed: a page whose player's level changed is told `level`,
+  // and one whose player was kicked is turned away.
+  const stopFollowing = room.onChange(() => {
     for (const [peer, entry] of [...peers]) {
-      const level = await team.levelOf(entry.id);
-      if (peers.get(peer) !== entry) continue;
-      if (level && entry.level && level !== entry.level) entry.port.postMessage({ event: 'level', data: { level } });
-      entry.level = level;
-      if (level) admit(peer);
-      else if (!team.isPending(entry.id)) turnAway(peer, entry.admitted ? 'removed' : 'denied');
+      if (entry.level === null) continue;
+      const level = room.levelOf(entry.id);
+      if (!level) turnAway(peer, 'kicked');
+      else if (level !== entry.level) {
+        entry.level = level;
+        entry.port.postMessage({ event: 'level', data: { level } });
+      }
     }
   });
 
@@ -357,13 +339,17 @@ function share(folder, team, secret) {
 
   connect();
   return {
-    secret,
+    link: `${RELAY.replace(/^ws/, 'http')}/team?room=${hash(secret)}`,
     joined,
     stop(reason) {
       stopped = true;
       stopFollowing();
       if (reason) for (const peer of [...peers.keys()]) turnAway(peer, reason);
-      socket.close();
+      if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+      return new Promise((done) => {
+        socket.addEventListener('close', done);
+        socket.close(); // after the frames that turn the pages away
+      });
     },
   };
 }

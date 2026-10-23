@@ -5,8 +5,8 @@
 // sessionStorage, so switching docs (`?folder&doc=<path>`, a new page as
 // in the app) and reloading keep it; a new tab starts over.
 // Buddies don't run: one asked answers with a set reply after a moment.
-// No history, no undo, no menus. A project's team is a sample: Noor can
-// edit, Sam asks to join, and no link is made.
+// No history, no undo, no menus. A project's room is a sample: once
+// opened, Noor and Sam are in it, and its link leads nowhere.
 
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { apply } from '../src/core/ot.js';
@@ -90,7 +90,7 @@ function seed() {
     mine: [{ id: 'Clippy', name: 'Clippy', about: 'A general writing assistant that helps draft and edit docs' }],
     buddies: inFolder ? [{ id: 'Editor', name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { id: 'Researcher', name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
     expanded: ['notes'], sidebar: true, carry: null,
-    team: { members: [{ id: 'p_noor', name: 'Noor', level: 'write' }], pending: [{ id: 'p_sam', name: 'Sam' }], link: null },
+    room: null,
   };
 }
 
@@ -176,10 +176,11 @@ function checkBuddy(fields, id = null) {
   if (fields.name !== undefined && taken.some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
 }
 
-function changeTeam(fn) {
-  s.team = fn(s.team);
+function changeRoom(fn) {
+  s.room = s.room && fn(s.room);
   save();
-  return s.team;
+  emit('room', s.room);
+  return s.room;
 }
 
 function changedBuddies() {
@@ -226,11 +227,15 @@ const calls = {
     s.mine = s.mine.filter((b) => b.id !== gone);
     return changedBuddies();
   },
-  team: () => s.team,
-  allow: ({ id, level }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: [...t.members, { ...t.pending.find((p) => p.id === id), level }] })),
-  remove: ({ id }) => changeTeam((t) => ({ ...t, pending: t.pending.filter((p) => p.id !== id), members: t.members.filter((m) => m.id !== id) })),
-  setLevel: ({ id, level }) => changeTeam((t) => ({ ...t, members: t.members.map((m) => (m.id === id ? { ...m, level } : m)) })),
-  link: () => changeTeam((t) => ({ ...t, link: `${location.origin}${location.pathname.replace(/[^/]*$/, '')}team.html?room=${newId('r')}` })),
+  room: () => s.room,
+  openRoom() {
+    s.room = { link: `${location.origin}${location.pathname.replace(/[^/]*$/, '')}team.html?room=${newId('r')}`, locked: false, players: [{ id: 'p_noor', name: 'Noor', level: 'write' }, { id: 'p_sam', name: 'Sam', level: 'read' }] };
+    return changeRoom((r) => r);
+  },
+  closeRoom: () => changeRoom(() => null),
+  lockRoom: ({ locked }) => changeRoom((r) => ({ ...r, locked })),
+  setLevel: ({ id, level }) => changeRoom((r) => ({ ...r, players: r.players.map((p) => (p.id === id ? { ...p, level } : p)) })),
+  kick: ({ id }) => changeRoom((r) => ({ ...r, players: r.players.filter((p) => p.id !== id) })),
   history: () => ({ versions: [] }),
   since: () => ({ edits: [], authors: [], head: null }),
   seen: () => ({}),
