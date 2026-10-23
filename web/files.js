@@ -334,7 +334,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     node.setAttribute('aria-busy', 'true');
     // The page saves any edit still on its way before it is replaced.
     desktop.openInFolder(path).then((opened) => opened || showFile(path))
-      .catch((error) => onError(`Could not open ${nameOf(path)}: ${reason(error)}`))
+      .catch((error) => onError(`Could not open ${nameOf(path)}: ${error.message}`))
       .finally(() => node.removeAttribute('aria-busy'));
   }
 
@@ -342,7 +342,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
   async function showFile(path) {
     previewing = path;
     markShown();
-    const result = await api.read(path).catch((error) => ({ error: reason(error) }));
+    const result = await api.read(path).catch((error) => ({ error: error.message }));
     if (previewing !== path) return;
     if (result.error) {
       closePreview();
@@ -377,7 +377,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
   async function trash(node) {
     const after = rows();
     const at = after.indexOf(node);
-    const result = await desktop.folderTrash(node.dataset.path, node.dataset.kind).catch((error) => ({ error: reason(error) }));
+    const result = await desktop.folderTrash(node.dataset.path, node.dataset.kind).catch((error) => ({ error: error.message }));
     if (result?.error) onError(result.error);
     if (!result?.trashed) return;
     // Keep the keyboard where it was: on the row that takes this one's place.
@@ -463,7 +463,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
       busy = true;
       input.readOnly = true;
       node.setAttribute('aria-busy', 'true');
-      const result = await commit(typed).catch((failure) => ({ error: reason(failure) }));
+      const result = await commit(typed).catch((failure) => ({ error: failure.message }));
       busy = false;
       input.readOnly = false;
       node.removeAttribute('aria-busy');
@@ -624,7 +624,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
         focusNext = result.rel;
         return refresh();
       })
-      .catch((error) => onError(`Could not move ${name}: ${reason(error)}`));
+      .catch((error) => onError(`Could not move ${name}: ${error.message}`));
   }
 
   tree.addEventListener('pointerdown', (event) => {
@@ -825,9 +825,6 @@ function browserFolder({ name, path }) {
 const parentOf = (path) => path.split('/').slice(0, -1).join('/');
 const nameOf = (path) => path.split('/').at(-1);
 const join = (folder, name) => (folder ? `${folder}/${name}` : name);
-
-// An error from the app, without Electron's "Error invoking remote method" wrapping.
-const reason = (error) => String(error?.message ?? error).replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, '');
 
 function el(tag, className, text) {
   const node = document.createElement(tag);

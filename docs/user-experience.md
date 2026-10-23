@@ -117,7 +117,7 @@ Codex, or the Ponjo agent, which runs a cloud model you pick): a
 program in `agents/` in your config folder that you may edit (see
 [agent config](agent-config.md)). The one picked shows its settings there,
 under it (a model, an API key), kept apart from its program; an API key
-shows only as set or not.
+shows only its last 4 characters.
 
 ## Who asks whom
 

@@ -40,7 +40,10 @@ window.addEventListener('pointerup', (event) => {
 function act(action, arg) {
   const user = navigator.userActivation.isActive || Date.now() - released < 1000;
   if (!user) return Promise.reject(new Error('needs a click or a key press'));
-  return ipcRenderer.invoke('ponjo:action', action, arg);
+  // The app's error as it threw it, without Electron's "Error invoking remote method" wrapping.
+  return ipcRenderer.invoke('ponjo:action', action, arg).catch((error) => {
+    throw new Error(error.message.replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, ''));
+  });
 }
 
 // window.ponjoHost: a doc page's line to its doc in the doc host
