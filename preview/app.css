@@ -274,7 +274,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-banner button { height: 28px; border: 1px solid var(--border-strong); background: var(--bg); border-radius: 6px; padding: 0 12px; font-weight: 500; }
 .pj-banner button:hover { background: var(--hover); }
 :is([data-read-only], [data-reader]) :is(.pj-bubble [data-action="comment"], .pj-bubble:has(> [data-action="comment"]:only-child), .pj-composer, .pj-resolve, .pj-resolved-row .pj-link-button, .pj-receipt-undo) { display: none !important; }
-[data-reader] .pj-history-restore { display: none !important; }
+[data-reader] .pj-history-restore, [data-reader] .pj-history-undo { display: none !important; }
 
 /* ---- tooltips ---- */
 
@@ -674,7 +674,7 @@ label.pj-setting { cursor: pointer; }
 .pj-history-heading { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pj-history-changes { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); white-space: nowrap; cursor: pointer; }
 .pj-history-changes input { accent-color: var(--text); margin: 0; }
-.pj-history-restore { flex: none; height: 28px; }
+.pj-history-restore, .pj-history-undo { flex: none; height: 28px; }
 .pj-history-stage .pj-editor .ProseMirror { caret-color: transparent; }
 .pj-history { position: sticky; top: 16px; align-self: start; display: flex; flex-direction: column; max-height: calc(100vh - 150px); background: var(--bg-soft); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
 .pj-history-list { list-style: none; margin: 0; padding: 4px 8px 8px; overflow-y: auto; outline: none; }
