@@ -48,10 +48,10 @@ npm run dist:desktop          # installer in release/
 The relay and the teammate's page are one Cloudflare Worker at `share.ponjo.app` ([relay/wrangler.toml](relay/wrangler.toml)). Its owner deploys it from a clean checkout of `main`, signed in to Cloudflare with wrangler (`npx wrangler login` in relay/, once):
 
 ```bash
-npm ci && npm run build       # the page it serves, in dist/web
+npm ci && npm ci --prefix relay
 cd relay
-npx wrangler deploy --dry-run # check
-npx wrangler deploy
+npm run deploy -- --dry-run  # check
+npm run deploy               # builds the page it serves (dist/web), then deploys
 ```
 
 Then check it on two machines: [the sharing checklist](docs/testing-ci.md#sharing--two-machines-by-hand).

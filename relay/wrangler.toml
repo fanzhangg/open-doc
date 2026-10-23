@@ -1,7 +1,6 @@
 # The relay and the teammate's page (docs/architecture.md, Sharing), at
-# https://share.ponjo.app. Deploy from here, after `npm ci && npm run build`
-# at the root: `npx wrangler deploy --dry-run`, then `npx wrangler deploy`
-# (README.md, Sharing).
+# https://share.ponjo.app. Deploy from here with `npm run deploy`, which
+# builds the page first (README.md, Deploying the relay).
 # The tests run it locally with wrangler (test/relay/harness.js).
 name = "ponjo"
 main = "worker.js"
