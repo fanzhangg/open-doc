@@ -2,6 +2,9 @@
   "name": "ponjo-relay",
   "private": true,
   "type": "module",
+  "scripts": {
+    "deploy": "npm run build --prefix .. && wrangler deploy"
+  },
   "devDependencies": {
     "wrangler": "4.151.3"
   }
