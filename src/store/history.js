@@ -8,7 +8,6 @@
 //   <config>/history/<key>/index.json   the versions, oldest first
 //   <config>/history/<key>/<sha256>.md  each version's text, by content
 //   <config>/history/<key>/taken.json   the comments this host took (noteTaken)
-//   <config>/history/<key>/seen.json    the version each person last looked at (noteSeen)
 // `key` is derived from the doc's absolute path; renaming a doc in Ponjo
 // moves its history along (moveHistory).
 //
@@ -168,42 +167,6 @@ async function readTakenFile(dir) {
 }
 
 const takenHash = (c) => hashText(JSON.stringify([c.thread ?? null, c.by.id, c.body]));
-
-/**
- * The text of version `id` and of each version after it, oldest first:
- * { text, after: [{ version, text }] }, or null when `id` is gone.
- */
-export async function versionsSince(docPath, root, id) {
-  const dir = historyDir(docPath, root);
-  const { versions } = await readIndex(dir);
-  const at = versions.findIndex((v) => v.id === id);
-  const text = at === -1 ? null : await readBlob(dir, versions[at].hash);
-  if (text === null) return null;
-  const after = [];
-  for (const version of versions.slice(at + 1)) after.push({ version, text: await readBlob(dir, version.hash) ?? '' });
-  return { text, after };
-}
-
-/** The version each person last looked at: { [person id]: version id }. */
-export async function readSeen(docPath, root) {
-  try {
-    return JSON.parse(await readFile(join(historyDir(docPath, root), 'seen.json'), 'utf8')) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-/** Person `person` has looked at the doc as version `id`. */
-export async function noteSeen(docPath, root, person, id) {
-  const dir = historyDir(docPath, root);
-  await mkdir(dir, { recursive: true });
-  const release = await lockFile(join(dir, 'seen.json.lock'), dir);
-  try {
-    await writeAtomic(join(dir, 'seen.json'), JSON.stringify({ ...(await readSeen(docPath, root)), [person]: id }));
-  } finally {
-    await release();
-  }
-}
 
 /**
  * The doc was renamed from `fromPath` to `toPath`: its history follows. A

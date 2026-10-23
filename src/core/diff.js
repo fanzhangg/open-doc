@@ -213,56 +213,6 @@ export function diffEdits(before, after) {
   return changes;
 }
 
-/**
- * What changed from `base` to the last of `steps` ([{ text, by }], each the
- * text after a step and who made it; `by` null for one whose reader made
- * it), each change credited to who made it: [{ before, after, prefix,
- * suffix, start, by }] as diffEdits records them, found with findEdit. A
- * step that touches a change before it takes it in: one change, from the
- * text as it was before either, credited to the later; one the reader
- * made takes it out, as seen.
- */
-export function changesBy(base, steps) {
-  let marks = []; // { from, to, removed, by } on `text`
-  let text = base;
-  for (const { text: next, by } of steps) {
-    const regions = diffEdits(text, next);
-    const moved = (at) => regions.reduce((shift, { from, to, edit }) => (to <= at && from < at ? shift + edit.after.length - (to - from) : shift), 0) + at;
-    const kept = [];
-    const made = [];
-    for (const m of marks) if (!regions.some((r) => touches(r, m))) kept.push({ ...m, from: moved(m.from), to: moved(m.to) });
-    for (const r of regions) {
-      const taken = marks.filter((m) => touches(r, m));
-      const from = Math.min(r.from, ...taken.map((m) => m.from));
-      const to = Math.max(r.to, ...taken.map((m) => m.to));
-      let removed = '';
-      let at = from;
-      for (const m of taken) {
-        removed += text.slice(at, m.from) + m.removed;
-        at = m.to;
-      }
-      removed += text.slice(at, to);
-      // In `next`, the region is at edit.start; what the marks taken added either side of it is unchanged.
-      const now = { from: r.edit.start - (r.from - from), to: r.edit.start + r.edit.after.length + (to - r.to) };
-      if (by !== null && next.slice(now.from, now.to) !== removed) made.push({ ...now, removed, by });
-    }
-    marks = [...kept, ...made].sort((a, b) => a.from - b.from);
-    text = next;
-  }
-  return marks.map(({ from, to, removed, by }) => ({
-    before: removed,
-    after: text.slice(from, to),
-    prefix: text.slice(Math.max(0, from - EDIT_CONTEXT), from),
-    suffix: text.slice(to, to + EDIT_CONTEXT),
-    start: from,
-    by,
-  }));
-}
-
-// Whether change region `r` (diffEdits) touches mark `m`, both on one text:
-// they overlap, or one is a point in or at the edge of the other.
-const touches = (r, m) => (r.from < m.to && m.from < r.to) || (m.from === m.to && r.from <= m.from && m.from <= r.to) || (r.from === r.to && m.from <= r.from && r.from <= m.to);
-
 /** Where an edit's `after` text sits in `doc` now, or null when it has changed or gone. */
 export function findEdit(doc, edit) {
   if (edit.after) {
