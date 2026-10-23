@@ -58,10 +58,11 @@ delete env.ELECTRON_RUN_AS_NODE;
 
 const step = (text) => console.log(`smoke: ${text}`);
 // In the page, the text of each element `selector` finds, as the person reads
-// it: a buddy's cursor, and the name it shows while it works, are not text.
+// it: a buddy's cursor, and the name it shows while it works, are not text,
+// nor is text a change took out, struck through where it was.
 const textOf = (selector) => `[...document.querySelectorAll('${selector}')].map((node) => {
   const copy = node.cloneNode(true);
-  for (const cursor of copy.querySelectorAll('.pj-cursor')) cursor.remove();
+  for (const cursor of copy.querySelectorAll('.pj-cursor, .pj-buddy-del, .pj-mark-del')) cursor.remove();
   return copy.textContent;
 })`;
 let failed = false;

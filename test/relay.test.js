@@ -476,14 +476,15 @@ test('C2 D7: the browser build asks a name, waits for Allow, then shows the doc 
     await shown.evaluate(`{
       const editor = document.querySelector('.pj-stage [contenteditable]');
       editor.focus();
-      const text = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then')).firstChild;
+      const paragraph = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then'));
+      const text = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT).nextNode(); // in its mark: changed since Noor last looked
       getSelection().collapse(text, 4);
     }`);
     await until(async () => (await host.request('call', { docId, call: 'state' })).cursors.some((c) => c.name === 'Noor'), 'Noor\'s cursor at the host');
 
     // D7: a comment being written, and its anchor, stay while the owner types above it.
     await shown.evaluate(`{
-      const text = [...document.querySelectorAll('.pj-stage [contenteditable] p')].find((p) => p.textContent.startsWith('Then')).firstChild;
+      const text = document.createTreeWalker([...document.querySelectorAll('.pj-stage [contenteditable] p')].find((p) => p.textContent.startsWith('Then')), NodeFilter.SHOW_TEXT).nextNode();
       getSelection().setBaseAndExtent(text, 5, text, 12);
     }`);
     await new Promise((done) => setTimeout(done, 100)); // the editor takes in the selection
@@ -500,7 +501,7 @@ test('C2 D7: the browser build asks a name, waits for Allow, then shows the doc 
     await shown.evaluate(`{
       const editor = document.querySelector('.pj-stage [contenteditable]');
       editor.focus();
-      getSelection().collapse([...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Ship')).firstChild, 0);
+      getSelection().collapse(document.createTreeWalker([...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Ship')), NodeFilter.SHOW_TEXT).nextNode(), 0);
     }`);
     await shown.send('Input.insertText', { text: 'Now: ' });
     await shown.evaluate('window.ponjoLeave()');
