@@ -1,17 +1,9 @@
-// A buddy (spec/PROJECT.md §2): Clippy, in every doc, or a project's
-// `<Name>.md` file. The file name is its name, its text who it is (`about`),
-// the first line shown where there is room for one. Pure, so the doc host
-// and the page check them the same way.
+// A buddy (spec/PROJECT.md §2): a `<Name>.md` file, the user's (in every
+// doc) or a project's. The file name is its name, its text who it is
+// (`about`), the first line shown where there is room for one. Pure, so the
+// doc host and the page check them the same way.
 
 import { NAME_PATTERN, sameName } from './mentions.js';
-
-/** Clippy as it ships: in every doc. Who it is is the user's to change (their own `Clippy.md`); its name is not. */
-export const CLIPPY = Object.freeze({
-  id: 'Clippy',
-  name: 'Clippy',
-  about: 'A general writing assistant that helps draft and edit docs',
-  where: 'app',
-});
 
 const BUDDY_RULES = Object.freeze({
   name: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
@@ -60,21 +52,20 @@ export function defaultName(taken, random = Math.random) {
 /** The first line of who `buddy` is, for a name card or the @ menu. */
 export const tagline = (buddy) => buddy.about.split('\n')[0];
 
-/** A buddy's file text; its id is written unless it is its name (an old file, or Clippy). */
+/** A buddy's file text; its id is written unless it is its name (an old file). */
 export const buddyText = ({ id, name, about = '' }) => `${id && id !== name ? `---\nid: ${id}\n---\n` : ''}${about.trim()}\n`;
 
 /**
  * Each buddy's color, one of eight (spec/PROJECT.md §2), by lower-case
- * name: Clippy's is 0; another's is the one of 1–7 its name picks or, when
- * a buddy before it by name has that one, the next free one.
+ * name: the one its name picks or, when a buddy before it by name has that
+ * one, the next free one.
  */
 export function colorSlots(names) {
-  const slots = new Map([[CLIPPY.name.toLowerCase(), 0]]);
-  const taken = new Set([0]);
-  const others = [...new Set(names.map((n) => n.toLowerCase()))].filter((n) => !slots.has(n)).sort();
-  for (const name of others) {
-    let slot = 1 + (fnv(name) % 7);
-    for (let i = 0; i < 7 && taken.has(slot); i++) slot = 1 + (slot % 7);
+  const slots = new Map();
+  const taken = new Set();
+  for (const name of [...new Set(names.map((n) => n.toLowerCase()))].sort()) {
+    let slot = fnv(name) % 8;
+    for (let i = 0; i < 8 && taken.has(slot); i++) slot = (slot + 1) % 8;
     taken.add(slot);
     slots.set(name, slot);
   }
@@ -89,12 +80,11 @@ function fnv(text) {
 }
 
 /**
- * The buddies a doc reaches: Clippy, as the user's `Clippy.md` among `mine`
- * says (when it says anything), then the project's by name. A project's
- * `Clippy.md` is not one.
+ * The buddies a doc reaches, by name: the user's (`mine`) and the
+ * project's; a project's wins over one of the user's with its name.
  */
 export function buddiesHere(project, mine = []) {
-  const about = mine.find((b) => sameName(b.name, CLIPPY.name))?.about;
-  const theirs = project.filter((b) => !sameName(b.name, CLIPPY.name)).map((b) => ({ ...b, where: 'project' }));
-  return [about ? { ...CLIPPY, about } : CLIPPY, ...theirs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))];
+  const own = mine.filter((b) => !project.some((p) => sameName(p.name, b.name)));
+  return [...project.map((b) => ({ ...b, where: 'project' })), ...own.map((b) => ({ ...b, where: 'user' }))]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 }

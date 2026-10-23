@@ -1,5 +1,5 @@
-// Buddies (spec/PROJECT.md): Clippy, in every doc and changed in the user's
-// config folder, and a project's files in .ponjo/buddies/. Runs use the
+// Buddies (spec/PROJECT.md): the user's files in their config folder's
+// buddies/, in every doc, and a project's in .ponjo/buddies/. Runs use the
 // fake agent script.
 
 import { test } from 'node:test';
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CLIPPY, buddiesHere, buddyText, colorSlots, defaultName, parseBuddy, tagline } from '../src/core/buddies.js';
+import { buddiesHere, buddyText, colorSlots, defaultName, parseBuddy, tagline } from '../src/core/buddies.js';
 import { readSettings } from '../src/store/settings.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, tempDoc, until } from './helpers.js';
 
@@ -42,9 +42,8 @@ test('a buddy file: the name is the file name, the text who it is, its first lin
   assert.equal(buddyText(kept), '---\nid: b_abc123\n---\nChecks every claim.\n');
   assert.equal(buddyText(critic), 'Checks every claim.\n\nQuote the line.\nBe brief.\n');
   assert.deepEqual(parseBuddy('Critic', buddyText(critic)), critic);
-  const here = buddiesHere([{ name: 'critic', about: 'project' }, { name: 'clippy', about: 'theirs' }, { name: 'Ada', about: 'project' }]);
-  assert.deepEqual(here.map((b) => [b.name, b.where]), [['Clippy', 'app'], ['Ada', 'project'], ['critic', 'project']], "Clippy first, then by name; a project's Clippy is not one");
-  assert.equal(here[0], CLIPPY);
+  const here = buddiesHere([{ name: 'critic', about: 'theirs' }, { name: 'clippy', about: 'theirs' }], [{ name: 'Clippy', about: 'mine' }, { name: 'Ada', about: 'mine' }]);
+  assert.deepEqual(here.map((b) => [b.name, b.about, b.where]), [['Ada', 'mine', 'user'], ['clippy', 'theirs', 'project'], ['critic', 'theirs', 'project']], "by name; a project's wins over the user's of its name");
 });
 
 test('a new buddy is named a common first name, not one taken (in any case), then with a number', () => {
@@ -55,38 +54,35 @@ test('a new buddy is named a common first name, not one taken (in any case), the
   assert.equal(defaultName([...all, 'Alice2'], () => 0), 'Alice3');
 });
 
-const CLIPPY_ROW = ['Clippy', CLIPPY.about, 'app'];
+const CLIPPY_ROW = ['Clippy', 'A general writing assistant that helps draft and edit docs', 'user'];
 
-test('buddy colors: Clippy has its own; up to seven others get different ones, the same in any order', () => {
-  // Seven names that would all pick the same color on their own.
+test('buddy colors: up to eight get different ones, the same in any order', () => {
+  // Eight names that would all pick the same color on their own.
   const alone = (name) => colorSlots([name]).get(name);
   const names = [];
-  for (let i = 0; names.length < 7; i++) if (alone(`b${i}`) === alone('b0')) names.push(`b${i}`);
-  const slots = colorSlots(['Clippy', ...names]);
-  assert.equal(slots.get('clippy'), 0);
-  assert.deepEqual(new Set(names.map((n) => slots.get(n))), new Set([1, 2, 3, 4, 5, 6, 7]), 'all seven differ, none is Clippy\'s');
+  for (let i = 0; names.length < 8; i++) if (alone(`b${i}`) === alone('b0')) names.push(`b${i}`);
+  const slots = colorSlots(names);
+  assert.deepEqual(new Set(names.map((n) => slots.get(n))), new Set([0, 1, 2, 3, 4, 5, 6, 7]), 'all eight differ');
   assert.deepEqual(colorSlots([...names].reverse()), slots, 'the same buddies, the same colors');
   assert.equal(colorSlots(['Ada', 'Critic']).get('ada'), colorSlots(['ada']).get('ada'), 'the first by name keeps the one its name picks');
 });
 
-test('Clippy is in every doc: who it is is the user\'s, in their config folder; it keeps its name and stays', { timeout: 30_000 }, async () => {
+test("the user's buddies are in every doc: Clippy is written on first run, then theirs to change, rename or delete", { timeout: 30_000 }, async () => {
   const settingsDir = await fakeConfig();
   const folder = await projectFolder();
-  const mine = ['Clippy', 'Mine now.\n\nReply in French.', 'app'];
+  const mine = ['Clippy', 'Mine now.\n\nReply in French.', 'user'];
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
     assert.deepEqual(await who(opened), [CLIPPY_ROW]);
-    await assert.rejects(readdir(join(settingsDir, 'buddies')), { code: 'ENOENT' }, 'nothing written until it is changed');
+    assert.equal(await readFile(join(settingsDir, 'buddies', 'Clippy.md'), 'utf8'), `${CLIPPY_ROW[1]}\n`, 'its id is its name');
     await opened.call('updateBuddy', { id: 'Clippy', patch: { about: 'Mine now.\n\nReply in French.' } });
     assert.equal(await readFile(join(settingsDir, 'buddies', 'Clippy.md'), 'utf8'), 'Mine now.\n\nReply in French.\n');
     assert.deepEqual(await who(opened), [mine]);
-    await assert.rejects(opened.call('updateBuddy', { id: 'Clippy', patch: { name: 'Clip' } }), refused('bad_input'));
-    await assert.rejects(opened.call('deleteBuddy', { id: 'Clippy' }), refused('bad_input'));
     await assert.rejects(opened.call('createBuddy', { buddy: { name: 'clippy' } }), /the name clippy is taken/);
     const { agents } = await opened.call('createBuddy', { buddy: { name: 'Ada' } });
     await assert.rejects(opened.call('updateBuddy', { id: agents.find((a) => a.name === 'Ada').id, patch: { name: 'Clippy' } }), /the name Clippy is taken/);
     for (const name of ['clippy', 'ada']) await assert.rejects(opened.call('saveSettings', { name }), /is taken/, 'your name is no buddy\'s');
   });
-  // Any other doc has the same Clippy, and its runs say who it is now.
+  // Any other doc has the same buddies, and its runs say who they are now.
   const doc = join(await mkdtemp(join(tmpdir(), 'ponjo-doc-')), 'notes.md');
   await writeFile(doc, SAMPLE);
   await opening(doc, { settingsDir }, async (opened) => {
@@ -95,26 +91,33 @@ test('Clippy is in every doc: who it is is the user\'s, in their config folder; 
     await until(async () => (await opened.state()).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
     assert.match(run.prompt, /Mine now\.\n\nReply in French\./);
-    await opened.call('updateBuddy', { id: 'Clippy', patch: { about: '' } });
-    assert.deepEqual(await who(opened), [CLIPPY_ROW], 'cleared: Clippy as it ships');
+    const renamed = await opened.call('updateBuddy', { id: 'Clippy', patch: { name: 'Clip' } });
+    assert.equal(await readFile(join(settingsDir, 'buddies', 'Clip.md'), 'utf8'), '---\nid: Clippy\n---\nMine now.\n\nReply in French.\n', 'renamed, it keeps its id');
+    assert.deepEqual(renamed.agents.map((a) => a.name), ['Clip']);
+    const { agents } = await opened.call('createBuddy', { buddy: { name: 'Bea' } });
+    assert.deepEqual(agents.map((a) => [a.name, a.where]), [['Bea', 'user'], ['Clip', 'user']], "made in a doc on its own: the user's");
+    await opened.call('deleteBuddy', { id: 'Clippy' });
+    assert.deepEqual(await readdir(join(settingsDir, 'buddies')), ['Bea.md']);
+  });
+  await opening(doc, { settingsDir }, async (opened) => {
+    assert.deepEqual((await who(opened)).map(([name]) => name), ['Bea'], 'deleted, Clippy is not written again');
   });
 });
 
-test('a doc opened from Finder reaches Clippy only, even inside a project folder', async () => {
+test("a doc opened from Finder reaches the user's buddies only, even inside a project folder", async () => {
   const settingsDir = await fakeConfig();
   const folder = await projectFolder({ Critic: 'The project\'s.\n' });
   await opening(join(folder, 'plan.md'), { settingsDir }, async (opened) => {
     assert.deepEqual(await who(opened), [CLIPPY_ROW]);
     assert.equal((await opened.state()).project, false);
-    await assert.rejects(opened.call('createBuddy', { buddy: { name: 'Bob' } }), refused('bad_input'), 'no project to put it in');
   });
 });
 
-test('a folder opened from the home page reaches Clippy and its own; its Clippy.md is not a buddy; @ runs the right one', { timeout: 30_000 }, async () => {
+test("a folder opened from the home page reaches the user's buddies and its own; its own wins by name; @ runs the right one", { timeout: 30_000 }, async () => {
   const settingsDir = await fakeConfig();
-  const folder = await projectFolder({ critic: 'Checks every claim.\n\nQuote the line you rely on.\n', Clippy: 'An impostor.\n' });
+  const folder = await projectFolder({ critic: 'Checks every claim.\n\nQuote the line you rely on.\n', Clippy: 'The project\'s.\n' });
   await opening(join(folder, 'plan.md'), { settingsDir, folder }, async (opened) => {
-    assert.deepEqual(await who(opened), [CLIPPY_ROW, ['critic', 'Checks every claim.\n\nQuote the line you rely on.', 'project']]);
+    assert.deepEqual(await who(opened), [['Clippy', 'The project\'s.', 'project'], ['critic', 'Checks every claim.\n\nQuote the line you rely on.', 'project']]);
     const { id } = await opened.call('comment', { anchor: null, body: '@Critic look' });
     await until(async () => (await opened.state()).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
@@ -140,7 +143,7 @@ test('adding the first buddy to a project creates .ponjo/; buddies are made, ren
     await assert.rejects(opened.call('createBuddy', { buddy: { name: '../evil' } }), refused('bad_input'));
 
     const renamed = await opened.call('updateBuddy', { id, patch: { name: 'Reviewer' } });
-    assert.deepEqual(renamed.agents.map((a) => a.name), ['Clippy', 'Ada', 'Reviewer']);
+    assert.deepEqual(renamed.agents.map((a) => a.name), ['Ada', 'Clippy', 'Reviewer']);
     assert.deepEqual((await readdir(join(folder, '.ponjo', 'buddies'))).sort(), ['Ada.md', 'Reviewer.md']);
     assert.equal(await readFile(join(folder, '.ponjo', 'buddies', 'Reviewer.md'), 'utf8'), written, 'a rename keeps the id');
     assert.equal(renamed.agents.find((a) => a.name === 'Reviewer').id, id);
@@ -192,9 +195,8 @@ test('a buddy file changed outside the app, or by another window, shows at once'
       await mkdir(join(folder, '.ponjo', 'buddies'), { recursive: true });
       await writeFile(join(folder, '.ponjo', 'buddies', 'Critic.md'), 'Pulled from git.\n');
       await until(() => a.events.some(([name, data]) => name === 'agents' && data.some((x) => x.name === 'Critic')), 'Critic from the folder');
-      await mkdir(join(settingsDir, 'buddies'), { recursive: true });
       await writeFile(join(settingsDir, 'buddies', 'Clippy.md'), 'Edited by hand.\n');
-      await until(() => a.events.some(([name, data]) => name === 'agents' && data[0].about === 'Edited by hand.'), 'Clippy from the config folder');
+      await until(() => a.events.some(([name, data]) => name === 'agents' && data.some((x) => x.name === 'Clippy' && x.about === 'Edited by hand.')), 'Clippy from the config folder');
     });
   });
 });

@@ -11,7 +11,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: [site/**, build/icon.svg, build/icon.png, web/**, src/core/**, desktop/start.*, preview/**, scripts/build.js]
+    paths: [site/**, build/icon.svg, build/icon.png, build/document.svg, web/**, src/core/**, desktop/start.*, preview/**, scripts/build.js]
   workflow_dispatch:
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
           # ?v= makes browsers fetch each deploy's CSS and scripts instead of cached ones.
           sed -i "s#\.\./dist/web/#./dist/web/#g; s#\.\./build/#./build/#g; s#\.\./dist/preview/#preview/#g; s#\.css\"#.css?v=${GITHUB_SHA::7}\"#g; s#\.js\([\"']\)#.js?v=${GITHUB_SHA::7}\1#g" *.html
           mkdir -p build dist/web/fonts
-          cp ../main/build/icon.svg ../main/build/icon.png build/
+          cp ../main/build/icon.svg ../main/build/icon.png ../main/build/document.svg build/
           cp ../main/dist/web/app.css ../main/dist/web/faces.js dist/web/
           cp ../main/dist/web/fonts/* dist/web/fonts/
           rm -rf preview && cp -R ../main/dist/preview preview

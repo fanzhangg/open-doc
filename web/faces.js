@@ -1,20 +1,19 @@
 // Avatars: a face drawn from the id (a person's, the name), from one set of parts, each body a
 // little uneven as if drawn by hand. People are round and keep their face
-// everywhere. Clippy's is fixed. The other buddies
-// in a doc take parts as unlike each other's as can be (setBuddies), and a
-// colour no other buddy there has (colorSlots).
+// everywhere. Buddies in a doc take parts as unlike each other's as can be
+// (setBuddies), and a colour no other buddy there has (colorSlots).
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
 // legible down to the 18px faces in a thread's footer.
 
-import { CLIPPY, colorSlots } from '../src/core/buddies.js';
+import { colorSlots } from '../src/core/buddies.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const INK = '#1f1d24';
 const STROKE = 5.5;
 
-// [lightness, chroma, hue] in OKLCH: eight hues evenly apart, Clippy's
-// sunflower first, a touch lighter so it reads as yellow.
+// [lightness, chroma, hue] in OKLCH: eight hues evenly apart, sunflower
+// first, a touch lighter so it reads as yellow.
 const COLORS = [[0.84, 0.17, 85], ...[135, 180, 225, 270, 315, 0, 45].map((hue) => [0.78, 0.14, hue])];
 let slots = colorSlots([]);
 let looks = new Map();
@@ -44,49 +43,6 @@ function colorOf(name) {
 
 let ids = 0; // gradient ids, unique per page
 
-// The app icon: Clippy's face on a paper tile, the shape and size of Apple's
-// icon grid (824 of 1024). macOS 26 shrinks an icon that does not fill this
-// shape onto a grey plate.
-export function appIcon() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'Ponjo' });
-  const defs = node('defs', {});
-  const gradient = node('linearGradient', { id: 'pj-tile', x1: '0', y1: '0', x2: '0', y2: '1' });
-  gradient.append(node('stop', { offset: '0', 'stop-color': '#ffffff' }), node('stop', { offset: '1', 'stop-color': '#f1ede3' }));
-  defs.append(gradient);
-  // A faint ink edge keeps the tile apart from white backgrounds (Windows, browser tabs).
-  svg.append(defs, node('rect', {
-    x: '9.77', y: '9.77', width: '80.47', height: '80.47', rx: '18.1',
-    fill: 'url(#pj-tile)', stroke: INK, 'stroke-opacity': '0.12', 'stroke-width': '0.6',
-  }));
-  const avatar = agentFace(CLIPPY.name);
-  const mark = node('g', { transform: 'translate(50 50) scale(0.64) translate(-50 -50)' });
-  mark.append(...avatar.childNodes);
-  svg.append(mark);
-  return svg;
-}
-
-// Clippy's face overlaps the folded page; its white halo cuts the page edge
-// where they cross.
-export function documentIcon() {
-  const svg = node('svg', { xmlns: NS, viewBox: '0 0 100 100', role: 'img', 'aria-label': 'Ponjo document' });
-  svg.append(
-    node('path', { d: 'M34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88V14Q28 8 34 8Z', fill: '#fff' }),
-    node('path', { d: 'M28 88V14Q28 8 34 8H69L91 30V88Q91 94 85 94H34Q28 94 28 88', fill: 'none', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
-    node('path', { d: 'M69 8V25Q69 30 74 30H91', fill: '#eeedf0', stroke: '#96959e', 'stroke-width': '2.5', 'stroke-linejoin': 'round' }),
-    node('path', { d: 'M68 45H81M69 57H81M68 69H81', fill: 'none', stroke: '#b8b7be', 'stroke-width': '3.5', 'stroke-linecap': 'round' }),
-  );
-  const [defs, clippy] = agentFace(CLIPPY.name).children;
-  const halo = clippy.cloneNode(true);
-  halo.querySelector('.pj-face-look').remove();
-  for (const [key, value] of Object.entries({ fill: '#fff', stroke: '#fff', 'stroke-width': '12', 'stroke-linejoin': 'round' })) {
-    halo.querySelector('.pj-face-body').setAttribute(key, value);
-  }
-  const mark = node('g', { transform: 'translate(-2 34) scale(0.62)' });
-  mark.append(halo, clippy);
-  svg.append(defs, mark);
-  return svg;
-}
-
 /** @param {string} id */
 export const agentFace = (id) => face(id, looks.get(id.toLowerCase()) ?? drawn(id));
 
@@ -112,9 +68,8 @@ function face(name, look, kind = look.body) {
   return svg;
 }
 
-// The parts `name` picks: Clippy's are fixed, anyone else's drawn from the name.
+// The parts `name` picks, drawn from the name.
 function drawn(name) {
-  if (name.toLowerCase() === CLIPPY.name.toLowerCase()) return CLIPPY_LOOK;
   const rand = random(seed(name));
   const body = pick(rand, BODIES);
   const tilt = range(rand, -7, 7);
@@ -124,7 +79,7 @@ function drawn(name) {
   return { body, tilt, eye, mouth, extra };
 }
 
-// The buddies in turn, Clippy first: each part is the one fewest before have,
+// The buddies in turn: each part is the one fewest before have,
 // the first such from the one the name picks, so faces in a doc differ as
 // much as they can.
 function spread(names) {
@@ -135,11 +90,9 @@ function spread(names) {
   for (const name of names) {
     const look = { ...drawn(name) };
     for (const [part, options] of Object.entries(parts)) {
-      if (name !== CLIPPY.name.toLowerCase()) {
-        const fit = options.filter((option) => part !== 'extra' || fits(option, look.eye));
-        const start = Math.max(0, fit.indexOf(look[part]));
-        look[part] = [...fit.slice(start), ...fit.slice(0, start)].reduce((best, option) => (count(part, option) < count(part, best) ? option : best));
-      }
+      const fit = options.filter((option) => part !== 'extra' || fits(option, look.eye));
+      const start = Math.max(0, fit.indexOf(look[part]));
+      look[part] = [...fit.slice(start), ...fit.slice(0, start)].reduce((best, option) => (count(part, option) < count(part, best) ? option : best));
       counts[part].set(look[part], count(part, look[part]) + 1);
     }
     result.set(name, look);
@@ -236,8 +189,6 @@ const MOUTHS = ['smile', 'grin', 'o', 'flat', 'cat'];
 const EXTRAS = [null, 'blush', 'glasses', 'bow'];
 // Blush and glasses would crowd big eyes.
 const fits = (extra, eye) => eye !== 'big' || !['blush', 'glasses'].includes(extra);
-
-const CLIPPY_LOOK = { body: 'cloud', tilt: -3, eye: 'dot', mouth: 'smile', extra: 'blush' };
 
 function drawFace(g, { eye, mouth, extra }, cy, hue) {
   const big = eye === 'big';

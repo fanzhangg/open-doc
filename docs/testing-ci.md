@@ -87,16 +87,17 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 ### Buddy files — unit, integration
 
 - `<Name>.md`: the file name is the name, the text who it is; a
-  renamed file is a renamed buddy; a `Clippy.md` is not a buddy;
+  renamed file is a renamed buddy;
   `.ponjo/` created with the first buddy; only the opened folder's counts.
-- Doc mode reaches Clippy only, also inside a project folder.
-- Clippy's text is the user's `buddies/Clippy.md`, the same in every doc
-  and in its runs; empty or missing, Clippy is as it ships; it keeps its
-  name and cannot be deleted.
+- The user's buddies are the same in every doc and in their runs; doc
+  mode reaches only them, also inside a project folder; a project's buddy
+  wins over one of the user's with its name.
+- The first run writes `Clippy.md` (id `Clippy`) once; then it is renamed,
+  changed and deleted like any buddy.
 - One agent script runs every buddy, with `PONJO_BUDDY` set;
   **nothing in `.ponjo/` or a sidecar chooses a program**.
-- The same project's buddies have the same faces and colors everywhere;
-  Clippy and up to seven buddies all have different colors.
+- The same buddies have the same faces and colors everywhere; up to
+  eight buddies all have different colors.
 
 ### App — e2e
 

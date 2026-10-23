@@ -207,7 +207,6 @@ async function start() {
     setName,
     getAbout: () => settings.get().about,
     setAbout: (about) => settings.set({ about }),
-    project: () => inProject,
     owner: () => level === 'owner',
     onResult: takeAgentResult,
   });

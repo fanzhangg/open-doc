@@ -40,7 +40,7 @@ MUST keep fields it does not understand.
 | `id` | string | `c_` + at least 6 characters from `[A-Za-z0-9_-]`. The first comment's id is also its thread's id. |
 | `thread` | string, optional | The first comment of the thread this one replies in. Absent on a first comment. |
 | `anchor` | object or null, optional | On a first comment: the text it is about (§3); absent or `null` for a comment on the whole doc. On a buddy's reply whose edit rewrote that text: where the text is now (§3). |
-| `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. The `id` is random and stays when the name changes: a human's is in their settings, a buddy's in its file ([PROJECT §2](PROJECT.md)); a buddy file without one is a buddy whose `id` is its name. Clippy's is `Clippy`. The `name` is only what it was called then. |
+| `by` | object | `{ "id", "name", "kind": "human" \| "ai" }`. The `id` is random and stays when the name changes: a human's is in their settings, a buddy's in its file ([PROJECT §2](PROJECT.md)); a buddy file without one is a buddy whose `id` is its name. The `name` is only what it was called then. |
 | `at` | string | When it was written, RFC 3339 UTC. A buddy's reply and comments: just after the latest comment of the thread it answered, as its run saw it. |
 | `body` | string | Plain text; may be empty on a reply (it resolves or reopens), or when `resolved` is set. |
 | `resolved` | `true`, optional | Resolves the thread. Who may is not in the file: the app that writes it decides. |

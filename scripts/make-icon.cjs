@@ -1,7 +1,7 @@
-// Generate SVG and desktop assets from the avatar renderer: npm run icon:desktop.
+// Generate the desktop assets and the wordmark from the icon drawings,
+// build/icon.svg and build/document.svg: npm run icon:desktop.
 const { app, BrowserWindow, nativeImage } = require('electron');
-const { writeFileSync } = require('node:fs');
-const { buildSync } = require('esbuild');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const build = join(__dirname, '..', 'build');
@@ -46,20 +46,15 @@ function icns(png) {
 app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
   await window.loadURL('data:text/html,<html></html>');
-  // Bundled, since faces.js imports from src/.
-  const renderer = buildSync({ entryPoints: [join(__dirname, '..', 'web', 'faces.js')], bundle: true, format: 'iife', globalName: 'faces', write: false }).outputFiles[0].text;
-  const draw = (fn) => window.webContents.executeJavaScript(`(() => { ${renderer}\nreturn faces.${fn}().outerHTML; })()`);
   // One mark everywhere: the app icon is also the favicon and the wordmark's mark.
-  const svg = await draw('appIcon');
-  writeFileSync(join(build, 'icon.svg'), svg + '\n');
+  const svg = readFileSync(join(build, 'icon.svg'), 'utf8').trim();
   const mark = svg.replace('<svg ', '<svg x="0" y="0" width="80" height="80" ');
   const logo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 80" width="204" height="80" role="img" aria-label="Ponjo">
     <style>text{fill:#1f1d24;font:600 38px Inter,"Segoe UI",sans-serif;letter-spacing:-1px}@media(prefers-color-scheme:dark){text{fill:#f4f2ec}}</style>
     ${mark}<text x="82" y="54">Ponjo</text>
   </svg>`;
   writeFileSync(join(build, 'logo.svg'), logo + '\n');
-  const documentSvg = await draw('documentIcon');
-  writeFileSync(join(build, 'document.svg'), documentSvg + '\n');
+  const documentSvg = readFileSync(join(build, 'document.svg'), 'utf8').trim();
   for (const [name, artwork] of [['icon', svg], ['document', documentSvg]]) {
     const data = await window.webContents.executeJavaScript(`(async () => {
       const image = new Image();
@@ -78,7 +73,7 @@ app.whenReady().then(async () => {
     writeFileSync(join(build, `${name}.icns`), icns(png));
   }
   window.destroy();
-  console.log('Generated application and document SVG, PNG (1024px), ICO (16-256px), ICNS (16-1024px), and the Ponjo wordmark.');
+  console.log('Generated application and document PNG (1024px), ICO (16-256px), ICNS (16-1024px), and the Ponjo wordmark.');
   app.quit();
 }).catch((error) => {
   console.error(error);

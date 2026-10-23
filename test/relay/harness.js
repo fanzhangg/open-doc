@@ -50,6 +50,8 @@ export async function project(text, doc = 'plan.md') {
   await writeFile(join(folder, '.ponjo', 'secret.md'), 'hidden\n');
   const config = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(config, 'settings.json'), JSON.stringify({ name: 'owner', agents: [] }));
+  await mkdir(join(config, 'buddies'));
+  await writeFile(join(config, 'buddies', 'Clippy.md'), 'Helps.\n'); // the owner's, from their first run
   const secret = `s-${Math.random().toString(36).slice(2)}`;
   const sam = teammate('Sam');
   await writeTeam(folder, { secret, members: [{ id: idOf(sam.key), name: sam.name, level: 'read' }] }, config);

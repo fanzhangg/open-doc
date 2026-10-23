@@ -62,7 +62,7 @@ test('a run edits its copy and prints its reply: the doc has the edit, the threa
     assert.equal(run.project, '');
     assert.equal(run.ponjo, false, 'no ponjo to call');
     assert.deepEqual(run.settings, {}, 'an agent with no manifest has no settings');
-    assert.match(run.prompt, /A general writing assistant/, 'Clippy is built in');
+    assert.match(run.prompt, /A general writing assistant/, 'Clippy, written on first run');
     assert.match(run.prompt, /fzhan: @Clippy replace/);
     await until(() => !existsSync(run.cwd), 'the folder to be gone after', 5000);
   });
