@@ -535,7 +535,7 @@ test('C2 C6 D7: the browser build asks a name, then shows the doc live at Edit: 
       const editor = document.querySelector('.pj-stage [contenteditable]');
       editor.focus();
       const paragraph = [...editor.querySelectorAll('p')].find((p) => p.textContent.startsWith('Then'));
-      const text = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT).nextNode(); // in its mark: changed since Noor last looked
+      const text = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT).nextNode();
       getSelection().collapse(text, 4);
     }`);
     await until(async () => (await host.call('state')).cursors.some((c) => c.name === 'Noor'), 'Noor\'s cursor at the host');

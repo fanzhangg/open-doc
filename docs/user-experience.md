@@ -143,8 +143,7 @@ shows only its last 4 characters.
   of the doc; when it is done, its changes are merged into the doc as it is
   then, at once, and shown as a revision: new text in its color, removed text
   grey and struck through where it was, until you type, press Escape or
-  another run's edits land; then it stays marked with the rest of what
-  changed since you last looked.
+  another run's edits land.
 - An AI buddy comments as people do: on any passage, or in any thread. It
   resolves the thread it answers when asked to ("…and resolve"). Its
   comments ask no one.
@@ -164,11 +163,6 @@ shows only its last 4 characters.
   stay, the rest of its change lands, and its reply says part of it was not
   applied: @mention it again to redo it. A change from outside merges the
   same way, without the second try.
-- **Changed since you last looked.** What others changed (teammates, AI
-  buddies, programs outside Ponjo) since you last looked at the doc stays
-  marked in their colour, removed text struck through, and a banner says
-  who: through your typing, and the next time you open the doc, until you
-  click Seen. Your own changes are never marked for you.
 - **Undo is one thing**, for your typing, an AI buddy's run, a teammate's
   change or one from outside: it takes those edits back, all at once, and
   keeps everything written since; where someone changed those lines since,

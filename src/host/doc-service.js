@@ -16,10 +16,10 @@ import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar
 import { sameName } from '../core/mentions.js';
 import { BuddyError, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
-import { changesBy, lineChanges, merge3 } from '../core/diff.js';
+import { lineChanges, merge3 } from '../core/diff.js';
 import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
 import { StoreError, formFor, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, moveHistory, noteSeen, noteTaken, noteWritten, readHistory, readSeen, readTaken, readVersion, recordVersion, versionsSince, writtenEdits } from '../store/history.js';
+import { VERSION_ID, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { firstBuddies, projectBuddiesDir, readBuddies, removeBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { secretTails } from '../store/secrets.js';
@@ -571,39 +571,6 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
     return commentsView(text);
   }
 
-  // What changed since `who` last looked: each change of a version after the
-  // one they last saw (seen), in the latest version, credited to who made it
-  // (changesBy): { edits, authors, head }, `by` on each edit a buddy's id, a
-  // person's name, or '' for a program outside, and `authors` [{ by, name }]
-  // who made them. Their own changes are not shown. Someone who never looked
-  // has looked now.
-  async function since(who) {
-    await chronicle;
-    const head = (await readHistory(docPath, settingsDir)).at(-1)?.id ?? null;
-    const last = (await readSeen(docPath, settingsDir))[who.id];
-    const found = head && last && (await versionsSince(docPath, settingsDir, last));
-    if (!found) {
-      if (head) await noteSeen(docPath, settingsDir, who.id, head); // never looked, or what they saw is gone from history
-      return { edits: [], authors: [], head };
-    }
-    const authors = new Map();
-    const steps = found.after.map(({ version: v, text }) => {
-      if ([v.author, ...(v.authors ?? [])].some((a) => a?.id === who.id)) return { text, by: null };
-      const by = v.author ? (v.author.kind === 'agent' ? v.author.id : v.author.name) : '';
-      authors.set(by, v.author?.name ?? 'Outside Ponjo');
-      return { text, by };
-    });
-    const edits = changesBy(found.text, steps);
-    const shown = new Set(edits.map((e) => e.by));
-    return { edits, authors: [...authors].filter(([by]) => shown.has(by)).map(([by, name]) => ({ by, name })), head };
-  }
-
-  // `who` has looked at the doc as version `id`.
-  async function seen({ id } = {}, who) {
-    await noteSeen(docPath, settingsDir, who.id, versionId(id));
-    return {};
-  }
-
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
   // { state: 'edited' | 'undone', by, changes, version, conflict } },
   // `changes` how many places the run changed, `version` the version that
@@ -816,8 +783,6 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
     read: {
       state,
       cursor,
-      since: (body, who) => since(who),
-      seen,
       async history() {
         await serial(flushTyping); // typing not paused yet is a version too
         await chronicle;

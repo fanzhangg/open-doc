@@ -237,8 +237,6 @@ const calls = {
   setLevel: ({ id, level }) => changeRoom((r) => ({ ...r, players: r.players.map((p) => (p.id === id ? { ...p, level } : p)) })),
   kick: ({ id }) => changeRoom((r) => ({ ...r, players: r.players.filter((p) => p.id !== id) })),
   history: () => ({ versions: [] }),
-  since: () => ({ edits: [], authors: [], head: null }),
-  seen: () => ({}),
   version: () => refuse('no history in the preview'),
   restoreVersion: () => refuse('no history in the preview'),
   undo: () => refuse('no undo in the preview'),

@@ -284,7 +284,7 @@ window's port is, so no call names a doc.
 
 | Calls | Level |
 | --- | --- |
-| `state`, `history`, `version`, `since`, `seen`, `cursor`; ProjectService's `list`, `read`, `open` | read |
+| `state`, `history`, `version`, `cursor`; ProjectService's `list`, `read`, `open` | read |
 | `submit`, `undo`, `comment` (resolving and reopening too) | write |
 | everything else: `move`, settings, AI buddies, agent scripts, Room's own calls | owner |
 
@@ -346,14 +346,6 @@ credited to whoever made it. A version is never changed once written: each
 names its `parent`, the version before it, and only the oldest go once the
 history is full. The history view groups a burst of typing into one row.
 
-**What changed since you last looked** is read from the versions too: each
-person's `seen` is the version they last said they had seen (`seen.json`
-with the history; a first look sees the latest). `since()` walks the
-versions after it and credits each change, as it sits in the latest one, to
-whoever made it (`changesBy` in `src/core/diff.js`): a later change that
-touches an earlier one takes it in, and the caller's own changes are left
-out. The page marks them in each maker's colour until the person says Seen.
-
 **Undo of a version is one edit**: the inverse of its change, from its
 parent's text to its own, merged by line with everything written since
 (`merge3`), so lines someone changed since stay. A row of several versions
@@ -366,7 +358,7 @@ others put in; its result is your typing, merged by character.
 | --- | --- | --- |
 | Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { first })` → ops, `apply(text, ops)`, `mapOffset(at, ops)`, `merge3(base, ours, theirs)` → `{ text, conflicts }`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts and history are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo({ id, from? })`, a version (or the versions from `from` to it) undone as above, a turn's from its reply; `since()`, what changed since the caller last looked, and `seen({ id })`, see below; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `room`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
+| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo({ id, from? })`, a version (or the versions from `from` to it) undone as above, a turn's from its reply; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `room`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of players who can edit. A finished turn comes through the door as its buddy |
 | Room | who plays in the project's room and what each may do, while it is open | for the owner `open()`, `close()`, `lock(locked)`, `setLevel(id, level)` with `level` `read` or `write`, `kick(id)` and `list()` (`{ link, locked, players }`, or null while closed), at the door as `openRoom`, `closeRoom`, `lockRoom`, `setLevel`, `kick` and `room`; a page that opens the link joins as `join({ id, name })`; the host asks it a player's level on each call; event `room` to the owner's windows |
@@ -444,7 +436,7 @@ written only by the app.
 | `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
-| `history/` | versions of each doc, saved each time typing pauses, before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; the version each person last looked at; and the windows' edits the doc's file was last written with; the comments this host took |
+| `history/` | versions of each doc, saved each time typing pauses, before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with; the comments this host took |
 | `mirrors/` | each project's mirror: a copy of what the project shows, cloned for each run (`src/host/mirror.js`) |
 
 ## A buddy's turn
@@ -504,8 +496,7 @@ how many places the turn edited, with Undo; a turn whose version says
 margin. The reply says only what the
 app cannot (why, what to decide), and may be empty. The turn's edits land at
 once, shown as a revision (new text in the buddy's color, removed text
-struck through) until the user next types or another turn's edits land,
-and then among what changed since they last looked, until they say Seen;
+struck through) until the user next types or another turn's edits land;
 clicking the count shows the turn's alone again. The count, the revision and Undo are
 read from the version saved after the turn and the one before it, in every
 window of the team, since the versions are on the host.
