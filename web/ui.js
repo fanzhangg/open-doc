@@ -7,7 +7,6 @@ import { hydrateIcons } from './icons.js';
 import { keyLabel, setupSettings, setupTooltips } from './settings-dialog.js';
 import { api } from './api.js';
 import { VIEWS } from './views/index.js';
-import { RULES } from '../src/rules/index.js';
 
 /**
  * @param {{ getView: () => object, settings: ReturnType<typeof import('./settings.js').createSettings>,
@@ -22,7 +21,6 @@ export function createChrome({ getView, settings: store, getName, setName }) {
   const settings = setupSettings({
     store,
     views: VIEWS,
-    rules: RULES,
     getName,
     setName,
     onApply() {

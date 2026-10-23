@@ -12,10 +12,10 @@ export const SETTINGS_VERSION = 3;
  * "not chosen yet": the doc host suggests one. `about` is who the user is, as a
  * buddy's is, and goes to every buddy that answers them. `agent` names the agent
  * that runs every buddy (src/store/agents.js). Buddies are files
- * (src/store/buddies.js), never settings. `views`, `rules` and `agents` hold the
- * settings of each view, rule and agent by its id (`{ <id>: { enabled: false } }`);
+ * (src/store/buddies.js), never settings. `views` and `agents` hold the
+ * settings of each view and agent by its id (`{ <id>: { enabled: false } }`);
  * one not there takes the default its declaration gives (viewSettings,
- * ruleSettings, agentSettings).
+ * agentSettings).
  */
 export const DEFAULT_SETTINGS = Object.freeze({
   id: null,
@@ -23,7 +23,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   about: '',
   theme: 'system',
   views: Object.freeze({}),
-  rules: Object.freeze({}),
   agents: Object.freeze({}),
   agent: 'claude',
 });
@@ -40,7 +39,6 @@ const VALID = {
   about: (v) => typeof v === 'string' && !v.includes('\0'),
   theme: oneOf('system', 'light', 'dark'),
   views: perId,
-  rules: perId,
   agents: perId,
   agent: (v) => typeof v === 'string' && NAME_PATTERN.test(v),
 };
@@ -62,7 +60,7 @@ export function checkSettingsPatch(patch) {
   return patch;
 }
 
-/** `stored` with `patch` applied: top-level keys replace, but a view's, rule's or agent's settings merge into its others. */
+/** `stored` with `patch` applied: top-level keys replace, but a view's or agent's settings merge into its others. */
 export function mergeSettings(stored, patch) {
   const next = { ...stored, ...patch };
   for (const kind of KINDS) {
@@ -111,9 +109,6 @@ const FIELD_RULES = {
  */
 export const viewSettings = (settings, view) => declared(settings.views[view.id], view);
 
-/** The settings of `rule` (a declaration, src/rules/): `{ enabled }`, on unless switched off. */
-export const ruleSettings = (settings, rule) => declared(settings.rules[rule.id], rule);
-
 /**
  * The settings of `agent` (a declaration, agentOf): each field as stored if
  * valid, else its default; a secret from `secrets`, the agent's decrypted
@@ -160,10 +155,10 @@ function values(stored, fields = [], secrets = {}) {
   }));
 }
 
-const KINDS = ['views', 'rules', 'agents'];
+const KINDS = ['views', 'agents'];
 const objectOr = (value) => (isObject(value) ? value : {});
 
-// `{ <id>: { <key>: boolean | string | number } }`, the shape of `views`, `rules` and `agents`.
+// `{ <id>: { <key>: boolean | string | number } }`, the shape of `views` and `agents`.
 function perId(value) {
   return isObject(value) && Object.values(value).every((one) => isObject(one) && Object.values(one).every(scalar));
 }

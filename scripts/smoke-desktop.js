@@ -4,9 +4,8 @@
 // buddy's revision show in the .js file's plain view, that Cmd+Z undoes only
 // your typing and Undo on a reply the buddy's edit, that switching the
 // Markdown view off and on turns the Markdown docs to the plain view and
-// back without writing them, that its own settings apply at once, that the
-// Markdown rule, apart from the view, refuses a page's merge of an outside
-// change that would change how a line renders until it is switched off, that
+// back without writing them, that its own settings apply at once, that
+// typing while a save is on its way stays with a change from outside, that
 // the app listens on no port, that a doc host that stops is started again, and
 // that a setting survives a relaunch.
 //
@@ -120,17 +119,9 @@ await first.evaluate(`document.querySelector('.pj-history-bar [data-action="clos
 check(await ownSettingsApply(first), 'its Outline switch and the focus mode shortcut take effect at once');
 check(readFileSync(docs[0], 'utf8') === unswitched.text && (await versionCount(first)) === unswitched.versions, 'switching wrote no file and recorded no version');
 
-step('the Markdown rule, apart from the view');
+step('typing while a save is on its way, in the plain view');
 await notes.evaluate(`document.querySelector('.pj-settings [data-owner="markdown"][data-key="enabled"]').click()`);
 await waitFor(() => notes.evaluate(`Boolean(document.querySelector('.pj-stage .cm-content'))`), 15_000, 'the plain view');
-// Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-const ruleOn = await mergesOutside(notes, docs[1]);
-check(ruleOn === '1 *2* 3 4*\n', `on, with the view off: the line conflicts and your typing stays (${JSON.stringify(ruleOn)})`);
-await notes.evaluate(`document.querySelector('.pj-settings [data-owner="markdown-rule"][data-key="enabled"]').click()`);
-const ruleOff = await mergesOutside(notes, docs[1]);
-check(ruleOff === '1 *2 3 4*\n', `off: the line merges by character (${JSON.stringify(ruleOff)})`);
-
-step('typing while a save is on its way');
 const midSave = await typesDuringSave(notes, docs[1]);
 check(midSave === 'one A B\ntwo\nTHREE\n', `what is typed while a save is on its way stays, with the change from outside (${JSON.stringify(midSave)})`);
 
@@ -292,24 +283,6 @@ async function undoesReply(page, doc, before) {
   })()`);
   if (!clicked) return false;
   return waitFor(() => readFileSync(doc, 'utf8').includes(before), 15_000, 'the undo').catch(() => false);
-}
-
-// In `page`, `doc` in the plain view: type " 4*" at the end of "1 *2* 3"
-// while a change from outside takes out its second `*`. The doc once the page
-// has merged the two and saved it.
-async function mergesOutside(page, doc) {
-  const shown = `${textOf('.pj-stage .cm-line')}.join('\\n')`;
-  writeFileSync(doc, '1 *2* 3\n');
-  await waitFor(async () => (await page.evaluate(shown)) === '1 *2* 3\n', 15_000, 'the doc from disk');
-  await page.evaluate(`document.querySelector('.pj-stage [contenteditable="true"]').focus()`);
-  // The End key, not a DOM selection: the editor's own caret is where typing goes.
-  for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'End', code: 'End', windowsVirtualKeyCode: 35 });
-  await page.send('Input.insertText', { text: ' 4*' });
-  writeFileSync(doc, '1 *2 3\n'); // before the typing is saved
-  return waitFor(async () => {
-    const text = await page.evaluate(shown);
-    return text.includes('4*') && readFileSync(doc, 'utf8') === text && text;
-  }, 15_000, 'the merge to be saved').catch(() => null);
 }
 
 // The doc is changed from outside right after ' A' is typed, and the save's answer is

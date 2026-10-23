@@ -141,7 +141,6 @@ test('when the host goes away the page waits, and once it is back catches up wit
         return result;
       },
       show: (text) => { shown = text; },
-      rules: () => [],
     });
     client.start(state);
     const hellos = () => teammate.events.filter((e) => e.event === 'hello').length;

@@ -38,7 +38,7 @@ People and AI buddies work on the same doc at the same time, discussing in comme
 
 - **Cloud documents**: Docs live only on your machine; no cloud storage. A shared project stays there too: the relay between you and your teammates stores nothing
 - **Accounts and organizations**: A teammate joins with a link and a name; there is no sign-up, no organization and no billing
-- **Proprietary document formats**: Plain text files only. Views and rules (Markdown is the first, built in) improve co-authoring for a format; they never replace the file
+- **Proprietary document formats**: Plain text files only. Views (Markdown is the first, built in) improve co-authoring for a format; they never replace the file
 - **Fine-grained permissions**: A teammate reads or edits, and is trusted; no roles, no per-doc rights, no tracking of who typed what
 - **Knowledge base**: We work on a doc or a project folder, not note management
 - **Chat interface**: All communication happens in comments; no chat window
@@ -81,7 +81,7 @@ How we're different:
 
 - **People in control**: The AI never takes over the doc. Measure edits that go beyond the comment's scope and the share of runs users undo.
 - **Less waiting**: Measure time from an @ to the AI buddy's reply, and how long people and AI buddies wait on each other.
-- **Many AI buddies**: Measure the share of docs with 2+ AI buddies and the number of AI buddy edits dropped in conflicts.
+- **Many AI buddies**: Measure the share of docs with 2+ AI buddies and the number of AI buddy turns run once more, or not fully applied, after colliding with people's edits.
 - **Writing together**: Measure the share of projects with a teammate, and characters lost when people type at once (the target is none).
 - **Better writing experience**: Beat an editor + AI plugin on completion time and satisfaction for the same task; track weekly active docs and retention.
 - **Open**: Docs open correctly in any text editor; count the third-party agents that connect.

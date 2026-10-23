@@ -221,7 +221,7 @@ test('an edit after a buddy\'s, on the same text: undoing the buddy\'s keeps wha
   });
 });
 
-test('a person\'s edit that started before a buddy\'s turn landed wins its line, and the turn is marked conflict', { timeout: 30_000 }, async () => {
+test('a person\'s edit that started before a buddy\'s turn landed moves over it by character: nothing either wrote is lost', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, edit, state }) => {
     const before = await state();
     const ask = async (body) => {
@@ -230,15 +230,14 @@ test('a person\'s edit that started before a buddy\'s turn landed wins its line,
     };
     const apart = await ask('@Pilot replace "Q4 Launch" with "Q1 Launch"');
     await edit(before.text.replace('beta cohort', 'beta testers'), before); // typed on the text before the turn
-    assert.equal((await state()).edits[apart].conflict, false, 'on another line: nothing taken back');
+    assert.match((await state()).text, /Q1 Launch Plan[\s\S]*beta testers/);
     const now = await state();
-    const same = await ask('@Pilot replace "beta testers" with "beta group"');
+    await ask('@Pilot replace "beta testers" with "beta group"');
     await edit(now.text.replace('beta testers', 'beta folks'), now); // the same word
     const after = await state();
-    assert.match(after.text, /Q1 Launch Plan/);
-    assert.match(after.text, /beta folks/);
-    assert.doesNotMatch(after.text, /group/);
-    assert.equal(after.edits[same].conflict, true);
+    const word = after.text.match(/beta (\w+) before/)[1]; // both, by character, where they meet
+    assert.ok([...'gp', ...'flk'].every((c) => word.includes(c)), word); // what each put in; the 'r' was the base's
+    assert.equal(after.edits[apart].conflict, false);
   });
 });
 

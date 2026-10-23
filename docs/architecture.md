@@ -31,8 +31,11 @@ with a way to fix it.
    remembers nothing.
 4. **No one resolves a conflict by hand.** Between people, nothing typed is
    dropped: the host orders their edits and merges them by character. An
-   AI buddy's edit, or one from outside, yields to a person's. What loses is
-   redone (ask the buddy again) or restored (history).
+   AI buddy's turn, a change from outside and an undo are merged with the
+   doc by line on the host (`merge3`): where they changed the same lines as
+   people, people's lines stay. A turn that collides is run once more
+   first. What does not land is redone (ask the buddy again) or restored
+   (history).
 5. **AI buddies always edit, and every edit can be undone.** See
    [Undoing changes](#undoing-changes).
 6. **Only a person's comment starts a turn:** mine, or a teammate's who can
@@ -98,14 +101,12 @@ flowchart TD
   end
   shell["Shell<br>desktop/"]
   host["DocService, Runner<br>src/host/"]
-  rules["Rules<br>src/rules/"]
   markdown["Markdown library<br>src/markdown/"]
   store["Store<br>src/store/"]
   core["Core<br>src/core/"]
   shell --> host & store & core
-  host --> rules & store & core
-  web --> rules & markdown & core
-  rules --> markdown & core
+  host --> store & core
+  web --> markdown & core
   markdown --> core
   store --> core
   web -. IPC .- shell
@@ -115,15 +116,14 @@ flowchart TD
 | Component | Owns |
 | --- | --- |
 | Format | `X` + `X.comments.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
-| Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff (Myers', `diff.js`), text operations and how they merge (`ot.js`), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
-| Markdown library (`src/markdown/`) | not a view or a rule; what both Markdown ones use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
-| Rules (`src/rules/`) | built in; how a format's edits merge, whoever made them. See Views and rules |
+| Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff (Myers', `diff.js`) and the three-way merge by line (`merge3`), text operations and how they merge by character (`ot.js`), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
+| Markdown library (`src/markdown/`) | not a view; what the Markdown view and the page use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
 | Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agents (programs and their manifests) in the config folder; buddy files (Clippy's there, a project's in its folder) |
 | DocService (`src/host/doc-service.js`) | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
 | ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |
 | Windows (`web/`) | the doc page: editing and commenting, through DocService. The page talks to its editor, a view, in offsets on the doc's text, turns its typing into operations and takes others' back (`client.js`), and works out the marks a view draws (comments, a draft, a revision). The page knows no format. Also the home page (`start.js`) |
-| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views and rules. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js`; every view's find bar is `find.js` |
+| Views (`web/views/`) | built in; a doc's editor: what a person sees and types in. See Views. The Markdown view's parts are also in `web/`: `diagrams.js`, `markdown-schema.js`, `pm-text.js`, `review.js`; every view's find bar is `find.js` |
 | Shell (`desktop/`) | the app: windows, menus, dialogs, recent docs and folders, the owner's changes to a project's files (new, rename, move, delete); starts the doc host (`doc-host.js`) and gives each page its port to it (`preload.cjs`); decrypts the agents' secrets, the one process with the keychain, and hands them to the doc host. An open doc's files only through its DocService; the settings, the agent scripts and files that are not open, through Store |
 | Relay (`relay/`) | a Cloudflare Worker at `share.ponjo.app` that serves the teammate's page and joins the owner's doc host to teammates' pages, one Durable Object per room; stores nothing. See Sharing |
 | Team (`src/host/team.js`) | who is on a project and what each may do: its teammates, the requests to join, its link. See Sharing |
@@ -132,21 +132,18 @@ DocService, Runner, ProjectService and Team run in the doc host, the app's utili
 Windows reach it over Electron message ports; a teammate's page over the
 relay.
 
-### Views and rules
+### Views
 
-A doc has one **view** and any number of **rules**. They share only the
-doc's text: no view imports a rule, no rule a view, and each is switched on
-or off alone (`settings.json`: `views` and `rules`, each by id).
+A doc has one **view**, its editor, switched on or off alone
+(`settings.json`: `views`, by id). A view has state (caret, undo, marks),
+so it is built in and not an extension point.
 
-| | View (`web/views/`) | Rule (`src/rules/`) |
-| --- | --- | --- |
-| Is | the doc's editor | how a format's edits merge, whoever made them: a buddy, another program |
-| Shape | has state (caret, undo, marks), so it is built in and not an extension point | a declaration of pure hooks: text in, verdict out; no state, no lifecycle, no I/O, no handle to the app |
-| Declared | `{ id, name, about, extensions, always?, limits?, createView, settings }` | `{ id, name, about, extensions, ...hooks }` |
-| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 20 MB); a view only for a doc within its `limits`, see [Editing](#editing) | `rulesOf(path, settings)` in `src/rules/index.js`: every enabled rule that claims it |
-| Runs in | the page | the doc host (an edit that yields: a buddy's, an outside change, an undo) and the page (one landing while typing is on its way), whatever the view |
-| Its settings | an ordered list of fields `{ key, type: 'switch' \| 'choice' \| 'number', label, hint?, default, group?, when? }`, rendered as its page in Settings > Views; `viewSettings` keeps a stored value only if its field allows it | the switch only: Settings > Rules; `ruleSettings` |
-| Must satisfy | the view contract, `test/views.test.js` | each hook's contract, below |
+| | View (`web/views/`) |
+| --- | --- |
+| Declared | `{ id, name, about, extensions, always?, limits?, createView, settings }` |
+| Picked by | `viewFor(name, settings)` in `web/views/index.js`: the first enabled view that claims the extension, else Plain text (`always`, any UTF-8 text file up to 20 MB); a view only for a doc within its `limits`, see [Editing](#editing) |
+| Its settings | an ordered list of fields `{ key, type: 'switch' \| 'choice' \| 'number', label, hint?, default, group?, when? }`, rendered as its page in Settings > Views; `viewSettings` keeps a stored value only if its field allows it |
+| Must satisfy | the view contract, `test/views.test.js` |
 
 The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
 is; line numbers, wrapping, font size, whitespace marks, indent guides and
@@ -157,27 +154,13 @@ word count are parts of it, switched by its settings, not separate extensions.
 It maps the doc's text to its own document through the rendered text, and
 saves each block the user did not change as it was written.
 
-**Hooks.** A hook is optional and may only refuse; the host applies the
-result. One exists: `mergeLine(base, ours, theirs, merged)`, whether a line
-both sides changed may be merged by character into `merged`. If any rule of
-the doc refuses, the line conflicts, and the human's text stays. The Markdown
-rule (`src/rules/markdown.js`) refuses a merge that would change how the line
-renders. Off, a `.md` merges as plain text. A switch applies from the next merge.
+How edits merge does not depend on the view or the format: people's by
+character, the rest by line (see Interfaces).
 
 **To add a view**: a folder in `web/views/` with its declaration, listed in
-`VIEWS`, passing the contract test. Its features are its own settings. Views
-are not a third-party extension point: a view owns state no hook can.
+`VIEWS`, passing the contract test. Its features are its own settings.
 
-**To add a rule**: a file in `src/rules/` exporting a declaration, listed in
-`RULES`. One concern per rule; a format gets several rather than a bigger one.
-A rule may use the libraries in `src/` (`src/markdown` for rendered text) and
-nothing in `web/`, since the doc host loads only `src/`.
-
-**To add a hook**: have the host call it at one place, with plain values in
-and a verdict out, and say what it may refuse in `src/rules/index.js`. Add one
-only when a rule needs it.
-
-Settings keep `views: { <id>: { enabled, ...values } }` and `rules: { <id>: { enabled } }`;
+Settings keep `views: { <id>: { enabled, ...values } }`;
 the core checks only that shape (values boolean, string or number) and keeps
 ids it does not know. Switching a view makes the affected views again from
 the same text in every window, the history's too, after saving pending
@@ -204,7 +187,7 @@ but the A rules always hold and the person is told.
 | A1 | Converge: once writers stop, every page's text is the host's text is the file. |
 | A2 | Nothing lost: what a person typed and nobody deleted ends up in the file, through crashes, power loss and dropped lines. |
 | A3 | Nothing twice: an edit lands at most once, through resends, restarts and write failures. |
-| A4 | People first: people's edits merge by character. A buddy, an outside change and an undo of a buddy yield to a person. What yielded comes back once, and can be found in history. |
+| A4 | People first: people's edits merge by character, and nothing typed is lost. A buddy's turn, an outside change and an undo merge by line with the doc as it is when they land: where they changed the same lines as people, people's lines stay, and theirs can be found in history. A person's edit on its way when one lands moves over it by character, as over anyone's. |
 | A5 | Text intact: no split surrogate pair, no U+FFFD; each line's end (LF, CRLF, CR), the BOM and the file's permissions kept; unchanged blocks saved byte for byte. |
 | A6 | Shown is saved: whatever the page shows as saved is in the file; anything not saved is marked, with the reason. |
 
@@ -298,9 +281,9 @@ when `who`'s level is at least that: `can(who, level)`, asked once; nothing
 behind it checks again. A buddy's finished turn lands as the buddy, with
 the level of whoever asked it. That is all
 a permission is. What a writer does with it is behavior, decided elsewhere:
-when an AI buddy resolves is its prompt's business, and whether an edit
-**yields** is its path's (a window's never; a buddy's turn, an outside
-change and an undo always). Behind the door DocService uses `who` only to
+when an AI buddy resolves is its prompt's business, and how an edit
+merges is its path's (a window's by character; a buddy's turn, an outside
+change and an undo by line, before they land). Behind the door DocService uses `who` only to
 put in a comment's `by`. A connection is bound to one doc at a time, as a
 window's port is, so no call names a doc.
 
@@ -317,26 +300,17 @@ started it; a teammate's is read or write.
 **Every edit is operations on a revision.** A submission is insert and delete
 operations (offsets in UTF-16 code units of the doc's text) on
 `{ epoch, rev }`, the revision it started from. DocService transforms it
-against what landed since: one function, `transform` (`src/core/ot.js`), two
-policies. A person's edit merges by character and loses nothing. An edit
-that yields is dropped wherever anything changed the same line since, unless
-both changed one line in places apart and the doc's rules allow a character
-merge there; what was dropped comes back (a buddy's reply says `conflict`).
-It yields to a person's edit that started before it too, though it reached
-the host first; a buddy's turn that loses part of it so is marked
-`conflict` on its version in history, since its reply is already written.
-It yields to all such edits together: each moves over it as the ones
-before left it, merged with them by character (`pastYield`), so what it
-gave back comes back once, with every edit in it; the log keeps what they
-left of it. A page moves its edit on its way the same way, and takes the
-host's when an earlier person's edit made it land otherwise; typing not
-sent yet moves over what is left of the edit that yields, by character. An
-edit sent again after the host started again gives back nothing: that
-host no longer knows what yielded to it. Of two edits that yield, the first to land wins. An edit
-lands on the text in memory, the file is written, and only then does it go
-to every window as `ops` (`{ epoch, rev, ops, id }`, `id` the window's name
-for its own edit; `yields`, and a buddy's `reply` and `by`): a window
-rebases what it has typed and not yet heard back (`web/client.js`).
+against what landed since, by character: `transform` (`src/core/ot.js`),
+which loses nothing typed. A buddy's turn, an outside change and an undo
+never go through it: the host merges each by line with the doc as it is
+(`merge3` in `src/core/diff.js`, from the text it started from), where
+people's lines win, and lands the result as one edit at the current
+revision, like anyone's. So one kind of edit goes through the order, and
+a window's edit on its way when one lands moves over it by character, as
+over any. An edit lands on the text in memory, the file is written, and
+only then does it go to every window as `ops` (`{ epoch, rev, ops, id }`,
+`id` the window's name for its own edit; a buddy's `reply` and `by`): a
+window rebases what it has typed and not yet heard back (`web/client.js`).
 
 **A window catches up one way**, whatever it missed: on every new
 connection (`hello`), an event missed, an edit refused as `stale`, or an
@@ -376,15 +350,14 @@ A burst of typing ends once everyone typing in it has paused: one version,
 whose `authors` are each person who typed in it (#228).
 
 **Undo on a reply is one edit**: the inverse of the turn's, from the
-versions saved before and after it, rebased with `transform` over
-everything written since as an edit that yields, so text someone changed
-since stays. Cmd+Z is the editor's history, which holds only your own
-typing, mapped over what others put in; its result is your typing, which
-does not yield: an undo must not give way to a buddy's edit.
+versions saved before and after it, merged by line with everything written
+since (`merge3`), so lines someone changed since stay. Cmd+Z is the
+editor's history, which holds only your own typing, mapped over what
+others put in; its result is your typing, merged by character.
 
 | Component | Its one thing | Interface |
 | --- | --- | --- |
-| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { yields, rules })` → `{ ops, dropped }`, `apply(text, ops)`, `mapOffset(at, ops)`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
+| Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { first })` → ops, `apply(text, ops)`, `mapOffset(at, ops)`, `merge3(base, ours, theirs)` → `{ text, conflicts }`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
 | DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
@@ -392,7 +365,6 @@ does not yield: an undo must not give way to a buddy's edit.
 | Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
 | ProjectService | the project's files, the same for everyone | `list(path)`, `read(path)`, `open(path)`, for the owner's windows and a teammate's page alike. A path must resolve inside the root and not start with `.`. An agent reads no more than this |
 | Config | own the settings, buddies and agents | `settings.get/patch`, `buddies.save/remove`, `scripts.list/reset` |
-| Rules | say whether a character merge would change how a line renders | `rulesOf(path, settings)` → rules with `mergeLine?`; asked only for an edit that yields |
 | View | the doc's editor: what a person sees and types in | its contract as today (`getText`, `applyText(text, { by, ops })` with the operations that made `text`, after which `getText()` is `text` and the line on top of the page is where it was, `setMarks`, the selection, and `composing()`, while an IME composition is on: its text goes out only once it ends, as one edit); the page turns its text into operations and back (`web/client.js`, [plan A](markdown-view.md#many-writers)) |
 | Shell | windows, menus, dialogs, recent docs | an open doc's files only through `DocService` (renaming through `DocService.move`), the sidebar through ProjectService; the settings and agent scripts through Store and Config |
 | Agent | edit its copy, append to its sidecar, print a reply | none: it cannot call anything |
@@ -417,9 +389,10 @@ when read. Nothing stores it.
 - It watches both files, through a folder watch and a poll every 500 ms
   for file systems where watches miss changes. When the sidecar's hash
   changes, it tells every window; a doc it did not write is a change from
-  outside: saved to history first, then landed as an edit that yields, from
-  the text the file held when last written. Where it overlaps what was typed
-  since, the typing wins and the outside version is only in history. It is
+  outside: saved to history first, then merged by line (`merge3`) from the
+  text the file held when last written, and landed. Where it changed the
+  same lines as what was typed since, the typing wins and the outside
+  version is only in history. It is
   taken once the file is unchanged for 50 ms (up to a second): another
   program may be half way through writing it, emptied with the rest to
   come.
@@ -446,12 +419,12 @@ since: where someone changed that text since, their text stays.
    saved before and after the turn.
 3. **Anything else:** restore a version from history.
 
-Each saves a version first. Undo on a reply is the same `transform` every
-edit goes through (see Interfaces): the turn's edit taken back, yielding to
-what changed since. It works where the versions are, on the doc host,
-from any window of the team, as whoever clicked it. Cmd+Z is the editor's own history,
-your typing only, and its result is typing like any other: a person's
-edit, which does not yield.
+Each saves a version first. Undo on a reply is the same `merge3` a buddy's
+turn goes through (see Interfaces): the turn's edit taken back, where no
+one changed its lines since. It works where the versions are, on the doc
+host, from any window of the team, as whoever clicked it. Cmd+Z is the
+editor's own history, your typing only, and its result is typing like any
+other: a person's edit, merged by character.
 
 ### The config folder
 
@@ -460,7 +433,7 @@ written only by the app.
 
 | File | Holds |
 | --- | --- |
-| `settings.json` | the user's id and name; editor preferences; views', rules' and agents' settings; which agent runs buddies |
+| `settings.json` | the user's id and name; editor preferences; views' and agents' settings; which agent runs buddies |
 | `agents/` | agents: each a program and its manifest ([agent config](agent-config.md#agents)); Claude Code, Codex and the Ponjo agent ship |
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
@@ -493,12 +466,15 @@ the ids of those who may ask. AI buddies run only on docs open in a window.
    only their own copies. Its copy goes when it ends.
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.
-3. On exit 0, DocService saves versions before and after, lands the doc
-   copy's diff, from the copy as it started, as an edit that yields (see
-   Interfaces), adds the appended comments as the buddy's, and writes the
-   reply as the buddy's comment. Where a person changed the same line
-   meanwhile, the buddy's change there is dropped and the reply is marked
-   `conflict`. The turn lands as the buddy's.
+3. On exit 0, DocService merges the doc copy with the doc as it is, from
+   the copy as it started (`merge3`, see Interfaces). Where people changed
+   none of the same lines meanwhile, it saves versions before and after,
+   lands the merge, adds the appended comments as the buddy's, and writes
+   the reply as the buddy's comment. Where they did, nothing lands and
+   nothing is posted: the ask runs once more, on the doc as it is then,
+   and its prompt says what the turn changed and what people did. Run
+   once more and colliding again, it lands with people's lines kept there,
+   and its version says `conflict`. The turn lands as the buddy's.
    The reply and comments are dated just after the last comment the turn
    was given, so a comment the user wrote meanwhile still waits on X.
 4. The private folder is deleted, and the turn gets a line in the config
@@ -517,8 +493,9 @@ carries `resolved`. Anything else is ignored
 ### What the user sees after a turn
 
 What the app knows, the app shows, not the buddy's reply: under the reply,
-how many places the turn edited, with Undo; a dropped change marks the reply
-`conflict`; its comments are in the margin. The reply says only what the
+how many places the turn edited, with Undo; a turn whose version says
+`conflict` says that part of it was not applied; its comments are in the
+margin. The reply says only what the
 app cannot (why, what to decide), and may be empty. The turn's edits land at
 once, shown as a revision (new text in the buddy's color, removed text
 struck through) until the user next types or another turn's edits land;
@@ -529,8 +506,9 @@ window of the team, since the versions are on the host.
 ### Failures, retries and restarts
 
 A turn that fails is answered too: the buddy's comment is marked `failed`,
-with the end of the program's output. One ask, one reply; to retry, or to
-redo a `conflict`, @mention the buddy again. Which turns are working lives
+with the end of the program's output. One ask, one reply (a turn run once
+more answers once); to retry, or to redo what was not applied, @mention
+the buddy again. Which turns are working lives
 only in memory: after a restart, unanswered asks run again. Turns go on at
 the same time; their merges are applied one at a time.
 

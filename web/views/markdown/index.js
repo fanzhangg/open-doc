@@ -1,7 +1,5 @@
 // The Markdown view: Markdown docs as formatted text (view.js), with a
-// toolbar and outline (chrome.js), and its settings. How Markdown merges is a
-// rule's (src/rules/markdown.js), apart from this view, so it applies
-// whatever view a doc is in.
+// toolbar and outline (chrome.js), and its settings.
 
 export const markdown = {
   id: 'markdown',

@@ -92,21 +92,21 @@ test('where another buddy changed the run\'s text since, Undo leaves that change
   });
 });
 
-test('an outside change (git pull) while typing: it merges into the typed line where they are apart; where they overlap, the typing stays and the pulled version is in history', { timeout: 30_000 }, async () => {
+test('an outside change (git pull) while typing: it merges where they changed different lines; where both changed a line, the typing stays and the pulled version is in history', { timeout: 30_000 }, async () => {
   await withDoc(async ({ call, edit, state, docPath, disk, versions }) => {
     const before = await state();
     const typed = before.text.replace('extra load.', 'extra load at launch.');
-    const pulled = SAMPLE.replace('The main risk is', 'The risk we see is');
+    const pulled = SAMPLE.replace('# Q4 Launch Plan', '# Q4 Launch Plan (draft)');
     const typing = edit(typed, before);
     writeFileSync(docPath, pulled); // before the typing lands
     await typing;
-    assert.match((await state()).text, /The risk we see is .* extra load at launch\./);
-    assert.match(await disk(), /The risk we see is .* extra load at launch\./);
+    assert.match((await state()).text, /Plan \(draft\)[\s\S]* extra load at launch\./);
+    assert.match(await disk(), /Plan \(draft\)[\s\S]* extra load at launch\./);
     const external = (await versions()).filter((v) => v.kind === 'external');
     assert.equal(external.length, 1);
     assert.equal((await call('version', { id: external[0].id })).text, pulled);
 
-    // Where the two overlap, the typing wins and the pulled text is only in history.
+    // Where both changed a line, the typing wins and the pulled text is only in history.
     const now = await state();
     const mine = now.text.replace('beta cohort', 'beta testers');
     const theirs = now.text.replace('beta cohort', 'early users');

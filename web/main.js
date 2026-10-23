@@ -20,7 +20,6 @@ import { viewSettings } from '../src/core/settings.js';
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { diffEdits, findEdit } from '../src/core/diff.js';
 import { createClient } from './client.js';
-import { rulesOf } from '../src/rules/index.js';
 import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
@@ -143,7 +142,6 @@ async function start() {
     view: { getText: () => editor.getText(), selection: () => editor.selection(), composing: () => editor.composing() },
     call: (type, arg) => api[type](arg),
     show: showLanded,
-    rules: () => rulesOf(docName, settings.get()),
     caughtUp: (state) => {
       showUnsaved(state.notSaved);
       applyComments(state);
@@ -309,7 +307,7 @@ async function start() {
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.on('history', () => {
     history.changed();
-    afterTyping('sidecar', refreshThreads); // a buddy's turn may now be marked conflict
+    afterTyping('sidecar', refreshThreads); // a buddy's turn's receipt is read from its version
   });
   events.on('agents', (data) => showAgents(data));
   events.on('team', (data) => people.render({ team: data }));

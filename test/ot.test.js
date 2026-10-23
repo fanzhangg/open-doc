@@ -1,9 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, diffOps, mapOffset, pastYield, transform } from '../src/core/ot.js';
-import { lineMatches, sameEnd, sameStart } from '../src/core/diff.js';
-import { DEFAULT_SETTINGS } from '../src/core/settings.js';
-import { rulesOf } from '../src/rules/index.js';
+import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
+import { lineMatches, merge3, sameEnd, sameStart } from '../src/core/diff.js';
 import { SAMPLE as SAMPLE_PLAN } from './helpers.js';
 import { createClient } from '../web/client.js';
 
@@ -35,8 +33,8 @@ test('a caret follows others\' edits: after text inserted at it, at the end of t
 
 // Both edits on `text`; `a` reached the host first. Each side ends in one text.
 function merge(text, a, b) {
-  const host = apply(apply(text, a), transform(b, a).ops);
-  assert.equal(apply(apply(text, b), transform(a, b, { first: true }).ops), host);
+  const host = apply(apply(text, a), transform(b, a));
+  assert.equal(apply(apply(text, b), transform(a, b, { first: true })), host);
   return host;
 }
 
@@ -71,26 +69,26 @@ test('random concurrent edits from two pages and buddies\' turns end in the host
     const host = { text: 'ab\ncd\nef', rev: 0, log: [] };
     const sent = [];
     const land = (ops, meta = {}) => {
-      host.log.push(meta.yields ? { ops, base: host.text } : { ops });
+      host.log.push({ ops });
       host.text = apply(host.text, ops);
-      const event = { epoch: 'e', rev: ++host.rev, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}) };
+      const event = { epoch: 'e', rev: ++host.rev, ops, id: meta.id ?? null };
       for (const p of pages) p.inbox.push(event);
     };
     const pages = [0, 1].map(() => {
       const view = { text: host.text, getText: () => view.text, selection: () => null };
-      const client = createClient({ view, call: (type, arg) => new Promise(() => sent.push(arg)), show: (text) => { view.text = text; }, rules: () => [] });
+      const client = createClient({ view, call: (type, arg) => new Promise(() => sent.push(arg)), show: (text) => { view.text = text; } });
       client.start({ text: host.text, epoch: 'e', rev: 0 });
       return { view, client, inbox: [] };
     });
     const submit = () => {
       const { ops, rev, id } = sent.shift();
       let moved = ops;
-      for (const landed of host.log.slice(rev)) moved = transform(moved, landed.ops, landed.base === undefined ? {} : { landedYields: true, base: landed.base }).ops;
+      for (const landed of host.log.slice(rev)) moved = transform(moved, landed.ops);
       land(moved, { id });
     };
     let turn = null; // a buddy's: the host's text as it was, and its edit of it
     const finish = () => {
-      land(transform(diffOps(turn.base, turn.edited), diffOps(turn.base, host.text), { yields: true, base: turn.base }).ops, { yields: true });
+      land(diffOps(host.text, merge3(turn.base, host.text, turn.edited).text));
       turn = null;
     };
     for (let step = 0; step < 40; step++) {
@@ -117,114 +115,80 @@ test('random concurrent edits from two pages and buddies\' turns end in the host
   }
 });
 
-// `other`, an edit that yields, over `person`'s, both from `base`: the text
-// and whether anything was dropped.
-function yielded(base, person, other, rules = []) {
-  const landed = diffOps(base, person);
-  const { ops, dropped } = transform(diffOps(base, other), landed, { yields: true, base, rules });
-  return { text: apply(person, ops), dropped };
-}
-
 const doc = (...lines) => lines.join('\n');
 const BASE = doc('# Plan', '', 'Intro.', '', 'Middle.', '', 'End.');
 
-test('an edit that yields lands where no one changed its lines', () => {
+test('merge3 takes each side\'s lines where the other did not change them', () => {
   const theirs = BASE.replace('Middle.', 'Middle, revised.');
-  assert.deepEqual(yielded(BASE, BASE, theirs), { text: theirs, dropped: false });
-  assert.deepEqual(yielded(BASE, theirs, BASE), { text: theirs, dropped: false });
-  assert.deepEqual(yielded(BASE, BASE.replace('Intro.', 'Intro, typed.'), BASE.replace('End.', 'End, by the buddy.')),
-    { text: doc('# Plan', '', 'Intro, typed.', '', 'Middle.', '', 'End, by the buddy.'), dropped: false }, 'different paragraphs');
-  assert.deepEqual(yielded(BASE, `${BASE}\n\nA new last paragraph.`, BASE.replace('Intro.', 'Intro.\n\nAn inserted paragraph.')),
-    { text: doc('# Plan', '', 'Intro.', '', 'An inserted paragraph.', '', 'Middle.', '', 'End.', '', 'A new last paragraph.'), dropped: false }, 'inserts');
-  assert.deepEqual(yielded(BASE, BASE.replace('Intro.', 'Intro!'), BASE.replace('Middle.\n\n', '')),
-    { text: doc('# Plan', '', 'Intro!', '', 'End.'), dropped: false }, 'a delete');
+  assert.deepEqual(merge3(BASE, BASE, theirs), { text: theirs, conflicts: 0 });
+  assert.deepEqual(merge3(BASE, theirs, BASE), { text: theirs, conflicts: 0 });
+  assert.deepEqual(merge3(BASE, BASE.replace('Intro.', 'Intro, typed.'), BASE.replace('End.', 'End, by the buddy.')),
+    { text: doc('# Plan', '', 'Intro, typed.', '', 'Middle.', '', 'End, by the buddy.'), conflicts: 0 }, 'different paragraphs');
+  assert.deepEqual(merge3(BASE, `${BASE}\n\nA new last paragraph.`, BASE.replace('Intro.', 'Intro.\n\nAn inserted paragraph.')),
+    { text: doc('# Plan', '', 'Intro.', '', 'An inserted paragraph.', '', 'Middle.', '', 'End.', '', 'A new last paragraph.'), conflicts: 0 }, 'inserts');
+  assert.deepEqual(merge3(BASE, BASE.replace('Intro.', 'Intro!'), BASE.replace('Middle.\n\n', '')),
+    { text: doc('# Plan', '', 'Intro!', '', 'End.'), conflicts: 0 }, 'a delete');
 });
 
-test('an edit that yields is dropped where the same line changed, and the rest of it lands', () => {
-  assert.deepEqual(yielded(BASE, BASE.replace('Middle.', 'Mine.'), BASE.replace('Middle.', 'Theirs.')), { text: BASE.replace('Middle.', 'Mine.'), dropped: true });
-  assert.deepEqual(yielded(BASE, BASE.replace('Middle.', 'Middle. A'), BASE.replace('Middle.', 'Middle. B')), { text: BASE.replace('Middle.', 'Middle. A'), dropped: true }, 'two inserts at one place');
+test('merge3: where both changed the same lines, or put lines at one place, ours stays, the rest of theirs lands, and it counts', () => {
+  assert.deepEqual(merge3(BASE, BASE.replace('Middle.', 'Mine.'), BASE.replace('Middle.', 'Theirs.')), { text: BASE.replace('Middle.', 'Mine.'), conflicts: 1 });
+  assert.deepEqual(merge3(BASE, BASE.replace('Middle.', 'Middle. A'), BASE.replace('Middle.', 'Middle. B')), { text: BASE.replace('Middle.', 'Middle. A'), conflicts: 1 }, 'apart in one line is still one line');
   const ours = BASE.replace('Middle.', 'Mine.').replace('End.', 'End!');
   const theirs = BASE.replace('Middle.', 'Theirs.').replace('Intro.', 'Intro, agent.');
-  assert.deepEqual(yielded(BASE, ours, theirs), { text: doc('# Plan', '', 'Intro, agent.', '', 'Mine.', '', 'End!'), dropped: true });
+  assert.deepEqual(merge3(BASE, ours, theirs), { text: doc('# Plan', '', 'Intro, agent.', '', 'Mine.', '', 'End!'), conflicts: 1 });
   const both = BASE.replace('Middle.', 'Same change.');
-  assert.deepEqual(yielded(BASE, both, both), { text: both, dropped: false }, 'the same change on both sides drops nothing');
+  assert.deepEqual(merge3(BASE, both, both), { text: both, conflicts: 0 }, 'the same change on both sides is no conflict');
+  assert.deepEqual(merge3(doc('a', 'b', 'c'), doc('a', 'B', 'c'), doc('a', 'b', 'C')), { text: doc('a', 'B', 'C'), conflicts: 0 }, 'lines next to each other');
+  assert.deepEqual(merge3('one\n', 'one A\n', 'one\ntwo\n'), { text: 'one A\ntwo\n', conflicts: 0 }, 'a line added after one changed');
+  assert.deepEqual(merge3('a\nb\n', 'a\nX\nb\n', 'a\nY\nb\n'), { text: 'a\nX\nb\n', conflicts: 1 }, 'lines put at one place');
   const wrapped = doc('One', 'two', 'three');
-  assert.deepEqual(yielded(wrapped, doc('One', 'TWO', 'three'), doc('One', 'two three')), { text: doc('One', 'TWO', 'three'), dropped: true }, 'a joined line changed');
+  assert.deepEqual(merge3(wrapped, doc('One', 'TWO', 'three'), doc('One', 'two three')), { text: doc('One', 'TWO', 'three'), conflicts: 1 }, 'a joined line changed');
 });
 
-test('an edit that yields merges by character in a line both changed apart, if every rule agrees', () => {
-  const base = doc('Intro.', '', 'The plan has three steps and one risk.');
-  assert.deepEqual(yielded(base, base.replace('three steps', 'four steps'), base.replace('one risk.', 'one known risk.')),
-    { text: doc('Intro.', '', 'The plan has four steps and one known risk.'), dropped: false });
-  assert.equal(yielded('a 😀 b', 'a 😁 b', 'a 😀 b!').text, 'a 😁 b!', 'never half a surrogate pair');
-  // Taking out one `*` and adding another elsewhere would pair them into new emphasis.
-  const off = { ...DEFAULT_SETTINGS, rules: { 'markdown-rule': { enabled: false } } };
-  assert.deepEqual(yielded('1 *2* 3', '1 *2 3', '1 *2* 3 4*', rulesOf('plan.md', DEFAULT_SETTINGS)), { text: '1 *2 3', dropped: true });
-  for (const rules of [rulesOf('plan.md', off), rulesOf('notes.txt', DEFAULT_SETTINGS)]) assert.deepEqual(yielded('1 *2* 3', '1 *2 3', '1 *2* 3 4*', rules), { text: '1 *2 3 4*', dropped: false });
-  assert.deepEqual(yielded('extra load.', 'extra traffic.', 'extra peak load.'), { text: 'extra traffic.', dropped: true }, 'an insert where the other changed from');
-  assert.deepEqual(yielded('extra load.', 'extra peak load.', 'extra traffic.'), { text: 'extra peak load.', dropped: true }, 'either way round');
-  const rules = [{ mergeLine: () => true }, { mergeLine: () => false }];
-  assert.deepEqual(yielded('a b', 'x b', 'a y', rules), { text: 'x b', dropped: true }, 'any rule refuses');
-  assert.deepEqual(yielded('a b', 'x b', 'a y', [rules[0]]), { text: 'x y', dropped: false });
-});
-
-test('an undo is the inverse of a turn, yielding: each change still in place is put back; one changed since stays', () => {
+test('an undo is the inverse of a turn, merged: each change still in place is put back; one changed since stays', () => {
   const run = SAMPLE_PLAN.replace('Q4 Launch', 'Q1 Launch').replace('week one', 'week two').replace('extra load', 'extra peak load');
-  const undo = (now) => apply(now, transform(diffOps(run, SAMPLE_PLAN), diffOps(run, now), { yields: true, base: run }).ops);
+  const undo = (now) => merge3(run, now, SAMPLE_PLAN).text;
   assert.equal(undo(run), SAMPLE_PLAN);
   const later = run.replace('week two', 'week three').replace('## Risks', '## Open risks');
   assert.equal(undo(later), SAMPLE_PLAN.replace('week one', 'week three').replace('## Risks', '## Open risks'), 'the touched change stays, the rest go, later edits stay');
 });
 
-test('a doc\'s rules are found by extension, any case, and only while they are on', () => {
-  assert.deepEqual(rulesOf('a/README.MD', DEFAULT_SETTINGS), rulesOf('b.markdown', DEFAULT_SETTINGS));
-  assert.equal(rulesOf('b.markdown', DEFAULT_SETTINGS).length, 1);
-  assert.deepEqual(rulesOf('b.markdown', { ...DEFAULT_SETTINGS, views: { markdown: { enabled: false } } }), rulesOf('b.markdown', DEFAULT_SETTINGS), 'the view is another switch');
-  assert.deepEqual(rulesOf('main.js', DEFAULT_SETTINGS), []);
-  assert.deepEqual(rulesOf('Makefile', DEFAULT_SETTINGS), []);
-});
-
-test('random edits: one that yields keeps every line the other changed, lands whole elsewhere, and says what it dropped', () => {
+test('random line edits: merge3 keeps every line ours changed, takes theirs where no change of ours is in the same run of lines, and counts the rest', () => {
   let seed = 9;
   const random = (n) => {
     seed = (seed * 1103515245 + 12345) % 2 ** 31;
-    return seed % n;
+    return Math.floor((seed / 2 ** 31) * n);
   };
-  // Edits inside lines: each side changes a few lines by character, adding no line.
-  const edit = (lines, marks) => lines.map((line) => {
-    if (random(3)) return line;
-    let next = line;
-    for (let k = random(2); k >= 0; k--) {
-      const from = random(next.length + 1);
-      next = next.slice(0, from) + marks[random(marks.length)].repeat(random(3)) + next.slice(Math.min(next.length, from + random(3)));
+  const edit = (lines, mark) => lines.map((line) => (random(3) ? line : `${line}${mark.repeat(1 + random(2))}`));
+  // The runs of lines `side` changed: [from, to).
+  const runs = (lines, side) => lines.reduce((out, line, k) => {
+    if (side[k] === line) return out;
+    if (out.at(-1)?.[1] === k) out.at(-1)[1] = k + 1;
+    else out.push([k, k + 1]);
+    return out;
+  }, []);
+  for (let run = 0; run < 3000; run++) {
+    const lines = Array.from({ length: 1 + random(8) }, (_, k) => `line ${k}`);
+    const ours = edit(lines, 'X');
+    const theirs = edit(lines, 'Y');
+    // Clusters of runs that share lines, as merge3 makes them.
+    const hunks = [...runs(lines, ours).map((r) => [...r, 0]), ...runs(lines, theirs).map((r) => [...r, 1])].sort((a, b) => a[0] - b[0]);
+    const clusters = [];
+    for (const [from, to, side] of hunks) {
+      const last = clusters.at(-1);
+      if (last && from < last.to) {
+        last.to = Math.max(last.to, to);
+        last.sides.add(side);
+      } else clusters.push({ from, to, sides: new Set([side]) });
     }
-    return next;
-  });
-  const never = [{ mergeLine: () => false }];
-  for (let run = 0; run < 3000; run++) {
-    const lines = Array.from({ length: 1 + random(6) }, (_, k) => 'abcdef'.slice(random(3), 3 + random(4)) + k);
-    const person = edit(lines, 'XY');
-    const other = edit(lines, 'xy');
-    const expected = lines.map((line, k) => (person[k] !== line ? person[k] : other[k]));
-    const dropped = lines.some((line, k) => person[k] !== line && other[k] !== line && other[k] !== person[k]);
-    assert.deepEqual(yielded(doc(...lines), doc(...person), doc(...other), never), { text: doc(...expected), dropped }, JSON.stringify([lines, person, other]));
-  }
-  // Any edits, lines added and joined too: what the person typed is all there, in order.
-  for (let run = 0; run < 3000; run++) {
-    const base = Array.from({ length: 1 + random(5) }, (_, k) => `ab${k}`).join('\n');
-    const change = (text, marks) => {
-      let next = text;
-      for (let k = random(3); k >= 0; k--) {
-        const from = random(next.length + 1);
-        next = next.slice(0, from) + [marks[random(2)], '\n', ''][random(3)] + next.slice(Math.min(next.length, from + random(3)));
-      }
-      return next;
-    };
-    const person = change(base, 'XY');
-    const { text } = yielded(base, person, change(base, 'xy'));
-    assert.equal(text.replace(/[^XY]/g, ''), person.replace(/[^XY]/g, ''), JSON.stringify([base, person]));
-    const unchanged = transform(diffOps(base, change(base, 'xy')), [], { yields: true, base });
-    assert.equal(unchanged.dropped, false, 'nothing landed: nothing dropped');
+    const expected = lines.map((line, k) => {
+      const cluster = clusters.find((c) => c.from <= k && k < c.to);
+      return !cluster ? line : cluster.sides.has(0) ? ours[k] : theirs[k];
+    });
+    const conflicts = clusters.filter((c) => c.sides.size === 2).length;
+    // Lines end in newlines, so a last line changed is a line like any other.
+    const nl = (list) => list.map((l) => `${l}\n`).join('');
+    assert.deepEqual(merge3(nl(lines), nl(ours), nl(theirs)), { text: nl(expected), conflicts }, JSON.stringify([lines, ours, theirs]));
   }
 });
 
@@ -234,8 +198,8 @@ test('an edit in two places far apart leaves what lies between to others', () =>
   const ours = diffOps(base, base.replace('line 0\n', 'line zero\n').replace('line 999\n', 'line last\n'));
   assert.ok(ours.every((op) => op.to - op.from < 20 && op.insert.length < 20), JSON.stringify(ours).slice(0, 200));
   const theirs = [{ from: base.indexOf('line 500\n'), to: base.indexOf('line 501\n'), insert: '' }];
-  const merged = apply(apply(base, theirs), transform(ours, theirs).ops);
-  assert.ok(!merged.includes('line 500\n') && merged.includes('line zero') && merged.includes('line last'));
+  const both = apply(apply(base, theirs), transform(ours, theirs));
+  assert.ok(!both.includes('line 500\n') && both.includes('line zero') && both.includes('line last'));
 });
 
 test('sameStart and sameEnd find what two texts share, past whole chunks too', () => {
@@ -281,46 +245,5 @@ test('a change spread over a long doc diffs place by place, and soon', () => {
     assert.equal(ops.length, Math.ceil(lines.length / every));
     assert.ok(ops.every((op) => op.to === op.from && op.insert === ' pulled'));
     assert.ok(ms < 1000, `${Math.round(ms)} ms for ${base.length} characters`);
-  }
-});
-
-test('an edit that yields yields to one that started before it, too, though it reached the host first', () => {
-  const base = 'gather feedback from the beta cohort before\nthe launch.\n';
-  const buddy = base.replace('beta cohort', 'beta group').replace('launch', 'public launch');
-  const person = base.replace('beta cohort', 'beta testers');
-  const landed = diffOps(base, buddy);
-  const { ops } = transform(diffOps(base, person), landed, { landedYields: true, base });
-  assert.equal(apply(buddy, ops), person.replace('launch', 'public launch'), 'the person\'s line stays; the buddy\'s lands elsewhere');
-  assert.equal(apply(buddy, transform(diffOps(base, base.replace('launch', 'start')), landed, { landedYields: true, base }).ops), buddy.replace('public launch', 'start'));
-  const apart = base.replace('gather', 'collect');
-  assert.equal(apply(buddy, transform(diffOps(base, apart), landed, { landedYields: true, base }).ops), buddy.replace('gather', 'collect'), 'apart in one line: merged by character');
-});
-
-test('A4: a line an edit that yields deletes, while people each have an edit on it from before it, comes back once, with every edit, in any order they land', () => {
-  let seed = 11;
-  const random = (n) => {
-    seed = (seed * 1103515245 + 12345) >>> 0;
-    return (seed >>> 16) % n;
-  };
-  const base = 'One two.\nThree four five.\nSix.\n';
-  const line = 'Three four five.\n';
-  const at = base.indexOf(line);
-  const yielding = { ops: [{ from: at, to: at + line.length, insert: '' }], text: base };
-  for (let round = 0; round < 200; round++) {
-    // Each person types a word of their own somewhere in the line.
-    const people = Array.from({ length: 2 + random(3) }, (_, k) => {
-      const from = at + random(line.length);
-      return [{ from, to: from, insert: `<${k}>` }];
-    });
-    let text = apply(base, yielding.ops);
-    let was = yielding;
-    for (const ops of people) {
-      const moved = pastYield(ops, was);
-      text = apply(text, moved.ops);
-      was = moved.left;
-    }
-    assert.equal(text.split('\n').length, base.split('\n').length, `the line once: ${JSON.stringify(text)}`);
-    for (let k = 0; k < people.length; k++) assert.equal(text.split(`<${k}>`).length, 2, `each edit once: ${JSON.stringify(text)}`);
-    assert.equal(text.replace(/<\d>/g, ''), base, 'the line as it was, around them');
   }
 });

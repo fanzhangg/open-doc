@@ -1,9 +1,10 @@
 // A stand-in for an agent CLI (docs/agent-config.md): it reads the prompt
 // on stdin, edits the doc's copy at PONJO_DOC and prints its reply. What it
 // does comes from the latest comment in the prompt's thread:
-//   replace "<before>" with "<after>"   edit the copy
+//   replace "<before>" with "<after>"   edit the copy (each such command, in turn)
 //   write <name>                        write file <name> in the project's copy, first
 //   hold                                wait for $FAKE_DIR/release-<buddy> first
+//   wait                                the same, and take the file away: each run waits for its own
 //   fail                                print to stderr and exit 1
 //   say <text>                          reply <text>
 //   quiet                               reply nothing
@@ -15,7 +16,7 @@
 // Each run logs one JSON line to $FAKE_DIR/runs.log when it starts, with
 // the PONJO_SETTING_* it was given.
 
-import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
 let prompt = '';
@@ -30,16 +31,18 @@ appendFileSync(join(dir, 'runs.log'), JSON.stringify({ buddy, ask, cwd: process.
 const written = ask.match(/\bwrite (\S+)/)?.[1];
 if (written) writeFileSync(join(project, written), 'written by a run\n');
 
-if (/\bhold\b/.test(ask)) {
+if (/\b(hold|wait)\b/.test(ask)) {
   while (!existsSync(join(dir, `release-${buddy}`))) await new Promise((r) => setTimeout(r, 50));
+  if (/\bwait\b/.test(ask)) rmSync(join(dir, `release-${buddy}`), { force: true });
 }
 if (/\bfail\b/.test(ask)) {
   console.log('some output');
   console.error('fake agent: something went wrong');
   process.exit(1);
 }
-const edit = ask.match(/replace "(.*?)" with "(.*?)"/);
-if (edit) writeFileSync(doc, readFileSync(doc, 'utf8').replace(edit[1], edit[2]));
+const edits = [...ask.matchAll(/replace "(.*?)" with "(.*?)"/g)];
+const edit = edits[0];
+if (edit) writeFileSync(doc, edits.reduce((text, [, before, after]) => text.replace(before, after), readFileSync(doc, 'utf8')));
 const lines = readFileSync(comments, 'utf8').split('\n');
 const first = lines.slice(1).find(Boolean);
 for (const command of ask.split(';;').map((c) => c.trim())) {

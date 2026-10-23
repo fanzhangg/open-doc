@@ -43,14 +43,14 @@ export function historyDir(docPath, root) {
 
 /**
  * The versions of the doc, oldest first:
- *   { id, kind, author, authors?, startedAt, at, hash, size, added, removed, thread?, reply?, undid?, restoredFrom? }
+ *   { id, kind, author, authors?, startedAt, at, hash, size, added, removed, thread?, reply?, conflict?, undid?, restoredFrom? }
  * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
  * 'external' (changed outside Ponjo); `author` is { id?, name, kind } or null
  * when unknown, the first of `authors` when several typed it; `added` and `removed` count the characters changed since
  * the version before. A buddy's edit has the `thread` it answered and the
- * id of its `reply`, and `conflict` when a person's edit that started
- * before it landed took part of it back; an undo of one has the reply it
- * `undid`.
+ * id of its `reply`, and `conflict` when it collided with people's lines
+ * again when run once more, and theirs stayed there; an undo of one has the
+ * reply it `undid`.
  */
 export async function readHistory(docPath, root) {
   return (await readIndex(historyDir(docPath, root))).versions;
@@ -74,7 +74,7 @@ export async function readVersion(docPath, root, id) {
 /**
  * Note that the doc now reads `text`. Returns the version that holds it
  * (new or extended), or null when it is the latest version already.
- * `change` is { kind, author, authors?, thread?, reply?, undid?, restoredFrom? }.
+ * `change` is { kind, author, authors?, thread?, reply?, conflict?, undid?, restoredFrom? }.
  */
 export async function recordVersion(docPath, root, text, change, now = Date.now()) {
   const dir = historyDir(docPath, root);
@@ -110,7 +110,7 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
         startedAt: at,
         at,
         hash,
-        ...Object.fromEntries(['thread', 'reply', 'undid', 'restoredFrom'].filter((k) => change[k]).map((k) => [k, change[k]])),
+        ...Object.fromEntries(['thread', 'reply', 'conflict', 'undid', 'restoredFrom'].filter((k) => change[k]).map((k) => [k, change[k]])),
       };
     }
     const before = versions.length > 0 ? await readBlob(dir, versions.at(-1).hash) : null;
@@ -121,21 +121,6 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
     while (versions.length > MAX_VERSIONS || (versions.length > 1 && kept() > MAX_HISTORY_CHARS)) dropped.push(versions.shift().hash);
     await saveIndex(dir, index, docPath, dropped);
     return version;
-  } finally {
-    await release();
-  }
-}
-
-/** Mark the version of buddy reply `reply`'s edit `conflict`: part of it was taken back. */
-export async function markConflict(docPath, root, reply) {
-  const dir = historyDir(docPath, root);
-  const release = await lockFile(join(dir, 'index.json.lock'), dir);
-  try {
-    const index = await readIndex(dir);
-    const version = index.versions.find((v) => v.reply === reply);
-    if (!version || version.conflict) return;
-    version.conflict = true;
-    await saveIndex(dir, index, docPath, []);
   } finally {
     await release();
   }

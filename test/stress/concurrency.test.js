@@ -71,7 +71,7 @@ test('buddies x asks while the human types: one reply each, every edit lands, no
     await sleep(500); // nothing more arrives
     threads = (await state()).threads;
     for (const t of threads) assert.equal(t.comments.length, 2, `seed ${seed}: ${t.id} answered once`);
-    assert.ok(threads.every((t) => !t.comments[1].failed && !t.comments[1].conflict), `seed ${seed}: no run failed or lost its edit`);
+    assert.ok(threads.every((t) => !t.comments[1].failed), `seed ${seed}: no run failed`);
     const text = await readFile(docPath, 'utf8');
     for (const a of asks) assert.ok(text.includes(`Para ${a.key} new.`), `seed ${seed}: ${a.key}'s edit landed`);
     for (const h of human) assert.ok(text.includes(`Para ${h} typed.`), `seed ${seed}: ${h} kept`);
@@ -127,10 +127,10 @@ async function run(c) {
     return doc;
   };
   const told = (event) => {
-    host.yields += event.yields ? 1 : 0;
+    host.outside += event.id === null ? 1 : 0; // no page's: a change made outside
     for (const page of pages) if (page.online) page.down.push({ event });
   };
-  host = Object.assign(await open(), { yields: 0 });
+  host = Object.assign(await open(), { outside: 0 });
   let owner = await host.owner();
   // What the pages typed, and other programs wrote, each with its own
   // number, all as long, so no piece of one reads as another.
@@ -148,7 +148,6 @@ async function run(c) {
       view: page.view,
       call: (type, arg) => new Promise((resolve, reject) => (page.online ? page.up : page.held).push({ type, arg, who, resolve, reject })),
       show: (text) => { page.view.text = text; },
-      rules: () => [],
       caughtUp: (state) => { page.reading = state.level === 'read'; }, // its view can no longer be typed in
       onError: (error) => page.errors.push(error),
     });
@@ -218,7 +217,7 @@ async function run(c) {
         const old = host;
         host = null;
         await old.close().catch(() => {}); // a last write that fails is lost, as in a crash
-        host = Object.assign(await open(), { yields: 0 });
+        host = Object.assign(await open(), { outside: 0 });
         owner = await host.owner();
       } else if (kind === 'readOnly' && writable) {
         writable = false;
@@ -229,7 +228,7 @@ async function run(c) {
       } else if (kind === 'outside' && writable) {
         // Another program adds a line, or deletes one that holds nothing
         // typed: the host takes it, and tells it.
-        const was = host.yields;
+        const was = host.outside;
         const lines = (await readFile(docPath, 'utf8')).split(/(?<=\n)/);
         const plain = lines.map((line, k) => [line, k]).filter(([line]) => !/[‹›]/.test(line) && line.trim() !== '');
         if (b < 0.5 && plain.length > 0) lines.splice(plain[Math.floor(a * plain.length)][1], 1);
@@ -239,7 +238,7 @@ async function run(c) {
           lines.splice(Math.floor(a * (lines.length + 1)), 0, c.crlf ? line.replace('\n', '\r\n') : line);
         }
         await writeFile(docPath, lines.join(''));
-        await until(() => host.yields > was, 'the outside change taken', 10_000);
+        await until(() => host.outside > was, 'the outside change taken', 10_000);
       }
       for (let i = 0; i < 5; i++) await turn();
     }

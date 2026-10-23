@@ -70,7 +70,7 @@ replaced (Reset to Default, a new version) without losing them.
 ### Settings
 
 `settings` is an ordered list of fields, as a view's
-([architecture](architecture.md#views-and-rules)), with two more types:
+([architecture](architecture.md#views)), with two more types:
 
 | `type` | Holds | Stored |
 | --- | --- | --- |

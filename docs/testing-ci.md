@@ -45,11 +45,12 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 
 ### Model — unit, property
 
-- Three-way merge, fuzzed: **the human's text always survives**; the
-  buddy's overlapping change is dropped and reported as a conflict;
-  disjoint edits merge; the result is deterministic.
-- Undo: each change of a run whose new text is still found is put back;
-  text changed since, by anyone, stays.
+- Three-way merge by line (`merge3`), fuzzed: **the human's lines always
+  survive**; where both changed the same lines the other side's change is
+  left out and counted; changes to other lines merge; the result is
+  deterministic.
+- Undo: each change of a run whose lines no one changed since is put back;
+  lines changed since, by anyone, stay.
 - The inbox: a thread waits on X only after a comment by this user that
   @mentions X, or mentions no one in a thread X opened or was @mentioned in;
   another user id asks no one, and neither does a comment this host did
@@ -72,8 +73,10 @@ for a window), **e2e** (the packaged app, under xvfb on Linux).
 - The script runs in a new folder holding only the copy, gets the prompt on
   stdin and `PONJO_DOC`, `PONJO_PROJECT` and `PONJO_BUDDY`, and its stdout becomes the
   reply; the folder is gone after.
-- **The human edits during a run**: the human's text stays and the reply is
-  marked `conflict`; nothing asks the user.
+- **The human edits the same lines during a run**: the human's text stays,
+  and the turn runs once more on the doc as it is, told what it and they
+  changed; colliding again, it lands where no one changed its lines, and
+  its version says `conflict`; nothing asks the user.
 - Two runs on one doc at once: both edits land, merged one at a time.
 - Exit non-zero: the reply is marked `failed` with the end of the output;
   @mentioning again runs again; after a restart, unanswered asks run again.
@@ -132,7 +135,7 @@ that fails before the fix.
   fewest steps that still fail and printed; the pull request that fixes it
   adds them to `test/stress/regressions.json`, which every run replays.
   Another program adds lines and deletes lines that hold nothing typed;
-  not yet: buddies, whose edits yield as another program's do.
+  not yet: buddies, whose turns merge by line as another program's do.
 - **Layer 3** runs each scenario for each other writer (a teammate, a
   buddy, an outside change) in each view (Markdown, Plain).
 - **Layer 4**: `test/perf/latency.test.js` opens each view at its limits,
