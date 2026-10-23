@@ -268,6 +268,7 @@ async function start() {
     chooseView: (text) => viewFor(docName, settings.get(), text),
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
+    onUndo: undoVersions,
     onClose: () => editor.focus(),
   });
   settings.subscribe(followViews);
@@ -713,14 +714,14 @@ async function send(request) {
   }
 }
 
-// Undo a buddy's edit. What you typed lands first; the undo comes back as
-// an edit from the doc host.
+// Undo the edit of a buddy's reply `id`. What you typed lands first; the
+// undo comes back as an edit from the doc host.
 async function undoReply(id) {
   if (shownRun === id) hideRun();
   await client.landed();
   asking = 'Undo';
   try {
-    applyComments(await api.undoReply(id));
+    applyComments(await api.undo(comments.edits[id].version));
   } catch (error) {
     setStatus(`Could not undo: ${error.message}`, 'error');
     throw error;
@@ -791,6 +792,18 @@ function hideRun() {
   preview = null;
   margin.setShownEdits(null);
   paintMarks();
+}
+
+// Undo the change of the versions from `from` to `id` (web/history.js): what
+// you typed lands first, and the undo comes back as an edit from the doc host.
+async function undoVersions(id, from) {
+  await client.landed();
+  asking = 'Undo';
+  try {
+    applyComments(await api.undo(id, from));
+  } finally {
+    asking = null;
+  }
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js):

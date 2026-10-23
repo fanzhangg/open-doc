@@ -235,7 +235,7 @@ const calls = {
   history: () => ({ versions: [] }),
   version: () => refuse('no history in the preview'),
   restoreVersion: () => refuse('no history in the preview'),
-  undoReply: () => refuse('no undo in the preview'),
+  undo: () => refuse('no undo in the preview'),
 };
 
 window.ponjoHost = {

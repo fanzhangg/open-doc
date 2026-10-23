@@ -265,8 +265,8 @@ calls below (principle 8). Done: one `comment` call and one function that
 builds a comment (#177), the Runner's `reconcile` (#178; the code calls
 `stop`/`resume` for `pause`), `DocService.move` (`moveTo`, which the Shell
 calls to rename an open doc), and every edit as operations on a revision,
-with the views' side of them (#215; the code calls Undo on a reply
-`undoReply`, and a restore is still its own call, `restoreVersion`). Not
+with the views' side of them (#215; a restore is still its own call,
+`restoreVersion`), and `undo` of any version (#286). Not
 yet: Config, History and Store as the components below (today they are the
 modules of `src/store/`), and the rest of what [Sharing](#sharing) needs:
 teammates who edit, and `cursor`. The door is built for the owner, AI
@@ -343,15 +343,19 @@ teammate's page does on a new line. The log holds the last 1,000 edits, for wind
 outside change and an undo each have their base text (the turn's copy, the
 text the file last held, the version saved after the turn) and take
 `diffOps(that base, the text now)` as what landed since, so they need no
-log, after a restart or days later. History records a version when typing
-pauses, before and after each buddy's edit, an outside change, an undo or a
-restore, and when the history is opened, each credited to whoever made it.
-A burst of typing ends once everyone typing in it has paused: one version,
-whose `authors` are each person who typed in it (#228).
+log, after a restart or days later. History records a version each time
+typing pauses (once everyone typing has paused: its `authors` are each
+person who typed, #228), before and after each buddy's edit, an outside
+change, an undo or a restore, and when the history is opened, each
+credited to whoever made it. A version is never changed once written: each
+names its `parent`, the version before it, and only the oldest go once the
+history is full. The history view groups a burst of typing into one row.
 
-**Undo on a reply is one edit**: the inverse of the turn's, from the
-versions saved before and after it, merged by line with everything written
-since (`merge3`), so lines someone changed since stay. Cmd+Z is the
+**Undo of a version is one edit**: the inverse of its change, from its
+parent's text to its own, merged by line with everything written since
+(`merge3`), so lines someone changed since stay. A row of several versions
+is undone as one, from the first's parent to the last. It works while the
+version and its parent are kept, however many came after. Cmd+Z is the
 editor's history, which holds only your own typing, mapped over what
 others put in; its result is your typing, merged by character.
 
@@ -359,7 +363,7 @@ others put in; its result is your typing, merged by character.
 | --- | --- | --- |
 | Core | compute on text, purely; the page and the host share it | `diffOps(base, text)`, `transform(ops, landed, { first })` → ops, `apply(text, ops)`, `mapOffset(at, ops)`, `merge3(base, ours, theirs)` → `{ text, conflicts }`; `createAnchor`, `locate`; `parseSidecar`, `serializeSidecar`, `newComment`, `threadsOf`, `askedOf(thread, askers)` |
 | Store | read, write, watch and move files | `read(path)`, `write(path, text, { ifHash })`, `watch(path, fn)`, `move(from, to)`. Settings, buddies, agent scripts, history and the team are paths and parsers over these, not interfaces of their own |
-| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo(replyId)`, a turn undone as above; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
+| DocService | order every edit to a doc, and write it | `state({ since? })` → text, `{ epoch, rev }`, the `events` missed since, and what this connection may do; `submit({ ops, epoch, rev, id })` → `{ rev }`, or `stale`, or `not_saved`; `comment({ thread?, anchor?, body, resolved? })`; `undo({ id, from? })`, a version (or the versions from `from` to it) undone as above, a turn's from its reply; `cursor({ at, epoch, rev })`; `move(to)`; events `ops` (every landed edit, written), `saved` (`{ error }`: why the file does not hold them, or null), `sidecar`, `team`, `cursors`, `missing`; a window that connects again catches up with `state`. Cursors are never queued behind writes: each is kept at the last rev windows were told of, and moved with every edit told |
 | History | keep the doc as it was at each version | `record`, `list`, `read`; a version may have several authors |
 | Runner | make the running turns equal the asks the sidecar holds | `reconcile()`, `statuses()`, `pause(on)`. The asks are people's comments: the owner's and those of teammates who can edit. A finished turn comes through the door as its buddy |
 | Team | who is on the project and what each may do | for the owner `allow(id, level)`, `remove(id)` (a teammate, or a request turned down), `set(id, { level })` with `level` `read` or `write`, `link()`, and `list()`, at the door as `allow`, `remove`, `setLevel`, `link` and `team`; the host asks it a teammate's level on each call; a request to join comes from the relay as `join({ id, name })`; event `team` to the owner's windows |
@@ -415,12 +419,12 @@ An undo takes some edits back, all at once, and keeps everything written
 since: where someone changed that text since, their text stays.
 
 1. **Your own typing:** Cmd+Z, which undoes only yours, as in shared docs.
-2. **An AI buddy's turn:** Undo on its reply: the edits between the versions
-   saved before and after the turn.
-3. **Anything else:** restore a version from history.
+2. **An AI buddy's turn:** Undo on its reply: the change of its version.
+3. **Any change:** Undo this change in history, for a version or a row of
+   them, whoever made it; or restore a whole version.
 
-Each saves a version first. Undo on a reply is the same `merge3` a buddy's
-turn goes through (see Interfaces): the turn's edit taken back, where no
+Each saves a version first. An undo is the same `merge3` a buddy's turn
+goes through (see Interfaces): the version's change taken back, where no
 one changed its lines since. It works where the versions are, on the doc
 host, from any window of the team, as whoever clicked it. Cmd+Z is the
 editor's own history, your typing only, and its result is typing like any

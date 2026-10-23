@@ -555,20 +555,19 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
 
   // ---- undo ----
 
-  // Undo a buddy's run (docs/architecture.md, Undoing changes): the edit
-  // from the version after it back to the version before it, merged with
-  // everything landed since (merge3), so lines anyone changed since stay.
-  // On the machine that has the versions; by `who`.
-  async function undoReply(body, who) {
+  // Undo version `id` (docs/architecture.md, Undoing changes), or every
+  // version from `from` to it: the change from the parent of `from` to `id`
+  // taken back, merged with everything landed since (merge3), so lines
+  // anyone changed since stay. On the machine that has the versions; by
+  // `who`.
+  async function undo({ id, from = id } = {}, who) {
     await chronicle;
-    const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
-    const found = edit && (await readVersion(docPath, settingsDir, edit.id));
-    if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
+    const [after, first] = await Promise.all([id, from].map((v) => readVersion(docPath, settingsDir, versionId(v))));
+    if (!after || first?.before == null) throw new DocError('not_found', 'that change is not in this machine\'s history');
     await flushTyping();
-    const after = found.text;
-    land(diffOps(text, merge3(after, text, found.before).text));
+    land(diffOps(text, merge3(after.text, text, first.before).text));
     await committed(); // landed: windows hear if it is not saved
-    await noteVersion(text, { kind: 'undo', author: byOf(who), undid: body.id });
+    await noteVersion(text, { kind: 'undo', author: byOf(who), undid: id });
     return commentsView(text);
   }
 
@@ -580,9 +579,10 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   async function replyEdits() {
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};
-    for (const v of await readHistory(docPath, settingsDir)) {
-      if (v.reply) edits[v.reply] = { state: 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, version: v.id, conflict: Boolean(v.conflict) };
-      if (v.undid && edits[v.undid]) edits[v.undid].state = 'undone';
+    const versions = await readHistory(docPath, settingsDir);
+    const undone = new Set(versions.map((v) => v.undid));
+    for (const v of versions) {
+      if (v.reply) edits[v.reply] = { state: undone.has(v.id) ? 'undone' : 'edited', by: v.author?.id ?? v.author?.name ?? null, changes: v.changes ?? 0, version: v.id, conflict: Boolean(v.conflict) };
     }
     return edits;
   }
@@ -810,7 +810,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       recreate: (body, who) => serial(() => recreate(who)),
       comment: (body, who) => comment({ thread: body?.thread, anchor: body?.anchor ?? null, body: body?.body, resolved: body?.resolved }, who),
       restoreVersion: (body, who) => serial(() => restoreVersion(body, who)),
-      undoReply: (body, who) => serial(() => undoReply(body, who)),
+      undo: (body, who) => serial(() => undo(body, who)),
     },
     owner: {
       async saveSettings(patch) {

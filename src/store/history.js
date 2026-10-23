@@ -11,11 +11,12 @@
 // `key` is derived from the doc's absolute path; renaming a doc in Ponjo
 // moves its history along (moveHistory).
 //
-// A burst of typing is one version: a change by people who typed in the
-// latest version, within COALESCE_MS of it, and less than MAX_SPAN_MS after
-// it began, replaces that version's text. A version typed by several people
-// lists them all in `authors`. A buddy's edit is always a
-// version of its own, after the version it was merged into.
+// A version is never changed once written, only dropped when it is the
+// oldest and the history is full. Each names its `parent`, the version
+// before it, whose text is what it changed: so any version can be undone
+// while its parent is kept, however many came after. Typing is a version
+// each time it pauses (the history view groups a burst of them); one typed
+// by several people lists them all in `authors`.
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
@@ -25,9 +26,7 @@ import { newId } from '../core/comments.js';
 import { hashText, lockFile, writeAtomic } from './files.js';
 
 const HISTORY_VERSION = 1;
-export const COALESCE_MS = 2 * 60 * 1000;
-export const MAX_SPAN_MS = 30 * 60 * 1000;
-const MAX_VERSIONS = 500;
+const MAX_VERSIONS = 2000;
 // The characters of text kept, besides: of a doc of millions of characters
 // (up to 5,000,000 are edited, web/views/plain/index.js), the latest versions
 // that fit; of an ordinary doc, all MAX_VERSIONS.
@@ -43,37 +42,38 @@ export function historyDir(docPath, root) {
 
 /**
  * The versions of the doc, oldest first:
- *   { id, kind, author, authors?, startedAt, at, hash, size, added, removed, thread?, reply?, conflict?, undid?, restoredFrom? }
- * `kind` is 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or
- * 'external' (changed outside Ponjo); `author` is { id?, name, kind } or null
- * when unknown, the first of `authors` when several typed it; `added` and `removed` count the characters changed since
- * the version before. A buddy's edit has the `thread` it answered and the
- * id of its `reply`, and `conflict` when it collided with people's lines
- * again when run once more, and theirs stayed there; an undo of one has the
- * reply it `undid`.
+ *   { id, parent, kind, author, authors?, at, hash, size, added, removed, thread?, reply?, conflict?, undid?, restoredFrom? }
+ * `parent` is the version before it (null for the first); `kind` is
+ * 'opened' (the doc as first seen), 'edit', 'undo', 'restore' or 'external'
+ * (changed outside Ponjo); `author` is { id?, name, kind } or null when
+ * unknown, the first of `authors` when several typed it; `added` and
+ * `removed` count the characters changed since the parent. A buddy's edit
+ * has the `thread` it answered and the id of its `reply`, and `conflict`
+ * when it collided with people's lines again when run once more, and theirs
+ * stayed there; an undo has the version it `undid`.
  */
 export async function readHistory(docPath, root) {
   return (await readIndex(historyDir(docPath, root))).versions;
 }
 
 /**
- * One version with its text, and the text of the version before it (null
- * for the first): { version, text, before }, or null when it is gone.
+ * One version with its text, and the text of its parent (null for the
+ * first, or once the parent is dropped): { version, text, before }, or
+ * null when it is gone.
  */
 export async function readVersion(docPath, root, id) {
   const dir = historyDir(docPath, root);
   const { versions } = await readIndex(dir);
-  const i = versions.findIndex((v) => v.id === id);
-  if (i === -1) return null;
-  const text = await readBlob(dir, versions[i].hash);
-  if (text === null) return null;
-  const before = i > 0 ? await readBlob(dir, versions[i - 1].hash) : null;
-  return { version: versions[i], text, before };
+  const version = versions.find((v) => v.id === id);
+  const text = version && (await readBlob(dir, version.hash));
+  if (text == null) return null;
+  const parent = versions.find((v) => v.id === version.parent);
+  return { version, text, before: parent ? await readBlob(dir, parent.hash) : null };
 }
 
 /**
- * Note that the doc now reads `text`. Returns the version that holds it
- * (new or extended), or null when it is the latest version already.
+ * Note that the doc now reads `text`: a new version, whose parent is the
+ * latest. Returns it, or null when the latest version reads `text` already.
  * `change` is { kind, author, authors?, thread?, reply?, conflict?, undid?, restoredFrom? }.
  */
 export async function recordVersion(docPath, root, text, change, now = Date.now()) {
@@ -87,33 +87,18 @@ export async function recordVersion(docPath, root, text, change, now = Date.now(
     const last = versions.at(-1);
     if (last?.hash === hash) return null;
 
-    const at = new Date(now).toISOString();
     const dropped = [];
-    let version;
-    if (last && continues(last, change, now)) {
-      // The same people, still at it: this version now ends at `text`.
-      versions.pop();
-      dropped.push(last.hash);
-      const previous = versions.at(-1);
-      if (previous?.hash === hash) {
-        // They put it back the way it was: no change left to show.
-        await saveIndex(dir, index, docPath, dropped);
-        return previous;
-      }
-      version = { ...last, at, hash };
-    } else {
-      version = {
-        id: newId('v'),
-        kind: versions.length === 0 && change.kind === 'external' ? 'opened' : change.kind,
-        author: change.author ?? null,
-        ...(change.authors ? { authors: change.authors } : {}),
-        startedAt: at,
-        at,
-        hash,
-        ...Object.fromEntries(['thread', 'reply', 'conflict', 'undid', 'restoredFrom'].filter((k) => change[k]).map((k) => [k, change[k]])),
-      };
-    }
-    const before = versions.length > 0 ? await readBlob(dir, versions.at(-1).hash) : null;
+    const version = {
+      id: newId('v'),
+      parent: last?.id ?? null,
+      kind: versions.length === 0 && change.kind === 'external' ? 'opened' : change.kind,
+      author: change.author ?? null,
+      ...(change.authors ? { authors: change.authors } : {}),
+      at: new Date(now).toISOString(),
+      hash,
+      ...Object.fromEntries(['thread', 'reply', 'conflict', 'undid', 'restoredFrom'].filter((k) => change[k]).map((k) => [k, change[k]])),
+    };
+    const before = last ? await readBlob(dir, last.hash) : null;
     Object.assign(version, countChanges(before, text), { size: text.length });
     await writeBlob(dir, hash, text);
     versions.push(version);
@@ -195,18 +180,6 @@ export async function moveHistory(fromPath, toPath, root) {
   await rename(from, to);
 }
 
-function continues(last, change, now) {
-  const typed = authorsOf(last);
-  return change.kind === 'edit' && last.kind === 'edit' && !change.reply && !last.reply
-    && authorsOf(change).length > 0 && authorsOf(change).every((a) => typed.some((b) => sameAuthor(a, b)))
-    && now - Date.parse(last.at) < COALESCE_MS
-    && now - Date.parse(last.startedAt) < MAX_SPAN_MS;
-}
-
-const authorsOf = (v) => v.authors ?? (v.author ? [v.author] : []);
-
-const sameAuthor = (a, b) => Boolean(a && b) && a.kind === b.kind && (a.id ?? a.name).toLowerCase() === (b.id ?? b.name).toLowerCase();
-
 // Characters added and removed between two versions of the source.
 function countChanges(before, after) {
   if (before === null) return { added: after.length, removed: 0, changes: 1 };
@@ -230,7 +203,10 @@ function countChanges(before, after) {
 async function readIndex(dir) {
   try {
     const index = JSON.parse(await readFile(join(dir, 'index.json'), 'utf8'));
-    if (index?.history === HISTORY_VERSION && Array.isArray(index.versions)) return index;
+    if (index?.history === HISTORY_VERSION && Array.isArray(index.versions)) {
+      index.versions.forEach((v, i) => { v.parent ??= index.versions[i - 1]?.id ?? null; }); // written before versions named it
+      return index;
+    }
   } catch {
     // none yet, or unreadable: start a new one
   }

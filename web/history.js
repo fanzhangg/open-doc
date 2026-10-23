@@ -1,8 +1,9 @@
 // Version history: every version of the doc (src/store/history.js), who made
-// it and what it changed. A version shows read-only in a second view, with
-// what it changed from the version before marked as a revision (added text
-// highlighted, removed text struck through); any earlier version can be
-// restored, which adds a new version, so a restore can be undone the same way.
+// it and what it changed, a burst of typing as one row. A row shows
+// read-only in a second view, with what it changed marked as a revision
+// (added text highlighted, removed text struck through); any earlier one can
+// be restored, and any change undone, each adding a new version, so either
+// can be undone the same way.
 
 import { diffEdits } from '../src/core/diff.js';
 import { revisionMarks } from './marks.js';
@@ -11,6 +12,10 @@ import { avatar } from './threads.js';
 import { nameOf } from './faces.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// A burst of typing is one row: versions typed by the same people, each
+// within BURST_GAP_MS of the one before, over at most BURST_SPAN_MS.
+const BURST_GAP_MS = 2 * 60 * 1000;
+const BURST_SPAN_MS = 30 * 60 * 1000;
 const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
@@ -19,21 +24,23 @@ const dateWithYear = new Intl.DateTimeFormat(undefined, { year: 'numeric', month
  * `api` is web/api.js; `chooseView(text)` is the view a version of text
  * `text` is shown in (viewFor in web/views/index.js); `commentOf(threadId)`
  * is the text of the comment a buddy's version answered, or null; `onRestore(id)` puts the doc back to
- * version `id` and resolves once the page shows it.
+ * version `id` and resolves once the page shows it; `onUndo(id, from)` takes back the change of
+ * the versions from `from` to `id`.
  */
-export function createHistory({ api, chooseView, commentOf, onRestore, onClose }) {
+export function createHistory({ api, chooseView, commentOf, onRestore, onUndo, onClose }) {
   const root = document.documentElement;
   const stage = document.querySelector('.pj-history-stage');
   const list = stage.querySelector('.pj-history-list');
   const bar = document.querySelector('.pj-history-bar');
   const heading = bar.querySelector('.pj-history-heading');
   const restoreButton = bar.querySelector('[data-action="restore"]');
+  const undoButton = bar.querySelector('[data-action="undo"]');
   const changesToggle = bar.querySelector('.pj-history-changes input');
   const toggleButton = document.querySelector('.pj-tool-history');
 
   let view = null; // the read-only view, made when history first opens
   let viewId; // the view `view` is of (null: the plain view)
-  let versions = [];
+  let versions = []; // the rows, oldest first: each its last version, with `first` and `startedAt` of its first
   let selected = null;
   let shown = null; // { version, text, before } of the selected version
   let loads = 0;
@@ -81,7 +88,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
 
   async function refresh() {
     try {
-      versions = await api.history();
+      versions = rowsOf(await api.history());
     } catch (error) {
       heading.textContent = `Could not load the history: ${error.message}`;
       return;
@@ -187,6 +194,8 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
       if (load === loads) heading.textContent = `Could not load this version: ${error.message}`;
       return;
     }
+    const first = versions.find((v) => v.id === id)?.first;
+    if (first && first !== id) data = { ...data, before: (await api.version(first).catch(() => ({ before: null }))).before };
     if (load !== loads) return; // another version was picked meanwhile
     shown = data;
     await makeView(); // the view for this version's length
@@ -203,13 +212,15 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
     view.setMarks(revisionMarks(shown?.text ?? '', edits, { replay: replay ? ++replays : 0 }));
   }
 
-  // The selected row says which version this is; the bar only offers to
-  // restore it (not the current one) and speaks up when something fails.
+  // The selected row says which version this is; the bar offers to undo
+  // its change (one with a version before it) and to restore it (not the
+  // current one), and speaks up when something fails.
   function showHeading() {
     const version = shown?.version;
     heading.textContent = '';
     restoreButton.hidden = !version || version.id === latest()?.id;
-    restoreButton.disabled = restoring;
+    undoButton.hidden = shown?.before == null;
+    restoreButton.disabled = undoButton.disabled = restoring;
   }
 
   changesToggle.addEventListener('change', () => showChanges({ replay: changesToggle.checked }));
@@ -228,6 +239,22 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
     } finally {
       restoring = false;
       restoreButton.textContent = 'Restore this version';
+      showHeading();
+    }
+  });
+
+  undoButton.addEventListener('click', async () => {
+    const version = shown?.version;
+    if (!version || restoring) return;
+    restoring = true;
+    showHeading();
+    try {
+      await onUndo(version.id, versions.find((v) => v.id === version.id)?.first);
+      close();
+    } catch (error) {
+      heading.textContent = `Could not undo: ${error.message}`;
+    } finally {
+      restoring = false;
       showHeading();
     }
   });
@@ -251,12 +278,12 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
 
   function describe(version) {
     if (version.kind === 'restore') {
-      const from = versions.find((v) => v.id === version.restoredFrom);
+      const from = versions.find((v) => v.ids.includes(version.restoredFrom));
       if (!from) return 'Restored an earlier version';
       const day = dayLabel(from.at);
       return `Restored ${day === dayLabel(version.at) ? '' : `${day.toLowerCase()}, `}${time.format(new Date(from.at))}`;
     }
-    if (version.kind === 'undo') return 'Undid a buddy\'s edit';
+    if (version.kind === 'undo') return 'Undid a change';
     const comment = version.thread && commentOf(version.thread);
     return comment ? `On “${comment.replace(/\s+/g, ' ').trim()}”` : '';
   }
@@ -268,6 +295,25 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onClose }
     viewChanged: () => (isOpen() ? makeView() : undefined),
   };
 }
+
+// `list` (versions, oldest first) as rows: a burst of typing (see
+// BURST_GAP_MS) is one, its last version with `first`, the first's id,
+// `startedAt`, when it began, `ids`, each version's, and what they all
+// added and removed.
+function rowsOf(list) {
+  const rows = [];
+  for (const v of list) {
+    const row = rows.at(-1);
+    if (row && typing(row) && typing(v) && sameAuthors(row, v) && Date.parse(v.at) - Date.parse(row.at) < BURST_GAP_MS && Date.parse(v.at) - Date.parse(row.startedAt) < BURST_SPAN_MS) {
+      rows[rows.length - 1] = { ...v, first: row.first, startedAt: row.startedAt, ids: [...row.ids, v.id], added: row.added + v.added, removed: row.removed + v.removed };
+    } else rows.push({ ...v, first: v.id, startedAt: v.startedAt ?? v.at, ids: [v.id] }); // an older version may span a burst itself
+  }
+  return rows;
+}
+
+const typing = (v) => v.kind === 'edit' && !v.reply;
+const authorsOf = (v) => (v.authors ?? (v.author ? [v.author] : [])).map((a) => `${a.kind} ${(a.id ?? a.name).toLowerCase()}`).sort().join();
+const sameAuthors = (a, b) => authorsOf(a) !== '' && authorsOf(a) === authorsOf(b);
 
 function timeRange(version) {
   const start = new Date(version.startedAt);

@@ -72,7 +72,7 @@ test('every write and owner-only call from a page is forbidden, whatever who it 
     const owner = { id: state.me.id, name: 'owner', kind: 'human', level: 'owner' };
     const calls = {
       submit: { ops: [{ from: 0, to: 0, insert: 'x' }], rev: state.rev, epoch: state.epoch, id: 'p.1' },
-      recreate: {}, comment: { body: 'hi' }, restoreVersion: { id: 'x' }, undoReply: { id: 'x' },
+      recreate: {}, comment: { body: 'hi' }, restoreVersion: { id: 'x' }, undo: { id: 'x' },
       saveSettings: { name: 'mallory' }, createBuddy: { buddy: { name: 'Spy' } }, updateBuddy: { id: 'clippy', patch: {} },
       deleteBuddy: { id: 'x' }, scripts: {}, resetScript: { name: 'claude' },
       team: {}, allow: { id: 'x', level: 'write' }, remove: { id: 'x' }, setLevel: { id: state.me.id, level: 'write' }, link: {},

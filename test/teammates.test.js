@@ -72,7 +72,7 @@ test('a teammate\'s @mention starts a turn, undone by them; one whose asker is s
     const [reply] = await until(async () => (await replies(owner.call)).length === 1 && replies(owner.call), 'the reply');
     assert.equal(reply.thread, id);
     assert.match(await readFile(docPath, 'utf8'), /^ALPHA one\./);
-    await sam('undoReply', { id: reply.id });
+    await sam('undo', { id: (await owner.call('state')).edits[reply.id].version });
     assert.match(await readFile(docPath, 'utf8'), /^Alpha one\./);
     assert.deepEqual(['undo', 'Sam'], [(await versions(owner.call)).at(-1).kind, (await versions(owner.call)).at(-1).author.name]);
 
