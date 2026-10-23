@@ -6,8 +6,8 @@
   <title>Ponjo Avatars</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=9f47404">
-  <link rel="stylesheet" href="site.css?v=9f47404">
+  <link rel="stylesheet" href="./dist/web/app.css?v=64896f6">
+  <link rel="stylesheet" href="site.css?v=64896f6">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -35,13 +35,13 @@
   <p>Everyone has a face, drawn from their name by <code>web/faces.js</code>, so it is the same on every machine and nobody picks or uploads one. The faces below are drawn by that code.</p>
 
   <h2>Buddies: a body, a face and a colour</h2>
-  <p>A buddy is one of five <strong>bodies</strong> (circle, square, triangle, pentagon, cloud) with a <strong>face</strong>: eyes (dot, big, happy, sleepy, squint), a mouth (smile, grin, o, flat, cat) and maybe one extra (blush, glasses, bow). Its <strong>colour</strong> is one of eight OKLCH hues, evenly spaced, with Clippy's sunflower first. Outlines are a little uneven and tilted, as if drawn by hand, and the same every time.</p>
+  <p>A buddy is one of five <strong>bodies</strong> (circle, square, triangle, pentagon, cloud) with a <strong>face</strong>: eyes (dot, big, happy, sleepy, squint), a mouth (smile, grin, o, flat, cat) and maybe one extra (blush, glasses, bow). Its <strong>colour</strong> is one of eight OKLCH hues, evenly spaced, sunflower first. Outlines are a little uneven and tilted, as if drawn by hand, and the same every time.</p>
   <p>In a doc, buddies take parts and colours as unlike each other's as possible: the first five never share a body, eyes or a mouth, and eight never share a colour. These are eight buddies in one doc:</p>
   <div class="ds-box ds-faces" data-faces="spread"></div>
 
-  <h2>Clippy</h2>
-  <p>Clippy's face is fixed: a sunflower cloud with dot eyes, a smile and blush. It is also the app's mark, on its icon and its documents.</p>
-  <div class="ds-box ds-faces" data-faces="clippy"></div>
+  <h2>The app's mark</h2>
+  <p>The app icon and the document icon are drawings, <code>build/icon.svg</code> and <code>build/document.svg</code>, not faces: no buddy's name or face changes them. <code>npm run icon:desktop</code> makes the desktop icons and the wordmark from them.</p>
+  <div class="ds-box ds-faces" data-faces="icons"></div>
 
   <h2>People</h2>
   <p>People are always round. Their face and colour come from their name, the same way as a buddy's.</p>
@@ -67,7 +67,7 @@
 
 </main>
 <script type="module">
-  import { agentFace, appIcon, documentIcon, personFace, setBuddies } from './dist/web/faces.js?v=9f47404';
+  import { agentFace, personFace, setBuddies } from './dist/web/faces.js?v=64896f6';
 
   const BUDDIES = ['Clippy', 'Ada', 'Rex', 'Juno', 'Milo', 'Vera', 'Otto', 'Pip'];
   setBuddies(BUDDIES.map((name) => ({ id: name, name })));
@@ -89,15 +89,15 @@
     item.append(node, label);
     return item;
   };
-  const icon = (svg, size) => {
-    svg.setAttribute('width', size);
-    svg.setAttribute('height', size);
-    return svg;
+  const icon = (src, size) => {
+    const img = document.createElement('img');
+    Object.assign(img, { src, width: size, height: size, alt: '' });
+    return img;
   };
   const fill = (key, items) => document.querySelector(`[data-faces="${key}"]`).append(...items);
 
   fill('spread', BUDDIES.map((name) => labelled(avatar(name, { size: 56 }), name)));
-  fill('clippy', [labelled(avatar('Clippy', { size: 56 }), 'Face'), labelled(icon(appIcon(), 64), 'App icon'), labelled(icon(documentIcon(), 64), 'Document')]);
+  fill('icons', [labelled(icon('./build/icon.svg', 64), 'App icon'), labelled(icon('./build/document.svg', 64), 'Document')]);
   fill('people', ['Fan', 'Noor', 'Alice', 'Bob', 'Carol'].map((name) => labelled(avatar(name, { person: true, size: 44 }), name)));
   fill('sizes', [[44, 'Card'], [32, 'Header'], [24, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
     .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
@@ -111,6 +111,6 @@
   flinch();
   setInterval(flinch, 3000);
 </script>
-<script type="module" src="site.js?v=9f47404"></script>
+<script type="module" src="site.js?v=64896f6"></script>
 </body>
 </html>
