@@ -12,7 +12,8 @@ and in a doc they are alike: a face and a unique name, each edits and
 comments, can be @mentioned, and is named wherever the doc says who did
 something.
 
-- **Teammates** are the people you share the project with. They are trusted:
+- **Teammates** are the friends in the project's room while you host it
+  (Sharing a project). They are trusted:
   one who can **Edit** does in a doc whatever you do (edit, comment,
   resolve, ask AI buddies); one who can only **Read** sees it all and
   changes nothing.
@@ -22,14 +23,15 @@ something.
 - Only you rename, move, delete or create files, and change settings, AI
   buddies and agents.
 
-The **Team** button (after the faces) opens the panel: You, your Teammates (a
-request to join waits at the top), then the AI buddies, ending with **New AI
+The **Team** button (after the faces) opens the panel: in a project, **Open
+room** or, once it is open, the room's link and **Lock** and **Close room**;
+You, the room's players, then the AI buddies, ending with **New AI
 buddy** (it starts with a random first name, which you can type over: Enter
 makes it and opens its card). Click a face anywhere for its card: a name that
 edits in place (yours, or an AI buddy's; a renamed AI buddy
 keeps its comments, face and color), for an AI buddy who it is, a field right
-under it saved when you leave it, then Read or Edit for a teammate. A teammate has **Remove from this
-project**; an AI buddy has a delete button (its file is deleted). In a doc
+under it saved when you leave it, then Read or Edit for a teammate. A teammate has **Kick**;
+an AI buddy has a delete button (its file is deleted). In a doc
 opened on its own the panel has only you and your AI buddies, and a new
 one is yours; on a teammate's page, only the owner changes the team and the
 AI buddies.
@@ -62,28 +64,35 @@ AI buddies.
 
 ## Sharing a project
 
-**Invite link**, in the Team panel, copies one link for the project,
-permanent until you make a **New link**. Whoever opens it, in a browser
-with no install and no account, picks a name (not one already on the
-project) and waits. You get a notification; in the Team panel you pick Read
-or Edit (Edit to start) and **Allow**, or **Deny**. That is only the first
-time: then the link lets them in at once, to the project's first doc, with
-the project's sidebar: the same tree you see, where a click opens any doc
-in it (another file shows read only) and nothing can be renamed, moved,
-deleted or made. Which folders are open, and whether the sidebar shows,
-are kept in their browser. A new link
-ends every old one, and pages open on it close; **Remove** ends one person
-at once. A page turned away says why: a name taken, a request denied,
-removed, a link replaced, a doc not in the project, a name the project
-never shares (starting with `.`, or out of it). One that cannot reach the
-host says whether the relay cannot be reached, the host went away, or no
-one is sharing at the link. A teammate who can only read sees no tool that
-would be refused: no formatting, no reply box, Resolve, Undo or Restore.
+Sharing is hosting a room, as for an online game. In a project window,
+**Open room** in the Team panel gives a link; **Copy link** copies it.
+Whoever opens it, in a browser with no install and no account, picks a
+name once (one already on the project gets a number: `Alice2`) and is in
+at once, at Edit, on the project's first doc, with the project's sidebar:
+the same tree you see, where a click opens any doc in it (another file
+shows read only) and nothing can be renamed, moved, deleted or made.
+Which folders are open, and whether the sidebar shows, are kept in their
+browser.
 
-Your computer is the host, so the project is there only while it is awake and
-the app is open. The app keeps the computer awake while teammates are in. A
-teammate whose host is away sees whom it is waiting for, and is back in the
-doc by itself when the host returns, keeping what they typed meanwhile.
+The panel lists who is in, live. For each you pick Read or Edit, or
+**Kick**: their pages close and that browser cannot come back to this
+room. **Lock** lets no one new in, once everyone is: those in can still
+come back after a dropped line. **Close room**, or closing the project,
+ends the room at once: every page is cleared and says only "The host
+closed the room". The next room has a new link; an old one never works
+again. Nothing about who was in is kept.
+
+A page turned away says why: the room closed, kicked, the room locked, a
+doc not in the project, a name the project never shares (starting with
+`.`, or out of it). A teammate who can only read sees no tool that would
+be refused: no formatting, no reply box, Resolve, Undo or Restore.
+
+Your computer is the host, so the room is there only while it is awake
+and the project is open. A teammate whose line drops goes read only at
+once and says so; what they typed that had not reached you is shown as
+they left it, to copy, and never sent later. Their page reconnects by
+itself and, caught up, edits again (after a reload, if it shows such
+typing).
 
 ## AI buddies
 
