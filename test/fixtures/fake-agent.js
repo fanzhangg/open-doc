@@ -2,6 +2,7 @@
 // on stdin, edits the doc's copy at PONJO_DOC and prints its reply. What it
 // does comes from the latest comment in the prompt's thread:
 //   replace "<before>" with "<after>"   edit the copy
+//   write <name>                        write file <name> in the project's copy, first
 //   hold                                wait for $FAKE_DIR/release-<buddy> first
 //   fail                                print to stderr and exit 1
 //   say <text>                          reply <text>
@@ -24,7 +25,10 @@ const ask = thread.split('\n\n').at(-1) ?? '';
 const { PONJO_DOC: doc, PONJO_COMMENTS: comments, PONJO_PROJECT: project, PONJO_BUDDY: buddy, FAKE_DIR: dir } = process.env;
 const settings = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PONJO_SETTING_')));
 const onPath = (process.env.PATH ?? '').split(delimiter).some((d) => d && ['ponjo', 'ponjo.cmd'].some((f) => existsSync(join(d, f))));
-appendFileSync(join(dir, 'runs.log'), JSON.stringify({ buddy, ask, cwd: process.cwd(), files: readdirSync(process.cwd()), doc, comments, project, prompt, settings, ponjo: onPath }) + '\n');
+appendFileSync(join(dir, 'runs.log'), JSON.stringify({ buddy, ask, cwd: process.cwd(), files: readdirSync(process.cwd()), doc, comments, project, projectFiles: project ? readdirSync(project).sort() : null, prompt, settings, ponjo: onPath }) + '\n');
+
+const written = ask.match(/\bwrite (\S+)/)?.[1];
+if (written) writeFileSync(join(project, written), 'written by a run\n');
 
 if (/\bhold\b/.test(ask)) {
   while (!existsSync(join(dir, `release-${buddy}`))) await new Promise((r) => setTimeout(r, 50));

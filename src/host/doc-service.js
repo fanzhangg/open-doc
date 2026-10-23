@@ -25,7 +25,7 @@ import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir,
 import { secretsSet } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
-import { mirrorDir, syncMirror } from './mirror.js';
+import { mirrorDir, snapshotMirror } from './mirror.js';
 import { projectService } from './project-service.js';
 import { Runner } from './runner.js';
 import { TeamError } from './team.js';
@@ -78,8 +78,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       const { settings } = await readSettings(settingsDir);
       return { script: agentScript(settings.agent, settingsDir), settings: agentSettings(settings, await readAgent(settings.agent, settingsDir), secrets()[settings.agent]) };
     },
-    // The project, as a run reads it: its mirror, up to date (none if that fails).
-    folder: () => folder && syncMirror(folder, mirrorDir(folder, settingsDir)).catch((error) => {
+    // The project, as a run reads it: its own copy of the mirror, up to date, in `place` (none if that fails).
+    folder: (place) => folder && snapshotMirror(folder, mirrorDir(folder, settingsDir), join(place, basename(folder) || 'project')).catch((error) => {
       console.error('Could not mirror the project:', error);
       return null;
     }),
@@ -558,11 +558,12 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     }
     const by = { id: buddyId, name, kind: 'ai' };
     const at = Date.parse(seen) + 1;
-    // Its comments are on the doc as it is now, its edit landed.
+    // Its comments are anchored on its copy as it left it, the text it
+    // quoted; readers find them in the doc as it is now.
     await changeComments((lines) => {
       if (!lines.some((l) => l.comment?.id === threadId)) return lines;
       const threads = new Set(lines.filter((l) => l.comment && l.comment.thread === undefined).map((l) => l.comment.id));
-      const added = comments ? appendedComments(comments.before, comments.after, { text, by, at: new Date(at).toISOString(), threads, own: threadId }) : { comments: [], resolves: false };
+      const added = comments ? appendedComments(comments.before, comments.after, { text: edited, by, at: new Date(at).toISOString(), threads, own: threadId }) : { comments: [], resolves: false };
       const reply = {
         id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
         ...(anchor ? { anchor } : {}), ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),

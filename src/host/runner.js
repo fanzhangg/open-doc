@@ -25,8 +25,9 @@ export class Runner {
    * comments }, `comments` the sidecar's text or null.
    * `agent()` resolves to the agent that runs every buddy: { script (its
    * path), settings ({ <key>: value }, each handed to the run as
-   * PONJO_SETTING_<KEY>) }. `folder()` resolves to the project folder
-   * the agent is given (its mirror, mirror.js) or null, `human()` the user, { name, about }. `finish(result)` takes a run
+   * PONJO_SETTING_<KEY>) }. `folder(place)` resolves to the project folder
+   * the agent is given, a copy of the project made in folder `place` for this
+   * run alone (mirror.js), or null, `human()` the user, { name, about }. `finish(result)` takes a run
    * that ended: { threadId, id, name, asker, base, seen, edited, comments, body, failed },
    * `seen` the `at` of the thread's last comment the run was given,
    * `edited` being the doc's copy at the end (null when the run failed) and
@@ -34,7 +35,7 @@ export class Runner {
    * when a run starts or ends. `log(entry)` takes a line on each run that
    * ended: { buddy, thread, at, ms, outcome: ok | failed | timedOut | stopped, code }.
    */
-  constructor({ asks, doc, agent, folder = () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
+  constructor({ asks, doc, agent, folder = async () => null, human = async () => null, finish, onChange = () => {}, log = async () => {}, timeoutMs = RUN_TIMEOUT_MS }) {
     Object.assign(this, { asks, doc, agent, folder, human, finish, onChange, log, timeoutMs });
     this.runs = new Map(); // keyOf(threadId, id) → { threadId, id, name, asker, child, done, cancelled, ended }
     this.stopped = false;
@@ -118,6 +119,7 @@ export class Runner {
   async #run(run, thread, buddy, buddies) {
     const { name: docName, text: base, comments } = await this.doc();
     const dir = await mkdtemp(join(tmpdir(), 'ponjo-run-'));
+    let project = null; // the folder its copy of the project is in
     try {
       const copy = join(dir, docName);
       await writeFile(copy, base);
@@ -125,7 +127,8 @@ export class Runner {
       const before = comments ?? `${JSON.stringify({ comments: FORMAT_VERSION })}\n`;
       await writeFile(sidecar, before);
       const { script, settings } = await this.agent();
-      const folder = await this.folder();
+      project = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
+      const folder = await this.folder(project);
       const prompt = buildPrompt({ buddy, buddies, docName: copy, sidecarName: sidecar, thread, folder, human: await this.human() });
       const at = Date.now();
       const result = await runScript(script, { cwd: dir, prompt, timeoutMs: this.timeoutMs, env: {
@@ -156,6 +159,7 @@ export class Runner {
       }
     } finally {
       await rm(dir, { recursive: true, force: true });
+      if (project) await rm(project, { recursive: true, force: true });
     }
   }
 }

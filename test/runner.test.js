@@ -177,7 +177,7 @@ test('a comment that mentions no one asks no one; a buddy\'s reply asks no one',
   });
 });
 
-test('in project mode the run is told the project\'s mirror, which holds what the project shows', { timeout: 30_000 }, async () => {
+test('in project mode a run gets its own copy of what the project shows, gone once it ends', { timeout: 30_000 }, async () => {
   const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
   await writeFile(join(folder, 'notes.md'), 'Notes.\n');
   await writeFile(join(folder, '.env'), 'KEY=secret\n');
@@ -185,11 +185,42 @@ test('in project mode the run is told the project\'s mirror, which holds what th
     const id = await comment(call, '@Clippy look around');
     await until(async () => (await repliesIn(state, id)).length, 'the reply');
     const [run] = await runs();
-    assert.equal(run.project, mirrorDir(folder, settingsDir));
-    assert.deepEqual(await readdir(run.project), ['notes.md']);
+    assert.equal(basename(run.project), basename(folder));
+    assert.ok(!run.project.startsWith(settingsDir), 'not the mirror itself');
+    assert.deepEqual(run.projectFiles, ['notes.md']);
     assert.ok(run.prompt.includes(run.project) && !run.prompt.includes(`${folder}/`));
     assert.match(run.prompt, /path in a comment is relative to the project folder/);
+    await until(() => !existsSync(run.project), 'its copy to be gone after', 5000);
   }, { folder });
+});
+
+test('runs at once never see each other\'s writes to the project, nor does the mirror', { timeout: 30_000 }, async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
+  await writeFile(join(folder, 'notes.md'), 'Notes.\n');
+  await withDoc(async ({ settingsDir, call, state, runs, release }) => {
+    const first = await comment(call, '@Clippy write stray.md ;; hold');
+    await until(async () => (await runs()).length === 1 && existsSync(join((await runs())[0].project, 'stray.md')), 'the first run to write');
+    const second = await comment(call, '@Clippy look around');
+    await until(async () => (await repliesIn(state, second)).length, 'the second reply');
+    const [, run] = await runs();
+    assert.deepEqual(run.projectFiles, ['notes.md']);
+    assert.ok(!existsSync(join(mirrorDir(folder, settingsDir), 'stray.md')));
+    await release('Clippy');
+    await until(async () => (await repliesIn(state, first)).length, 'the first reply');
+    assert.ok(!existsSync(join(folder, 'stray.md')));
+  }, { folder });
+});
+
+test('a buddy\'s new comment is anchored on the text it quoted, though a person edited that text meanwhile', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, edit, state, runs, release }) => {
+    await comment(call, '@Clippy hold ;; append {"anchor":{"exact":"cannot handle the extra load"},"body":"Is this measured?"}');
+    await until(async () => (await runs()).length === 1, 'the run to start');
+    await edit((await state()).text.replace('the extra load', 'the extra holiday load'));
+    await release('Clippy');
+    const thread = await until(async () => (await state()).threads.find((t) => t.comments[0].body === 'Is this measured?'), 'its comment');
+    assert.equal(thread.detached, false);
+    assert.equal(thread.anchor.exact, 'cannot handle the extra holiday load');
+  });
 });
 
 test('after a restart, an unanswered ask runs again', { timeout: 30_000 }, async () => {
