@@ -1,6 +1,19 @@
-// Anchors (SPEC.md §3): create them from a selection, and re-find
-// them after the doc changes — exact match, then context bracket, then fuzzy,
-// else detach.
+// Anchors (SPEC.md §3): create them from a selection, and find them in
+// the doc's text as it is now. The format leaves finding to each reader;
+// this is Ponjo's way, not the format's. In order:
+//
+// 1. Exact: every occurrence of `exact`; among the acceptable ones
+//    (`acceptable`), the best score (`evaluate`).
+// 2. Context bracket: what now sits between the full prefix and suffix
+//    (`bracket`).
+// 3. Fuzzy: approximate matches of `exact` with up to half its length in
+//    edits (insertions, deletions, substitutions), first in a window
+//    around `start`, then in the whole text; among the acceptable ones,
+//    the best score. A quote shorter than 4 characters is never
+//    fuzzy-matched.
+// 4. Otherwise it is not found, and its comment shows as detached.
+//
+// The same doc and anchor always give the same result.
 
 import search from 'approx-string-match';
 
@@ -26,7 +39,7 @@ export function createAnchor(text, start, end) {
 }
 
 /**
- * Re-find an anchor in a doc's text as it is now (SPEC.md §3.2).
+ * Find an anchor in a doc's text as it is now (steps 1–4 above).
  * @returns {{ start: number, end: number, method: 'exact' | 'bracket' | 'fuzzy', score: number } | null}
  */
 export function locate(text, anchor) {
@@ -57,8 +70,13 @@ export function locate(text, anchor) {
   return null;
 }
 
-// Context bracket (SPEC.md §3.2 step 2): when the full prefix and suffix both
-// survive unchanged, the anchor is whatever now sits between them.
+// Context bracket (step 2): when the full prefix and suffix, each at least
+// 8 characters, both survive unchanged, the anchor is whatever now sits
+// between them: a gap of `ceil(len(exact) / 2)` to `2 * len(exact) + 16`
+// characters after an exact prefix and before an exact suffix. Of several,
+// the one whose start is closest to `start` (ties: earliest). This follows
+// edits that grow or shrink the quote itself, such as "extra load" becoming
+// "extra peak load". Having the whole context, it needs no `acceptable`.
 function bracket(text, anchor) {
   const { exact, prefix, suffix } = anchor;
   if (prefix.length < MIN_BRACKET_CONTEXT || suffix.length < MIN_BRACKET_CONTEXT) return null;
@@ -76,15 +94,19 @@ function bracket(text, anchor) {
 }
 
 // Text typed after the quote lands between it and the suffix, so the gap
-// swallows it: when the quote's own tail survives in the gap, end there.
+// swallows it: when the quote's own tail (its last 16 characters) survives
+// in the gap, end after its last occurrence.
 function trimTail(text, { exact }, { start, end }) {
   const tail = exact.slice(-TAIL_LENGTH);
   const at = text.slice(start, end).lastIndexOf(tail);
   return at === -1 ? end : start + at + tail.length;
 }
 
-// The one acceptance rule for exact and fuzzy candidates (SPEC.md §3.2). A
-// short quote always needs its context: an exact copy elsewhere is also a
+// The one acceptance rule for exact and fuzzy candidates: quote
+// similarity at least 0.5; below 0.8, context similarity (the mean of
+// prefix and suffix similarity) at least 0.5 too. A quote shorter than 8
+// characters always needs its context, so a short quote that was deleted
+// does not jump to an unrelated copy elsewhere: an exact copy is also a
 // perfect fuzzy match, so checking it only in the exact step lets it through.
 function acceptable(candidate, anchor) {
   const { quoteSim, contextSim } = candidate;
@@ -94,6 +116,10 @@ function acceptable(candidate, anchor) {
   return true;
 }
 
+// A candidate's score, with `sim(a, b) = 1 - edits / len(a)` (1 when `a` is
+// empty) by approximate search of `a` within `b`:
+//   50 * quote sim + 20 * prefix sim (32 characters before)
+//   + 20 * suffix sim (32 after) + 2 * (1 - |start - anchor's start| / len(text))
 function evaluate(text, anchor, start, end, errors) {
   const quoteSim = 1 - errors / anchor.exact.length;
   const prefixSim = similarity(anchor.prefix, text.slice(Math.max(0, start - anchor.prefix.length), start));
