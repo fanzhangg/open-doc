@@ -6,7 +6,8 @@
 // `node_modules`, and only text files of 20 MB or less (a NUL byte makes a
 // file binary). It is brought up to date before each run, a file copied
 // again when its size or mtime changed, with a copy-on-write clone where
-// the file system has them.
+// the file system has them; then the run gets a clone of it of its own, so
+// what it reads never changes while it works, whatever other runs do.
 
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -22,11 +23,24 @@ const syncs = new Map(); // mirror folder → its latest sync
 /** Where the mirror of the project at real path `root` is, in config folder `settingsDir`. */
 export const mirrorDir = (root, settingsDir) => join(settingsDir, 'mirrors', createHash('sha256').update(root).digest('hex').slice(0, 16), basename(root) || 'project');
 
-/** Bring the mirror in `dir` of the project at real path `root` up to date; resolves to `dir`. One sync at a time per mirror. */
-export function syncMirror(root, dir) {
-  const run = (syncs.get(dir) ?? Promise.resolve()).then(() => copyFolder(root, root, dir, '')).then(() => dir);
+/**
+ * Bring the mirror in `dir` of the project at real path `root` up to date,
+ * then clone it to `into`, a run's own copy; resolves to `into`. One at a
+ * time per mirror, so no sync changes it while it is cloned.
+ */
+export function snapshotMirror(root, dir, into) {
+  const run = (syncs.get(dir) ?? Promise.resolve()).then(() => copyFolder(root, root, dir, '')).then(() => clone(dir, into)).then(() => into);
   syncs.set(dir, run.catch(() => {}));
   return run;
+}
+
+// Folder `from`, which holds only folders and files, cloned to `to`.
+async function clone(from, to) {
+  await mkdir(to, { recursive: true });
+  for (const entry of await readdir(from, { withFileTypes: true })) {
+    if (entry.isDirectory()) await clone(join(from, entry.name), join(to, entry.name));
+    else await copyFile(join(from, entry.name), join(to, entry.name), constants.COPYFILE_FICLONE);
+  }
 }
 
 // The project's folder `rel` (`from`, a real path) into `to`; what `to`

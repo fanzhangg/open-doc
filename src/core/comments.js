@@ -104,9 +104,10 @@ export function newComment({ thread, anchor = null, body, resolved }, { by, at }
  * `before` and have no `id` (a changed comment has one). `comments` are the
  * lines `{ anchor: { exact }, body }`, `{ body }` or `{ thread, body }`,
  * made comments `by` the buddy `at` a time; a reply needs a thread of
- * `threads`, and a quote found other than once in `text` (the doc's text) is
- * on the whole doc. `resolves` is whether a line `{ thread: own, resolved:
- * true }` resolves the thread of the run, `own`. Anything else is ignored.
+ * `threads`, and a quote found other than once in `text` (the buddy's copy
+ * of the doc as it left it, the text it quoted) is on the whole doc.
+ * `resolves` is whether a line `{ thread: own, resolved: true }` resolves
+ * the thread of the run, `own`. Anything else is ignored.
  */
 export function appendedComments(before, after, { text, by, at, threads, own }) {
   const had = new Set(before.split('\n'));

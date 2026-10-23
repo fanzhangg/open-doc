@@ -1,5 +1,5 @@
-// The agents' mirror (src/host/mirror.js): what a project shows, copied for
-// a run, and brought up to date by size and mtime.
+// The agents' mirror (src/host/mirror.js): what a project shows, brought up
+// to date by size and mtime, and cloned for each run.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_TEXT_BYTES } from '../src/store/files.js';
-import { mirrorDir, syncMirror } from '../src/host/mirror.js';
+import { mirrorDir, snapshotMirror } from '../src/host/mirror.js';
 
 // Every file in `dir`, by its path there.
 async function filesIn(dir) {
@@ -35,28 +35,31 @@ test('the mirror holds what the project shows: no hidden names, links out, node_
   await symlink(outside, join(root, 'linked'), 'junction');
 
   const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
-  const dir = await syncMirror(root, mirrorDir(root, settingsDir));
+  const dir = mirrorDir(root, settingsDir);
+  const copy = await snapshotMirror(root, dir, join(settingsDir, 'run', 'project'));
   assert.ok(dir.startsWith(join(settingsDir, 'mirrors')));
-  assert.deepEqual(await filesIn(dir), ['alias.md', 'notes/deep/a.txt', 'plan.md', 'plan.md.comments.jsonl']);
-  assert.equal(await readFile(join(dir, 'alias.md'), 'utf8'), 'Plan.\n', 'a link in the project is its file');
+  for (const shown of [dir, copy]) {
+    assert.deepEqual(await filesIn(shown), ['alias.md', 'notes/deep/a.txt', 'plan.md', 'plan.md.comments.jsonl']);
+    assert.equal(await readFile(join(shown, 'alias.md'), 'utf8'), 'Plan.\n', 'a link in the project is its file');
+  }
 });
 
-test('a sync copies what changed, drops what went, and puts back what an agent changed in the mirror', async () => {
+test('a snapshot copies what changed and drops what went; a run\'s copy is its own', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'ponjo-project-')));
   await writeFile(join(root, 'plan.md'), 'Plan.\n');
   await writeFile(join(root, 'notes.md'), 'Notes.\n');
-  const dir = mirrorDir(root, await mkdtemp(join(tmpdir(), 'ponjo-config-')));
-  await syncMirror(root, dir);
+  const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
+  const dir = mirrorDir(root, settingsDir);
+  const first = await snapshotMirror(root, dir, join(settingsDir, 'one', 'project'));
 
   await writeFile(join(root, 'plan.md'), 'Plan, longer.\n');
   await rm(join(root, 'notes.md'));
   await writeFile(join(root, 'new.md'), 'New.\n');
-  await writeFile(join(dir, 'stray.md'), 'an agent wrote this\n');
-  await syncMirror(root, dir);
+  await writeFile(join(first, 'stray.md'), 'a run wrote this\n');
+  await writeFile(join(first, 'plan.md'), 'Edited by a run.\n');
+  const second = await snapshotMirror(root, dir, join(settingsDir, 'two', 'project'));
   assert.deepEqual(await filesIn(dir), ['new.md', 'plan.md']);
-  assert.equal(await readFile(join(dir, 'plan.md'), 'utf8'), 'Plan, longer.\n');
-
-  await writeFile(join(dir, 'plan.md'), 'Edited by an agent.\n');
-  await syncMirror(root, dir);
-  assert.equal(await readFile(join(dir, 'plan.md'), 'utf8'), 'Plan, longer.\n');
+  assert.deepEqual(await filesIn(second), ['new.md', 'plan.md']);
+  assert.equal(await readFile(join(second, 'plan.md'), 'utf8'), 'Plan, longer.\n');
+  assert.deepEqual(await filesIn(first), ['notes.md', 'plan.md', 'stray.md'], 'the first copy is as that run left it');
 });

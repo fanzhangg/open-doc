@@ -465,7 +465,7 @@ written only by the app.
 | `secrets.bin` | the agents' secret settings, such as API keys, encrypted with the system keychain |
 | `state.json` | recent docs and folders, window bounds |
 | `history/` | versions of each doc, saved before and after each buddy edit (tagged with its reply's id), before each outside change, undo and restore; and the windows' edits the doc's file was last written with; the comments this host took |
-| `mirrors/` | each project's mirror: a copy of what the project shows, for agents to read (`src/host/mirror.js`) |
+| `mirrors/` | each project's mirror: a copy of what the project shows, cloned for each run (`src/host/mirror.js`) |
 | `team/` | each project's link (the secret its room is made from) and teammates, `{ id, name, level }`, in a file named by the SHA-256 of the project folder's real path: a project that moves must allow its teammates again |
 
 ## A buddy's turn
@@ -484,10 +484,13 @@ the ids of those who may ask. AI buddies run only on docs open in a window.
    the [agent script](agent-config.md) there, with the prompt (who the
    buddy is, the thread, the rules) on stdin and the buddy's name in
    `PONJO_BUDDY` (the name is for the script; the app goes by id). In
-   project mode the project is its mirror, brought up to date first: a copy
+   project mode the project is a copy of its own, cloned from the
+   project's mirror once that is brought up to date: the mirror is a copy
    in the config folder of what ProjectService shows, but `node_modules`
    and files that are not text or are over 20 MB, so an agent never learns
-   the real path or reads what a teammate may not.
+   the real path or reads what a teammate may not. Nothing the run reads
+   changes while it works: another run's writes and later syncs reach
+   only their own copies. Its copy goes when it ends.
 2. The agent edits the doc copy, appends comments to the sidecar copy, and
    prints its reply on stdout.
 3. On exit 0, DocService saves versions before and after, lands the doc
