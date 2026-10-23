@@ -55,8 +55,12 @@ export const api = {
   updateBuddy: (id, patch) => call('updateBuddy', { id, patch }),
   /** Delete buddy `name`'s file: { agents }. */
   deleteBuddy: (id) => call('deleteBuddy', { id }),
-  /** Undo the edit of buddy reply `id`: the comments now. */
-  undoReply: (id) => call('undoReply', { id }),
+  /** Undo version `id`, or the versions from `from` to it: the comments now. */
+  undo: (id, from) => call('undo', { id, ...(from ? { from } : {}) }),
+  /** What changed since you last looked: { edits, authors, head }. */
+  since: () => call('since'),
+  /** You have looked at the doc as version `id`. */
+  seen: (id) => call('seen', { id }),
   /** The doc's versions, oldest first (src/store/history.js). */
   history: async () => (await call('history')).versions,
   /** One version: { version, text, before }. */

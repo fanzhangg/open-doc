@@ -133,7 +133,8 @@ shows only as set or not.
   of the doc; when it is done, its changes are merged into the doc as it is
   then, at once, and shown as a revision: new text in its color, removed text
   grey and struck through where it was, until you type, press Escape or
-  another run's edits land.
+  another run's edits land; then it stays marked with the rest of what
+  changed since you last looked.
 - An AI buddy comments as people do: on any passage, or in any thread. It
   resolves the thread it answers when asked to ("…and resolve"). Its
   comments ask no one.
@@ -153,12 +154,18 @@ shows only as set or not.
   stay, the rest of its change lands, and its reply says part of it was not
   applied: @mention it again to redo it. A change from outside merges the
   same way, without the second try.
-- **Undo is one thing**, for your typing and for an AI buddy's run: it takes
-  those edits back, all at once, and keeps everything written since; where
-  someone changed that text since, their text stays. **Cmd+Z** (Ctrl+Z)
-  undoes your own typing, never anyone else's. **Undo** on an AI buddy's
-  reply undoes its run; its comments stay. It works in every window of the
-  team.
+- **Changed since you last looked.** What others changed (teammates, AI
+  buddies, programs outside Ponjo) since you last looked at the doc stays
+  marked in their colour, removed text struck through, and a banner says
+  who: through your typing, and the next time you open the doc, until you
+  click Seen. Your own changes are never marked for you.
+- **Undo is one thing**, for your typing, an AI buddy's run, a teammate's
+  change or one from outside: it takes those edits back, all at once, and
+  keeps everything written since; where someone changed those lines since,
+  their lines stay. **Cmd+Z** (Ctrl+Z) undoes your own typing, never anyone
+  else's. **Undo** on an AI buddy's reply undoes its run; its comments stay.
+  **Undo this change** in history undoes any version, or a burst of typing.
+  It works in every window of the team.
 - **A failed run** replies with the end of its output, marked failed.
   @mention the AI buddy again to retry.
 
@@ -187,9 +194,11 @@ shows only as set or not.
   Replacing is your own edit, undone with Ctrl+Z.
 - **Version history** (clock button, Ctrl+Alt+Shift+H): every version with
   who made it (you, a teammate, both when you typed together, an AI buddy
-  with the comment it answered, or a program outside Ponjo), a diff against the one before, and Restore. A version is
-  saved before and after each buddy edit, before each change from outside
-  Ponjo, and for each undo and restore, so any of them can be restored.
+  with the comment it answered, or a program outside Ponjo), a diff against the one before, Undo this change and
+  Restore. A version is saved each time typing pauses (a burst of typing
+  shows as one), before and after each buddy edit, before each change from
+  outside Ponjo, and for each undo and restore, so any of them can be undone
+  or restored.
   History is kept in the config folder, never next to the doc.
 - **Changes from outside** (a `git pull`, another editor) show up live and
   merge with your typing, line by line. Where they changed a line you

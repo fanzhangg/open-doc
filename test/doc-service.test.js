@@ -215,7 +215,7 @@ test('an edit after a buddy\'s, on the same text: undoing the buddy\'s keeps wha
     const { versions } = await call('history');
     assert.equal(versions.at(-2).reply, replyId);
     assert.equal(versions.at(-1).reply, undefined);
-    await call('undoReply', { id: replyId });
+    await call('undo', { id: (await state()).edits[replyId].version });
     assert.match((await state()).text, /handle the traffic\./, 'the buddy\'s change there was the person\'s to keep');
     assert.match((await state()).text, /Q1 Launch Plan/);
   });

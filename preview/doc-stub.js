@@ -233,9 +233,11 @@ const calls = {
   setLevel: ({ id, level }) => changeTeam((t) => ({ ...t, members: t.members.map((m) => (m.id === id ? { ...m, level } : m)) })),
   link: () => changeTeam((t) => ({ ...t, link: `${location.origin}${location.pathname.replace(/[^/]*$/, '')}team.html?room=${newId('r')}` })),
   history: () => ({ versions: [] }),
+  since: () => ({ edits: [], authors: [], head: null }),
+  seen: () => ({}),
   version: () => refuse('no history in the preview'),
   restoreVersion: () => refuse('no history in the preview'),
-  undoReply: () => refuse('no undo in the preview'),
+  undo: () => refuse('no undo in the preview'),
 };
 
 window.ponjoHost = {

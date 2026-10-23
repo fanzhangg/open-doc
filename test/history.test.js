@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { writeAtomic } from '../src/store/files.js';
-import { COALESCE_MS, MAX_HISTORY_CHARS, MAX_SPAN_MS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
+import { MAX_HISTORY_CHARS, historyDir, moveHistory, readHistory, readVersion, recordVersion } from '../src/store/history.js';
 import { SAMPLE, fakeConfig, openTestDoc, tempDoc, until } from './helpers.js';
 
 const me = { name: 'fzhan', kind: 'human' };
@@ -35,36 +35,32 @@ test('versions record who changed the doc and how much', async () => {
   assert.equal(await readVersion(doc, root, 'v_missing1'), null);
 });
 
-test('a burst of changes by one author is one version', async () => {
+test('a version is never changed: each names its parent, and its change can still be read after 600 more', { timeout: 60_000 }, async () => {
   const root = await configRoot();
   const doc = await tempDoc();
   const t0 = Date.parse('2026-10-15T09:00:00Z');
-  await recordVersion(doc, root, 'a\n', { kind: 'external', author: null }, t0);
+  const opened = await recordVersion(doc, root, 'a\n', { kind: 'external', author: null }, t0);
   const typed = await recordVersion(doc, root, 'ab\n', edit(me), t0 + 1000);
   const more = await recordVersion(doc, root, 'abc\n', edit(me), t0 + 2000);
-  assert.equal(more.id, typed.id, 'still typing: the same version');
-  assert.equal(more.startedAt, typed.startedAt);
-  assert.deepEqual([more.added, more.removed], [2, 0], 'counted from the version before the burst');
+  assert.notEqual(more.id, typed.id, 'typing on: a version of its own');
+  assert.deepEqual([opened.parent, typed.parent, more.parent], [null, opened.id, typed.id]);
+  assert.equal((await readVersion(doc, root, more.id)).before, 'ab\n', 'its change is from its parent');
+  const turn = await recordVersion(doc, root, 'abcd\n', edit(bot, { thread: 'c_aaaaaa', reply: 'c_bbbbbb' }), t0 + 3000);
+  for (let i = 0; i < 600; i++) await recordVersion(doc, root, `abcd ${i}\n`, edit(me), t0 + 4000 + i * 1000);
+  const kept = await readVersion(doc, root, turn.id);
+  assert.deepEqual([kept.before, kept.text], ['abc\n', 'abcd\n']);
+  assert.deepEqual((await readHistory(doc, root)).slice(0, 4).map((v) => v.id), [opened.id, typed.id, more.id, turn.id], 'the versions before are as they were');
+});
 
-  // The agent's change in between starts a new version, and so does the human's after it.
-  await recordVersion(doc, root, 'abcd\n', edit(bot), t0 + 3000);
-  await recordVersion(doc, root, 'abcde\n', edit(me), t0 + 4000);
-  // A pause longer than COALESCE_MS starts a new one too.
-  await recordVersion(doc, root, 'abcdef\n', edit(me), t0 + 4000 + COALESCE_MS);
-  assert.equal((await readHistory(doc, root)).length, 5);
-
-  // A long session is cut into versions even without a pause.
-  let at = t0 + 10 * MAX_SPAN_MS;
-  for (let i = 0; at < t0 + 11 * MAX_SPAN_MS + 1000; i++, at += 60_000) await recordVersion(doc, root, `x${i}\n`, edit(me), at);
-  assert.equal((await readHistory(doc, root)).length, 7);
-
-  // Typing that ends where the version before began leaves no version behind.
-  const doc2 = await tempDoc();
-  await recordVersion(doc2, root, 'a\n', { kind: 'external', author: null }, t0);
-  await recordVersion(doc2, root, 'ab\n', edit(me), t0 + 1000);
-  await recordVersion(doc2, root, 'a\n', edit(me), t0 + 2000);
-  assert.equal((await readHistory(doc2, root)).length, 1);
-  assert.equal((await readdir(historyDir(doc2, root))).filter((f) => f.endsWith('.md')).length, 1, 'unused text is removed');
+test('an older version, written before versions named their parent, has the one before it as its parent', async () => {
+  const root = await configRoot();
+  const doc = await tempDoc();
+  await mkdir(historyDir(doc, root), { recursive: true });
+  await writeAtomic(join(historyDir(doc, root), 'index.json'), JSON.stringify({ history: 1, doc, versions: [
+    { id: 'v_aaaaaa', kind: 'opened', author: null, at: '2026-10-15T09:00:00Z', hash: 'sha256:x' },
+    { id: 'v_bbbbbb', kind: 'edit', author: me, at: '2026-10-15T09:01:00Z', hash: 'sha256:y' },
+  ] }));
+  assert.deepEqual((await readHistory(doc, root)).map((v) => v.parent), [null, 'v_aaaaaa']);
 });
 
 test('of a very long doc, history keeps the latest versions that fit', { timeout: 60_000 }, async () => {

@@ -53,9 +53,15 @@
     <span class="pj-history-heading" role="status" aria-live="polite"></span>
     <span class="pj-spacer"></span>
     <label class="pj-history-changes"><input type="checkbox" checked> Show changes</label>
+    <button type="button" class="pj-secondary pj-history-undo" data-action="undo" hidden>Undo this change</button>
     <button type="button" class="pj-primary pj-history-restore" data-action="restore" hidden>Restore this version</button>
   </div>
 
+  <div class="pj-banner pj-since" hidden>
+    <span class="pj-banner-icon" data-icon="history"></span>
+    <span class="pj-banner-text"></span>
+    <button type="button" data-action="seen">Seen</button>
+  </div>
   <div class="pj-banner pj-notice" hidden>
     <span class="pj-banner-icon" data-icon="alert"></span>
     <span class="pj-banner-text"></span>

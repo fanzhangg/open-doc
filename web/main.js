@@ -11,7 +11,7 @@ import { markdown } from './views/markdown/index.js';
 import { viewFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
 import { createPeople, modeOf } from './agent.js';
-import { setBuddies } from './faces.js';
+import { nameOf, setBuddies } from './faces.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
@@ -38,6 +38,7 @@ const status = document.querySelector('.pj-status');
 const missingBanner = document.querySelector('.pj-missing');
 const readOnlyBanner = document.querySelector('.pj-read-only');
 const noticeBanner = document.querySelector('.pj-notice');
+const sinceBanner = document.querySelector('.pj-since');
 const resolvedToggle = document.querySelector('.pj-show-resolved');
 const commentsToggle = document.querySelector('.pj-tool-comment');
 // In a narrow window the comments rise from the bottom over the page: closed
@@ -156,6 +157,7 @@ async function start() {
     onError: (error) => (error.code === 'not_saved' ? showUnsaved(error.message) : setStatus(`Not saved: ${error.message}`, 'error')),
   });
   client.start(initial);
+  refreshSince();
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
@@ -268,6 +270,7 @@ async function start() {
     chooseView: (text) => viewFor(docName, settings.get(), text),
     commentOf: (id) => comments?.threads.find((t) => t.id === id)?.comments[0]?.body ?? null,
     onRestore: restoreVersion,
+    onUndo: undoVersions,
     onClose: () => editor.focus(),
   });
   settings.subscribe(followViews);
@@ -307,6 +310,7 @@ async function start() {
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.on('history', () => {
     history.changed();
+    afterTyping('since', refreshSince);
     afterTyping('sidecar', refreshThreads); // a buddy's turn's receipt is read from its version
   });
   events.on('agents', (data) => showAgents(data));
@@ -713,14 +717,14 @@ async function send(request) {
   }
 }
 
-// Undo a buddy's edit. What you typed lands first; the undo comes back as
-// an edit from the doc host.
+// Undo the edit of a buddy's reply `id`. What you typed lands first; the
+// undo comes back as an edit from the doc host.
 async function undoReply(id) {
   if (shownRun === id) hideRun();
   await client.landed();
   asking = 'Undo';
   try {
-    applyComments(await api.undoReply(id));
+    applyComments(await api.undo(comments.edits[id].version));
   } catch (error) {
     setStatus(`Could not undo: ${error.message}`, 'error');
     throw error;
@@ -761,6 +765,31 @@ function standAtLastEdit(by, before, after) {
   if (range && text) cursors.set(by, createAnchor(text, Math.max(range.end, 1) - 1, Math.max(range.end, 1)));
 }
 
+// ---- what changed since you last looked ----
+
+// Each change made since you last looked at the doc, marked in the text in
+// its maker's colour until you say you have seen them (doc-service.js, since).
+let since = { edits: [], authors: [], head: null };
+async function refreshSince() {
+  since = await api.since().catch(() => since);
+  paintSince();
+}
+
+function paintSince() {
+  const names = since.authors.map((a) => nameOf(a.by, a.name));
+  sinceBanner.hidden = since.edits.length === 0;
+  const listed = names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  sinceBanner.querySelector('.pj-banner-text').textContent = `Changed since you last looked, by ${listed}.`;
+  paintMarks();
+}
+
+sinceBanner.querySelector('[data-action="seen"]').addEventListener('click', async () => {
+  const { head } = since;
+  since = { edits: [], authors: [], head };
+  paintSince();
+  if (head) await api.seen(head).catch((error) => setStatus(`Could not save that: ${error.message}`, 'error'));
+});
+
 // ---- a buddy's run as a revision in the text ----
 
 // The edits of the run that wrote reply `id`, marked in the text until the
@@ -791,6 +820,18 @@ function hideRun() {
   preview = null;
   margin.setShownEdits(null);
   paintMarks();
+}
+
+// Undo the change of the versions from `from` to `id` (web/history.js): what
+// you typed lands first, and the undo comes back as an edit from the doc host.
+async function undoVersions(id, from) {
+  await client.landed();
+  asking = 'Undo';
+  try {
+    applyComments(await api.undo(id, from));
+  } finally {
+    asking = null;
+  }
 }
 
 // Put the doc back the way it was in an earlier version (web/history.js):
@@ -841,6 +882,7 @@ function paintMarks() {
   }
   if (pendingSelection) comment('draft', pendingSelection, true);
   if (preview) marks.push(...revisionMarks(text, preview.edits, preview));
+  else for (const edit of since.edits) marks.push(...revisionMarks(text, [edit], { by: edit.by || null })); // a run shown stands in for them
   for (const [by, anchor] of cursors) {
     const found = where(text, anchor);
     if (found) marks.push({ kind: 'cursor', at: found.end, by, working: working.has(by) });
