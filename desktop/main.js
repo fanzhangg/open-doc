@@ -11,7 +11,7 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHIPPED_AGENTS, agentsDir, installAgents, listAgents, readAgent } from '../src/store/agents.js';
-import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
+import { readSecrets, secretTails, writeSecrets } from '../src/store/secrets.js';
 import { configDir, readSettings, updateSettings, watchSettings } from '../src/store/settings.js';
 import { readSidecarText, sidecarPath } from '../src/store/files.js';
 import { parseSidecar } from '../src/core/comments.js';
@@ -489,7 +489,7 @@ function recentMenu() {
 const PAGE_SETTING_KEYS = ['name', 'theme', 'agent', 'agents'];
 
 // Settings > Agents: the agents, as a doc's page gets them from its doc host.
-const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir(), secrets: secretsSet(secrets) });
+const agentScripts = async () => ({ agents: await listAgents(), shipped: SHIPPED_AGENTS, folder: agentsDir(), secrets: secretTails(secrets) });
 
 async function resetAgentScript(name) {
   if (!SHIPPED_AGENTS.includes(name)) throw new Error('not a shipped agent');
@@ -507,7 +507,7 @@ async function saveStartSettings(patch) {
 
 // API keys and the like (src/store/secrets.js), decrypted here, the one
 // process with the keychain, and handed to the doc host for the runs. A
-// page learns only which are set.
+// page learns only their last 4 characters.
 let secrets = {};
 
 // Set agent `agent`'s secret `key`, one its manifest declares, or clear it with ''.

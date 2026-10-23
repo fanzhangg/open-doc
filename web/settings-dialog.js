@@ -121,7 +121,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
   dialog.querySelector('[data-action="show-agents"]').hidden = !scripts.showFolder;
 
   // The agents are read again each time Agents shows (the user may add one) and after a Reset.
-  let secretsSet = {}; // which secrets are set: { <agent>: [<key>] }
+  let secretTails = {}; // the secrets set, by their last 4 characters: { <agent>: { <key>: tail } }
   let paintAgents = () => {};
   async function listAgents() {
     let found;
@@ -130,19 +130,15 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     } catch {
       return;
     }
-    secretsSet = found.secrets;
+    secretTails = found.secrets;
     dialog.querySelector('.pj-agents-folder').textContent = found.folder;
     const choices = found.agents.map((agent) => agentChoice(agent, found.shipped.includes(agent.id), {
       pick: () => set({ agent: agent.id }),
       change: (key, value) => set({ agents: { [agent.id]: { [key]: value } } }),
       saveSecret: async (key, value) => {
-        try {
-          await scripts.saveSecret(agent.id, key, value);
-          secretsSet = (await scripts.list()).secrets;
-          apply();
-        } catch {
-          // not saved: it still shows as it was
-        }
+        await scripts.saveSecret(agent.id, key, value);
+        secretTails = (await scripts.list()).secrets;
+        apply();
       },
       reset() {
         if (window.confirm(`Reset ${agent.name} to what Ponjo comes with?\n\nYour changes to its program and manifest are lost; its settings stay.`)) scripts.reset(agent.id).then(listAgents, () => {});
@@ -150,8 +146,7 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     }));
     dialog.querySelector('[data-section="agents"] .pj-choices').replaceChildren(...choices.map((choice) => choice.node));
     paintAgents = (settings) => found.agents.forEach((agent, i) => {
-      const secrets = Object.fromEntries((secretsSet[agent.id] ?? []).map((key) => [key, true]));
-      choices[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secrets });
+      choices[i].paint(settings.agent === agent.id, { ...agentSettings(settings, agent), ...secretTails[agent.id] });
     });
     apply();
   }
@@ -308,7 +303,7 @@ function itemRowAndPage(kind, title, item, save) {
 // declares (shown while their `when` holds) and, for one Ponjo ships,
 // Reset to Default. `change(key, value)` and `saveSecret(key, value)` save a
 // field. `paint(using, own)` shows whether it is picked and its settings
-// `own`, a secret as true when set.
+// `own`, a secret by its last 4 characters when set.
 function agentChoice(agent, shipped, { pick, change, saveSecret, reset }) {
   const radio = el('input', 'pj-radio');
   Object.assign(radio, { type: 'radio', name: 'pj-agent' });
@@ -394,20 +389,32 @@ function fieldRow(field, id, change) {
       if (document.activeElement !== control) control.value = own[field.key];
     };
   } else if (field.type === 'secret') {
-    // Never shown, only whether it is set: typing one in replaces it.
+    // Never shown, only its last 4 characters: typing one in replaces it.
     const input = el('input', 'pj-input');
     Object.assign(input, { type: 'password', autocomplete: 'off', ariaLabel: field.label });
+    const problem = el('span', 'pj-input-error');
+    problem.hidden = true;
+    text.append(problem);
+    // `change` resolves once saved; else the row says why not.
+    const save = (value) => change(field.key, value).then(() => {
+      problem.hidden = true;
+      input.removeAttribute('aria-invalid');
+    }, (error) => {
+      problem.textContent = `Not saved: ${error.message}`;
+      problem.hidden = false;
+      input.setAttribute('aria-invalid', 'true');
+    });
     input.addEventListener('change', () => {
-      if (input.value.trim()) change(field.key, input.value.trim());
+      if (input.value.trim()) save(input.value.trim());
       input.value = '';
     });
     const clear = el('button', 'pj-link-button', 'Clear');
     clear.type = 'button';
-    clear.addEventListener('click', () => change(field.key, ''));
+    clear.addEventListener('click', () => save(''));
     control = el('div', 'pj-setting-row');
     control.append(input, clear);
     paint = (own) => {
-      input.placeholder = own[field.key] ? 'Set' : 'Not set';
+      input.placeholder = own[field.key] ? `Set: …${own[field.key]}` : 'Not set';
       clear.hidden = !own[field.key];
     };
   } else {

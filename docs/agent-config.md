@@ -76,7 +76,7 @@ replaced (Reset to Default, a new version) without losing them.
 | --- | --- | --- |
 | `switch`, `choice`, `number` | as for a view | `settings.json`: `agents: { <name>: { <key>: value } }` |
 | `text` | a line of text, such as a model | the same |
-| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only as set or not |
+| `secret` | an API key | encrypted with the system keychain (Electron `safeStorage`), in the config folder; never in `settings.json` or a log, and shown only by its last 4 characters |
 
 A key is lower case letters, digits and `_`. Only the app's main process
 can decrypt a secret; it hands the secrets to the doc host, which runs the

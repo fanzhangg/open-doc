@@ -22,7 +22,7 @@ import { StoreError, formFor, hashText, moveDoc, readDoc, readSidecarText, sidec
 import { VERSION_ID, moveHistory, noteSeen, noteTaken, noteWritten, readHistory, readSeen, readTaken, readVersion, recordVersion, versionsSince, writtenEdits } from '../store/history.js';
 import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { firstBuddies, projectBuddiesDir, readBuddies, removeBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
-import { secretsSet } from '../store/secrets.js';
+import { secretTails } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { mirrorDir, snapshotMirror } from './mirror.js';
@@ -859,7 +859,7 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
       createBuddy,
       updateBuddy,
       deleteBuddy,
-      scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir), secrets: secretsSet(secrets()) }),
+      scripts: async () => ({ agents: await listAgents(settingsDir), shipped: SHIPPED_AGENTS, folder: agentsDir(settingsDir), secrets: secretTails(secrets()) }),
       // A shipped agent script, written again as it came.
       async resetScript(body) {
         if (!SHIPPED_AGENTS.includes(body?.name)) throw new DocError('bad_input', 'not a shipped agent');

@@ -44,7 +44,8 @@ export const api = {
   line: (fn) => host.onLine?.(fn),
   /**
    * The agents: { agents: [{ id, name, about, settings }], shipped: the ids
-   * Ponjo comes with, folder, secrets: which are set, { <agent>: [<key>] } }.
+   * Ponjo comes with, folder, secrets: those set, by their last 4
+   * characters, { <agent>: { <key>: tail } } }.
    */
   scripts: () => call('scripts'),
   /** Write shipped agent `name` (its program and manifest) again as it came. */

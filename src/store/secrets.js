@@ -29,5 +29,6 @@ export async function writeSecrets(cipher, secrets, dir = configDir()) {
   await writeAtomic(secretsPath(dir), cipher.encryptString(JSON.stringify(secrets)));
 }
 
-/** Which secrets are set, without them: { <agent>: [<key>] }, for Settings to show. */
-export const secretsSet = (secrets) => Object.fromEntries(Object.entries(secrets).map(([agent, own]) => [agent, Object.keys(own)]));
+/** The secrets set, by their last 4 characters only: { <agent>: { <key>: tail } }, for Settings to show. */
+export const secretTails = (secrets) => Object.fromEntries(Object.entries(secrets).map(([agent, own]) =>
+  [agent, Object.fromEntries(Object.entries(own).map(([key, value]) => [key, value.slice(-4)]))]));

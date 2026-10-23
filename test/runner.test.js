@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { mirrorDir } from '../src/host/mirror.js';
 import { buildPrompt } from '../src/host/runner.js';
 import { agentScript, agentsDir, installAgents, listAgents } from '../src/store/agents.js';
-import { readSecrets, secretsSet, writeSecrets } from '../src/store/secrets.js';
+import { readSecrets, secretTails, writeSecrets } from '../src/store/secrets.js';
 import { SAMPLE, fakeConfig, fakeRuns, openTestDoc, readOnly, tempDoc, until } from './helpers.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -286,10 +286,10 @@ test('a secret is kept encrypted in the config folder, reaches its agent\'s run,
   await writeSecrets(cipher, { fake: { key: 'sk-fake-123' }, other: { key: 'sk-other-456' } }, settingsDir);
   const secrets = await readSecrets(cipher, settingsDir);
   assert.deepEqual(secrets, { fake: { key: 'sk-fake-123' }, other: { key: 'sk-other-456' } });
-  assert.deepEqual(secretsSet(secrets), { fake: ['key'], other: ['key'] }, 'Settings learns only which are set');
+  assert.deepEqual(secretTails(secrets), { fake: { key: '-123' }, other: { key: '-456' } }, 'Settings learns only their last 4 characters');
   const { doc, call } = await openTestDoc(docPath, { settingsDir, secrets: () => secrets });
   try {
-    assert.deepEqual((await call('scripts')).secrets, { fake: ['key'], other: ['key'] });
+    assert.deepEqual((await call('scripts')).secrets, { fake: { key: '-123' }, other: { key: '-456' } });
     const id = (await call('comment', { anchor: null, body: '@Clippy say done' })).id;
     await until(async () => (await call('state')).threads.find((t) => t.id === id).comments.length === 2, 'the reply');
     const [run] = await fakeRuns(settingsDir);
