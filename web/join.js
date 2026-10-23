@@ -1,5 +1,5 @@
-// Who a teammate's page is, in a plain browser (docs/user-experience.md,
-// Sharing a project): a key made once in this browser, by which the host
+// Who a player's page is, in a plain browser (docs/user-experience.md,
+// Hosting a room): a key made once in this browser, by which the host
 // knows them (it is never shown; their id is its hash), and the name they
 // pick the first time they open a link.
 
@@ -37,11 +37,11 @@ export function identity() {
   return { key, name: name ?? '' };
 }
 
-/** Whether the teammate has picked a name. */
+/** Whether the player has picked a name. */
 export const named = () => Boolean(name);
 
-/** Ask the teammate's name, `problem` saying why it is asked again; resolves once it is picked. */
-export function askName(problem = '') {
+/** Ask the player's name; resolves once it is picked. */
+export function askName() {
   const form = document.querySelector('.pj-join');
   const field = form.querySelector('input');
   const error = form.querySelector('.pj-input-error');
@@ -50,8 +50,6 @@ export function askName(problem = '') {
     error.hidden = !message;
     field.toggleAttribute('aria-invalid', Boolean(message));
   };
-  field.value = name ?? '';
-  show(problem);
   form.hidden = false;
   field.focus();
   return new Promise((done) => {

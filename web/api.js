@@ -73,14 +73,17 @@ export const api = {
   /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
   read: (path) => call('read', { path }),
   /**
-   * The owner's: the project's team, { members: [{ id, name, level }],
-   * pending: [{ id, name }] (asking to join), link (or null) }, and changing
-   * it, each answered with the team then. `level` is 'read' or 'write'.
+   * The owner's: the project's room, { link, locked, players: [{ id, name,
+   * level }] } while it is open, else null, and changing it, each answered
+   * with the room then. `level` is 'read' or 'write'.
    */
-  team: () => call('team'),
-  allow: (id, level) => call('allow', { id, level }),
-  remove: (id) => call('remove', { id }),
+  room: () => call('room'),
+  /** Open the room, with a new link. */
+  openRoom: () => call('openRoom'),
+  /** End the room: every page on it closes. */
+  closeRoom: () => call('closeRoom'),
+  lockRoom: (locked) => call('lockRoom', { locked }),
   setLevel: (id, level) => call('setLevel', { id, level }),
-  /** A new link: every one before it ends. */
-  link: () => call('link'),
+  /** Turn player `id` out of the room, for as long as it is open. */
+  kick: (id) => call('kick', { id }),
 };

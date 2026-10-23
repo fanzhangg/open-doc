@@ -4,14 +4,14 @@
 //
 // A card is where everyone is changed: on a buddy's, a click on its name
 // edits it in place, and who it is is a field right under it; your own
-// card edits your name the same way; on a teammate's, the owner sets Read
-// or Edit, or removes them. Faces are drawn from names.
+// card edits your name the same way; on a player's, the owner sets Read
+// or Edit, or kicks them. Faces are drawn from names.
 //
 // A buddy answers when @mentioned. The Team panel (the button after the
-// faces) has you, in a project your teammates (a request to join at the
-// top) and the invite link, then every buddy here; it deletes a buddy and
-// makes one (a project's in a project, else yours). Only the owner changes
-// the team and the buddies.
+// faces) has you, in a project its room (Open room; once open its link,
+// Lock and Close room) and its players, then every buddy here; it deletes
+// a buddy and makes one (a project's in a project, else yours). Only the
+// owner runs the room and changes the buddies.
 //
 // The comment box asks this module what to offer after @.
 
@@ -31,7 +31,7 @@ const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a let
 export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, owner = () => true, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
-  let team = null; // the project's team, for its owner (api.team)
+  let room; // for the owner of a project, its room: null while closed (api.room)
   let here = []; // who has the project open: [{ id, name, owner, doc: whether this one }] (the doc host)
   let showing = null; // 'me' | 'team' | 'agent:<name>' | 'person:<name>' | null
   // One card for everyone, in two states: view only, opened by hovering a
@@ -119,12 +119,12 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (kind !== 'agent' && same(name, getName())) return 'me';
     const agent = agentsHere().find((n) => same(n, name));
     if (agent || kind === 'agent') return `agent:${agent ?? name}`;
-    return `person:${memberNamed(name)?.name ?? writers.find((p) => same(p.name, name))?.name ?? name}`;
+    return `person:${playerNamed(name)?.name ?? writers.find((p) => same(p.name, name))?.name ?? name}`;
   }
 
-  // Only another person's card has nothing to change, but for the owner a teammate's.
-  const editable = () => Boolean(showing) && (!showing.startsWith('person:') || Boolean(memberNamed(showing.slice(7))));
-  const memberNamed = (name) => team?.members.find((m) => same(m.name, name)) ?? null;
+  // Only another person's card has nothing to change, but for the owner a player's.
+  const editable = () => Boolean(showing) && (!showing.startsWith('person:') || Boolean(playerNamed(showing.slice(7))));
+  const playerNamed = (name) => room?.players.find((p) => same(p.name, name)) ?? null;
 
   // Under the header, or next to the name it opened from: below it, or above
   // when there is no room, kept inside the window.
@@ -244,27 +244,27 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return [head, about];
   }
 
-  // A teammate's card has, for the owner, Read or Edit and Remove.
+  // A player's card has, for the owner, Read or Edit and Kick.
   function personCard(name) {
-    const teammate = memberNamed(name);
+    const player = playerNamed(name);
     const present = here.find((p) => same(p.name, name));
-    if (!teammate) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc')];
-    if (viewOnly) return [personHead(name, LEVEL[teammate.level])];
+    if (!player) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc')];
+    if (viewOnly) return [personHead(name, LEVEL[player.level])];
     const level = el('div', 'pj-teammate-row');
-    level.append(levelChoice(teammate.level, (next) => changeTeam(() => api.setLevel(teammate.id, next))));
-    const remove = el('button', 'pj-secondary pj-danger', 'Remove from this project');
-    remove.type = 'button';
-    remove.addEventListener('click', async () => {
-      if (!window.confirm(`Remove ${teammate.name} from this project?\n\nTheir pages close at once. Their comments stay.`)) return;
-      await changeTeam(() => api.remove(teammate.id));
+    level.append(levelChoice(player.level, (next) => changeRoom(() => api.setLevel(player.id, next))));
+    const kick = el('button', 'pj-secondary pj-danger', 'Kick');
+    kick.type = 'button';
+    kick.addEventListener('click', async () => {
+      if (!window.confirm(`Kick ${player.name}?\n\nTheir pages close at once, and their browser cannot come back to this room. Their comments stay.`)) return;
+      await changeRoom(() => api.kick(player.id));
       toggle('team');
     });
-    const removeRow = el('div', 'pj-teammate-row');
-    removeRow.append(remove);
-    return [personHead(name, 'Teammate'), level, removeRow];
+    const kickRow = el('div', 'pj-teammate-row');
+    kickRow.append(kick);
+    return [personHead(name, 'Player'), level, kickRow];
   }
 
-  // Read or Edit, Edit to start: `pick(level)` hears a change.
+  // Read or Edit: `pick(level)` hears a change.
   function levelChoice(level, pick) {
     const choice = el('div', 'pj-segmented');
     choice.setAttribute('role', 'radiogroup');
@@ -283,62 +283,68 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return choice;
   }
 
-  // A change to the team, as `request()` asks it: the panel shows the team it answers with, or what went wrong.
-  async function changeTeam(request) {
+  // A change to the room, as `request()` asks it: the panel shows the room it answers with, or what went wrong.
+  async function changeRoom(request) {
     try {
-      team = await request();
+      room = await request();
       paintCard();
     } catch (failure) {
+      paintCard();
       const error = el('div', 'pj-input-error', failure.message);
       panel.querySelector('.pj-input-error')?.remove();
       panel.querySelector('.pj-card-head, .pj-profile')?.after(error);
     }
   }
 
-  // You, then in a project your teammates, a request to join at the top,
-  // then every buddy here, one line each: a click opens a card, and a
-  // buddy is deleted from here. Then a line to name a new buddy: Enter
-  // makes it and opens its card. Only the owner sees the
-  // teammates and changes anything, and sees who is away, greyed; a
-  // teammate sees who is here.
+  // You, then in a project the room's players, then every buddy here, one
+  // line each: a click opens a card, and a buddy is deleted from here. Then
+  // a line to name a new buddy: Enter makes it and opens its card. Only the
+  // owner sees the players and changes anything, and sees who is away,
+  // greyed; a player sees who is here.
   function teamCard() {
+    const runs = room !== undefined && owner(); // the owner runs the project's room
     const head = el('div', 'pj-card-head');
     head.append(el('div', 'pj-card-title', 'Team'));
-    if (team) head.append(inviteButtons());
+    if (runs) head.append(roomButtons());
     const list = el('div', 'pj-people-list');
     list.append(meRow());
-    if (team) {
-      list.append(el('div', 'pj-setting-group', 'Teammates'), ...team.pending.map(pendingRow), ...team.members.map(memberRow));
-      if (team.pending.length + team.members.length === 0) list.append(el('div', 'pj-people-none', 'No one yet: send them the invite link.'));
-    } else if (here.some((p) => !isMe(p))) {
+    if (runs && room) {
+      list.append(el('div', 'pj-setting-group', room.locked ? 'Players · locked' : 'Players'), ...room.players.map(playerRow));
+      if (room.players.length === 0) list.append(el('div', 'pj-people-none', 'No one yet: send them the link.'));
+    } else if (!runs && here.some((p) => !isMe(p))) {
       list.append(el('div', 'pj-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
     }
     list.append(el('div', 'pj-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
     return owner() ? [head, list, ...newBuddyRow()] : [head, list];
   }
 
-  // Invite link copies the project's one link, made the first time; New link ends every old one.
-  function inviteButtons() {
+  // Open room while it is closed; once open, Copy link, Lock (or Unlock) and Close room.
+  function roomButtons() {
     const buttons = el('div', 'pj-people-invite');
-    const copy = el('button', 'pj-secondary', 'Invite link');
-    copy.type = 'button';
-    copy.prepend(icon('link'));
-    copy.addEventListener('click', async () => {
-      if (!team.link) await changeTeam(() => api.link());
-      if (!team.link) return;
-      await navigator.clipboard.writeText(team.link);
-      const copied = panel.querySelector('.pj-people-invite .pj-secondary');
-      if (copied) copied.lastChild.textContent = 'Copied';
-    });
-    buttons.append(copy);
-    if (team.link) {
-      const renew = el('button', 'pj-secondary', 'New link');
-      renew.type = 'button';
-      renew.addEventListener('click', () => {
-        if (window.confirm('Make a new invite link?\n\nEvery old link stops working, and pages open on it close. Teammates on the project stay, and join again from the new link.')) changeTeam(() => api.link());
+    const button = (className, label, onClick) => {
+      const made = el('button', className, label);
+      made.type = 'button';
+      made.addEventListener('click', onClick);
+      buttons.append(made);
+      return made;
+    };
+    if (!room) {
+      const open = button('pj-primary', 'Open room', () => {
+        open.disabled = true;
+        open.textContent = 'Opening…';
+        changeRoom(() => api.openRoom());
       });
-      buttons.append(renew);
+      return buttons;
     }
+    const copy = button('pj-secondary', 'Copy link', async () => {
+      await navigator.clipboard.writeText(room.link);
+      copy.lastChild.textContent = 'Copied';
+    });
+    copy.prepend(icon('link'));
+    button('pj-secondary', room.locked ? 'Unlock' : 'Lock', () => changeRoom(() => api.lockRoom(!room.locked)));
+    button('pj-secondary pj-danger', 'Close room', () => {
+      if (window.confirm('Close the room?\n\nEvery page on it closes at once, and its link stops working. The next room has a new link.')) changeRoom(() => api.closeRoom());
+    });
     return buttons;
   }
 
@@ -352,25 +358,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     return row;
   }
 
-  // Someone asking to join: Read or Edit (Edit to start), and Allow or Deny.
-  function pendingRow({ id, name }) {
-    const wrap = el('div', 'pj-people-pending');
-    const row = el('div', 'pj-people-row');
-    row.append(avatar(name, 'human', true), el('span', 'pj-people-name', name), el('span', 'pj-people-role', 'Asks to join'));
-    let level = 'write';
-    const actions = el('div', 'pj-people-actions');
-    const deny = el('button', 'pj-secondary', 'Deny');
-    deny.type = 'button';
-    deny.addEventListener('click', () => changeTeam(() => api.remove(id)));
-    const allow = el('button', 'pj-primary', 'Allow');
-    allow.type = 'button';
-    allow.addEventListener('click', () => changeTeam(() => api.allow(id, level)));
-    actions.append(levelChoice(level, (next) => { level = next; }), el('span', 'pj-spacer'), deny, allow);
-    wrap.append(row, actions);
-    return wrap;
-  }
-
-  const memberRow = (member) => personRow(member.name, LEVEL[member.level], here.some((p) => p.id === member.id) ? 'idle' : 'away');
+  const playerRow = (player) => personRow(player.name, LEVEL[player.level], here.some((p) => p.id === player.id) ? 'idle' : 'away');
 
   // A person, greyed while away.
   function personRow(name, role, presence) {
@@ -413,7 +401,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const field = el('input', 'pj-people-new-name');
     field.type = 'text';
     field.placeholder = 'New buddy';
-    field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name), ...(team ? [...team.members, ...team.pending].map((p) => p.name) : [])]);
+    field.value = defaultName([...agentsHere(), getName(), ...writers.map((p) => p.name), ...(room?.players.map((p) => p.name) ?? [])]);
     field.maxLength = 64;
     field.spellcheck = false;
     field.setAttribute('aria-label', "New buddy's name");
@@ -580,13 +568,13 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   /**
    * Any of: `agents` (the buddies here, with their statuses), `people` (who
-   * commented), `team` (the project's, for its owner), `here` (who has the
-   * project open).
+   * commented), `room` (the project's, for its owner: null while closed),
+   * `here` (who has the project open).
    */
-  function render({ agents, people: nextWriters, team: nextTeam, here: nextHere }) {
+  function render({ agents, people: nextWriters, room: nextRoom, here: nextHere }) {
     if (agents) statuses = agents;
     if (nextWriters) writers = nextWriters;
-    if (nextTeam) team = nextTeam;
+    if (nextRoom !== undefined) room = nextRoom;
     if (nextHere) here = nextHere;
     paintFaces();
     // Not while a field on the card is being typed in.
@@ -648,10 +636,6 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     renameMe() {
       if (showing === 'me' || showing === 'team') paintCard();
     },
-    /** Open the Team panel, where a request to join waits. */
-    showTeam() {
-      if (showing !== 'team') toggle('team');
-    },
   };
 }
 
@@ -663,7 +647,7 @@ const WHERE = { user: 'In all your docs', project: "This project's" };
 
 const LABELS = { working: 'Working…', away: 'Not here' };
 
-// What a teammate may do, under their name.
+// What a player may do, under their name.
 const LEVEL = { read: 'Can read', write: 'Can edit' };
 
 /** 'working', 'idle' (answers when @mentioned), or 'away' (no status: not run here). */

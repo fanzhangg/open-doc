@@ -5,7 +5,7 @@
 // talks to its doc in a process of its own, the doc host (doc-host.js);
 // settings are the user's settings.json, shared by every window.
 
-import { BrowserWindow, Menu, Notification, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
+import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, utilityProcess } from 'electron';
 import { statSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
@@ -451,25 +451,6 @@ function setSettings(patch) {
 function pageCommand(win, name) {
   const page = windows.docFor(win)?.view ?? (windows.isStartWindow(win) ? win : null);
   page?.webContents.send('ponjo:command', name);
-}
-
-// Someone asks to join the project in `folder`: a notification, whose click
-// opens the Team panel of the project's window, where they wait at the top.
-const notices = new Set(); // shown, kept until clicked or closed
-function askedToJoin({ folder, name }) {
-  if (!Notification.isSupported()) return;
-  const notice = new Notification({ title: `${name} asks to join ${basename(folder)}`, body: 'Allow them in the Team panel.' });
-  notices.add(notice);
-  notice.on('close', () => notices.delete(notice));
-  notice.on('click', () => {
-    notices.delete(notice);
-    const entry = windows.folderWindow(folder);
-    if (!entry) return;
-    entry.win.show();
-    entry.win.focus();
-    pageCommand(entry.win, 'team');
-  });
-  notice.show();
 }
 
 // Settings > Agents > Show folder: where the agents are, to edit them.
@@ -918,7 +899,7 @@ async function start() {
   // own so that what the docs do never holds up the windows. It takes its
   // environment from this process, so the login shell's goes in first.
   Object.assign(process.env, loginEnvPatch(process.env, await loginEnv));
-  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'Ponjo Docs' }), onJoin: askedToJoin });
+  docHost = createDocHost({ fork: () => utilityProcess.fork(DOC_HOST, [], { serviceName: 'Ponjo Docs' }) });
   secrets = await readSecrets(safeStorage).catch((error) => {
     console.error('Could not read the agents\' secrets:', error.message);
     return {};

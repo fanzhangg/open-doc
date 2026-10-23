@@ -21,8 +21,15 @@ class_name = "Room"
 tag = "v1"
 new_sqlite_classes = ["Room"]
 
-# Rooms an address opens a minute (worker.js).
+# Hosts an address connects a minute (worker.js).
 [[ratelimits]]
 name = "HOSTS"
 namespace_id = "1001"
 simple = { limit = 60, period = 60 }
+
+# Pages an address opens a minute (worker.js): a page connects again after
+# its line drops, and once per doc it opens.
+[[ratelimits]]
+name = "PAGES"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }

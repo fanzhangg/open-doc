@@ -24,6 +24,7 @@ import { createHistory } from './history.js';
 import { revisionMarks } from './marks.js';
 import { createFileList } from './files.js';
 import { askName, named } from './join.js';
+import { REFUSED } from './relay.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { FORMAT_VERSION } from '../src/core/comments.js';
 
@@ -70,6 +71,8 @@ let shownAgents = ''; // the agent statuses on screen, as JSON
 let shownComments = ''; // the comments on screen, as JSON
 let missing = false; // the doc was moved or deleted on disk: nothing is saved
 let offline = false; // the line to the doc host is down (client.onLine)
+let lineDown = false; // a player's line to the host dropped: read only until it is back (showLine)
+let stranded = false; // and it held typing not sent then: shown as left, to copy, until the page reloads
 let files; // the folder sidebar (desktop folder windows)
 let startTyping = false; // the doc was just made in the sidebar: the cursor starts in it
 
@@ -90,31 +93,58 @@ window.ponjoStay = () => {
   document.body.inert = false;
 };
 
-// How the line to the host is, in a teammate's page (web/relay.js).
+// How the line to the host is, in a player's page (web/relay.js). While it
+// is down the page is read only, and typing not sent is shown as it was
+// left, to copy, never sent later; once the host is back the page catches
+// up and edits again (`hello`), unless it shows such typing: that stays
+// until the page reloads. A page turned away opens again with nothing in it
+// but why (`?gone=`), so nothing of the room stays in its memory.
 const LINE = {
-  waiting: 'Waiting for the owner to let you in',
-  host: 'The host is offline: waiting for it to come back',
-  nohost: 'No one is sharing at this link now. It may be from an earlier time: ask for a new one. Waiting…',
-  relay: 'Cannot reach the relay: trying again',
+  host: 'The host is offline: read only until it is back',
+  nohost: 'No room is open at this link. It may have closed: ask the host for a new link. Waiting…',
+  relay: 'Cannot reach the relay: read only until it is back',
 };
+const UNSENT = 'Not saved: the line dropped. Your last typing is shown as you left it, to copy. Reload to edit again.';
 function showLine(line) {
-  if (!line) setStatus('');
-  else setStatus(line.message ?? LINE[line.reason], 'error');
+  if (line?.reason === 'refused') {
+    reloading = true;
+    location.replace(`?${new URLSearchParams({ gone: line.code })}`);
+    return;
+  }
+  if (line && editor && !lineDown) {
+    lineDown = true;
+    stranded = !client.idle();
+    followReading();
+  }
+  if (stranded) setStatus(UNSENT, 'error');
+  else if (line) setStatus(LINE[line.reason], 'error');
+  else if (!lineDown) setStatus('');
 }
 
+// The page may edit or not (its level, its line): the view and the tools follow.
+function followReading() {
+  document.documentElement.toggleAttribute('data-reader', reading());
+  following = following.then(() => swapView(made)).catch((error) => setStatus(`Could not switch the view: ${error.message}`, 'error'));
+  return following;
+}
+const reading = () => level === 'read' || lineDown;
+
 async function start() {
+  const gone = new URLSearchParams(location.search).get('gone');
+  if (gone !== null) {
+    const card = document.createElement('div');
+    card.className = 'pj-join';
+    card.textContent = REFUSED[gone] ?? 'The host turned this page away';
+    document.body.replaceChildren(card);
+    return;
+  }
   api.line(showLine);
-  // A teammate's page in a browser: their name, picked once, joins them.
+  // A player's page in a browser: their name, picked once, joins them.
   if (!window.ponjoHost && !named()) await askName();
   let initial;
   try {
     initial = await api.state();
   } catch (error) {
-    if (error.code === 'name_taken') {
-      await askName(`${error.message}: pick another`);
-      location.reload();
-      return;
-    }
     document.body.textContent = `Could not load the doc: ${error.message}`;
     return;
   }
@@ -122,8 +152,8 @@ async function start() {
   myId = initial.me.id;
   inProject = initial.project;
   level = initial.level;
-  // A teammate who can only read sees no tool that would be refused: no reply, Resolve, Undo or Restore.
-  document.documentElement.toggleAttribute('data-reader', level === 'read');
+  // A player who can only read sees no tool that would be refused: no reply, Resolve, Undo or Restore.
+  document.documentElement.toggleAttribute('data-reader', reading());
   // The settings are the owner's: anyone else's stay in this page.
   settings = createSettings(initial.settings, {
     save: level === 'owner' ? api.saveSettings : async () => settings.get(),
@@ -148,8 +178,10 @@ async function start() {
       applyComments(state);
       if (state.level !== level) setLevel(state.level);
     },
-    // Offline the same way alone or shared: a call to the doc host fails as `offline`.
+    // An app window whose doc host stopped: a call fails as `offline`, and
+    // typing is saved once it is back. A player's page hears its line instead (showLine).
     onLine: (online) => {
+      if (!window.ponjoHost) return;
       if (!online) setStatus('Offline: what you type stays here, and is saved once the line is back', 'error');
       else if (offline) setStatus('');
       offline = !online;
@@ -161,7 +193,7 @@ async function start() {
   chrome = createChrome({
     getView: () => editor, settings, getName: () => me, setName,
   });
-  window.ponjoDesktop?.onCommand((name) => (name === 'team' ? people.showTeam() : chrome.command(name)));
+  window.ponjoDesktop?.onCommand((name) => chrome.command(name));
   files = createFileList({
     place: initial.place,
     onError: (message) => setStatus(message, 'error'),
@@ -219,7 +251,7 @@ async function start() {
   });
   setBuddies(initial.agents);
   people.render({ agents: initial.agents });
-  if (inProject && level === 'owner') api.team().then((team) => people.render({ team }), () => {});
+  if (inProject && level === 'owner') api.room().then((room) => people.render({ room }), () => {});
   margin.setAgents(initial.agents);
   shownAgents = JSON.stringify(initial.agents);
   applyComments(initial);
@@ -292,7 +324,9 @@ async function start() {
 
   document.querySelector('.pj-editor').addEventListener('beforeinput', () => { typedAt = performance.now(); }, true);
   const events = api.events();
-  events.on('ops', (data) => client.receive(data));
+  events.on('ops', (data) => {
+    if (!lineDown) client.receive(data); // the page catches up once its line is back
+  });
   events.on('cursors', (data) => {
     client.cursors(data);
     if (data.by) movedAt.set(data.by, Date.now());
@@ -304,7 +338,7 @@ async function start() {
   events.on('saved', (data) => showUnsaved(data.error));
   // Where you are in the text, for the others; a reader has no caret.
   document.addEventListener('selectionchange', () => {
-    if (level !== 'read') client.moved();
+    if (!reading()) client.moved();
   });
   events.on('sidecar', () => afterTyping('sidecar', refreshThreads));
   events.on('history', () => {
@@ -313,22 +347,30 @@ async function start() {
     afterTyping('sidecar', refreshThreads); // a buddy's turn's receipt is read from its version
   });
   events.on('agents', (data) => showAgents(data));
-  events.on('team', (data) => people.render({ team: data }));
+  events.on('room', (data) => people.render({ room: data }));
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
     showDocName(data.doc);
     followViews(); // a new extension may open in another view
   });
   events.on('missing', (data) => setMissing(data.missing));
-  // The owner set this teammate to Read or Edit; an offline page hears it
-  // when it catches up on its next connection.
-  events.on('level', () => client.catchUp());
+  // The owner set this player to Read or Edit; a page whose line dropped
+  // hears it when it catches up on its next connection.
+  events.on('level', () => {
+    if (!lineDown) client.catchUp();
+  });
   // First on a new connection: the doc may have gone missing, or runs
-  // started, since `state`, and the doc host may have started again.
-  events.on('hello', (data) => {
+  // started, since `state`, and the doc host may have started again. A
+  // player's page whose line dropped edits again once it has caught up.
+  events.on('hello', async (data) => {
+    if (stranded) return;
     if (Boolean(data.missing) !== missing) setMissing(!missing);
     showAgents(data.agents);
-    client.catchUp();
+    if (!lineDown) return client.catchUp();
+    lineDown = false;
+    setStatus('');
+    await client.catchUp();
+    await followReading();
   });
   await files.ready;
   if (startTyping) editor.focus();
@@ -359,7 +401,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
-    editable: chosen.editable && level !== 'read',
+    editable: chosen.editable && !reading(),
     color: chosen.color,
     settings: chosen.settings,
     saveSettings: (patch) => settings.set({ views: { [chosen.id]: patch } }),
@@ -413,8 +455,7 @@ async function setLevel(next) {
     location.reload();
     return;
   }
-  document.documentElement.toggleAttribute('data-reader', level === 'read');
-  await swapView(made);
+  await followReading();
   if (level === 'read') setStatus('Not saved: you can only read this doc now. Your last typing is shown as you left it, to copy.', 'error');
   else setStatus('');
 }
@@ -680,7 +721,7 @@ function revealText(id) {
 
 // Comments are on selected text only.
 function requestComment() {
-  if (comments?.readOnly || level === 'read') return;
+  if (comments?.readOnly || reading()) return;
   const selection = editor.selection();
   if (!selection || selection.from === selection.to) return;
   if (narrow.matches) openSheet(true);

@@ -154,7 +154,7 @@ contextBridge.exposeInMainWorld('ponjoDesktop', {
   onSettingsChanged: (callback) => {
     ipcRenderer.on('ponjo:settings-changed', () => callback());
   },
-  /** Commands for the page: 'settings' or 'shortcuts' from the menu, 'team' from a notification. */
+  /** Commands for the page from the menu: 'settings', 'shortcuts', 'undo', 'redo'. */
   onCommand: (callback) => {
     ipcRenderer.on('ponjo:command', (_event, name) => callback(String(name)));
   },
