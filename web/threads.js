@@ -146,7 +146,7 @@ export function createCommentMargin(margin, handlers) {
     else row.append(head);
     // To retry, or to redo what was dropped, the human asks again.
     if (comment.failed) row.append(el('div', 'pj-card-note pj-msg-note', `The run failed. @mention ${shown} again to retry.`));
-    if (comment.conflict || edits[comment.id]?.conflict) row.append(el('div', 'pj-card-note pj-msg-note', `You changed this text meanwhile, so its edit there was dropped. @mention ${shown} again to redo it.`));
+    if (edits[comment.id]?.conflict) row.append(el('div', 'pj-card-note pj-msg-note', `People changed some of the same lines while it worked, twice, so its edit there was not applied. @mention ${shown} again to redo it.`));
     if (edits[comment.id]) row.append(receipt(comment.id, edits[comment.id]));
     row.classList.toggle('pj-msg-failed', Boolean(comment.failed));
     return row;

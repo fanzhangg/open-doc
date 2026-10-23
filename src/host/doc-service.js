@@ -16,10 +16,10 @@ import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar
 import { sameName } from '../core/mentions.js';
 import { BuddyError, CLIPPY, buddiesHere, checkBuddyPatch } from '../core/buddies.js';
 import { DEFAULT_SETTINGS, SettingsError, agentSettings } from '../core/settings.js';
-import { apply, diffOps, mapOffset, pastYield, transform } from '../core/ot.js';
-import { rulesOf } from '../rules/index.js';
+import { lineChanges, merge3 } from '../core/diff.js';
+import { apply, diffOps, mapOffset, transform } from '../core/ot.js';
 import { StoreError, formFor, hashText, moveDoc, readDoc, readSidecarText, sidecarPath, writeDoc, writeSidecar } from '../store/files.js';
-import { VERSION_ID, markConflict, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
+import { VERSION_ID, moveHistory, noteTaken, noteWritten, readHistory, readTaken, readVersion, recordVersion, writtenEdits } from '../store/history.js';
 import { configDir, defaultName, ownerOf, readSettings, settingsWithId, updateSettings, watchSettings } from '../store/settings.js';
 import { projectBuddiesDir, readBuddies, removeBuddy, saveBuddy, userBuddiesDir, writeBuddy } from '../store/buddies.js';
 import { secretsSet } from '../store/secrets.js';
@@ -110,9 +110,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // new one takes the text again). `log` holds the latest landed edits, the
   // one that made rev `logStart + k + 1` at k, to move a window's edit from
   // an older rev, to know a window's edit sent again, and to tell a window
-  // what it missed: { ops, id, event }, and the `base` text of one that
-  // yields, with a buddy's `reply`, and `left`, what people's edits from
-  // before it left of it (pastYield), the last landed at rev `end`.
+  // what it missed: { ops, id, event }.
   // `written` is the text the file holds as last written or read,
   // `writtenHash` its hash: a file that is not that changed outside.
   // `writtenStat` is the file's stat as this service last wrote it: a file
@@ -152,11 +150,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   let notSaved = null; // why the file does not hold the doc as windows were told, or null
 
   // Edit `ops` lands on the text, from a window (`id`, the window's name for
-  // it) or from here: one that yields (a buddy's, with its `reply` and buddy
-  // `by`; an outside change; an undo).
+  // it) or from here, merged already (merge3): a buddy's turn (its `reply`
+  // and buddy `by`), an outside change, an undo.
   function land(ops, meta = {}) {
-    const event = { epoch, rev: rev + 1, ops, id: meta.id ?? null, ...(meta.yields ? { yields: true } : {}), ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) };
-    log.push(meta.yields ? { ops, base: text, reply: meta.reply, event } : { ops, id: meta.id, event });
+    const event = { epoch, rev: rev + 1, ops, id: meta.id ?? null, ...(meta.reply ? { reply: meta.reply, by: meta.by } : {}) };
+    log.push({ ops, id: meta.id, event });
     if (meta.id) landedRevs.set(meta.id, rev + 1);
     if (log.length > LOG_SIZE) {
       log.shift();
@@ -251,15 +249,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     emit('saved', { error });
   }
 
-  // The doc's rules, as the settings are now.
-  async function rules() {
-    return rulesOf(docPath, (await readSettings(settingsDir)).settings);
-  }
-
   // A change made outside (another program, git pull), found on disk as
-  // `disk`: it is in history first, then lands, yielding to what landed
-  // since the file was last written. Where it was dropped, the person's text
-  // stays and the outside version is only in history. Run in `serial`.
+  // `disk`: it is in history first, then merged with what landed since the
+  // file was last written (merge3). Where both changed the same lines, what
+  // landed here stays and the outside version is only in history. Run in
+  // `serial`.
   async function takeOutside(disk) {
     if (typing !== null) { // the typing the file held, a version before the outside one
       clearTimeout(typing);
@@ -267,11 +261,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       await noteVersion(written, await typingChange());
     }
     await noteVersion(disk.text, { kind: 'external', author: null });
-    const { ops } = transform(diffOps(written, disk.text), diffOps(written, text), { yields: true, base: written, rules: await rules() });
+    const merged = merge3(written, text, disk.text).text;
     written = disk.text;
     writtenHash = disk.hash;
     await noteWritten(docPath, settingsDir, writtenHash, writtenIds); // the edits written so far: landed, though the file now holds another's
-    land(ops, { yields: true });
+    land(diffOps(text, merged));
     if (text !== disk.text) await noteVersion(text, { kind: 'edit', author: await me() });
   }
 
@@ -298,9 +292,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   }
 
   // A window's edit: operations `ops` on rev `rev` of epoch `epoch`, moved over
-  // what landed since, by character; an edit that yields, there since, yields
-  // to it too, and a buddy's turn that loses part of it so is marked
-  // `conflict` in history. `id` names it in the `ops` event that tells it;
+  // what landed since, by character. `id` names it in the `ops` event that tells it;
   // one sent again once it landed lands no more, and is answered as it was.
   // An epoch or rev this service no longer has is `stale`: the window takes
   // the text again (state) and sends its edit on that.
@@ -314,37 +306,11 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
         return { rev: landedAt };
       }
       if (from !== epoch || at < logStart || at > rev) throw new DocError('stale', 'the doc has moved on: take it again');
-      const overridden = [];
-      const left = []; // what each edit that yields is left as, once this lands
-      for (let k = at - logStart; k < log.length; k++) {
-        const landed = log[k];
-        if (landed.base === undefined) {
-          ops = transform(ops, landed.ops).ops;
-          continue;
-        }
-        // An edit that yields, there since: it yields to this one, which
-        // started before it, as the people's edits before this one left it.
-        const was = landed.left ?? { ops: landed.ops, text: landed.base };
-        const moved = pastYield(ops, was, await rules());
-        if (moved.dropped && landed.reply) overridden.push(landed.reply);
-        left.push([landed, { ...moved.left, end: rev + 1 }]);
-        if (!landed.left) {
-          ops = moved.ops;
-          continue;
-        }
-        // From the text the ones before left, to the text before the next
-        // edit that yields after them, or now.
-        const next = log.findIndex((later, j) => j >= was.end - logStart && later.base !== undefined);
-        ops = transform(moved.ops, diffOps(apply(was.text, was.ops), next === -1 ? text : log[next].base)).ops;
-        k = next === -1 ? log.length : next - 1;
-      }
+      for (const landed of log.slice(at - logStart)) ops = transform(ops, landed.ops);
       if (ops.length > 0 && ops.at(-1).to > text.length) throw new DocError('bad_input', 'operations past the end of the doc');
-      for (const [landed, now] of left) landed.left = now;
       land(ops, { id });
       typed(who);
       const failed = await committed();
-      for (const reply of overridden) await markConflict(docPath, settingsDir, reply);
-      if (overridden.length > 0) emit('history', {});
       if (failed) throw failed;
       return { rev };
     });
@@ -492,9 +458,15 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const threads = threadsOf(lines.map((l) => l.comment).filter(Boolean), here.map(({ id, name }) => ({ id, name })));
     return threads.flatMap((thread) => [...askedBy(thread, askers, taken)].map(([id, asker]) => ({
       threadId: thread.id, thread, buddy: here.find((b) => b.id === id), buddies: here, asker,
+      redo: redo.get(`${thread.id} ${id}`)?.seen === thread.comments.at(-1).at ? redo.get(`${thread.id} ${id}`) : null,
     })).filter((ask) => ask.buddy // a thread's opener may be gone
       && unposted.get(`${ask.threadId} ${ask.buddy.id}`) !== thread.comments.at(-1).id));
   }
+  // The asks whose turn collided with people's edits, to run once more:
+  // thread and buddy → { seen, the `at` of the thread's last comment then;
+  // mine, what the turn changed; theirs, what people changed meanwhile },
+  // each [{ before, after }].
+  const redo = new Map();
   // The asks a turn answered whose reply could not be written: thread and
   // buddy → the thread's latest comment then. Not asked again until the
   // thread has another comment, so a sidecar that cannot be written never
@@ -529,11 +501,13 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     await runner.reconcile();
   }
 
-  // A run ended (runner.js): what it changed in its copy lands as an edit
-  // that yields to what landed since the copy was made, then its reply is
-  // posted. Where anyone changed the same line meanwhile, theirs stays, the
-  // buddy's change there is dropped and the reply says `conflict`. A run
-  // whose thread was resolved meanwhile is dropped whole. Its reply and
+  // A run ended (runner.js): what it changed in its copy is merged with what
+  // landed since the copy was made (merge3) and lands, then its reply is
+  // posted. Where people changed the same lines meanwhile, its ask is run
+  // once more, on the doc as it is now, told what it changed and what they
+  // did (`redo`); colliding again, their lines stay, the rest of its change
+  // lands, and its version says `conflict`. A run whose thread was resolved
+  // meanwhile is dropped whole. Its reply and
   // comments come just after the last comment it saw, so one written while
   // it worked still asks; the reply resolves the thread when the run asked
   // to. The buddy acts with the level of whoever asked it, at most write,
@@ -544,17 +518,21 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     const latest = (await readComments()).lines.map((l) => l.comment).filter(Boolean);
     const thread = threadsOf(latest).find((t) => t.id === threadId);
     if (thread?.resolved) return;
-    let conflict = false;
+    const again = redo.get(`${threadId} ${buddyId}`)?.seen === seen; // this run is its ask run once more
+    redo.delete(`${threadId} ${buddyId}`);
     let anchor = null; // where its edit put the thread's text
     const id = newId('c');
     if (edited !== null && edited !== base && !missing) { // a doc gone has nothing to land on
+      const merged = merge3(base, text, edited);
+      if (merged.conflicts > 0 && !again) {
+        redo.set(`${threadId} ${buddyId}`, { seen, mine: lineChanges(base, edited), theirs: lineChanges(base, text) });
+        return; // unanswered, its ask runs again (runner.js)
+      }
       await flushTyping();
-      const edit = transform(diffOps(base, edited), diffOps(base, text), { yields: true, base, rules: await rules() });
-      conflict = edit.dropped;
-      land(edit.ops, { yields: true, reply: id, by: buddyId });
+      land(diffOps(text, merged.text), { reply: id, by: buddyId });
       await committed(); // landed: windows hear if it is not saved, and the turn is answered
       anchor = movedAnchor(thread?.anchor, base, edited, text);
-      await noteVersion(text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id });
+      await noteVersion(text, { kind: 'edit', author: { id: buddyId, name, kind: 'agent' }, thread: threadId, reply: id, ...(merged.conflicts > 0 ? { conflict: true } : {}) });
     }
     const by = { id: buddyId, name, kind: 'ai' };
     const at = Date.parse(seen) + 1;
@@ -566,7 +544,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
       const added = comments ? appendedComments(comments.before, comments.after, { text: edited, by, at: new Date(at).toISOString(), threads, own: threadId }) : { comments: [], resolves: false };
       const reply = {
         id, thread: threadId, by, at: new Date(at + 1).toISOString(), body, // after its comments, so it ends its thread
-        ...(anchor ? { anchor } : {}), ...(conflict ? { conflict: true } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),
+        ...(anchor ? { anchor } : {}), ...(failed ? { failed: true } : {}), ...(added.resolves ? { resolved: true } : {}),
       };
       return [...lines, ...added.comments.map((comment) => ({ comment })), { comment: reply }];
     }).catch((error) => {
@@ -578,9 +556,9 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // ---- undo ----
 
   // Undo a buddy's run (docs/architecture.md, Undoing changes): the edit
-  // from the version after it back to the version before it, as an edit
-  // that yields to everything landed since, so text anyone changed since
-  // stays. On the machine that has the versions; by `who`.
+  // from the version after it back to the version before it, merged with
+  // everything landed since (merge3), so lines anyone changed since stay.
+  // On the machine that has the versions; by `who`.
   async function undoReply(body, who) {
     await chronicle;
     const edit = (await readHistory(docPath, settingsDir)).find((v) => v.reply === body?.id);
@@ -588,7 +566,7 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
     if (!found?.before) throw new DocError('not_found', 'no edit of that reply on this machine');
     await flushTyping();
     const after = found.text;
-    land(transform(diffOps(after, found.before), diffOps(after, text), { yields: true, base: after, rules: await rules() }).ops, { yields: true });
+    land(diffOps(text, merge3(after, text, found.before).text));
     await committed(); // landed: windows hear if it is not saved
     await noteVersion(text, { kind: 'undo', author: byOf(who), undid: body.id });
     return commentsView(text);
@@ -597,8 +575,8 @@ export async function openDoc(docPath, { folder = null, team = null, settingsDir
   // The runs that edited the doc on this machine, by their reply: { [replyId]:
   // { state: 'edited' | 'undone', by, changes, version, conflict } },
   // `changes` how many places the run changed, `version` the version that
-  // holds the doc right after it, and `conflict` whether a person's edit that
-  // started before it took part of it back.
+  // holds the doc right after it, and `conflict` whether people's lines
+  // stayed where it collided with them, twice.
   async function replyEdits() {
     await chronicle; // a run's version is in before the page reads the doc it wrote
     const edits = {};

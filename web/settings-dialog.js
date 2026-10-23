@@ -8,7 +8,7 @@
 // they belong to a doc's People.
 
 import { hydrateIcons, icon } from './icons.js';
-import { agentSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
+import { agentSettings, viewSettings } from '../src/core/settings.js';
 
 const SHORTCUTS = [
   ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Inline code', 'Mod+E'], ['Strikethrough', 'Mod+Shift+X'], ['Link', 'Mod+K'], ['Find', 'Mod+F'], ['Find and replace', 'Mod+Alt+F'], ['Next match', 'Mod+G'], ['Previous match', 'Mod+Shift+G']]],
@@ -23,7 +23,6 @@ const DIALOG = `
     <div class="pj-settings-title">Settings</div>
     <button type="button" role="tab" data-section="general" data-icon="user">General</button>
     <button type="button" role="tab" data-section="views" data-icon="pencil">Views</button>
-    <button type="button" role="tab" data-section="rules" data-icon="check">Rules</button>
     <button type="button" role="tab" data-section="shortcuts" data-icon="keyboard">Shortcuts</button>
     <button type="button" role="tab" data-section="agents" data-icon="settings">Agents</button>
   </nav>
@@ -61,14 +60,6 @@ const DIALOG = `
       </div>
     </section>
 
-    <section class="pj-settings-section" role="tabpanel" data-section="rules" hidden>
-      <div class="pj-page-list">
-        <h2>Rules</h2>
-        <p class="pj-settings-intro">How changes to a file are merged, whatever its view. Each gives one kind of file its own rules. Off, those files merge as plain text.</p>
-        <ul class="pj-setting-pages"></ul>
-      </div>
-    </section>
-
     <section class="pj-settings-section" role="tabpanel" data-section="agents" hidden>
       <h2>Agents</h2>
       <p class="pj-settings-intro">What does a buddy's work: a program in <code class="pj-agents-folder"></code>, with the prompt on stdin and the reply on stdout. The one picked runs every buddy.</p>
@@ -98,22 +89,21 @@ export function keyLabel(keys) {
 /**
  * The Settings dialog, opened by the page's `.pj-settings-toggle`, Mod+, and
  * Mod+/ (Shortcuts). `onApply(settings)` follows every change, for what only
- * one page shows. `views` (web/views/index.js) and `rules` (src/rules/index.js)
- * fill Views and Rules, which show only when there are some: a list of them,
- * each opening its own page.
+ * one page shows. `views` (web/views/index.js) fill Views, which shows only
+ * when there are some: a list of them, each opening its own page.
  * `scripts` ({ list() → { agents, shipped, folder, secrets }, reset(id),
  * saveSecret(id, key, value), showFolder? }, see web/api.js) backs Agents:
  * the agents, read again each time it shows, one of them picked to run
  * every buddy, its settings open under it.
  * @param {{ store: ReturnType<typeof import('./settings.js').createSettings>, getName: () => string,
- *           setName: (name: string) => boolean, onApply?: (settings: object) => void, views?: object[], rules?: object[],
+ *           setName: (name: string) => boolean, onApply?: (settings: object) => void, views?: object[],
  *           scripts: object }} options
  */
-export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], rules = [], scripts }) {
+export function setupSettings({ store, getName, setName, onApply = () => {}, views = [], scripts }) {
   document.body.insertAdjacentHTML('beforeend', DIALOG);
   const dialog = document.querySelector('.pj-settings');
-  // Views and Rules are lists of pages alike: `read(settings, item)` gives an item's settings.
-  const lists = [['views', 'Views', views, viewSettings], ['rules', 'Rules', rules, ruleSettings]].map(([kind, title, items, read]) => {
+  // Views is a list of pages: `read(settings, item)` gives an item's settings.
+  const lists = [['views', 'Views', views, viewSettings]].map(([kind, title, items, read]) => {
     const list = dialog.querySelector(`[data-section="${kind}"] .pj-page-list`);
     const parts = items.map((item) => itemRowAndPage(kind, title, item, (patch) => store.set(patch)));
     list.querySelector('ul').append(...parts.map((part) => part.row));

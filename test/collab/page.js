@@ -16,7 +16,6 @@ import { viewFor } from '../../web/views/index.js';
 import { resolveSettings, viewSettings } from '../../src/core/settings.js';
 import { apply } from '../../src/core/ot.js';
 import { createClient } from '../../web/client.js';
-import { rulesOf } from '../../src/rules/index.js';
 import { relayHost } from '../../web/relay.js';
 
 const params = new URLSearchParams(location.search);
@@ -69,7 +68,6 @@ function createHarnessClient(view, name, call) {
   harness.client = createClient({
     view,
     call,
-    rules: () => rulesOf('doc.md', resolveSettings({})),
     onError: (error) => harness.errors.push({ kind: 'error', message: String(error.stack) }),
     show(text, ops, event) {
       try {

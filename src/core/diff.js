@@ -234,6 +234,68 @@ export function findEdit(doc, edit) {
   return best === null ? null : { start: best, end: best };
 }
 
+/**
+ * Three-way merge by line: `theirs` and `ours` each changed `base`; the
+ * text with both changes: { text, conflicts }. A run of lines one side
+ * changed and the other did not takes that side's lines. Where both changed
+ * the same lines, or both put lines at one place, it is a conflict unless
+ * they made the same change, and `ours` wins there; `conflicts` counts
+ * them. A line keeps its newline, so a last line without one differs from
+ * it with one.
+ */
+export function merge3(base, ours, theirs) {
+  const b = lines(base);
+  const sides = [lines(ours), lines(theirs)];
+  const hunks = sides.flatMap((side, s) => regionsOf(b, side).map(([from, to, sideFrom, sideTo]) => ({ s, from, to, sideFrom, sideTo })))
+    .sort((x, y) => x.from - y.from || x.to - y.to);
+  let text = '';
+  let at = 0;
+  let conflicts = 0;
+  // Each cluster of hunks that share base lines, or put lines at one
+  // place, merges alone.
+  const joins = (h, cluster, to) => h.from < to || (h.from === h.to && cluster.at(-1).from === h.from && cluster.at(-1).to === h.from);
+  for (let i = 0; i < hunks.length;) {
+    const cluster = [hunks[i]];
+    let to = hunks[i].to;
+    for (i++; i < hunks.length && joins(hunks[i], cluster, to); i++) {
+      cluster.push(hunks[i]);
+      to = Math.max(to, hunks[i].to);
+    }
+    const from = cluster[0].from;
+    text += b.slice(at, from).join('');
+    // What a side made of base lines [from, to).
+    const made = (s) => {
+      let out = '';
+      let p = from;
+      for (const h of cluster.filter((h) => h.s === s)) {
+        out += b.slice(p, h.from).join('') + sides[s].slice(h.sideFrom, h.sideTo).join('');
+        p = h.to;
+      }
+      return out + b.slice(p, to).join('');
+    };
+    const changed = [0, 1].filter((s) => cluster.some((h) => h.s === s));
+    const [mine, other] = [made(0), made(1)];
+    if (changed.length === 2 && mine !== other) conflicts++;
+    text += changed.includes(0) ? mine : other;
+    at = to;
+  }
+  return { text: text + b.slice(at).join(''), conflicts };
+}
+
+/** The runs of whole lines `text` changed in `base`: [{ before, after }]. */
+export function lineChanges(base, text) {
+  const [a, b] = [lines(base), lines(text)];
+  return regionsOf(a, b).map(([i, j, k, l]) => ({ before: a.slice(i, j).join(''), after: b.slice(k, l).join('') }));
+}
+
+// The runs of lines `side` changed in `base`: [baseFrom, baseTo, sideFrom, sideTo].
+function regionsOf(base, side) {
+  const map = lineMatches(base, side);
+  return map ? changedRegions(map, base.length, side.length) : [[0, base.length, 0, side.length]];
+}
+
+const lines = (text) => (text ? text.split(/(?<=\n)/) : []);
+
 // Runs of lines that differ: [aStart, aEnd, bStart, bEnd].
 function changedRegions(map, n, m) {
   const regions = [];

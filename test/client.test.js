@@ -30,7 +30,6 @@ function page(host, gate = () => null, text = TEXT) {
       return host().call(type, arg);
     },
     show: (text) => { view.text = text; },
-    rules: () => [],
     onError: (error) => errors.push(error),
   });
   return { view, client, errors };
@@ -100,7 +99,7 @@ test('two pages of one doc: each one\'s typing reaches the other, and the doc', 
   await host.close();
 });
 
-test('C3: an outside change that lands while typing is on its way yields to the typing, in the page and the doc alike', async () => {
+test('C3: an outside change that lands while typing is on its way: both land, merged by character, in the page and the doc alike', async () => {
   const docPath = await tempDoc(TEXT);
   let receive = () => {};
   const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
@@ -113,9 +112,11 @@ test('C3: an outside change that lands while typing is on its way yields to the 
   client.flush(); // on its way, held
   await writeFile(docPath, TEXT.replace('Beta two', 'Beta pulled').replace('Gamma three', 'Gamma pulled'));
   await until(() => view.text.includes('Gamma pulled'), 'the outside change shown');
-  assert.equal(view.text, 'Alpha one.\n\nBeta typed.\n\nGamma pulled.\n', 'shown yielding to the typing');
+  // The typing replaced "wo" of "two" with "yped", and the pull all of "two" with "pulled".
+  assert.match(view.text, /^Alpha one\.\n\nBeta pulledyped\.\n\nGamma pulled\.\n$/, 'the typing on its way stays shown, over the pull');
   open();
   await client.landed();
+  assert.equal(view.text, 'Alpha one.\n\nBeta pulledyped.\n\nGamma pulled.\n');
   assert.equal((await host.call('state')).text, view.text);
   assert.equal(await readFile(docPath, 'utf8'), view.text);
   await host.close();
@@ -405,7 +406,6 @@ test('C7: a page set to Read while away learns it as it catches up; its typing i
     view,
     call: (type, arg) => doc.call(type, arg, sam),
     show: (text) => { view.text = text; },
-    rules: () => [],
     caughtUp: (state) => levels.push(state.level),
   });
   receive = (event) => client.receive(event);
@@ -423,7 +423,7 @@ test('C7: a page set to Read while away learns it as it catches up; its typing i
   await doc.close();
 });
 
-test('A4: a line deleted outside while two people each have an edit on it on its way comes back once, with both edits', async () => {
+test('A4: a line deleted outside while two people each have an edit on it on its way: each edit lands once, and every page ends as the file', async () => {
   const text = 'One two.\nThree four.\nFive.\n';
   const docPath = await tempDoc(text);
   const pages = [];
@@ -442,12 +442,14 @@ test('A4: a line deleted outside while two people each have an edit on it on its
   await writeFile(docPath, 'One two.\nFive.\n');
   await until(async () => (await host.call('state')).text === 'One two.\nFive.\n', 'the outside change taken');
   pages[0].open();
-  await until(() => pages[1].view.text.includes('A Three'), 'the first edit shown at the other page');
+  await until(() => pages[1].view.text.includes('A '), 'the first edit shown at the other page');
   pages[1].open();
   await Promise.all(pages.map((p) => p.client.landed()));
-  const expected = 'One two.\nA Three four. B\nFive.\n';
-  assert.equal(await readFile(docPath, 'utf8'), expected);
-  for (const p of pages) assert.equal(p.view.text, expected);
+  const written = await readFile(docPath, 'utf8');
+  assert.equal(written.split('A ').length, 2, written);
+  assert.equal(written.split(' B').length, 2, written);
+  assert.match(written, /^One two\.\n.*Five\.\n$/s);
+  for (const p of pages) assert.equal(p.view.text, written);
   await host.close();
 });
 
@@ -465,7 +467,6 @@ test('D4: nothing goes out during an IME composition, though others\' edits arri
       return host.call(type, arg);
     },
     show: (text) => { view.text = text; },
-    rules: () => [],
   });
   receive = (event) => client.receive(event);
   client.start(await host.call('state'));
@@ -496,7 +497,7 @@ test('C6: a page whose line drops says it is offline, stays editable, and is bac
   const wire = line(host);
   const view = { text: TEXT, getText: () => view.text, selection: () => null };
   const lines = [];
-  const client = createClient({ view, call: wire.call, show: (text) => { view.text = text; }, rules: () => [], onLine: (online) => lines.push(online) });
+  const client = createClient({ view, call: wire.call, show: (text) => { view.text = text; }, onLine: (online) => lines.push(online) });
   receive = wire.events((event) => client.receive(event));
   client.start(await host.call('state'));
   wire.up = false;

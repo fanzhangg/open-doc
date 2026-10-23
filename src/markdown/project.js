@@ -1,7 +1,7 @@
 // Rendered text: what a reader of a markdown doc sees, with its syntax
 // removed, plus a map from each character back to the source. The WYSIWYG
 // editor reaches its document through it (web/views/markdown/view.js builds the same text
-// from its own document), and the Markdown rule compares it (src/rules/markdown.js).
+// from its own document).
 //
 // Built from the CommonMark + GFM tree, with emphasis read the CJK-friendly
 // way (`**熟悉：**直接` is bold): each text block (paragraph, heading, table

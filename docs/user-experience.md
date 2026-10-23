@@ -44,7 +44,7 @@ the owner changes the team and the AI buddies.
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
    Any other text file (code, config, notes) opens as plain text, and
    comments and AI buddies work the same there. The WYSIWYG editor is a
-   view (see Views and rules below): switched off, Markdown opens as plain text too.
+   view (see Views below): switched off, Markdown opens as plain text too.
    A doc too long to write in smoothly in a view opens in the next one, and
    says so in a banner: past 100,000 characters (or a paragraph past
    10,000), Markdown opens as plain text, and the banner offers the Markdown
@@ -147,10 +147,12 @@ shows only as set or not.
   replace the same word, both new words stay, to fix by hand.
 - **A person's typing is trusted.** It is not marked by who typed it, and
   when two people disagree they settle it outside the app, in a call.
-- **People win over AI buddies.** Where a person changed the same text while
-  an AI buddy worked (or a change came from outside), theirs stays, the
-  other change there is dropped, and an AI buddy's reply says so. @mention it
-  again to redo it.
+- **People win over AI buddies.** Where a person changed the same lines
+  while an AI buddy worked, the buddy does its turn once more on the doc as
+  it is then, told what changed. If it collides again, the person's lines
+  stay, the rest of its change lands, and its reply says part of it was not
+  applied: @mention it again to redo it. A change from outside merges the
+  same way, without the second try.
 - **Undo is one thing**, for your typing and for an AI buddy's run: it takes
   those edits back, all at once, and keeps everything written since; where
   someone changed that text since, their text stays. **Cmd+Z** (Ctrl+Z)
@@ -190,22 +192,20 @@ shows only as set or not.
   Ponjo, and for each undo and restore, so any of them can be restored.
   History is kept in the config folder, never next to the doc.
 - **Changes from outside** (a `git pull`, another editor) show up live and
-  merge with your typing. Where they overlap what you are typing, your typing
-  stays and their version is in history.
-- **Settings** (name and theme, views, rules, shortcuts, agent) are
-  the same dialog in every window, the home page too (it has no Views or
-  Rules: those come with a doc), and a change applies at once to all of
+  merge with your typing, line by line. Where they changed a line you
+  changed too, your line stays and their version is in history.
+- **Settings** (name and theme, views, shortcuts, agent) are
+  the same dialog in every window, the home page too (it has no Views:
+  those come with a doc), and a change applies at once to all of
   them. How a doc looks and what its editor offers are its view's
   settings, not global ones. Buddies are not in Settings: they are changed
   on their cards.
-- **Views and rules.** A doc has a **view**, its editor, and **rules**, how
-  changes to it are merged. They are separate, and each is switched on or off
-  alone in Settings > Views and Settings > Rules (each lists its items with
-  their files, what they do and whether they are on; an item's page has its
-  switch and, for a view, its own settings). Every text file opens in the
-  Plain text view (always on) unless a view gives its format a WYSIWYG
-  editor, and merges changes as plain text unless a rule gives it rules of its
-  own. Both built-in ones are for Markdown and on by default.
+- **Views.** A doc has a **view**, its editor, switched on or off in
+  Settings > Views (it lists the views with their files, what they do and
+  whether they are on; a view's page has its switch and its own settings).
+  Every text file opens in the Plain text view (always on) unless a view
+  gives its format a WYSIWYG editor; the built-in one is for Markdown and on
+  by default. How changes merge is the same in every view.
   The **Markdown view** ([design](markdown-view.md)): its toolbar, outline and focus mode (Ctrl+Shift+F)
   are part of it. The toolbar formats, and so do the standard keys (Mod+B,
   Mod+I, Mod+E, Mod+Shift+X, Mod+K); typed Markdown such as `## `, `**x**`
@@ -213,10 +213,6 @@ shows only as set or not.
   view off (Ctrl+Shift+T, again to switch back); `.md` then opens in the plain
   editor. Pasted plain text stays text too; pasted formatted text keeps
   its formatting.
-  The **Markdown rule**: a buddy's edit or a change from outside merges
-  into a line you changed too only where that keeps how the line renders;
-  where it would not, your text stays, as when you both change the same
-  words. It applies whatever view the doc is in.
   The plain editor's settings: line numbers, wrapping, font size, whitespace
   marks (in the selection, everywhere or off) and indent guides, and
   indentation: Tab types the file's indent (found from the file, or tabs or
@@ -228,7 +224,6 @@ shows only as set or not.
   and width, Outline, Focus mode and Word count (shown in its toolbar).
   Switching a view applies at once to every open doc: a Markdown doc turns to
   plain text and back, comments still in the margin, and nothing is written.
-  Switching a rule applies from the next merge.
 - **Files.** New Doc and Rename (the comments move too). Opening an already
   open doc focuses its window. If the file is moved or deleted outside the
   app, a banner says so and saving pauses.

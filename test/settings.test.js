@@ -4,10 +4,9 @@ import { fork } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, SettingsError, agentOf, agentSettings, checkSettingsPatch, resolveSettings, ruleSettings, viewSettings } from '../src/core/settings.js';
+import { DEFAULT_SETTINGS, SettingsError, agentOf, agentSettings, checkSettingsPatch, resolveSettings, viewSettings } from '../src/core/settings.js';
 import { configDir, readSettings, settingsPath, updateSettings, watchSettings } from '../src/store/settings.js';
 import { markdown } from '../web/views/markdown/index.js';
-import { markdownRule } from '../src/rules/markdown.js';
 
 const MARKDOWN_DEFAULTS = { font: 'sans', width: 'normal', outline: true, focus: false, wordCount: false };
 const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-settings-'));
@@ -121,7 +120,7 @@ test('agent: which agent script runs every buddy, Claude Code unless changed', (
 });
 
 test('views: defaults come from the declaration; the old top-level outline and focus are gone', () => {
-  assert.deepEqual([DEFAULT_SETTINGS.views, DEFAULT_SETTINGS.rules], [{}, {}]);
+  assert.deepEqual(DEFAULT_SETTINGS.views, {});
   assert.deepEqual(viewSettings(resolveSettings(null), markdown), { enabled: true, ...MARKDOWN_DEFAULTS });
   assert.deepEqual(resolveSettings({ outline: false, focus: true }), DEFAULT_SETTINGS);
   assert.throws(() => checkSettingsPatch({ focus: true }), /unknown setting: focus/);
@@ -136,18 +135,19 @@ test('views: a switch changed is saved alone and survives a fresh read', async (
   assert.deepEqual(viewSettings(settings, markdown), { enabled: false, ...MARKDOWN_DEFAULTS, focus: true });
 });
 
-test('views and rules: only booleans, strings and numbers by id; a bad value falls back alone', () => {
-  assert.doesNotThrow(() => checkSettingsPatch({ views: { markdown: { outline: false }, csv: {} }, rules: { 'markdown-rule': { enabled: false } } }));
+test('views: only booleans, strings and numbers by id; a bad value falls back alone', () => {
+  assert.doesNotThrow(() => checkSettingsPatch({ views: { markdown: { outline: false }, csv: {} } }));
   for (const bad of [[], null, { markdown: true }, { markdown: { focus: null } }, { markdown: { focus: {} } }, { markdown: [] }]) {
-    for (const kind of ['views', 'rules']) assert.throws(() => checkSettingsPatch({ [kind]: bad }), SettingsError, JSON.stringify(bad));
+    assert.throws(() => checkSettingsPatch({ views: bad }), SettingsError, JSON.stringify(bad));
   }
+  assert.throws(() => checkSettingsPatch({ rules: {} }), /unknown setting: rules/, 'merge rules are gone');
   assert.deepEqual(resolveSettings({ views: 'on' }).views, {});
   const resolved = resolveSettings({ views: { markdown: { enabled: 'no', outline: false }, broken: 3 } });
   assert.deepEqual(resolved.views, { markdown: { enabled: 'no', outline: false } });
   assert.deepEqual(viewSettings(resolved, markdown), { enabled: true, ...MARKDOWN_DEFAULTS, outline: false });
 });
 
-test('views and rules: ids this version does not know are kept', async () => {
+test('views: ids this version does not know are kept', async () => {
   const dir = await tempDir();
   await writeFile(settingsPath(dir), JSON.stringify({ version: 3, views: { csv: { enabled: false, header: true } } }));
   assert.deepEqual((await readSettings(dir)).settings.views, { csv: { enabled: false, header: true } });
@@ -173,16 +173,10 @@ test('views: a value is kept only if its field allows it, else the default', () 
   assert.doesNotThrow(() => checkSettingsPatch({ views: { demo: { mode: 'a', size: 16 } } }));
 });
 
-test('views and rules: on by default, the Markdown view and its rule included, and switched apart', () => {
-  const fresh = resolveSettings(null);
-  assert.equal(viewSettings(fresh, markdown).enabled, true);
-  assert.equal(ruleSettings(fresh, markdownRule).enabled, true);
-  const viewOff = resolveSettings({ views: { markdown: { enabled: false } } });
-  assert.equal(viewSettings(viewOff, markdown).enabled, false);
-  assert.equal(ruleSettings(viewOff, markdownRule).enabled, true, 'the rule is another switch');
-  const ruleOff = resolveSettings({ rules: { 'markdown-rule': { enabled: false } } });
-  assert.equal(ruleSettings(ruleOff, markdownRule).enabled, false);
-  assert.equal(viewSettings(ruleOff, markdown).enabled, true, 'the view is another switch');
+test('views: on by default, the Markdown view included, and switched off alone', () => {
+  assert.equal(viewSettings(resolveSettings(null), markdown).enabled, true);
+  assert.equal(viewSettings(resolveSettings({ views: { markdown: { enabled: false } } }), markdown).enabled, false);
+  assert.deepEqual(resolveSettings({ rules: { 'markdown-rule': { enabled: false } } }), DEFAULT_SETTINGS, 'a stored rule is dropped');
 });
 
 test('views: an always-on view stays enabled whatever is stored', () => {

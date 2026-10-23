@@ -1,7 +1,7 @@
 # Markdown view
 
 The editor a `.md` doc opens in: the Markdown file, shown as formatted text.
-It is one view ([Views and rules](architecture.md#views-and-rules)); switched
+It is one view ([Views](architecture.md#views)); switched
 off, Markdown opens in the plain view as source. What is marked *planned* is
 designed, not built.
 
@@ -161,9 +161,8 @@ is editable, whether to colour its syntax (the plain view), and the page's callb
 
 ### What it does not know
 
-Who anyone is (a mark's `by` is only a name to color), how edits merge (the
-Markdown rule, `src/rules/markdown.js`, whatever view is on), the doc host,
-and files.
+Who anyone is (a mark's `by` is only a name to color), how edits merge
+(the doc host's, whatever view is on), the doc host, and files.
 
 ### Cost
 

@@ -44,7 +44,6 @@ MUST keep fields it does not understand.
 | `at` | string | When it was written, RFC 3339 UTC. A buddy's reply and comments: just after the latest comment of the thread it answered, as its run saw it. |
 | `body` | string | Plain text; may be empty on a reply (it resolves or reopens), or when `resolved` is set. |
 | `resolved` | `true`, optional | Resolves the thread. Who may is not in the file: the app that writes it decides. |
-| `conflict` | `true`, optional | Buddies only: part of its edit was dropped because a human changed the same text meanwhile. |
 | `failed` | `true`, optional | Buddies only: its run failed; `body` is the end of the program's output. |
 
 A comment never changes once written.
