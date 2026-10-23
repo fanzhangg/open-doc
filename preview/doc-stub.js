@@ -11,7 +11,7 @@
 import { createAnchor, locate } from '../src/core/anchor.js';
 import { apply } from '../src/core/ot.js';
 import { askedOf, newComment, newId, peopleOf, threadsOf } from '../src/core/comments.js';
-import { CLIPPY, buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
+import { buddiesHere, checkBuddyPatch } from '../src/core/buddies.js';
 import { sameName } from '../src/core/mentions.js';
 import { DEFAULT_SETTINGS, agentOf, checkSettingsPatch, mergeSettings } from '../src/core/settings.js';
 import claude from '../agents/claude.json' with { type: 'json' };
@@ -38,7 +38,7 @@ Opening files and folders, version history and undoing a buddy's edit need the d
 const PROJECT = {
   'README.md': `# Sample Project
 
-A folder opened as a project: its files in the sidebar, and its own buddies, Editor and Researcher, next to Clippy.
+A folder opened as a project: its files in the sidebar, and its own buddies, Editor and Researcher, next to yours, Clippy.
 
 Open a doc from the sidebar, rename one (F2), delete one (Delete) or drag it into another folder. New files come from the right-click menu, which is the desktop app's own, so not here.
 `,
@@ -65,7 +65,7 @@ const THREADS = inFolder
     { doc: 'README.md', quote: 'its own buddies', ask: '@Editor is this clear enough?', by: 'Editor', answer: 'Yes. Maybe say what a buddy is in one line.' },
     { doc: 'notes/plan.md', quote: 'Check the numbers', ask: '@Researcher which numbers?', by: 'Researcher', answer: 'The hosting cost in data/budget.csv looks low.' },
   ]
-  : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: CLIPPY.name, answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
+  : [{ doc: 'Welcome.md', quote: 'a preview of the editor', ask: '@Clippy what can I try here?', by: 'Clippy', answer: 'Edit the text, start a thread on any selection, reply, resolve. Settings work too.' }];
 
 const AGENTS = Object.entries({ claude, codex, ponjo }).map(([id, manifest]) => agentOf(id, manifest));
 const ai = (name) => ({ id: name, name, kind: 'ai' });
@@ -86,7 +86,8 @@ function seed() {
     );
   }
   return {
-    settings, files, comments, clippy: null,
+    settings, files, comments,
+    mine: [{ id: 'Clippy', name: 'Clippy', about: 'A general writing assistant that helps draft and edit docs' }],
     buddies: inFolder ? [{ id: 'Editor', name: 'Editor', about: 'Tightens prose and keeps the tone even' }, { id: 'Researcher', name: 'Researcher', about: 'Finds sources and checks the facts' }] : [],
     expanded: ['notes'], sidebar: true, carry: null,
     team: { members: [{ id: 'p_noor', name: 'Noor', level: 'write' }], pending: [{ id: 'p_sam', name: 'Sam' }], link: null },
@@ -114,7 +115,7 @@ let current = s.files[params.get('doc')] !== undefined && DOC.test(params.get('d
 const name = (path) => path.split('/').pop();
 const me = () => ({ id: s.settings.id, name: s.settings.name, kind: 'human' });
 const comments = () => (s.comments[current] ??= []);
-const buddies = () => buddiesHere(s.buddies.map((b) => ({ id: b.name, ...b })), s.clippy ? [{ name: CLIPPY.name, about: s.clippy }] : []);
+const buddies = () => buddiesHere(s.buddies, s.mine);
 
 // The page is the only writer: every edit is on the latest rev of this page load.
 const epoch = newId('e');
@@ -169,9 +170,10 @@ const refuse = (message) => {
   throw Object.assign(new Error(message), { code: 'bad_input' });
 };
 
-function checkBuddy(fields) {
+function checkBuddy(fields, id = null) {
   checkBuddyPatch(fields);
-  if (fields.name !== undefined && [CLIPPY.name, s.settings.name].some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
+  const taken = [...buddies().filter((b) => b.id !== id).map((b) => b.name), s.settings.name];
+  if (fields.name !== undefined && taken.some((n) => sameName(fields.name, n))) refuse(`the name ${fields.name} is taken`);
 }
 
 function changeTeam(fn) {
@@ -206,25 +208,22 @@ const calls = {
   scripts: () => ({ agents: AGENTS, shipped: ['claude', 'codex', 'ponjo'], folder: '(the desktop app\'s config folder)', secrets: {} }),
   resetScript: () => ({ agents: AGENTS }),
   createBuddy({ buddy }) {
-    if (!inFolder) refuse('buddies other than Clippy belong to a project');
     const fields = { about: '', ...buddy };
     checkBuddy(fields);
     if (!fields.name) refuse('a buddy needs a name');
-    if (buddies().some((b) => sameName(b.name, fields.name))) refuse(`the name ${fields.name} is taken`);
-    s.buddies.push({ id: newId('b'), ...fields });
+    s[inFolder ? 'buddies' : 'mine'].push({ id: newId('b'), ...fields });
     return changedBuddies();
   },
   updateBuddy({ id, patch = {} }) {
     const found = buddies().find((b) => b.id === id) ?? refuse('no such buddy');
-    if (found.where === 'app' && patch.name !== undefined) refuse(`${found.name} keeps its name`);
-    checkBuddy(patch);
-    if (found.where === 'app') s.clippy = patch.about ?? s.clippy;
-    else s.buddies = s.buddies.map((b) => (b.id === id ? { ...b, ...patch } : b));
+    checkBuddy(patch, id);
+    const key = found.where === 'project' ? 'buddies' : 'mine';
+    s[key] = s[key].map((b) => (b.id === id ? { ...b, ...patch } : b));
     return changedBuddies();
   },
   deleteBuddy({ id: gone }) {
-    if (gone === CLIPPY.id) refuse(`${CLIPPY.name} cannot be deleted`);
     s.buddies = s.buddies.filter((b) => b.id !== gone);
+    s.mine = s.mine.filter((b) => b.id !== gone);
     return changedBuddies();
   },
   team: () => s.team,

@@ -9,8 +9,9 @@
 //
 // A buddy answers when @mentioned. The Team panel (the button after the
 // faces) has you, in a project your teammates (a request to join at the
-// top) and the invite link, then every buddy here; in a project it deletes
-// a buddy and makes one. Only the owner changes the team and the buddies.
+// top) and the invite link, then every buddy here; it deletes a buddy and
+// makes one (a project's in a project, else yours). Only the owner changes
+// the team and the buddies.
 //
 // The comment box asks this module what to offer after @.
 
@@ -24,10 +25,10 @@ const NAME_RULE = 'Letters, digits, dot, dash or underscore, starting with a let
 
 /**
  * @param {{ root: HTMLElement, invite: HTMLElement, panel: HTMLElement, me: HTMLElement, getName: () => string, getId?: () => string | null,
- *           setName: (name: string) => boolean, getAbout: () => string, setAbout: (about: string) => void, project?: () => boolean,
+ *           setName: (name: string) => boolean, getAbout: () => string, setAbout: (about: string) => void,
  *           owner?: () => boolean, onResult: (result: { agents? }) => void }} options
  */
-export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, project = () => false, owner = () => true, onResult }) {
+export function createPeople({ root, invite, panel, me, getName, getId = () => null, setName, getAbout, setAbout, owner = () => true, onResult }) {
   let statuses = []; // the buddies the doc reaches, who they are and which are at work (the doc host)
   let writers = []; // the people who commented: [{ id, name }]
   let team = null; // the project's team, for its owner (api.team)
@@ -296,8 +297,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // You, then in a project your teammates, a request to join at the top,
   // then every buddy here, one line each: a click opens a card, and a
-  // project's buddy is deleted from here. Then, in a project, a line to name
-  // a new buddy: Enter makes it and opens its card. Only the owner sees the
+  // buddy is deleted from here. Then a line to name a new buddy: Enter
+  // makes it and opens its card. Only the owner sees the
   // teammates and changes anything, and sees who is away, greyed; a
   // teammate sees who is here.
   function teamCard() {
@@ -313,7 +314,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       list.append(el('div', 'pj-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
     }
     list.append(el('div', 'pj-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
-    return project() && owner() ? [head, list, ...newBuddyRow()] : [head, list]; // buddies other than Clippy are a project's
+    return owner() ? [head, list, ...newBuddyRow()] : [head, list];
   }
 
   // Invite link copies the project's one link, made the first time; New link ends every old one.
@@ -390,14 +391,14 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     open.append(avatar(status.name, 'agent', true, status.id), el('span', 'pj-people-name', status.name), el('span', 'pj-people-role', tagline(status) || WHERE[status.where]));
     open.addEventListener('click', () => toggle(`agent:${status.name}`));
     row.append(open);
-    if (status.where === 'project' && owner()) {
+    if (owner()) {
       const remove = el('button', 'pj-icon-btn pj-people-delete');
       remove.type = 'button';
       remove.dataset.tip = `Delete ${status.name}`;
       remove.setAttribute('aria-label', `Delete ${status.name}`);
       remove.append(icon('trash'));
       remove.addEventListener('click', async () => {
-        if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering. Its comments stay.`)) return;
+        if (!window.confirm(`Delete ${status.name}?\n\nIts file is deleted and it stops answering${status.where === 'user' ? ' in all your docs' : ''}. Its comments stay.`)) return;
         take(await api.deleteBuddy(status.id).catch(() => ({}))); // gone already: nothing to do
       });
       row.append(remove);
@@ -463,7 +464,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     pic.append(avatar(name, 'agent', false, idOf(name)));
     const who = el('div', 'pj-profile-who');
     // Click the name to edit it right there.
-    who.append(status && !viewOnly && status.where !== 'app' ? inPlace(status, 'Name') : el('div', 'pj-profile-name', name));
+    who.append(status && !viewOnly ? inPlace(status, 'Name') : el('div', 'pj-profile-name', name));
     if (viewOnly && introOf(name)) who.append(el('div', 'pj-profile-slogan', introOf(name)));
     who.append(el('div', 'pj-profile-sub pj-profile-standing', status ? (STANDING[modeOf(status)] ?? WHERE[status.where]) : 'Not in this doc'));
     head.append(pic, who);
@@ -471,7 +472,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   }
 
   // Who `agent` is, all of it, to change right there: saved when the field
-  // is left. Clippy's, cleared, is Clippy as it ships.
+  // is left.
   function aboutField(agent) {
     const field = el('textarea', 'pj-input pj-profile-about');
     field.value = agent.about;
@@ -658,7 +659,7 @@ const FAILED_MS = 1000; // how long a failed run's moment plays (app.css: .pj-fa
 
 // Where a buddy stands in this doc, on its card under its name.
 const STANDING = { working: 'Working…', away: 'Not running here' };
-const WHERE = { app: 'In all your docs', project: "This project's" };
+const WHERE = { user: 'In all your docs', project: "This project's" };
 
 const LABELS = { working: 'Working…', away: 'Not here' };
 

@@ -57,12 +57,12 @@ with a way to fix it.
 
 The app has two modes:
 
-- **Doc mode:** a `.md` file opened on its own (from Finder, say). One
-  doc, one buddy: Clippy. That holds even if the file sits in a project
-  folder.
+- **Doc mode:** a `.md` file opened on its own (from Finder, say). It
+  reaches the user's buddies. That holds even if the file sits in a
+  project folder.
 - **Project mode:** a folder opened from the home page. A file tree and
-  its docs, Clippy, and the project's own buddies. They live in
-  `.ponjo/buddies/` at the folder's root and travel with it
+  its docs, the user's buddies and the project's own. The project's live
+  in `.ponjo/buddies/` at the folder's root and travel with it
   ([PROJECT](../spec/PROJECT.md)).
 
 | | Doc mode | Project mode |
@@ -72,20 +72,14 @@ The app has two modes:
 | Folder | none | the opened folder |
 
 The asymmetry is intentional: doc mode is a light editor for one person
-and Clippy, with no team and no sharing; project mode is the full
-experience, many docs, many AI buddies and a team.
+and their buddies, with no team and no sharing; project mode is the full
+experience, many docs, the project's buddies and a team.
 
-Clippy is the same in both modes: who it is lives in the user's config
-folder, not in any project. That is what sets it apart from every other
-buddy ([PROJECT §2](../spec/PROJECT.md)):
-
-| | Clippy | Project buddies |
-| --- | --- | --- |
-| Reached from | every doc, in either mode | docs in their project only |
-| Who it is | the user's `buddies/Clippy.md` in their config folder; built in if missing or empty | `.ponjo/buddies/<Name>.md` in the project |
-| Travels with | the user | the project folder |
-| Name, face | the app's; a project's `Clippy.md` is ignored | the file name; a face made from its id |
-| Color | yellow, its own | one of the other seven, picked by id |
+The user's buddies live in `buddies/` in their config folder and reach
+every doc; a project's reach its docs only. In a project, a project's
+buddy wins over one of the user's with its name. Otherwise they are
+alike: name, face and color follow one rule ([PROJECT §2](../spec/PROJECT.md)).
+The first run writes the user's first buddy, Clippy; then it is theirs.
 
 ### Components
 
@@ -118,7 +112,7 @@ flowchart TD
 | Format | `X` + `X.comments.jsonl`, anchors on X's text ([SPEC](../spec/SPEC.md)) |
 | Core (`src/core/`) | computing on text, the same in the doc host and the page; no I/O: anchors, diff (Myers', `diff.js`) and the three-way merge by line (`merge3`), text operations and how they merge by character (`ot.js`), the sidecar's lines and threads, @mentions and the inbox, what a buddy file and the settings may hold |
 | Markdown library (`src/markdown/`) | not a view; what the Markdown view and the page use: a doc's rendered text and its map back to the source (`project.js`), and saving with the bytes of unchanged blocks kept (`splice.js`) |
-| Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agents (programs and their manifests) in the config folder; buddy files (Clippy's there, a project's in its folder) |
+| Store (`src/store/`) | the files: a doc and its sidecar, each written whole (`files.js`), watched (`watch.js`), and the doc's versions (`history.js`); the settings and agents (programs and their manifests) in the config folder; buddy files (the user's there, a project's in its folder) |
 | DocService (`src/host/doc-service.js`) | every write to a doc and its sidecar, one at a time; outside changes; versions |
 | Runner (`src/host/runner.js`) | which turns should start (the inbox), runs them, their status in memory |
 | ProjectService (`src/host/project-service.js`) | the project's files, the same for everyone: what a folder holds, a file to show or open; every path resolved to its real path, inside the root, no part starting with `.` |

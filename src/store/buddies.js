@@ -1,5 +1,5 @@
 // Buddy files (spec/PROJECT.md): a project's, in its `.ponjo/buddies/`,
-// and the user's Clippy, in `buddies/` in their config folder.
+// and the user's, in `buddies/` in their config folder.
 
 import { mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -28,10 +28,11 @@ export async function writeBuddy(dir, buddy, was = null) {
   await writeAtomic(fileOf(dir, buddy.name), buddyText(buddy));
 }
 
-/** Write buddy `buddy`'s file in `dir` (made if missing), new or not. */
-export async function saveBuddy(dir, buddy) {
-  await mkdir(dir, { recursive: true });
-  await writeAtomic(fileOf(dir, buddy.name), buddyText(buddy));
+/** The user's first buddy, Clippy, written when their config folder `settingsDir` has no `buddies/` yet; theirs from then on. */
+export async function firstBuddies(settingsDir) {
+  const dir = userBuddiesDir(settingsDir);
+  if ((await mkdir(dir, { recursive: true })) === undefined) return; // there already
+  await writeAtomic(fileOf(dir, 'Clippy'), buddyText({ id: 'Clippy', name: 'Clippy', about: 'A general writing assistant that helps draft and edit docs' }));
 }
 
 export async function removeBuddy(dir, name) {

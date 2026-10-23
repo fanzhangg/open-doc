@@ -5,9 +5,9 @@ markdown file. What does the work is an agent CLI
 (Claude Code, Codex) chosen on each machine
 ([agent config](../docs/agent-config.md)); a buddy only says who it is.
 
-**Clippy** is in every doc; who it is is the user's to change, in
-`buddies/Clippy.md` in their config folder. Every other buddy
-belongs to a project, lives in its `.ponjo/buddies/` and travels with it.
+The **user's** buddies are in `buddies/` in their config folder and in
+every doc. A **project's** buddies are in its `.ponjo/buddies/`, in its
+docs only, and travel with it.
 A doc's comments are not here; they stay in its sidecar ([SPEC](SPEC.md)).
 
 ## 1. Projects
@@ -30,8 +30,7 @@ A **project** is a folder opened from the app's home page.
 
 - **The file name is the buddy's name.** It starts with a letter
   or digit, then letters, digits, `.`, `_`, `-`; unique in its folder,
-  compared case-insensitively; not `Clippy`. Renaming the file renames
-  the buddy.
+  compared case-insensitively. Renaming the file renames the buddy.
 - **Its id is a line at the top of the file**, `id: b_…` between two `---`
   lines, made when the buddy is created and kept when it is renamed. The
   app finds a buddy, its comments and its face by the id; the name is only
@@ -47,14 +46,16 @@ Checks every claim against the code.
 Read the project before you answer. Quote the file and line you rely on.
 ```
 
-A doc reaches Clippy and, in a project, the project's buddies. Clippy's
-name, face and color are the app's. Who it is is the text of the user's
-`buddies/Clippy.md` in their config folder, the same in every doc; with no
-such file, or an empty one, Clippy is as it ships. Its color is the yellow of eight, evenly apart in hue. A project buddy's
-face is made from its id. Its color is one of the other seven: the one
-its id picks or, when a buddy before it by id has that one, the next
-free one. So Clippy and up to seven buddies look different, and a project
-looks the same on every machine.
+A doc reaches the user's buddies and, in a project, the project's; a
+project's buddy wins over one of the user's with its name. A buddy's face
+is made from its id. Its color is one of eight, evenly apart in hue: the
+one its id picks or, when a buddy before it by id has that one, the next
+free one. So up to eight buddies in a doc look different, and the same
+buddies look the same on every machine.
+
+The app's first run, when the config folder has no `buddies/`, writes
+the user's first buddy, `Clippy.md`, a general writing assistant whose id
+is `Clippy`. Then it is the user's like any other.
 
 ## 3. What a buddy may do
 

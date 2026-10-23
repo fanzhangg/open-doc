@@ -11,6 +11,8 @@ import { createTeam } from '../src/host/team.js';
 async function newTeam() {
   const settingsDir = await mkdtemp(join(tmpdir(), 'ponjo-config-'));
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify({ name: 'fan' }));
+  await mkdir(join(settingsDir, 'buddies'));
+  await writeFile(join(settingsDir, 'buddies', 'Clippy.md'), 'Mine.\n');
   const folder = await mkdtemp(join(tmpdir(), 'ponjo-project-'));
   await mkdir(join(folder, '.ponjo', 'buddies'), { recursive: true });
   await writeFile(join(folder, '.ponjo', 'buddies', 'Editor.md'), 'Edits.\n');

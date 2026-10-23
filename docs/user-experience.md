@@ -26,12 +26,13 @@ The **Team** button (after the faces) opens the panel: You, your Teammates (a
 request to join waits at the top), then the AI buddies, ending with **New AI
 buddy** (it starts with a random first name, which you can type over: Enter
 makes it and opens its card). Click a face anywhere for its card: a name that
-edits in place (yours, or an AI buddy's but not Clippy's; a renamed AI buddy
+edits in place (yours, or an AI buddy's; a renamed AI buddy
 keeps its comments, face and color), for an AI buddy who it is, a field right
-under it saved when you leave it, then Read or Edit for a teammate. A teammate and an AI buddy each have **Remove from this
-project** (an AI buddy's file is deleted; Clippy stays). In a doc opened
-on its own the panel has only you and Clippy; on a teammate's page, only
-the owner changes the team and the AI buddies.
+under it saved when you leave it, then Read or Edit for a teammate. A teammate has **Remove from this
+project**; an AI buddy has a delete button (its file is deleted). In a doc
+opened on its own the panel has only you and your AI buddies, and a new
+one is yours; on a teammate's page, only the owner changes the team and the
+AI buddies.
 
 ## The basic loop
 
@@ -39,7 +40,7 @@ the owner changes the team and the AI buddies.
    or a drag onto the app. Each doc gets its own window. The home page
    opens a **project** (a folder, or a new one made in the dialog) with its
    files in a sidebar, and lists the recent ones. A doc opened on its own is a
-   quick editor for you and Clippy: no team, no sharing.
+   quick editor for you and your AI buddies: no team, no sharing.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
    Any other text file (code, config, notes) opens as plain text, and
@@ -90,16 +91,16 @@ An AI buddy is a name and who it is, in one markdown file, `<Name>.md`. The
 file name is its name; its text, given to its agent as is, says who it is,
 and the first line shows next to its name.
 
-- **Clippy**, a general writing assistant, answers in every doc. Who it is
-  is yours to change, once for all your docs (`buddies/Clippy.md` in your
-  config folder); clear it for Clippy as it ships. Its name stays, and it
-  cannot be removed.
+- **Yours** live in `buddies/` in your config folder and answer in every
+  doc. The first run makes one, **Clippy**, a general writing assistant;
+  rename, change or delete it like any other.
 - **A project's** AI buddies live in its `.ponjo/buddies/` and travel with
-  the folder (commit them). They answer only in that project's docs.
-- A doc opened on its own (from Finder, say) reaches only Clippy, even if it
+  the folder (commit them). They answer only in that project's docs, and
+  win over one of yours with the same name.
+- A doc opened on its own (from Finder, say) reaches only yours, even if it
   sits inside a project folder.
-- Each has its own face and color, the same on every machine: Clippy is
-  yellow, and up to seven project AI buddies get seven other colors.
+- Each has its own face and color, the same on every machine with the same
+  AI buddies: up to eight in a doc get eight colors.
 
 Editing the files by hand works too: the app picks up changes at once. What
 runs every AI buddy is the agent picked in Settings > Agents (Claude Code,
