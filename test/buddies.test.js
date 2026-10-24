@@ -65,6 +65,8 @@ test('buddy colors: up to eight get different ones, the same in any order', () =
   assert.deepEqual(new Set(names.map((n) => slots.get(n))), new Set([0, 1, 2, 3, 4, 5, 6, 7]), 'all eight differ');
   assert.deepEqual(colorSlots([...names].reverse()), slots, 'the same buddies, the same colors');
   assert.equal(colorSlots(['Ada', 'Critic']).get('ada'), colorSlots(['ada']).get('ada'), 'the first by name keeps the one its name picks');
+  const taken = new Set(names.slice(0, 7).map((n) => slots.get(n)));
+  assert.equal(colorSlots(['Noor'], taken).get('noor'), slots.get(names[7]), 'a slot given already is skipped: Noor takes the one left');
 });
 
 test("the user's buddies are in every doc: Clippy is written on first run, then theirs to change, rename or delete", { timeout: 30_000 }, async () => {

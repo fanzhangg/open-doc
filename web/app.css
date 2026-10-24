@@ -126,14 +126,22 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-face { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; }
 .pj-face-body, .pj-face-look { transform-box: view-box; transform-origin: 50% 50%; transition: filter 0.15s; }
 .pj-face-hat { color: var(--text); }
+.pj-face-focused { display: none; }
+/* Small faces stay plain: no blush, glasses or bow, and upright. */
+.pj-avatar { container-type: size; }
+@container (max-width: 20px) {
+  .pj-face-extra { display: none; }
+  .pj-face-tilt { transform: none; }
+}
 
 .pj-agent { display: flex; align-items: center; }
 .pj-agent[data-presence="working"] { margin: 0 3px; } /* room to grow */
 .pj-agent-face, .pj-profile-face { position: relative; display: flex; }
 
 /* Everyone has three states, the same on every face of them: at work (it
-   grows and hops, squashing and stretching, and its face looks about: a
-   buddy running, a person moving or typing), here (as drawn,
+   grows and hops, squashing and stretching, its face looks about and its
+   eyes are focused, which shows even still: a buddy running, a person
+   moving or typing), here (as drawn,
    still) and away (greyed: a buddy that does not answer here, a person not
    in this doc). A failed run is a moment: the face shakes and flashes red,
    once. A face in the header you point at grows a little, and nothing else. */
@@ -141,6 +149,8 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 :is([data-presence="working"], .pj-typing) .pj-avatar { transform: scale(1.18); }
 :is([data-presence="working"], .pj-typing) .pj-face { animation: pj-hop 0.7s ease-in-out infinite alternate; }
 :is([data-presence="working"], .pj-typing) .pj-face-look { animation: pj-bob 0.35s ease-in-out infinite alternate; }
+:is([data-presence="working"], .pj-typing) .pj-face-eyes { display: none; }
+:is([data-presence="working"], .pj-typing) .pj-face-focused { display: inline; }
 [data-presence="away"] .pj-avatar { filter: grayscale(1); opacity: 0.45; }
 .pj-avatar.pj-failed { animation: pj-shake 0.45s ease-in-out; }
 .pj-failed .pj-face-body { animation: pj-red 1s; }

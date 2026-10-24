@@ -9,7 +9,7 @@
 import { api } from './api.js';
 import { markdown } from './views/markdown/index.js';
 import { viewFor } from './views/index.js';
-import { avatar, createCommentMargin, namecardFor } from './threads.js';
+import { createCommentMargin } from './threads.js';
 import { WORKING_MS, createPeople, modeOf } from './agent.js';
 import { setBuddies, setOwner } from './faces.js';
 import { createNameCards } from './namecard.js';
@@ -168,7 +168,6 @@ async function start() {
   settings.subscribe((next) => renameMe(next.name ?? defaultName)); // before the dialog's, which shows `me`
   showDocName(initial.doc);
   offerRename();
-  paintNameChip();
 
   openedText = initial.text;
   made = chooseView(openedText);
@@ -338,7 +337,10 @@ async function start() {
     clearTimeout(settleCarets);
     settleCarets = setTimeout(paintMarks, WORKING_MS); // names go once they stop
   });
-  events.on('here', (data) => people.render({ here: data }));
+  events.on('here', (data) => {
+    people.render({ here: data });
+    repaintThreads(); // someone new may move a colour
+  });
   events.on('saved', (data) => showUnsaved(data.error));
   // Where you are in the text, for the others; a reader has no caret.
   document.addEventListener('selectionchange', () => {
@@ -350,7 +352,10 @@ async function start() {
     afterTyping('sidecar', refreshThreads); // a buddy's turn's receipt is read from its version
   });
   events.on('agents', (data) => showAgents(data));
-  events.on('room', (data) => people.render({ room: data }));
+  events.on('room', (data) => {
+    people.render({ room: data });
+    repaintThreads();
+  });
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
     showDocName(data.doc);
@@ -623,8 +628,8 @@ function applyComments({ threads, people: writers, edits, notice, readOnly }) {
   comments = { threads, people: writers, edits, notice, readOnly };
   showReadOnly(readOnly);
   paintMarks();
+  people?.render({ people: writers }); // first: who is here sets the colours
   margin.update(threads, { id: myId, name: me }, edits);
-  people?.render({ people: writers });
   paintNotice();
   const open = threads.filter((t) => !t.resolved).length;
   commentsToggle.querySelector('.pj-comment-count').textContent = open > 0 ? String(open) : '';
@@ -944,11 +949,9 @@ function offerRename() {
   });
 }
 
-function paintNameChip() {
-  const button = document.querySelector('.pj-me');
-  button.replaceChildren(avatar(me, 'human', false, myId));
-  namecardFor(button, me, 'human', 'instant');
-  button.setAttribute('aria-label', `${me} · You`);
+// The threads drawn again, as when the people in the doc change.
+function repaintThreads() {
+  if (comments) margin?.update(comments.threads, { id: myId, name: me }, comments.edits);
 }
 
 /** Rename the human in comments, in every doc; false when the name is not allowed. */
@@ -961,9 +964,8 @@ function setName(next) {
 function renameMe(next) {
   if (next === me) return;
   me = next;
-  paintNameChip();
-  if (comments) margin?.update(comments.threads, { id: myId, name: me }, comments.edits);
   people?.renameMe();
+  repaintThreads();
 }
 
 // Saving is automatic and local, so the header says nothing while it works;

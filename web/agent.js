@@ -17,7 +17,7 @@
 
 import { api } from './api.js';
 import { icon } from './icons.js';
-import { isOwner } from './faces.js';
+import { isOwner, setPeople } from './faces.js';
 import { avatar, namecardFor } from './threads.js';
 import { defaultName, tagline } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
@@ -192,8 +192,12 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const when = (face) => since.get(face.key)[1] * (face.mode === 'working' ? 1 : -1);
     faces.sort((a, b) => rank(a) - rank(b) || when(a) - when(b));
     const key = JSON.stringify(faces);
-    if (key !== painted) {
-      painted = key;
+    const mine = JSON.stringify([getName(), getId()]);
+    if (key + mine !== painted) {
+      painted = key + mine;
+      me.replaceChildren(avatar(getName(), 'human', false, getId()));
+      namecardFor(me, getName(), 'human', 'instant');
+      me.setAttribute('aria-label', `${getName()} · You`);
       const before = new Map([...root.children].map((n) => [n.dataset.key, n.getBoundingClientRect().left]));
       root.replaceChildren(...faces.map(queued));
       glide(before);
@@ -606,6 +610,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     if (nextWriters) writers = nextWriters;
     if (nextRoom !== undefined) room = nextRoom;
     if (nextHere) here = nextHere;
+    setPeople([getName(), ...writers.map((p) => p.name), ...here.map((p) => p.name), ...(room?.players.map((p) => p.name) ?? [])]);
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();
@@ -669,8 +674,9 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       failedAt.set(id, Date.now());
       paintFaces();
     },
-    /** Your name changed: repaint your card if it is open. */
+    /** Your name changed: your face, and your card if it is open. */
     renameMe() {
+      render({});
       if (showing === 'me' || showing === 'team') paintCard();
     },
   };
