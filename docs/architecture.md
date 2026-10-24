@@ -141,9 +141,10 @@ so it is built in and not an extension point.
 | Must satisfy | the view contract, `test/views.test.js` |
 
 The Plain text view (`web/views/plain/`) is CodeMirror showing the text as it
-is; line numbers, wrapping, font size, whitespace marks, indent guides and
-indentation are its settings, with a status bar (`status.js`) whose menu and
-toggles save the same settings. The Markdown view (`web/views/markdown/`, [design](markdown-view.md)) is
+is, with CodeMirror's standard keys for code (Mod+/ comments out lines in a
+language that has comments); line numbers, wrapping, font size, whitespace
+marks, indent guides and indentation are its settings, with a status bar
+(`status.js`) whose menu and toggles save the same settings. The Markdown view (`web/views/markdown/`, [design](markdown-view.md)) is
 WYSIWYG; its toolbar (and the standard keys), outline, focus mode and
 word count are parts of it, switched by its settings, not separate extensions.
 It maps the doc's text to its own document through the rendered text, and
@@ -219,7 +220,7 @@ numbers are `LATENCY` in `web/views/index.js`, which the tests read:
 | D1 | My caret stays: others' edits never move my caret or selection off the character it is next to. |
 | D2 | My viewport stays: when others edit above me, the line I am looking at keeps its place on screen. |
 | D3 | My undo: Cmd+Z undoes only my typing, and still works after others split or restyle my paragraph. |
-| D4 | IME: nothing is saved or sent mid-composition; others' edits arriving mid-composition lose or double nothing. |
+| D4 | IME: nothing is saved or sent mid-composition, and others' edits arriving meanwhile show once it ends (one in the text being composed would break it); they lose or double nothing. |
 | D5 | The view never rewrites: after `applyText(t)`, `getText() === t`; a view's own normalisation is never saved as anyone's edit. |
 | D6 | Clear marks: a teammate's typing shows only by their cursor; a buddy's change is flagged with its name; outside changes and restores glow. |
 | D7 | Drafts stay: a comment being written, and its anchor, survive others' edits. |

@@ -9,7 +9,7 @@ import { Annotation, Compartment, EditorState, StateEffect, StateField, Transact
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, lineNumbers } from '@codemirror/view';
 import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { history, historyKeymap, redo, standardKeymap, undo } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands';
 import { diffOps } from '../../../src/core/ot.js';
 import { buddyColor } from '../../faces.js';
 import { cursorNode } from '../../marks.js';
@@ -133,7 +133,7 @@ export async function createPlainView({ stage, text, name, settings, saveSetting
     state: EditorState.create({
       doc: text,
       extensions: [
-        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...standardKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField, foundField,
+        history(), keymap.of([...indentKeys({ indent: () => indent, keep: () => own.keepIndent }), ...historyKeymap, ...defaultKeymap]), numbers.of(numbersFor(settings)), wrapping.of(wrapFor(settings)), syntax.of([]), marking.of(markingFor(settings)), guiding.of(guidingFor(settings)), marksField, flashField, foundField,
         bidi, EditorView.perLineTextDirection.of(true),
         EditorState.readOnly.of(!editable), EditorView.editable.of(editable),
         EditorView.updateListener.of((update) => {

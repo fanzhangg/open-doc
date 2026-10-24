@@ -47,39 +47,45 @@ function touchedLines(state) {
 }
 
 /**
- * Tab, Shift-Tab and Enter for an editable view. `indent()` is the indent to
- * type, `keep()` whether Enter starts the new line with the indent of the
- * one it leaves. Tab types the indent, or indents every line of a selection
- * over several lines; Shift-Tab takes one indent off those lines.
+ * Tab, Shift-Tab, Mod-], Mod-[ and Enter for an editable view. `indent()` is
+ * the indent to type, `keep()` whether Enter starts the new line with the
+ * indent of the one it leaves. Tab types the indent, or indents every line
+ * of a selection over several lines, as Mod-] always does; Shift-Tab and
+ * Mod-[ take one indent off those lines.
  */
 export function indentKeys({ indent, keep }) {
+  const indentLines = (view) => {
+    const { state } = view;
+    if (state.readOnly) return false;
+    const changes = touchedLines(state).filter((line) => line.length > 0).map((line) => ({ from: line.from, insert: unitText(indent()) }));
+    if (changes.length > 0) view.dispatch({ changes, userEvent: 'input.indent' });
+    return true;
+  };
+  const outdentLines = (view) => {
+    const { state } = view;
+    if (state.readOnly) return false;
+    const { tabs, size } = indent();
+    const lead = new RegExp(`^(\\t| {1,${tabs ? 4 : size}})`);
+    const changes = touchedLines(state).flatMap((line) => {
+      const found = lead.exec(line.text);
+      return found ? [{ from: line.from, to: line.from + found[0].length }] : [];
+    });
+    if (changes.length > 0) view.dispatch({ changes, userEvent: 'delete.dedent' });
+    return true;
+  };
   return [
     {
       key: 'Tab',
       run(view) {
         const { state } = view;
-        if (state.readOnly) return false;
-        const lines = touchedLines(state);
-        if (lines.length < 2) view.dispatch({ ...state.replaceSelection(unitText(indent())), scrollIntoView: true, userEvent: 'input.type' });
-        else view.dispatch({ changes: lines.filter((line) => line.length > 0).map((line) => ({ from: line.from, insert: unitText(indent()) })), userEvent: 'input.indent' });
+        if (state.readOnly || touchedLines(state).length > 1) return indentLines(view);
+        view.dispatch({ ...state.replaceSelection(unitText(indent())), scrollIntoView: true, userEvent: 'input.type' });
         return true;
       },
     },
-    {
-      key: 'Shift-Tab',
-      run(view) {
-        const { state } = view;
-        if (state.readOnly) return false;
-        const { tabs, size } = indent();
-        const lead = new RegExp(`^(\\t| {1,${tabs ? 4 : size}})`);
-        const changes = touchedLines(state).flatMap((line) => {
-          const found = lead.exec(line.text);
-          return found ? [{ from: line.from, to: line.from + found[0].length }] : [];
-        });
-        if (changes.length > 0) view.dispatch({ changes, userEvent: 'delete.dedent' });
-        return true;
-      },
-    },
+    { key: 'Mod-]', run: indentLines },
+    { key: 'Shift-Tab', run: outdentLines },
+    { key: 'Mod-[', run: outdentLines },
     {
       key: 'Enter',
       run(view) {

@@ -3,7 +3,9 @@
 // goes to the host as operations on the rev it started from, one edit at a
 // time: at once when none is on its way, else all typed meanwhile once the
 // host answers. Others' edits come back as operations, moved over the typing
-// not landed yet and shown with the view's applyText. The same for every
+// not landed yet and shown with the view's applyText, once any IME
+// composition has ended: a change in the text being composed would break
+// it, and what was composed would be lost. The same for every
 // view, and for the two-writer harness (test/collab/page.js).
 
 import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
@@ -19,6 +21,7 @@ import { apply, diffOps, mapOffset, transform } from '../src/core/ot.js';
  * Start it with the host's `state`; call `edited()` on every change the
  * person makes in the view, and `moved()` when their caret moves; give it
  * each `ops` and `cursors` event, and `catchUp()` on a new connection.
+ * A view that composes calls `edited()` when its composition ends.
  */
 export function createClient({ view, call, show, caughtUp = () => {}, onLine = () => {}, onError = () => {} }) {
   const name = Math.random().toString(36).slice(2);
@@ -35,7 +38,7 @@ export function createClient({ view, call, show, caughtUp = () => {}, onLine = (
   let sent = null;
   let reading = false; // the host says this page may only read: nothing goes out, nothing is dropped
   let composed = false; // typing was read during an IME composition, not sent yet
-  let catching = null; // a catch-up on its way; events meanwhile wait in `held`
+  let catching = null; // a catch-up on its way; events meanwhile wait in `held`, as during an IME composition
   let again = false; // and one more asked for meanwhile
   let held = [];
   let idle = [];
@@ -76,13 +79,13 @@ export function createClient({ view, call, show, caughtUp = () => {}, onLine = (
     }
   }
 
-  // Its event comes before its answer, so an answer with no event says the
-  // event was lost. An edit whose fate is not known is sent again as it
-  // was, never moved: the host takes an id once.
+  // Its event comes before its answer, so an answer with no event (taken or
+  // held) says the event was lost. An edit whose fate is not known is sent
+  // again as it was, never moved: the host takes an id once.
   function post(submit) {
     call('submit', submit).then(() => {
       submit.landed = true;
-      if (sent === submit) client.catchUp();
+      if (sent === submit && !held.some((event) => event.id === submit.id)) client.catchUp();
     }, (error) => {
       if (sent !== submit) return;
       if (error.code === 'offline') { // sent again on the next connection
@@ -109,6 +112,12 @@ export function createClient({ view, call, show, caughtUp = () => {}, onLine = (
     pending.push(diffOps(last, text, view.selection()?.to));
     last = text;
     next();
+  }
+
+  // Take the events held, unless a catch-up or a composition still holds them.
+  function release() {
+    if (catching || view.composing?.()) return;
+    for (const event of held.splice(0)) take(event);
   }
 
   function take(event) {
@@ -174,12 +183,13 @@ export function createClient({ view, call, show, caughtUp = () => {}, onLine = (
     flush,
     /** The person changed the view: their typing goes out now, or once the edit on its way is answered. */
     edited() {
+      release();
       if (sent === null && !catching) flush();
     },
     /** An `ops` event: an edit landed. */
     receive(event) {
-      if (catching) held.push(event);
-      else take(event);
+      held.push(event);
+      release();
     },
     /**
      * Catch up with the host: on a new connection, a level changed, an
@@ -211,7 +221,7 @@ export function createClient({ view, call, show, caughtUp = () => {}, onLine = (
           client.catchUp();
           return;
         }
-        for (const event of held.splice(0)) take(event);
+        release();
         if (sent?.lost && !reading) {
           sent.lost = false;
           post(sent);
