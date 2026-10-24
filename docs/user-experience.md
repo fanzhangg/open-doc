@@ -186,8 +186,8 @@ shows only its last 4 characters.
   moved or typed in the last few seconds), then who is here, then who is
   away (a person on another doc, or for the owner a teammate not in the
   project); a face moves only when its state changes. A face shows its
-  state wherever it appears, the same for everyone: while working it grows
-  and hops and its eyes turn focused; where an AI buddy cannot answer or a person
+  state wherever it appears, the same for everyone: while working it grows,
+  its body rolls and its eyes turn focused; where an AI buddy cannot answer or a person
   is away it is greyed out; and when a run fails it shakes and flashes red
   once. No dots or badges. In the Team panel you see which teammates are
   here; a teammate sees who is here with them.
