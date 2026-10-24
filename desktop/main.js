@@ -22,8 +22,8 @@ import {
   moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
-import { resolve as resolveInProject } from '../src/host/project-service.js';
-import { docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc } from './folder.js';
+import { linkURL, resolve as resolveInProject } from '../src/host/project-service.js';
+import { docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';

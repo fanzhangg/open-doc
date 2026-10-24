@@ -285,7 +285,7 @@ window's port is, so no call names a doc.
 
 | Calls | Level |
 | --- | --- |
-| `state`, `history`, `version`, `cursor`; ProjectService's `list`, `read`, `open` | read |
+| `state`, `history`, `version`, `cursor`, `image`; ProjectService's `list`, `read`, `open` | read |
 | `submit`, `undo`, `comment` (resolving and reopening too) | write |
 | everything else: `move`, settings, AI buddies, agent scripts, Room's own calls | owner |
 
