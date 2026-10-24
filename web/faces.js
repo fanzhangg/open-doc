@@ -14,6 +14,7 @@ import { colorSlots } from '../src/core/buddies.js';
 const NS = 'http://www.w3.org/2000/svg';
 const INK = '#1f1d24';
 const STROKE = 5.5;
+const GOLD = '#f5b301'; // the owner's crown
 
 // [lightness, chroma, hue] in OKLCH: eight hues evenly apart, sunflower
 // first, a touch lighter so it reads as yellow.
@@ -96,7 +97,8 @@ function face(name, look, kind = look.body, hat = null) {
 }
 
 // A crown or a top hat on the head, tipped the way the face leans: a flat
-// silhouette in the text's colour, so it reads on any page.
+// silhouette, a crown in gold, a top hat in the text's colour so it reads on
+// any page.
 const HATS = {
   crown: 'M28 28L25 8L38.5 17.5L50 3L61.5 17.5L75 8L72 28Z',
   tophat: 'M35 22L36 3Q50 0 64 3L65 22Q77 23 79 25Q80 30 74 30L26 30Q20 30 21 25Q23 23 35 22Z',
@@ -105,7 +107,8 @@ const HATS = {
 // It sits on the crown of the head, a little above the box.
 function drawHat(hat, tilt) {
   const tipped = node('g', { class: 'pj-face-tilt', transform: `rotate(${f(tilt * 0.5 + (tilt < 0 ? -6 : 6))} 50 8)` });
-  tipped.append(node('path', { class: 'pj-face-hat', d: HATS[hat], fill: 'currentColor', stroke: 'currentColor', 'stroke-width': '3', 'stroke-linejoin': 'round', transform: 'translate(50 13) scale(0.68) translate(-50 -30)' }));
+  const color = hat === 'crown' ? GOLD : 'currentColor';
+  tipped.append(node('path', { class: 'pj-face-hat', d: HATS[hat], fill: color, stroke: color, 'stroke-width': '3', 'stroke-linejoin': 'round', transform: 'translate(50 13) scale(0.68) translate(-50 -30)' }));
   return tipped;
 }
 
