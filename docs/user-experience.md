@@ -176,14 +176,19 @@ shows only its last 4 characters.
 
 ## Seeing teammates work
 
-- **Presence.** People's avatars are circles; each AI buddy's is a soft blob
-  with a face. They sit side by side in the header: the people in the doc
-  with you, then the AI buddies. A face shows its state wherever it
-  appears, the same for everyone: while an AI buddy works it grows and its
-  body rolls, where an AI buddy cannot answer or a person is away (not in
-  the project now) it is greyed out, and when a run fails it shakes and
-  flashes red once. No dots or badges. In the Team panel you see which
-  teammates are here; a teammate sees who is here with them.
+- **Presence.** People's avatars are circles in a hat: the owner's a crown,
+  a teammate's a top hat. Each AI buddy's is a soft blob with a face. The
+  header has one queue of them, every face alike (point at it for its name
+  card, click for its card), then yours, then Team. It is ordered by what
+  each is doing: who is working first (an AI buddy running, a person who
+  moved or typed in the last few seconds), then who is here, then who is
+  away (a person on another doc, or for the owner a teammate not in the
+  project); a face moves only when its state changes. A face shows its
+  state wherever it appears, the same for everyone: while working it grows
+  and hops; where an AI buddy cannot answer or a person
+  is away it is greyed out; and when a run fails it shakes and flashes red
+  once. No dots or badges. In the Team panel you see which teammates are
+  here; a teammate sees who is here with them.
 - **Cursor.** Every teammate in the doc has a cursor in their color, with
   their name beside it while they work or type; otherwise it is a plain line.
   A person's stands where they are typing. An AI buddy asked to work stays

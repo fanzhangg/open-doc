@@ -1,7 +1,9 @@
 // Avatars: a face drawn from the id (a person's, the name), from one set of parts, each body a
-// little uneven as if drawn by hand. People are round and keep their face
-// everywhere. Buddies in a doc take parts as unlike each other's as can be
-// (setBuddies), and a colour no other buddy there has (colorSlots).
+// little uneven as if drawn by hand. People are round, wear a hat that says
+// who they are on the project (the owner a crown, a teammate a top hat) and
+// keep their face everywhere. Buddies in a doc take parts as unlike each
+// other's as can be (setBuddies), and a colour no other buddy there has
+// (colorSlots).
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
 // legible down to the 18px faces in a thread's footer.
@@ -19,6 +21,14 @@ let slots = colorSlots([]);
 let looks = new Map();
 
 let names = new Map(); // buddy id → its name now
+let owner = null; // the owner's id: the one person with a crown
+
+/** The owner's id, so their face wears the crown and everyone else's a top hat. */
+export function setOwner(id) {
+  owner = id;
+}
+
+export const isOwner = (id) => id === owner;
 
 /** The buddies in this doc ([{ id, name }]), so their faces and colours differ. */
 export function setBuddies(buddies) {
@@ -46,10 +56,10 @@ let ids = 0; // gradient ids, unique per page
 /** @param {string} id */
 export const agentFace = (id) => face(id, looks.get(id.toLowerCase()) ?? drawn(id));
 
-/** @param {string} name */
-export const personFace = (name) => face(name, drawn(name), 'circle');
+/** @param {string} name @param {string} id */
+export const personFace = (name, id = name) => face(name, drawn(name), 'circle', isOwner(id) ? 'crown' : 'tophat');
 
-function face(name, look, kind = look.body) {
+function face(name, look, kind = look.body, hat = null) {
   const body = drawBody(kind, name);
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'pj-face', 'aria-hidden': 'true' });
   const id = `pj-face-${++ids}`;
@@ -59,13 +69,27 @@ function face(name, look, kind = look.body) {
   const defs = node('defs', {});
   defs.append(gradient);
 
-  // The whole face tilts a touch, body and all.
+  // The whole face tilts a touch, body and all. Under a hat the head is
+  // smaller and lower, so head and hat fit the box.
   const tilted = node('g', { transform: `rotate(${f(look.tilt)} 50 50)` });
+  const head = hat ? node('g', { transform: 'translate(50 56) scale(0.86) translate(-50 -50)' }) : tilted;
   const features = node('g', { class: 'pj-face-look' });
-  tilted.append(node('path', { class: 'pj-face-body', d: body.d, fill: `url(#${id})` }), features);
+  head.append(node('path', { class: 'pj-face-body', d: body.d, fill: `url(#${id})` }), features);
+  if (hat) tilted.append(head, drawHat(hat, look.tilt));
   svg.append(defs, tilted);
   drawFace(features, look, body.cy, colorOf(name)[2]);
   return svg;
+}
+
+// A crown or a top hat on the head, tipped the way the face leans: a flat
+// silhouette in the text's colour, so it reads on any page.
+const HATS = {
+  crown: 'M28 28L25 8L38.5 17.5L50 3L61.5 17.5L75 8L72 28Z',
+  tophat: 'M35 22L36 3Q50 0 64 3L65 22Q77 23 79 25Q80 30 74 30L26 30Q20 30 21 25Q23 23 35 22Z',
+};
+
+function drawHat(hat, tilt) {
+  return node('path', { class: 'pj-face-hat', d: HATS[hat], fill: 'currentColor', stroke: 'currentColor', 'stroke-width': '3', 'stroke-linejoin': 'round', transform: `rotate(${f(tilt * 1.5 + (tilt < 0 ? -6 : 6))} 50 20) translate(50 22) scale(0.7) translate(-50 -30)` });
 }
 
 // The parts `name` picks, drawn from the name.

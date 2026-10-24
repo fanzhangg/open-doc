@@ -10,8 +10,8 @@ import { api } from './api.js';
 import { markdown } from './views/markdown/index.js';
 import { viewFor } from './views/index.js';
 import { avatar, createCommentMargin, namecardFor } from './threads.js';
-import { createPeople, modeOf } from './agent.js';
-import { setBuddies } from './faces.js';
+import { WORKING_MS, createPeople, modeOf } from './agent.js';
+import { setBuddies, setOwner } from './faces.js';
 import { createNameCards } from './namecard.js';
 import { createChrome } from './ui.js';
 import { createSettings } from './settings.js';
@@ -156,6 +156,7 @@ async function start() {
   myId = initial.me.id;
   inProject = initial.project;
   level = initial.level;
+  setOwner(initial.owner);
   // A player who can only read sees no tool that would be refused: no reply, Resolve, Undo or Restore.
   document.documentElement.toggleAttribute('data-reader', reading());
   // The settings are the owner's: anyone else's stay in this page.
@@ -332,10 +333,10 @@ async function start() {
   });
   events.on('cursors', (data) => {
     client.cursors(data);
-    if (data.by) movedAt.set(data.by, Date.now());
+    if (data.by) people.moved(data.by);
     paintMarks();
     clearTimeout(settleCarets);
-    settleCarets = setTimeout(paintMarks, CARET_WORKING_MS); // names go once they stop
+    settleCarets = setTimeout(paintMarks, WORKING_MS); // names go once they stop
   });
   events.on('here', (data) => people.render({ here: data }));
   events.on('saved', (data) => showUnsaved(data.error));
@@ -785,8 +786,6 @@ const cursors = new Map(); // buddy id -> anchor of the character before its cur
 let working = new Set();
 // People's cursors are the host's (client.cursorsShown); each is named for
 // a while after it moves.
-const CARET_WORKING_MS = 3000;
-const movedAt = new Map(); // person id -> when their cursor last moved
 let settleCarets = null;
 
 function standAtWork(statuses) {
@@ -905,7 +904,7 @@ function paintMarks() {
   }
   // People's, named while they move or type.
   for (const { id, name, at } of client?.cursorsShown() ?? []) {
-    if (id !== myId && at <= text.length) marks.push({ kind: 'cursor', at, by: name, working: Date.now() - (movedAt.get(id) ?? 0) < CARET_WORKING_MS });
+    if (id !== myId && at <= text.length) marks.push({ kind: 'cursor', at, by: name, working: people?.atWork(id) });
   }
   editor.setMarks(marks);
   return marks;
@@ -947,9 +946,9 @@ function offerRename() {
 
 function paintNameChip() {
   const button = document.querySelector('.pj-me');
-  button.replaceChildren(avatar(me, 'human'));
+  button.replaceChildren(avatar(me, 'human', false, myId));
   namecardFor(button, me, 'human', 'instant');
-  button.setAttribute('aria-label', `You (${me})`);
+  button.setAttribute('aria-label', `${me} · You`);
 }
 
 /** Rename the human in comments, in every doc; false when the name is not allowed. */

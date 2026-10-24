@@ -375,6 +375,7 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
       defaultName: owner ? defaultName() : who.name,
       me: owner ? await me() : byOf(who),
       level: who.level,
+      owner: (await me()).id, // whose face wears the crown
       agents: agentStatuses(),
       cursors: cursorsNow(),
       project: folder !== null, // whether the doc was opened from a project
