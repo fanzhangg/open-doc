@@ -425,9 +425,14 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
     if (typeof body !== 'string' || (body.trim() === '' && thread === undefined)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
     if (resolved === true && thread === undefined) throw new DocError('bad_input', 'only a reply can resolve');
-    const added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date().toISOString() });
+    let added;
     await serial(() => changeComments(async (lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
+      // A reply is after every comment in its thread, though written in the
+      // same millisecond: a thread is ordered by `at` (SPEC §4).
+      const at = thread === undefined ? Date.now() : lines.reduce((after, { comment: c }) => (
+        c && (c.id === thread || c.thread === thread) ? Math.max(after, Date.parse(c.at) + 1) : after), Date.now());
+      added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date(at).toISOString() });
       if (body.trim() !== '') await noteTaken(docPath, settingsDir, added, lines.map((l) => l.comment?.id));
       return [...lines, { comment: added }];
     }));
