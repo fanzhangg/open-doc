@@ -91,6 +91,11 @@ window.ponjoLeave = async () => {
 window.ponjoStay = () => {
   document.body.inert = false;
 };
+// The same in a browser, where opening another doc of the room loads the page
+// again: the last page's picture stays (app.css, @view-transition) until this
+// one is drawn. index.html holds the first frame until this module has run,
+// so it hears the event.
+window.addEventListener('pagereveal', (event) => event.viewTransition && window.ponjoReady.then(() => event.viewTransition.skipTransition()));
 
 // How the line to the host is, in a player's page (web/relay.js). While it
 // is down the page is read only, and typing not sent is shown as it was
@@ -398,6 +403,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
+    image: api.image,
     editable: chosen.editable && !reading(),
     color: chosen.color,
     settings: chosen.settings,

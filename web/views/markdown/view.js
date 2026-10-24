@@ -141,6 +141,45 @@ const blockKeys = $shortcut(() => ({
   },
 }));
 
+// Tab stays in the page: past the list and table keys, in a code block it
+// indents the lines the selection touches (an empty one: at the caret) by the
+// block's own indent, a tab or the fewest spaces a line starts with (2 when
+// none), and Shift+Tab outdents them; anywhere else in a page that can be
+// edited it does nothing.
+const codeTab = $shortcut(() => ({
+  CodeTab: { key: 'Tab', priority: 10, onRun: () => indentCode(1) },
+  CodeShiftTab: { key: 'Shift-Tab', priority: 10, onRun: () => indentCode(-1) },
+}));
+
+const indentCode = (step) => (state, dispatch, view) => {
+  if (!view?.editable) return false;
+  const { $from, $to, from, to, empty } = state.selection;
+  if ($from.parent.type.name !== 'code_block' || !$from.sameParent($to) || !dispatch) return true;
+  const text = $from.parent.textContent;
+  const start = $from.start();
+  const leads = text.match(/^ +(?=\S)/gm)?.map((lead) => lead.length) ?? [2];
+  const unit = /^\t/m.test(text) ? '\t' : ' '.repeat(Math.min(8, Math.max(2, Math.min(...leads))));
+  const tr = state.tr;
+  if (step > 0 && empty) {
+    dispatch(tr.insertText(unit, from).scrollIntoView());
+    return true;
+  }
+  const lines = [];
+  for (let at = text.lastIndexOf('\n', from - start - 1) + 1; at <= to - start; at = text.indexOf('\n', at) + 1) {
+    lines.push(at);
+    if (text.indexOf('\n', at) === -1) break;
+  }
+  for (const at of lines.reverse()) {
+    if (step > 0) tr.insertText(unit, start + at);
+    else {
+      const lead = text.slice(at).match(unit === '\t' ? /^\t/ : new RegExp(`^ {1,${unit.length}}`))?.[0] ?? '';
+      if (lead) tr.delete(start + at, start + at + lead.length);
+    }
+  }
+  if (tr.docChanged) dispatch(tr.scrollIntoView());
+  return true;
+};
+
 // Pasting a single URL over selected text links the text to it, as Docs and
 // Notion do. Plain text goes in as the text it is, a paragraph a line, as
 // typed text does (Markdown in it stays text); formatted text (HTML) is the
@@ -255,7 +294,7 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void, onEdit?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
- *           toolbar?: HTMLElement, onComment?: () => void,
+ *           toolbar?: HTMLElement, onComment?: () => void, image?: (src: string) => Promise<string | null>,
  *           settings?: object, saveSettings?: (patch: object) => void }} options
  */
 // `onChange` fires once the person pauses after changing the doc, `onEdit`
@@ -267,8 +306,11 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 // around `stage`; its bubble's Comment button calls `onComment`. The chrome
 // follows the view's `settings` (web/views/markdown/index.js) and changes
 // them through `saveSettings` (the focus mode shortcut).
+// An image at a path, not on the web, shows what `image` gives for its `src`
+// as written: a URL the page may show, or null for none.
 export async function createMarkdownView({
   stage, text, editable = true, onChange = () => {}, onEdit = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
+  image = async () => null,
   settings = null, saveSettings = () => {},
 }) {
   // The human changed the doc since `updated` last fired: any change not
@@ -290,12 +332,25 @@ export async function createMarkdownView({
       }
     },
   };
+  // An image's URL by its `src`, asked for once.
+  const images = new Map();
+  const imageView = (node) => {
+    const { src, alt, title } = node.attrs;
+    const dom = Object.assign(document.createElement('img'), { alt, title });
+    if (/^[a-z][a-z\d+.-]*:/i.test(src)) dom.src = src;
+    else {
+      if (!images.has(src)) images.set(src, image(src).catch(() => null));
+      images.get(src).then((url) => url && (dom.src = url));
+    }
+    return { dom };
+  };
   const host = stage.querySelector('.pj-editor');
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
       ctx.set(defaultValueCtx, text);
       if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
+      ctx.update(editorViewOptionsCtx, (options) => ({ ...options, nodeViews: { image: imageView } }));
       // Delete at the start of a list item deletes forward, as in any text.
       ctx.update(listItemKeymap.key, (keys) => ({ ...keys, LiftFirstListItem: { shortcuts: 'Backspace' } }));
       // Match common markdown style so edited blocks change as little as possible.
@@ -314,7 +369,7 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(blockKeys).use(taskBox)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(blockKeys).use(codeTab).use(taskBox)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(decorationPlugin(foundKey)).use(linkPlugin).use(bidiPlugin).use(uiPlugin(hooks))
     // The standard keys format as the toolbar does; typed Markdown still stays text.
     .use($prose(() => keymap({
@@ -555,23 +610,40 @@ export async function createMarkdownView({
   const headingCommand = (level) => (state) => editor.action(blockType(state) === `h${level}`
     ? callCommand(turnIntoTextCommand.key)
     : callCommand(wrapInHeadingCommand.key, level));
+  // A block style given to a paragraph changes the lines the selection
+  // touches, not the rest of it: it is split at the line breaks around them
+  // first, and with `each`, between them too (a heading is one line).
+  const onLines = (command, each = false) => (state, dispatch) => {
+    const tr = splitLines(state.tr, each);
+    if (tr.docChanged) dispatch(tr);
+    return command(view().state, dispatch);
+  };
   const commands = {
     undo: () => editor.action(callCommand(undoCommand.key)),
     redo: () => editor.action(callCommand(redoCommand.key)),
     paragraph: () => editor.action(callCommand(turnIntoTextCommand.key)),
-    h1: headingCommand(1),
-    h2: headingCommand(2),
-    h3: headingCommand(3),
+    h1: onLines(headingCommand(1), true),
+    h2: onLines(headingCommand(2), true),
+    h3: onLines(headingCommand(3), true),
     bold: () => editor.action(callCommand(toggleStrongCommand.key)),
     italic: () => editor.action(callCommand(toggleEmphasisCommand.key)),
     strike: () => editor.action(callCommand(toggleStrikethroughCommand.key)),
     code: () => editor.action(callCommand(toggleInlineCodeCommand.key)),
-    bullets: listCommand('bullet_list', wrapInBulletListCommand),
-    numbers: listCommand('ordered_list', wrapInOrderedListCommand),
-    quote: (state, dispatch) => (ancestor(state, (node) => node.type.name === 'blockquote')
+    bullets: onLines(listCommand('bullet_list', wrapInBulletListCommand)),
+    numbers: onLines(listCommand('ordered_list', wrapInOrderedListCommand)),
+    quote: onLines((state, dispatch) => (ancestor(state, (node) => node.type.name === 'blockquote')
       ? lift(state, dispatch)
-      : editor.action(callCommand(wrapInBlockquoteCommand.key))),
-    codeBlock: () => editor.action(callCommand(createCodeBlockCommand.key)),
+      : editor.action(callCommand(wrapInBlockquoteCommand.key)))),
+    // Its lines stay lines: each line break becomes a newline in the code.
+    codeBlock: onLines((state, dispatch) => {
+      const { $from } = state.selection;
+      const tr = state.tr;
+      $from.parent.forEach((child, offset) => {
+        if (child.type.name === 'hardbreak') tr.replaceWith(tr.mapping.map($from.start() + offset), tr.mapping.map($from.start() + offset + 1), state.schema.text('\n'));
+      });
+      if (tr.docChanged) dispatch(tr);
+      return editor.action(callCommand(createCodeBlockCommand.key));
+    }),
     divider: () => editor.action(callCommand(insertHrCommand.key)),
     table: () => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })),
   };
@@ -913,6 +985,23 @@ function ancestor(state, test) {
     if (test(node)) return { node, pos: $from.before(depth) };
   }
   return null;
+}
+
+// `tr` with the top-level paragraph the selection is in split at the line
+// breaks (a soft one, as in the file, or Shift+Enter) just before and after
+// the selection, and with `each`, at those inside it.
+function splitLines(tr, each) {
+  const { $from, $to } = tr.selection;
+  if (!$from.sameParent($to) || $from.depth !== 1 || $from.parent.type.name !== 'paragraph') return tr;
+  const breaks = [];
+  $from.parent.forEach((child, offset) => {
+    if (child.type.name === 'hardbreak') breaks.push($from.start() + offset);
+  });
+  const before = breaks.filter((pos) => pos < $from.pos).at(-1);
+  const after = breaks.find((pos) => pos >= $to.pos);
+  const cuts = [before, ...(each ? breaks.filter((pos) => pos >= $from.pos && pos < $to.pos) : []), after];
+  for (const pos of cuts.filter((pos) => pos !== undefined).reverse()) tr.delete(pos, pos + 1).split(pos);
+  return tr;
 }
 
 // The mark of type `name` at the caret or across the selection, or null.

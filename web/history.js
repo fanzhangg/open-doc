@@ -79,7 +79,7 @@ export function createHistory({ api, chooseView, commentOf, onRestore, onUndo, o
     const chosen = chooseView(shown?.text ?? '');
     if (view && chosen.id === viewId) return view.applySettings?.(chosen.settings);
     const old = view;
-    view = await chosen.createView({ stage, text: '', editable: false, settings: chosen.settings });
+    view = await chosen.createView({ stage, text: '', editable: false, settings: chosen.settings, image: api.image });
     viewId = chosen.id;
     await old?.destroy();
     view.applyText(shown?.text ?? ''); // the version picked by now

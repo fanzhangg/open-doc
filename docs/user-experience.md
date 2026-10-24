@@ -70,7 +70,8 @@ Whoever opens it, in a browser with no install and no account, picks a
 name once (one already on the project gets a number: `Alice2`) and is in
 at once, at Edit, on the project's first doc, with the project's sidebar:
 the same tree you see, where a click opens any doc in it (another file
-shows read only) and nothing can be renamed, moved, deleted or made.
+shows read only; the doc shown stays until the next is drawn) and nothing
+can be renamed, moved, deleted or made.
 Which folders are open, and whether the sidebar shows, are kept in their
 browser.
 
@@ -229,8 +230,11 @@ shows only its last 4 characters.
   The plain editor's settings: line numbers, wrapping, font size, whitespace
   marks (in the selection, everywhere or off) and indent guides, and
   indentation: Tab types the file's indent (found from the file, or tabs or
-  spaces as set), Tab and Shift+Tab indent and outdent selected lines, and
-  Enter keeps the line's indent; it has a status bar with the caret's line
+  spaces as set), Tab and Shift+Tab (or Mod+] and Mod+[) indent and outdent
+  selected lines, and Enter keeps the line's indent. In a code file Mod+/
+  comments out the lines and back, Alt+↑ and Alt+↓ move them, Mod+Shift+K
+  deletes them (elsewhere Mod+/ shows the shortcuts). While comments show,
+  a hairline on its right edge is where its text ends. It has a status bar with the caret's line
   and column, the size of the selection, the indent Tab types (a menu of
   others, for what you type next, never the file) and Wrap and Whitespace
   toggles that change the same settings. The Markdown view's: the page's font

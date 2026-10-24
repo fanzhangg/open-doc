@@ -9,8 +9,9 @@
 // through Room (room.js), at the same door.
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
@@ -26,7 +27,7 @@ import { secretTails } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { mirrorDir, snapshotMirror } from './mirror.js';
-import { projectService } from './project-service.js';
+import { linkURL, projectService } from './project-service.js';
 import { Runner } from './runner.js';
 import { RoomError } from './room.js';
 
@@ -425,9 +426,14 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
     if (typeof body !== 'string' || (body.trim() === '' && thread === undefined)) throw new DocError('bad_input', 'a comment needs text');
     if (anchor !== null && (thread !== undefined || !validAnchor(anchor))) throw new DocError('bad_input', 'invalid anchor');
     if (resolved === true && thread === undefined) throw new DocError('bad_input', 'only a reply can resolve');
-    const added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date().toISOString() });
+    let added;
     await serial(() => changeComments(async (lines) => {
       if (thread !== undefined && !lines.some((l) => l.comment?.id === thread && l.comment.thread === undefined)) throw new DocError('not_found', 'no such thread');
+      // A reply is after every comment in its thread, though written in the
+      // same millisecond: a thread is ordered by `at` (SPEC §4).
+      const at = thread === undefined ? Date.now() : lines.reduce((after, { comment: c }) => (
+        c && (c.id === thread || c.thread === thread) ? Math.max(after, Date.parse(c.at) + 1) : after), Date.now());
+      added = newComment({ thread, anchor, body, resolved }, { by: byOf(who), at: new Date(at).toISOString() });
       if (body.trim() !== '') await noteTaken(docPath, settingsDir, added, lines.map((l) => l.comment?.id));
       return [...lines, { comment: added }];
     }));
@@ -796,6 +802,14 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
       // The project's files (project-service.js), `path` in the project.
       // Its real path is the owner's alone.
       list: (body) => inProject().list(body?.path),
+      // An image the doc shows, `src` as written in it (linkURL): from the
+      // project, or for a doc on its own, from its folder.
+      image(body) {
+        const root = folder ?? dirname(docPath);
+        const url = linkURL(String(body?.src), docPath, folder);
+        if (url.protocol !== 'file:') throw new DocError('not_found', 'not a file of the doc');
+        return (project ?? projectService(root)).image(relative(root, fileURLToPath(url)).split(sep).join('/'));
+      },
       read: (body) => inProject().read(body?.path),
       async open(body, who) {
         const opened = await inProject().open(body?.path);
@@ -947,11 +961,23 @@ async function fileHash(path) {
 }
 
 // A line per run in the config folder's logs/runs.jsonl: what a slow or
-// missing reply was. Never fails a run.
+// missing reply was. Then each log there (an agent's too, as the Ponjo
+// agent's ponjo.jsonl) past LOG_LIMIT keeps its newest half, from a line's
+// start: old runs are worth less. Never fails a run.
+const LOG_LIMIT = 10 * 1024 * 1024;
 async function logRun(dir, entry) {
+  const logs = join(dir, 'logs');
   try {
-    await mkdir(join(dir, 'logs'), { recursive: true });
-    await appendFile(join(dir, 'logs', 'runs.jsonl'), `${JSON.stringify(entry)}\n`);
+    await mkdir(logs, { recursive: true });
+    await appendFile(join(logs, 'runs.jsonl'), `${JSON.stringify(entry)}\n`);
+    for (const name of (await readdir(logs)).filter((n) => n.endsWith('.jsonl'))) {
+      const path = join(logs, name);
+      const { size } = await stat(path);
+      if (size <= LOG_LIMIT) continue;
+      const file = await open(path);
+      const { buffer } = await file.read({ buffer: Buffer.alloc(LOG_LIMIT / 2), position: size - LOG_LIMIT / 2 }).finally(() => file.close());
+      await writeFile(path, buffer.subarray(buffer.indexOf('\n') + 1));
+    }
   } catch (error) {
     console.error('Could not log a run:', error);
   }

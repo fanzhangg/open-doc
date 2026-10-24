@@ -41,8 +41,14 @@ designed, not built.
   every reference link (`[docs][d]`) in a block not changed but by typing.
 - **Keys:** Undo, Redo, the formatting above, Comment, Find, and focus
   mode (Ctrl+Shift+F). Enter and Tab work in lists and tables; Tab in a
-  table's last cell adds a row;
+  table's last cell adds a row; in a code block Tab and Shift+Tab indent and
+  outdent its lines by the block's own indent; elsewhere Tab stays in the page.
   Delete at the start of a list item deletes forward, as in any text.
+- **Lines:** a block style (a heading, a list, a quote or a code block)
+  given to a paragraph changes the lines the selection touches, not the rest
+  of it: a line break in it (Shift+Enter, or one the file has between two
+  lines of a paragraph) splits it there first. A heading is one line each; a
+  code block keeps its lines as lines.
 - **Links.** At the caret a card says where a link goes: open it, edit it or
   remove it. The link button opens a popover for the URL: Enter applies, an
   empty URL removes, Escape cancels. Pasting a URL over selected text links
@@ -51,7 +57,9 @@ designed, not built.
 - **Diagrams.** A ` ```mermaid ` block shows as its diagram. Its source is
   hidden and cannot be typed into; a click selects the whole block, to
   comment on or delete. An AI buddy changes it, asked in a comment.
-- Images in the file show; the view does not insert them.
+- Images in the file show; the view does not insert them. One on the web
+  (`https:`) loads from there; one at a path comes from the doc host
+  (`image`, as a link resolves, only what the project shows), up to 5 MB.
 - **Find and replace** (Mod+F; Mod+Alt+F with Replace), as in every view: a
   bar at the page's top right finds what a reader sees, not the markup,
   ignoring case; every match is marked, the current one stronger, with how

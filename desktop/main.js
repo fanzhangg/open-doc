@@ -22,8 +22,8 @@ import {
   moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
-import { resolve as resolveInProject } from '../src/host/project-service.js';
-import { docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc } from './folder.js';
+import { linkURL, resolve as resolveInProject } from '../src/host/project-service.js';
+import { docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc } from './folder.js';
 import { loginEnvPatch, readLoginEnv } from './shell-env.js';
 import { addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from './state.js';
 import * as windows from './windows.js';
@@ -425,7 +425,8 @@ function buildMenu() {
       role: 'help',
       submenu: [
         {
-          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', ...PAGE_KEY, enabled: page,
+          // The page's on macOS too: in the plain view Mod+/ comments out lines of code.
+          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', registerAccelerator: false, enabled: page,
           click: (_item, win) => pageCommand(win, 'shortcuts'),
         },
       ],

@@ -13,6 +13,7 @@ import { agentSettings, viewSettings } from '../src/core/settings.js';
 const SHORTCUTS = [
   ['Text', [['Bold', 'Mod+B'], ['Italic', 'Mod+I'], ['Inline code', 'Mod+E'], ['Strikethrough', 'Mod+Shift+X'], ['Link', 'Mod+K'], ['Find', 'Mod+F'], ['Find and replace', 'Mod+Alt+F'], ['Next match', 'Mod+G'], ['Previous match', 'Mod+Shift+G']]],
   ['Comments', [['Comment on the selection', 'Mod+Alt+M'], ['Post comment or reply', 'Enter'], ['New line in a comment', 'Shift+Enter'], ['Cancel', 'Esc']]],
+  ['Code (plain view)', [['Comment out lines', 'Mod+/'], ['Indent lines', 'Mod+]'], ['Outdent lines', 'Mod+['], ['Move line up', 'Alt+↑'], ['Move line down', 'Alt+↓'], ['Delete line', 'Mod+Shift+K']]],
   ['App', [['Undo', 'Mod+Z'], ['Redo', 'Mod+Shift+Z'], ['Focus mode', 'Mod+Shift+F'], ['Plain text view', 'Mod+Shift+T'], ['Settings', 'Mod+,'], ['Keyboard shortcuts', 'Mod+/']]],
 ];
 
@@ -239,9 +240,10 @@ export function setupSettings({ store, getName, setName, onApply = () => {}, vie
     else open(section);
   }
 
+  // A key the page's text took (Mod+/ comments out lines of code in the plain view) is not these.
   document.addEventListener('keydown', (event) => {
     const mod = mac ? event.metaKey : event.ctrlKey;
-    if (mod && !event.altKey && (event.key === '/' || event.key === ',')) {
+    if (mod && !event.altKey && !event.defaultPrevented && (event.key === '/' || event.key === ',')) {
       event.preventDefault();
       toggle(event.key === '/' ? 'shortcuts' : 'general');
     }

@@ -60,7 +60,9 @@ replaced (Reset to Default, a new version) without losing them.
 - The config folder is `~/Library/Application Support/Ponjo/` on macOS.
   Never in a project: a shared folder must not decide what runs here.
 - Claude Code, Codex and the [Ponjo agent](ponjo-agent.md) ship, written
-  once when missing; then they are yours. Reset to Default writes one again.
+  when missing. A newer version replaces one you have not edited
+  (`agents/.shipped.json` holds the hash of what was written); once edited,
+  it is yours. Reset to Default writes one again.
 - An agent without a manifest is shown by its file name, with no settings.
 - One agent runs every buddy: Settings > Agents lists them, one picked. The
   picked one shows the fields of its manifest under it, and for a shipped
