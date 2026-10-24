@@ -58,11 +58,11 @@ export const buddyText = ({ id, name, about = '' }) => `${id && id !== name ? `-
 /**
  * Each buddy's color, one of eight (spec/PROJECT.md §2), by lower-case
  * name: the one its name picks or, when a buddy before it by name has that
- * one, the next free one.
+ * one or it is in `others` (slots already given), the next free one.
  */
-export function colorSlots(names) {
+export function colorSlots(names, others = new Set()) {
   const slots = new Map();
-  const taken = new Set();
+  const taken = new Set(others);
   for (const name of [...new Set(names.map((n) => n.toLowerCase()))].sort()) {
     let slot = fnv(name) % 8;
     for (let i = 0; i < 8 && taken.has(slot); i++) slot = (slot + 1) % 8;

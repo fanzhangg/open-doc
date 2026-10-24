@@ -238,7 +238,7 @@ export function createCommentMargin(margin, handlers) {
     const head = el('div', 'pj-msg-head');
     const who = el('div', 'pj-who');
     who.append(el('span', 'pj-name', me.name));
-    head.append(avatar(me.name, 'human'), who);
+    head.append(avatar(me.name, 'human', false, me.id), who);
     card.append(head);
     card.append(composer('draft', 'Comment…', 'Comment', async (body) => {
       await handlers.onCreate(body);
@@ -539,9 +539,9 @@ export function namecardFor(node, name, kind, how) {
 export function avatar(name, kind, small = false, id = name) {
   const agent = kind === 'agent';
   const node = el('span', `pj-avatar${agent ? ' pj-avatar-agent' : ''}${small ? ' pj-avatar-small' : ''}`);
-  // A buddy's face is drawn from its id, a person's from the name (faces.js): people round,
-  // buddies a circle, square, triangle, pentagon or cloud, all drawn by hand.
-  node.append(agent ? agentFace(id) : personFace(name));
+  // A buddy's face is drawn from its id, a person's from the name (faces.js): people round
+  // in a crown or top hat, buddies a circle, square, triangle, pentagon or cloud, all drawn by hand.
+  node.append(agent ? agentFace(id) : personFace(name, id));
   node.title = name;
   return node;
 }

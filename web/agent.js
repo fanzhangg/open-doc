@@ -1,6 +1,6 @@
-// The people in the header, laid out like a shared doc's: avatars of the
-// people in this doc with you, then of the buddies the doc reaches, a Team
-// button, then yours.
+// The people in the header, laid out like a shared doc's: one queue of the
+// faces of the people and buddies here, who is at work first, then yours,
+// then a Team button.
 //
 // A card is where everyone is changed: on a buddy's, a click on its name
 // edits it in place, and who it is is a field right under it; your own
@@ -17,6 +17,7 @@
 
 import { api } from './api.js';
 import { icon } from './icons.js';
+import { isOwner, setPeople } from './faces.js';
 import { avatar, namecardFor } from './threads.js';
 import { defaultName, tagline } from '../src/core/buddies.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
@@ -158,47 +159,80 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // ---- the avatars in the header ----
 
+  // One queue of faces, each alike: a click opens its card, hovering it its
+  // name card, and it shows its state. Who is at work comes first (a buddy
+  // running, a person who moved or typed in the last few seconds), then who
+  // is here, then who is away (a person on another doc of the project, or,
+  // for the owner, a player not here). Among those at work, who started
+  // first leads; among the rest, whoever changed state last. So a face
+  // moves only when its state changes. Yours stays at the end, before Team.
+
   // When each buddy's last run failed, so its face plays that out even if the
   // header is redrawn meanwhile (its status changes as the run ends).
   const failedAt = new Map();
+  const movedAt = new Map(); // person id → when their cursor last moved
+  const since = new Map(); // face key → [state, when it came into it]
+  let stopsWork = null; // repaints when a person stops moving
   let painted = '';
 
   // Redrawn only when a face would change, so one being pointed at keeps
   // growing and one at work keeps moving through the doc's other updates.
   function paintFaces() {
-    const names = agentsHere();
-    const flinching = (id) => failedAt.get(id) > Date.now() - FAILED_MS;
-    const faces = names.map((name) => ({ id: idOf(name), name, mode: modeOf(statusOf(name)), failed: flinching(idOf(name)) }));
-    const people = here.filter((p) => p.doc && !isMe(p)).map((p) => p.name);
-    const key = JSON.stringify([people, faces]);
-    if (key !== painted) {
-      painted = key;
-      root.replaceChildren(...people.map((name) => {
-        const wrap = el('span', 'pj-agent');
-        const face = el('button', 'pj-agent-face');
-        face.type = 'button';
-        face.dataset.person = name;
-        face.setAttribute('aria-label', `${name} · In this doc`);
-        face.append(avatar(name, 'human'));
-        namecardFor(face, name, 'human', 'instant');
-        wrap.append(face);
-        return wrap;
-      }), ...faces.map(({ id, name, mode, failed }) => {
-        const wrap = el('span', 'pj-agent');
-        wrap.dataset.presence = mode;
-        const face = el('button', 'pj-agent-face');
-        face.type = 'button';
-        face.dataset.agent = name;
-        face.setAttribute('aria-label', `${name}${LABELS[mode] ? ` · ${LABELS[mode]}` : ''}`);
-        face.append(avatar(name, 'agent', false, id));
-        if (failed) face.firstChild.classList.add('pj-failed');
-        namecardFor(face, name, 'agent', 'instant'); // its name card on hover, its full card on a click
-        wrap.append(face);
-        return wrap;
-      }));
+    const now = Date.now();
+    const flinching = (id) => failedAt.get(id) > now - FAILED_MS;
+    const people = [
+      ...here.filter((p) => !isMe(p)).map((p) => ({ id: p.id, name: p.name, mode: !p.doc ? 'away' : movedAt.get(p.id) > now - WORKING_MS ? 'working' : 'idle' })),
+      ...(owner() ? room?.players ?? [] : []).filter((p) => !here.some((h) => h.id === p.id)).map((p) => ({ id: p.id, name: p.name, mode: 'away' })),
+    ].map((p) => ({ ...p, key: `person:${p.id}`, kind: 'human' }));
+    const buddies = agentsHere().map((name) => ({ id: idOf(name), name, mode: modeOf(statusOf(name)), failed: flinching(idOf(name)), key: `agent:${idOf(name)}`, kind: 'agent' }));
+    const faces = [...people, ...buddies];
+    for (const face of faces) if (since.get(face.key)?.[0] !== face.mode) since.set(face.key, [face.mode, now]);
+    const rank = (face) => RANK[face.mode];
+    // At work, the earliest first; else the latest first.
+    const when = (face) => since.get(face.key)[1] * (face.mode === 'working' ? 1 : -1);
+    faces.sort((a, b) => rank(a) - rank(b) || when(a) - when(b));
+    const key = JSON.stringify(faces);
+    const mine = JSON.stringify([getName(), getId()]);
+    if (key + mine !== painted) {
+      painted = key + mine;
+      me.replaceChildren(avatar(getName(), 'human', false, getId()));
+      namecardFor(me, getName(), 'human', 'instant');
+      me.setAttribute('aria-label', `${getName()} · You`);
+      const before = new Map([...root.children].map((n) => [n.dataset.key, n.getBoundingClientRect().left]));
+      root.replaceChildren(...faces.map(queued));
+      glide(before);
     }
+    // A person's work ends when they stop moving.
+    clearTimeout(stopsWork);
+    const next = Math.min(...[...movedAt.values()].map((at) => at + WORKING_MS).filter((at) => at > now));
+    if (next < Infinity) stopsWork = setTimeout(paintFaces, next - now);
     // A renamed agent's card stays open while the doc catches up with the new name.
-    if (agentShown() && !names.some((n) => same(n, agentShown())) && !editing) close();
+    if (agentShown() && !agentsHere().some((n) => same(n, agentShown())) && !editing) close();
+  }
+
+  function queued({ id, name, kind, mode, failed, key }) {
+    const wrap = el('span', 'pj-agent');
+    wrap.dataset.key = key;
+    wrap.dataset.presence = mode;
+    const face = el('button', 'pj-agent-face');
+    face.type = 'button';
+    face.dataset[kind === 'agent' ? 'agent' : 'person'] = name;
+    const label = kind === 'agent' ? LABELS[mode] : `${isOwner(id) ? 'Owner' : 'Teammate'} · ${PERSON[mode]}`;
+    face.setAttribute('aria-label', `${name} · ${label}`);
+    face.append(avatar(name, kind, false, id));
+    if (failed) face.firstChild.classList.add('pj-failed');
+    namecardFor(face, name, kind, 'instant'); // its name card on hover, its full card on a click
+    wrap.append(face);
+    return wrap;
+  }
+
+  // Faces that moved in the queue slide from where they were.
+  function glide(before) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const node of root.children) {
+      const dx = before.get(node.dataset.key) - node.getBoundingClientRect().left;
+      if (dx) node.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(0.3, 1.2, 0.5, 1)' });
+    }
   }
 
   // ---- the cards ----
@@ -216,10 +250,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // A person's card is an agent's with less on it: face, name, where they
   // stand.
-  function personHead(name, standing) {
+  function personHead(name, standing, id) {
     const head = el('div', 'pj-profile');
     const pic = el('span', 'pj-profile-face');
-    pic.append(avatar(name, 'human'));
+    pic.append(avatar(name, 'human', false, id));
     const who = el('div', 'pj-profile-who');
     who.append(el('div', 'pj-profile-name', name), el('div', 'pj-profile-sub', standing));
     head.append(pic, who);
@@ -228,10 +262,10 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
 
   // Yours works as an agent's does: a click on your name edits it in place.
   function meCard() {
-    if (viewOnly) return [personHead(getName(), 'You')];
+    if (viewOnly) return [personHead(getName(), 'You', getId())];
     const head = el('div', 'pj-profile');
     const pic = el('span', 'pj-profile-face');
-    pic.append(avatar(getName(), 'human'));
+    pic.append(avatar(getName(), 'human', false, getId()));
     const who = el('div', 'pj-profile-who');
     who.append(inPlace({ me: true, name: getName() }, 'Your name, as others @mention you'), el('div', 'pj-profile-sub', 'You'));
     head.append(pic, who);
@@ -248,8 +282,8 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   function personCard(name) {
     const player = playerNamed(name);
     const present = here.find((p) => same(p.name, name));
-    if (!player) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc')];
-    if (viewOnly) return [personHead(name, LEVEL[player.level])];
+    if (!player) return [personHead(name, present ? (present.owner ? 'Owner' : 'Here') : 'Commented on this doc', present?.id ?? writers.find((p) => same(p.name, name))?.id)];
+    if (viewOnly) return [personHead(name, LEVEL[player.level], player.id)];
     const level = el('div', 'pj-teammate-row');
     level.append(levelChoice(player.level, (next) => changeRoom(() => api.setLevel(player.id, next))));
     const kick = el('button', 'pj-secondary pj-danger', 'Kick');
@@ -261,7 +295,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     });
     const kickRow = el('div', 'pj-teammate-row');
     kickRow.append(kick);
-    return [personHead(name, 'Player'), level, kickRow];
+    return [personHead(name, 'Player', player.id), level, kickRow];
   }
 
   // Read or Edit: `pick(level)` hears a change.
@@ -312,7 +346,7 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
       list.append(el('div', 'pj-setting-group', room.locked ? 'Players · locked' : 'Players'), ...room.players.map(playerRow));
       if (room.players.length === 0) list.append(el('div', 'pj-people-none', 'No one yet: send them the link.'));
     } else if (!runs && here.some((p) => !isMe(p))) {
-      list.append(el('div', 'pj-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p.name, p.owner ? 'Owner' : 'Here', 'idle')));
+      list.append(el('div', 'pj-setting-group', 'Here'), ...here.filter((p) => !isMe(p)).map((p) => personRow(p, p.owner ? 'Owner' : 'Here', 'idle')));
     }
     list.append(el('div', 'pj-setting-group', 'AI buddies'), ...statuses.map(buddyRow));
     return owner() ? [head, list, ...newBuddyRow()] : [head, list];
@@ -352,21 +386,21 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     const row = el('div', 'pj-people-row');
     const open = el('button', 'pj-people-open');
     open.type = 'button';
-    open.append(avatar(getName(), 'human', true), el('span', 'pj-people-name', getName()), el('span', 'pj-people-role', 'You'));
+    open.append(avatar(getName(), 'human', true, getId()), el('span', 'pj-people-name', getName()), el('span', 'pj-people-role', 'You'));
     open.addEventListener('click', () => toggle('me'));
     row.append(open);
     return row;
   }
 
-  const playerRow = (player) => personRow(player.name, LEVEL[player.level], here.some((p) => p.id === player.id) ? 'idle' : 'away');
+  const playerRow = (player) => personRow(player, LEVEL[player.level], here.some((p) => p.id === player.id) ? 'idle' : 'away');
 
   // A person, greyed while away.
-  function personRow(name, role, presence) {
+  function personRow({ id, name }, role, presence) {
     const row = el('div', 'pj-people-row');
     row.dataset.presence = presence;
     const open = el('button', 'pj-people-open');
     open.type = 'button';
-    open.append(avatar(name, 'human', true), el('span', 'pj-people-name', name), el('span', 'pj-people-role', role));
+    open.append(avatar(name, 'human', true, id), el('span', 'pj-people-name', name), el('span', 'pj-people-role', role));
     open.addEventListener('click', () => toggle(`person:${name}`));
     row.append(open);
     return row;
@@ -569,16 +603,18 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   /**
    * Any of: `agents` (the buddies here, with their statuses), `people` (who
    * commented), `room` (the project's, for its owner: null while closed),
-   * `here` (who has the project open).
+   * `here` (who has the project open). Whether a person's colour changed.
    */
   function render({ agents, people: nextWriters, room: nextRoom, here: nextHere }) {
     if (agents) statuses = agents;
     if (nextWriters) writers = nextWriters;
     if (nextRoom !== undefined) room = nextRoom;
     if (nextHere) here = nextHere;
+    const recoloured = setPeople([getName(), ...writers.map((p) => p.name), ...here.map((p) => p.name), ...(room?.players.map((p) => p.name) ?? [])]);
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();
+    return recoloured;
   }
 
   // ---- @names in the text ----
@@ -627,13 +663,21 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
     pin,
     /** An agent whose run is in progress, if any. */
     running: () => statuses.find((s) => s.state === 'running') ?? null,
+    /** Whether person `id` moved or typed in the last few seconds. */
+    atWork: (id) => movedAt.get(id) > Date.now() - WORKING_MS,
+    /** Person `id` moved or typed: they are at work for a few seconds. */
+    moved(id) {
+      movedAt.set(id, Date.now());
+      paintFaces();
+    },
     /** Buddy `id`'s run failed: its face shakes and flashes red, once. */
     failed(id) {
       failedAt.set(id, Date.now());
       paintFaces();
     },
-    /** Your name changed: repaint your card if it is open. */
+    /** Your name changed: your face, and your card if it is open. */
     renameMe() {
+      render({});
       if (showing === 'me' || showing === 'team') paintCard();
     },
   };
@@ -645,7 +689,12 @@ const FAILED_MS = 1000; // how long a failed run's moment plays (app.css: .pj-fa
 const STANDING = { working: 'Working…', away: 'Not running here' };
 const WHERE = { user: 'In all your docs', project: "This project's" };
 
-const LABELS = { working: 'Working…', away: 'Not here' };
+const LABELS = { working: 'Working…', idle: 'Ready', away: 'Not here' };
+const PERSON = { working: 'Working…', idle: 'In this doc', away: 'Away' };
+const RANK = { working: 0, idle: 1, away: 2 }; // the queue's order
+
+/** How long a person is at work after they move or type: while their cursor is named. */
+export const WORKING_MS = 3000;
 
 // What a player may do, under their name.
 const LEVEL = { read: 'Can read', write: 'Can edit' };

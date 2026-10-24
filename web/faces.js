@@ -1,16 +1,20 @@
 // Avatars: a face drawn from the id (a person's, the name), from one set of parts, each body a
-// little uneven as if drawn by hand. People are round and keep their face
-// everywhere. Buddies in a doc take parts as unlike each other's as can be
-// (setBuddies), and a colour no other buddy there has (colorSlots).
+// little uneven as if drawn by hand. People are round, wear a hat that says
+// who they are on the project (the owner a crown, a teammate a top hat) and
+// keep their face everywhere. Buddies in a doc take parts as unlike each
+// other's as can be (setBuddies), and a colour no other buddy there has
+// (colorSlots); people there take the colours the buddies left (setPeople).
 //
 // Everything is drawn in a 100×100 box. Strokes and dots are sized to stay
-// legible down to the 18px faces in a thread's footer.
+// legible down to the 18px faces in a thread's footer; below 24px the
+// extras and the tilt go (app.css), so a face stays plain.
 
 import { colorSlots } from '../src/core/buddies.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const INK = '#1f1d24';
 const STROKE = 5.5;
+const GOLD = '#f5b301'; // the owner's crown
 
 // [lightness, chroma, hue] in OKLCH: eight hues evenly apart, sunflower
 // first, a touch lighter so it reads as yellow.
@@ -19,12 +23,40 @@ let slots = colorSlots([]);
 let looks = new Map();
 
 let names = new Map(); // buddy id → its name now
+let buddyIds = [];
+let people = []; // the names of the people in this doc
+let owner = null; // the owner's id: the one person with a crown
+
+/** The owner's id, so their face wears the crown and everyone else's a top hat. */
+export function setOwner(id) {
+  owner = id;
+}
+
+export const isOwner = (id) => id === owner;
 
 /** The buddies in this doc ([{ id, name }]), so their faces and colours differ. */
 export function setBuddies(buddies) {
   names = new Map(buddies.map((b) => [b.id, b.name]));
-  slots = colorSlots(buddies.map((b) => b.id));
-  looks = spread([...slots.keys()]);
+  buddyIds = buddies.map((b) => b.id);
+  looks = spread([...colorSlots(buddyIds).keys()]);
+  recolor();
+}
+
+/**
+ * The names of the people in this doc, so their colours differ from each
+ * other's and the buddies'; whether any of their colours changed.
+ */
+export function setPeople(list) {
+  const before = people.map((name) => slots.get(name.toLowerCase()));
+  people = list;
+  recolor();
+  return people.length !== before.length || people.some((name, i) => slots.get(name.toLowerCase()) !== before[i]);
+}
+
+// The buddies keep theirs, so their edits keep their colour; people take what is left.
+function recolor() {
+  const own = colorSlots(buddyIds);
+  slots = new Map([...own, ...colorSlots(people, new Set(own.values()))]);
 }
 
 /** Buddy `id`'s name now; `fallback` (the name in a comment) when it is not here. */
@@ -46,10 +78,10 @@ let ids = 0; // gradient ids, unique per page
 /** @param {string} id */
 export const agentFace = (id) => face(id, looks.get(id.toLowerCase()) ?? drawn(id));
 
-/** @param {string} name */
-export const personFace = (name) => face(name, drawn(name), 'circle');
+/** @param {string} name @param {string} id */
+export const personFace = (name, id = name) => face(name, drawn(name), 'circle', isOwner(id) ? 'crown' : 'tophat');
 
-function face(name, look, kind = look.body) {
+function face(name, look, kind = look.body, hat = null) {
   const body = drawBody(kind, name);
   const svg = node('svg', { viewBox: '0 0 100 100', class: 'pj-face', 'aria-hidden': 'true' });
   const id = `pj-face-${++ids}`;
@@ -59,13 +91,30 @@ function face(name, look, kind = look.body) {
   const defs = node('defs', {});
   defs.append(gradient);
 
-  // The whole face tilts a touch, body and all.
-  const tilted = node('g', { transform: `rotate(${f(look.tilt)} 50 50)` });
+  // The whole face tilts a touch, body and all, a hat a little more.
+  const tilted = node('g', { class: 'pj-face-tilt', transform: `rotate(${f(look.tilt)} 50 50)` });
   const features = node('g', { class: 'pj-face-look' });
   tilted.append(node('path', { class: 'pj-face-body', d: body.d, fill: `url(#${id})` }), features);
+  if (hat) tilted.append(drawHat(hat, look.tilt));
   svg.append(defs, tilted);
   drawFace(features, look, body.cy, colorOf(name)[2]);
   return svg;
+}
+
+// A crown or a top hat on the head, tipped the way the face leans: a flat
+// silhouette, a crown in gold, a top hat in the text's colour so it reads on
+// any page.
+const HATS = {
+  crown: 'M28 28L25 8L38.5 17.5L50 3L61.5 17.5L75 8L72 28Z',
+  tophat: 'M35 22L36 3Q50 0 64 3L65 22Q77 23 79 25Q80 30 74 30L26 30Q20 30 21 25Q23 23 35 22Z',
+};
+
+// It sits on the crown of the head, a little above the box.
+function drawHat(hat, tilt) {
+  const tipped = node('g', { class: 'pj-face-tilt', transform: `rotate(${f(tilt * 0.5 + (tilt < 0 ? -6 : 6))} 50 8)` });
+  const color = hat === 'crown' ? GOLD : 'currentColor';
+  tipped.append(node('path', { class: 'pj-face-hat', d: HATS[hat], fill: color, stroke: color, 'stroke-width': '3', 'stroke-linejoin': 'round', transform: 'translate(50 13) scale(0.68) translate(-50 -30)' }));
+  return tipped;
 }
 
 // The parts `name` picks, drawn from the name.
@@ -196,18 +245,29 @@ function drawFace(g, { eye, mouth, extra }, cy, hue) {
   const eyeY = cy - 7;
   const mouthY = eyeY + (big ? 17 : 14);
 
+  const extras = node('g', { class: 'pj-face-extra' }); // gone below 24px (app.css)
+
   // Cheeks go under everything else, a soft blush below the eyes.
   if (extra === 'blush') {
     const blush = hue > 320 || hue < 15 ? 'hsl(350 85% 50% / 0.45)' : 'hsl(350 95% 72% / 0.6)';
-    for (const side of [-1, 1]) g.append(node('ellipse', { cx: f(50 + side * (gap + 5)), cy: f(eyeY + 9), rx: '5.5', ry: '3.2', fill: blush }));
+    for (const side of [-1, 1]) extras.append(node('ellipse', { cx: f(50 + side * (gap + 5)), cy: f(eyeY + 9), rx: '5.5', ry: '3.2', fill: blush }));
+    g.append(extras);
   }
 
-  for (const side of [-1, 1]) drawEye(g, eye, 50 + side * gap, eyeY, side);
+  // Its own eyes, and focused ones it wears while it works (app.css).
+  const eyes = node('g', { class: 'pj-face-eyes' });
+  const focused = node('g', { class: 'pj-face-focused' });
+  for (const side of [-1, 1]) {
+    drawEye(eyes, eye, 50 + side * gap, eyeY, side);
+    drawEye(focused, 'focused', 50 + side * gap, eyeY, side);
+  }
+  g.append(eyes, focused);
 
   if (extra === 'glasses') {
     const r = 9.5;
-    for (const side of [-1, 1]) g.append(node('circle', { cx: f(50 + side * gap), cy: f(eyeY), r: f(r), fill: 'rgba(255,255,255,0.18)', stroke: INK, 'stroke-width': '3.2' }));
-    g.append(stroke(`M${f(50 - gap + r)} ${f(eyeY)}Q50 ${f(eyeY - 3)} ${f(50 + gap - r)} ${f(eyeY)}`, 3.2));
+    for (const side of [-1, 1]) extras.append(node('circle', { cx: f(50 + side * gap), cy: f(eyeY), r: f(r), fill: 'rgba(255,255,255,0.18)', stroke: INK, 'stroke-width': '3.2' }));
+    extras.append(stroke(`M${f(50 - gap + r)} ${f(eyeY)}Q50 ${f(eyeY - 3)} ${f(50 + gap - r)} ${f(eyeY)}`, 3.2));
+    g.append(extras);
   }
 
   drawMouth(g, mouth, 50, mouthY, hue);
@@ -215,12 +275,16 @@ function drawFace(g, { eye, mouth, extra }, cy, hue) {
   if (extra === 'bow') {
     const y = mouthY + 15;
     const w = 11;
-    g.append(node('path', { d: `M50 ${f(y)}L${f(50 - w)} ${f(y - 5.5)}Q${f(48.5 - w)} ${f(y)} ${f(50 - w)} ${f(y + 5.5)}ZM50 ${f(y)}L${f(50 + w)} ${f(y - 5.5)}Q${f(51.5 + w)} ${f(y)} ${f(50 + w)} ${f(y + 5.5)}Z`, fill: INK, 'stroke-linejoin': 'round', stroke: INK, 'stroke-width': '2' }));
+    g.append(extras);
+    extras.append(node('path', { d: `M50 ${f(y)}L${f(50 - w)} ${f(y - 5.5)}Q${f(48.5 - w)} ${f(y)} ${f(50 - w)} ${f(y + 5.5)}ZM50 ${f(y)}L${f(50 + w)} ${f(y - 5.5)}Q${f(51.5 + w)} ${f(y)} ${f(50 + w)} ${f(y + 5.5)}Z`, fill: INK, 'stroke-linejoin': 'round', stroke: INK, 'stroke-width': '2' }));
   }
 }
 
 function drawEye(g, style, x, y, side) {
-  if (style === 'dot') {
+  if (style === 'focused') {
+    // a dot under a brow that slopes down to the middle
+    g.append(node('circle', { cx: f(x), cy: f(y + 1), r: '4.6', fill: INK }), stroke(`M${f(x - side * 6)} ${f(y - 9)}L${f(x + side * 5)} ${f(y - 5)}`, 4.5));
+  } else if (style === 'dot') {
     g.append(node('circle', { cx: f(x), cy: f(y), r: '5.4', fill: INK }));
   } else if (style === 'big') {
     g.append(
