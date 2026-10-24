@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -335,7 +336,7 @@ test('the shipped scripts pass the project folder only when there is one', () =>
   assert.equal(run('codex', ''), 'reply', 'codex prints only its last message');
 });
 
-test('the shipped agents are written when missing, then left alone; Reset writes one again', async () => {
+test('the shipped agents are written when missing, then updated until edited; Reset writes one again', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ponjo-agents-'));
   await installAgents(dir, { platform: 'linux' });
   await installAgents(dir, { platform: 'win32' });
@@ -346,7 +347,7 @@ test('the shipped agents are written when missing, then left alone; Reset writes
   ], 'each with its manifest, all valid');
   const windows = await mkdtemp(join(tmpdir(), 'ponjo-agents-'));
   await installAgents(windows, { platform: 'win32' });
-  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'ponjo.cmd', 'ponjo.json', 'ponjo.mjs'], 'with the program the Ponjo agent runs');
+  assert.deepEqual((await readdir(agentsDir(windows))).sort(), ['.shipped.json', 'claude.cmd', 'claude.json', 'codex.cmd', 'codex.json', 'ponjo.cmd', 'ponjo.json', 'ponjo.mjs'], 'with the program the Ponjo agent runs, and what was written');
   await writeFile(join(agentsDir(dir), 'mine'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken'), '#!/bin/sh\n');
   await writeFile(join(agentsDir(dir), 'broken.json'), '{ "name": ');
@@ -361,7 +362,14 @@ test('the shipped agents are written when missing, then left alone; Reset writes
   assert.equal(basename(agentScript('claude', dir, 'win32')), 'claude.cmd');
   await writeFile(claude, '#!/bin/sh\necho mine\n');
   await installAgents(dir, { platform: 'linux' });
-  assert.equal(await readFile(claude, 'utf8'), '#!/bin/sh\necho mine\n', 'yours once written');
+  assert.equal(await readFile(claude, 'utf8'), '#!/bin/sh\necho mine\n', 'yours once edited');
+  // As written by an older version: the record says so, and it was not edited.
+  const codex = agentScript('codex', dir, 'linux');
+  const written = join(agentsDir(dir), '.shipped.json');
+  await writeFile(codex, '#!/bin/sh\necho old\n');
+  await writeFile(written, JSON.stringify({ ...JSON.parse(await readFile(written, 'utf8')), codex: createHash('sha256').update('#!/bin/sh\necho old\n').digest('hex') }));
+  await installAgents(dir, { platform: 'linux' });
+  assert.equal(await readFile(codex, 'utf8'), await readFile(join(ROOT, 'agents', 'codex'), 'utf8'), 'an unedited older version is replaced');
   await installAgents(dir, { platform: 'linux', reset: 'claude' });
   assert.equal(await readFile(claude, 'utf8'), await readFile(join(ROOT, 'agents', 'claude'), 'utf8'));
 });
