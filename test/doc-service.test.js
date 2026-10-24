@@ -247,12 +247,22 @@ test('resolving is a comment with resolved; any later comment reopens', async ()
     assert.equal((await call('comment', { thread: id, body: '', resolved: true })).threads[0].resolved, true);
     const resolving = JSON.parse((await readFile(sidecarPath(docPath), 'utf8')).trimEnd().split('\n').at(-1));
     assert.deepEqual([resolving.thread, resolving.body, resolving.resolved], [id, '', true]);
-    await pause(2); // comments are ordered by their time, to the millisecond
     assert.equal((await call('comment', { thread: id, body: 'Not yet' })).threads[0].resolved, false);
     await call('comment', { thread: id, body: '', resolved: true });
-    await pause(2);
     assert.equal((await call('comment', { thread: id, body: '' })).threads[0].resolved, false);
     assert.deepEqual((await threadOf(state, id)).comments.map((c) => c.body), ['Fix this', '', 'Not yet', '', ''], 'reopening is an empty reply');
+  });
+});
+
+test('a reply comes after every comment in its thread, though its clock is behind', async () => {
+  await withDoc(async ({ call, state, docPath }) => {
+    const { id } = await call('comment', { anchor: null, body: 'Fix this' });
+    const { me } = await state();
+    const resolving = { id: 'c_ahead0001', thread: id, by: me, at: new Date(Date.now() + 60_000).toISOString(), body: '', resolved: true };
+    await appendFile(sidecarPath(docPath), `${JSON.stringify(resolving)}\n`);
+    const { threads } = await call('comment', { thread: id, body: 'Not yet' });
+    assert.deepEqual(threads[0].comments.map((c) => c.body), ['Fix this', '', 'Not yet']);
+    assert.equal(threads[0].resolved, false);
   });
 });
 
