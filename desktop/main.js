@@ -18,7 +18,7 @@ import { parseSidecar } from '../src/core/comments.js';
 import { NAME_PATTERN } from '../src/core/mentions.js';
 import { moveHistory } from '../src/store/history.js';
 import {
-  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isDocName, isInside,
+  cleanPaths, createDoc, docPathFor, freeUntitledPath, isDocName, isInside,
   moveFolder, nameParts, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from './files.js';
 import { createDocHost } from './doc-host-client.js';
@@ -137,7 +137,7 @@ async function openLaunched(paths) {
 // window's place; any other gets a window of its own.
 async function show(docPath, parent) {
   try {
-    const here = windows.docFor(parent);
+    const here = windows.entryFor(parent);
     const real = await realpath(docPath);
     if (here?.folder && relativeDoc(here.folder, real) && !windows.windowOf(real)) {
       const entry = await windows.switchDoc(here, real);
@@ -155,7 +155,7 @@ async function show(docPath, parent) {
 /**
  * Open a folder: a window that lists its docs, showing the one last open
  * there (or its README, or with no Markdown, a text file). A folder without
- * any offers to start a doc.
+ * any opens with no doc: its files, to start one in.
  */
 async function openFolder(path, parent = null) {
   let folder;
@@ -166,7 +166,7 @@ async function openFolder(path, parent = null) {
     return failed(parent, `${basename(path)} could not be found.`, error);
   }
   const open = windows.folderWindow(folder);
-  if (open) return show(open.docPath, parent);
+  if (open) return open.docPath ? show(open.docPath, parent) : Boolean(await windows.openFolderWindow(folder));
   const docs = await listDocs(folder);
   // A doc another window has open stays there; start with one that is free.
   const free = docs.filter((rel) => !windows.windowOf(docInFolder(folder, rel)));
@@ -174,18 +174,10 @@ async function openFolder(path, parent = null) {
   // Any doc, Markdown or not, the project still shows.
   const last = remembered && (await resolveInProject(folder, remembered).then(() => docInFolder(folder, remembered), () => null));
   const lastFree = last && isFile(last) && !windows.windowOf(last) && (await docPathFor(last)) === last;
-  let rel = (lastFree ? remembered : firstDoc(free)) ?? firstDoc(docs) ?? (await firstTextFile(folder));
-  if (!rel) {
-    const name = basename(folder) || folder;
-    if (!(await ask(parent, `${name} has no docs yet.`, `Start one in ${folder}?`, 'New Doc'))) return false;
-    try {
-      rel = relativeDoc(folder, await createUntitled(folder));
-    } catch (error) {
-      return failed(parent, `Could not create a doc in ${name}.`, error);
-    }
-  }
+  const rel = (lastFree ? remembered : firstDoc(free)) ?? firstDoc(docs) ?? (await firstTextFile(folder));
   try {
-    const { entry } = await windows.openDoc(docInFolder(folder, rel), { folder, expanded: state.folderExpanded[folder] });
+    const expanded = state.folderExpanded[folder];
+    const entry = rel ? (await windows.openDoc(docInFolder(folder, rel), { folder, expanded })).entry : await windows.openFolderWindow(folder, { expanded });
     rememberIn(entry);
     return true;
   } catch (error) {
@@ -309,11 +301,11 @@ function remember(docPath) {
 // one to open there next time.
 function rememberIn(entry) {
   if (!entry.folder) return remember(entry.docPath);
-  const rel = relativeDoc(entry.folder, entry.docPath);
+  const rel = entry.docPath && relativeDoc(entry.folder, entry.docPath);
   if (rel) state.folderDocs = rememberForFolder(state.folderDocs, entry.folder, rel);
   state.recent = addRecent(state.recent, entry.folder);
   app.addRecentDocument(entry.folder);
-  state.lastFolder = dirname(entry.docPath);
+  state.lastFolder = entry.docPath ? dirname(entry.docPath) : entry.folder;
   saveState();
   recentChanged();
 }
@@ -532,7 +524,7 @@ async function saveSecret({ agent, key, value }) {
 // the owner's.
 
 function sidebarOf(win) {
-  const entry = windows.docFor(win);
+  const entry = windows.entryFor(win);
   if (!entry?.folder) throw new Error('not allowed');
   return entry;
 }
@@ -558,18 +550,20 @@ function sidebarName(typed) {
 const parentRel = (rel) => rel.split('/').slice(0, -1).join('/');
 
 /**
- * A new, empty file named `name` (as typed; `/` makes folders) in the
- * sidebar folder `parent`. A new doc opens in this window.
+ * A new, empty file, or with `folder` a folder, named `name` (as typed; `/`
+ * makes folders) in the sidebar folder `parent`. A new doc opens in this
+ * window.
  * @returns {Promise<{ rel: string } | { error: string }>}
  */
-async function sidebarCreate(win, { parent, name } = {}) {
+async function sidebarCreate(win, { parent, name, folder = false } = {}) {
   const entry = sidebarOf(win);
   const dir = await checkInFolder(entry, parent, parent ? 'folder' : 'root');
   const named = sidebarName(name);
   if (named.problem) return { error: named.problem };
-  let path;
+  let path = join(dir, ...named.parts);
   try {
-    path = await createDoc(join(dir, ...named.parts));
+    if (!folder) path = await createDoc(path);
+    else if (!(await mkdir(path, { recursive: true }))) return { error: `${basename(path)} is already here.` };
   } catch (error) {
     if (error.code === 'exists') return { error: `${basename(error.path)} is already here.` };
     throw error;
@@ -577,7 +571,7 @@ async function sidebarCreate(win, { parent, name } = {}) {
   const rel = relativeDoc(entry.folder, path);
   windows.expandFolder(entry, parentRel(rel));
   windows.relist(entry);
-  if (await docPathFor(path)) await show(path, win);
+  if (!folder && (await docPathFor(path))) await show(path, win);
   return { rel };
 }
 
@@ -764,9 +758,9 @@ async function sidebarMenu(win, contents, { rel, kind, x, y } = {}) {
   const path = await checkInFolder(entry, rel, kind);
   const command = (action) => () => contents.send('ponjo:folder-command', { action, rel, kind });
   const report = (promise) => promise.catch((error) => failed(win, 'Could not do that.', error));
-  const newFile = { label: 'New File', click: command('newFile') };
-  const template = kind === 'root' ? [newFile] : [
-    ...(kind === 'folder' ? [newFile, { type: 'separator' }] : []),
+  const create = [{ label: 'New File', click: command('newFile') }, { label: 'New Folder', click: command('newFolder') }];
+  const template = kind === 'root' ? create : [
+    ...(kind === 'folder' ? [...create, { type: 'separator' }] : []),
     { label: 'Rename…', accelerator: 'F2', registerAccelerator: false, click: command('rename') },
     { label: 'Copy Path', click: () => clipboard.writeText(rel) },
     { label: REVEAL_LABEL, click: () => shell.showItemInFolder(path) },
@@ -795,7 +789,7 @@ ipcMain.handle('ponjo:action', async (event, action, arg) => {
   const win = windows.windowForContents(event.sender) ?? BrowserWindow.fromWebContents(event.sender);
   if (!win || event.senderFrame !== event.sender.mainFrame) throw new Error('not allowed');
   const fromStart = windows.isStartWindow(win);
-  const fromDoc = Boolean(windows.docFor(win));
+  const fromDoc = Boolean(windows.entryFor(win));
   if (action === 'openFolder' && fromStart) return void (await openFolderDialog(win));
   if (action === 'folder' && fromDoc) return windows.folderView(win, event.sender);
   if (action === 'openInFolder' && fromDoc) return openInFolder(win, arg);
@@ -804,7 +798,7 @@ ipcMain.handle('ponjo:action', async (event, action, arg) => {
     if (typeof arg?.path !== 'string') return undefined;
     windows.setExpanded(win, arg.path, Boolean(arg.open));
     // The folder opens with them next time, after a restart too.
-    const { folder, expanded } = windows.docFor(win);
+    const { folder, expanded } = windows.entryFor(win);
     if (folder) {
       state.folderExpanded = rememberForFolder(state.folderExpanded, folder, [...expanded]);
       saveState();
@@ -833,7 +827,7 @@ ipcMain.handle('ponjo:action', async (event, action, arg) => {
     }
     return undefined;
   }
-  if (action === 'settings' && fromStart) return pageSettings((await readSettings()).settings);
+  if (action === 'settings' && (fromStart || fromDoc)) return pageSettings((await readSettings()).settings);
   if (action === 'saveSettings' && fromStart) return saveStartSettings(arg);
   if (action === 'openRecent' && fromStart) {
     const path = recentProjects()[arg];

@@ -673,6 +673,11 @@ label.pj-setting { cursor: pointer; }
 [data-preview] .pj-preview-name { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pj-preview-text { margin: 0; font: 13px/1.6 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .pj-preview-note { margin: 0; color: var(--text-soft); font-size: 14px; }
+/* A folder window with no doc: only its files, and a way to start one. */
+.pj-folder-empty { display: none; }
+[data-folder-only] :is(.pj-toolbar, .pj-stage, .pj-doc-icon, .pj-doc-name, .pj-people, .pj-settings-toggle) { display: none; }
+[data-folder-only]:not([data-preview]) .pj-folder-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: var(--page-w); margin: 0 auto; padding: 48px var(--page-pad); }
+[data-folder-only] .pj-folder-empty .pj-empty { flex-basis: 100%; margin: 0 0 4px; font-size: 14px; }
 [data-history] .pj-toolbar, [data-history] .pj-stage:not(.pj-history-stage), [data-history] .pj-outline { display: none; }
 [data-history] .pj-history-bar { display: flex; align-items: center; gap: 8px; margin: 0 12px 8px; padding: 4px; min-height: 36px; background: var(--bg-soft); border-radius: 10px; flex: none; font-size: 13px; }
 [data-history] .pj-history-stage { display: grid; --margin-w: 320px; --stage-gap: 24px; }

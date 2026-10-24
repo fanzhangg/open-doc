@@ -1,20 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises';
+import { EventEmitter } from 'node:events';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, parse } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MAX_TEXT_BYTES, readSidecarText, sidecarPath } from '../src/store/files.js';
 import {
-  cleanPaths, createDoc, createUntitled, docPathFor, freeUntitledPath, isInside, moveFolder,
+  cleanPaths, createDoc, docPathFor, freeUntitledPath, isInside, moveFolder,
   nameParts, nameProblem, pathsFromArgs, renameFile, trashFile, withDocExtension,
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
-  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc, watchFolder,
+  docInFolder, firstDoc, firstTextFile, hostFolder, listDocs, neighbourDoc, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
 import { linkURL } from '../src/host/project-service.js';
-import { tempDoc } from './helpers.js';
+import { tempDoc, until } from './helpers.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-desktop-'));
 
@@ -65,11 +66,11 @@ test('createDoc never overwrites an existing doc', async () => {
 
 test('new docs in a folder take the next free Untitled name', async () => {
   const dir = await tempDir();
-  assert.equal(await createUntitled(dir), join(dir, 'Untitled.md'));
-  assert.equal(await createUntitled(dir), join(dir, 'Untitled 2.md'));
+  assert.equal(await createDoc(await freeUntitledPath(dir)), join(dir, 'Untitled.md'));
+  assert.equal(await createDoc(await freeUntitledPath(dir)), join(dir, 'Untitled 2.md'));
   await writeFile(join(dir, 'Untitled 4.md'), 'taken');
-  assert.equal(await createUntitled(dir), join(dir, 'Untitled 3.md'));
-  assert.equal(await createUntitled(dir), join(dir, 'Untitled 5.md'));
+  assert.equal(await createDoc(await freeUntitledPath(dir)), join(dir, 'Untitled 3.md'));
+  assert.equal(await createDoc(await freeUntitledPath(dir)), join(dir, 'Untitled 5.md'));
   assert.equal(await readFile(join(dir, 'Untitled 4.md'), 'utf8'), 'taken');
 });
 
@@ -275,6 +276,27 @@ test('relativeDoc says where a doc is in a folder, and null outside it', () => {
   assert.equal(relativeDoc(root, join(root, '..', 'b.md')), null);
   assert.equal(relativeDoc(root, join(root, '..work', 'b.md')), '..work/b.md');
   assert.equal(relativeDoc(root, root), null);
+});
+
+test('a folder window with no doc: its page lists, reads and opens the folder\'s files, as the owner, and asks nothing else', async () => {
+  const root = await realpath(await tempDir());
+  await writeFile(join(root, 'notes.txt'), 'hi');
+  await writeFile(join(root, '.env'), 'secret');
+  const host = hostFolder(root);
+  const sent = [];
+  const port = Object.assign(new EventEmitter(), { postMessage: (message) => sent.push(message), start() {}, close() {} });
+  await host.attach(port);
+  let id = 0;
+  const ask = async (type, arg) => {
+    const asked = ++id;
+    port.emit('message', { data: { id: asked, type, arg } });
+    return until(() => sent.find((message) => message.id === asked), type);
+  };
+  assert.deepEqual((await ask('list', { path: '' })).result, [{ name: 'notes.txt', folder: false, ignored: false }]);
+  assert.deepEqual((await ask('read', { path: 'notes.txt' })).result, { text: 'hi' });
+  assert.equal((await ask('read', { path: '.env' })).error.code, 'not_found');
+  assert.equal((await ask('state')).error.code, 'folder_only', 'the page takes it for a window with no doc');
+  assert.deepEqual(await host.call('open', { path: 'notes.txt' }), { path: join(root, 'notes.txt') }, 'the app opens a file from the sidebar through it');
 });
 
 test('linkURL: a link from the doc\'s place, or from the project\'s top when it starts with /', () => {

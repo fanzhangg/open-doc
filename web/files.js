@@ -33,7 +33,7 @@ const NOT_SHOWN = {
  * things (`carry` from the app; `startTyping` when it made this doc), once; `onError(message)` hears what could
  * not be done. `place` is the doc's in its project ({ name, path }), for a
  * teammate's page. Returns `ready`, which resolves once the sidebar is drawn,
- * and `state()`, how this page leaves it.
+ * `state()`, how this page leaves it, and `create(kind)`.
  */
 export function createFileList({ place = null, onError = () => {}, onCarry = () => {} } = {}) {
   const owner = Boolean(window.ponjoDesktop); // only the owner changes files
@@ -522,7 +522,8 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     });
   }
 
-  async function startCreate(parent) {
+  // Name a new file, or a `kind` 'folder', in `parent`.
+  async function startCreate(parent, kind = 'file') {
     if (field || !view) return;
     reveal();
     const holder = parent ? rowFor(parent) : null;
@@ -532,7 +533,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     const item = el('li');
     item.setAttribute('role', 'none');
     const level = parent ? parent.split('/').length + 1 : 1;
-    const node = row('file', '', '', level);
+    const node = row(kind, '', '', level);
     delete node.dataset.path;
     node.classList.add('pj-files-new');
     item.append(node);
@@ -541,11 +542,11 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     nameField(node, {
       value: '',
       placeholder: 'Name',
-      label: 'New file name',
+      label: `New ${kind} name`,
       check: (typed) => problem(typed, parent),
       commit: (typed) => {
-        created = true; // an empty file is text: it opens as a doc
-        return desktop.folderCreate(parent, typed).finally(() => { created = null; });
+        created = kind === 'file'; // an empty file is text: it opens as a doc
+        return desktop.folderCreate(parent, typed, kind === 'folder').finally(() => { created = null; });
       },
       cancel: () => item.remove(),
     });
@@ -702,6 +703,7 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
     const node = rel ? rowFor(rel) : null;
     if (action === 'rename' && node) startRename(node);
     else if (action === 'newFile') startCreate(rel);
+    else if (action === 'newFolder') startCreate(rel, 'folder');
   });
 
   // ---- showing and hiding ----
@@ -783,7 +785,12 @@ export function createFileList({ place = null, onError = () => {}, onCarry = () 
   });
 
   desktop.onFolderChanged(refresh);
-  return { ready: refresh(), state: () => ({ sidebarScroll: tree.scrollTop, startTyping: Boolean(created) }) };
+  return {
+    ready: refresh(),
+    state: () => ({ sidebarScroll: tree.scrollTop, startTyping: Boolean(created) }),
+    /** Name a new file or folder at the top. */
+    create: (kind) => startCreate('', kind),
+  };
 }
 
 // The sidebar's side of the app, in a teammate's page: which folders are

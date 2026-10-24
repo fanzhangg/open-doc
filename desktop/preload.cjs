@@ -99,7 +99,8 @@ contextBridge.exposeInMainWorld('ponjoDesktop', {
   /**
    * The folder window's sidebar: { name, current (the doc's path in the
    * folder, `/` between folders), expanded (open subfolders), sidebar,
-   * carry }, or null in a window with a single doc.
+   * carry }, or null in a window with a single doc. `current` is null in a
+   * window with no doc.
    */
   folder: () => ipcRenderer.invoke('ponjo:action', 'folder'),
   /** Show the folder's file `path` in this window if it is a doc; false if it is not. */
@@ -108,11 +109,12 @@ contextBridge.exposeInMainWorld('ponjoDesktop', {
   openLink: (href) => act('openLink', String(href)),
   folderExpand: (path, open) => act('folderExpand', { path: String(path), open: Boolean(open) }),
   /**
-   * A new, empty file `name` (`/` makes folders) in the sidebar folder
-   * `parent` ('' for the top); a doc then opens here. Resolves to { rel }
-   * (its path in the folder) or { error } (why the name can't be used).
+   * A new, empty file `name` (`/` makes folders), or with `folder` a folder,
+   * in the sidebar folder `parent` ('' for the top); a doc then opens here.
+   * Resolves to { rel } (its path in the folder) or { error } (why the name
+   * can't be used).
    */
-  folderCreate: (parent, name) => act('folderCreate', { parent: String(parent), name: String(name) }),
+  folderCreate: (parent, name, folder = false) => act('folderCreate', { parent: String(parent), name: String(name), folder: Boolean(folder) }),
   /** Rename the sidebar's file or folder `from` to `to`; { rel } or { error }. */
   folderRename: (from, kind, to) => act('folderRename', { from: String(from), kind: String(kind), to: String(to) }),
   /** Delete the sidebar's file or folder, once the user confirms; { trashed }. */
@@ -124,7 +126,7 @@ contextBridge.exposeInMainWorld('ponjoDesktop', {
   folderMenu: (rel, kind, x = null, y = null) => act('folderMenu', {
     rel: String(rel), kind: String(kind), x: x === null ? null : Number(x), y: y === null ? null : Number(y),
   }),
-  /** A command from a sidebar menu: { action: 'rename' | 'newFile', rel, kind }. */
+  /** A command from a sidebar menu: { action: 'rename' | 'newFile' | 'newFolder', rel, kind }. */
   onFolderCommand: (callback) => {
     ipcRenderer.on('ponjo:folder-command', (_event, { action, rel, kind }) => callback({ action: String(action), rel: String(rel), kind: String(kind) }));
   },
@@ -150,7 +152,7 @@ contextBridge.exposeInMainWorld('ponjoDesktop', {
   onRecentChanged: (callback) => {
     ipcRenderer.on('ponjo:recent-changed', () => callback());
   },
-  /** The start window's settings (name and look), and saving a change to them. */
+  /** The start window's settings (name and look; a folder window with no doc reads them too), and saving a change to them. */
   settings: () => ipcRenderer.invoke('ponjo:action', 'settings'),
   saveSettings: (patch) => act('saveSettings', patch),
   /** The settings changed, here or in another window. */
