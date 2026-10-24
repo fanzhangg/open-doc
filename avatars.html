@@ -6,8 +6,8 @@
   <title>Ponjo Avatars</title>
   <!-- A live specimen: the app's own stylesheet and classes, so this page is
        always what the app looks like. Run `npm run build` to view it locally. -->
-  <link rel="stylesheet" href="./dist/web/app.css?v=8ac6e4d">
-  <link rel="stylesheet" href="site.css?v=8ac6e4d">
+  <link rel="stylesheet" href="./dist/web/app.css?v=885fb4c">
+  <link rel="stylesheet" href="site.css?v=885fb4c">
   <link rel="icon" href="./build/icon.svg" type="image/svg+xml">
 </head>
 <body>
@@ -44,33 +44,36 @@
   <div class="ds-box ds-faces" data-faces="icons"></div>
 
   <h2>People</h2>
-  <p>People are always round. Their face and colour come from their name, the same way as a buddy's.</p>
+  <p>People are always round, and wear a hat that says who they are on the project: the <strong>owner</strong> a crown, a <strong>teammate</strong> a top hat. A hat is a flat silhouette: the crown gold, the top hat in the text colour, so it reads on any page, light or dark. It sits on top of the head, so a person is as big as a buddy beside them. Their face comes from their name, the same way as a buddy's, and the hat from their id, so it stays when they rename themselves. In a doc, people take the colours its buddies left, so no one there shares a colour while eight or fewer are in it; the buddies keep theirs, since their edits show in them.</p>
   <div class="ds-box ds-faces" data-faces="people"></div>
 
   <h2>Sizes</h2>
-  <p>Set by <code>--size</code> on <code>.pj-avatar</code>. Features are drawn to read at 18px; a new eye, mouth or extra must too.</p>
+  <p>Set by <code>--size</code> on <code>.pj-avatar</code>. Features and hats are drawn to read at 18px; a new eye, mouth or hat must too. Below 24px a face is plain: no blush, glasses or bow, and upright.</p>
   <div class="ds-box ds-faces" data-faces="sizes"></div>
 
   <h2>States</h2>
-  <p>A buddy shows what it is doing with its face, never with a badge or a dot, and the same on every face of it: in the header, on its card and on the thread it works on. It has three states and one moment:</p>
+  <p>Everyone shows what they are doing with their face, never with a badge or a dot, and the same on every face of them: in the header, on their card and on the thread a buddy works on. Buddies and people have the same three states, and a buddy one moment:</p>
   <ul>
-    <li><strong>Ready</strong>: as drawn, still. It answers when you @mention it.</li>
-    <li><strong>Working</strong>: it grows a little, its body rolls and its face bobs, until the run ends and it settles back.</li>
-    <li><strong>Away</strong>: greyed out. It does not answer in this doc.</li>
+    <li><strong>Working</strong>: a buddy running, or a person moving or typing in the doc in the last few seconds (while their cursor shows their name). The face is bigger and hops, squashing and stretching, and its eyes turn focused, under brows that slope to the middle, and look about. The eyes show it even when nothing moves. Nothing else moves like this, so you can tell who is at work at a glance.</li>
+    <li><strong>Ready</strong> (a person: <strong>here</strong>): as drawn, still. A buddy answers when you @mention it; a person is in this doc.</li>
+    <li><strong>Away</strong>: greyed out. A buddy does not answer in this doc; a person is on another doc of the project, or not on it at all.</li>
     <li><strong>Failed</strong>, a moment: when a run fails, its face shakes and flashes red, once. The thread says what happened.</li>
   </ul>
-  <p>A person has two states, the same way: <strong>here</strong>, as drawn, with the project open, and <strong>away</strong>, greyed out. In a doc, each person with you has a cursor in their colour, with their name beside it while they move or type, as a buddy's while it works.</p>
-  <p>A finished run has no moment of its own: its edits light up in the text, in its colour. A face you point at grows the same way, and on its card a buddy moves as if at work, to greet you. With reduced motion, faces keep their size and nothing moves.</p>
+  <p>A finished run has no moment of its own: its edits light up in the text, in its colour. A face in the header you point at grows a little, and does nothing else. With reduced motion, faces keep their size and nothing moves.</p>
   <div class="ds-box ds-faces" data-faces="states"></div>
   <div class="ds-box ds-faces" data-faces="person-states"></div>
+  <h2>The header</h2>
+  <p>The header has one queue of faces: everyone in the doc, people and buddies alike, then you, then the Team button. Every face in it is the same button at 32px: pointing at it grows it and shows its name card, a click opens its card, and it shows its state. The queue is ordered by state: who is <strong>working</strong> first, then who is <strong>here</strong>, then who is <strong>away</strong>. Among those working, who started first leads; among the rest, whoever changed state last. So a face moves only when its state changes, and slides to its new place. Your own face stays at the end, still.</p>
+  <div class="ds-box ds-faces" data-faces="queue"></div>
   <p>Faces have their own palette and gradient in <code>faces.js</code>, the one place outside the tokens with colour literals. Ink for features is <code>#1f1d24</code>.</p>
 
 </main>
 <script type="module">
-  import { agentFace, personFace, setBuddies } from './dist/web/faces.js?v=8ac6e4d';
+  import { agentFace, personFace, setBuddies, setOwner } from './dist/web/faces.js?v=885fb4c';
 
   const BUDDIES = ['Clippy', 'Ada', 'Rex', 'Juno', 'Milo', 'Vera', 'Otto', 'Pip'];
   setBuddies(BUDDIES.map((name) => ({ id: name, name })));
+  setOwner('Fan');
   const avatar = (name, { person = false, size = 44, presence = null } = {}) => {
     const node = document.createElement('span');
     node.className = `pj-avatar${person ? '' : ' pj-avatar-agent'}`;
@@ -99,18 +102,24 @@
   fill('spread', BUDDIES.map((name) => labelled(avatar(name, { size: 56 }), name)));
   fill('icons', [labelled(icon('./build/icon.svg', 64), 'App icon'), labelled(icon('./build/document.svg', 64), 'Document')]);
   fill('people', ['Fan', 'Noor', 'Alice', 'Bob', 'Carol'].map((name) => labelled(avatar(name, { person: true, size: 44 }), name)));
-  fill('sizes', [[44, 'Card'], [32, 'Header'], [24, 'Menus'], [18, 'Threads'], [16, 'Folded replies']]
-    .map(([size, use]) => labelled(avatar('Clippy', { size }), `${size} ${use}`)));
+  fill('sizes', [[44, 'Card'], [32, 'Header'], [24, 'Menus'], [18, 'Threads'], [16, 'Folded replies']].map(([size, use]) => {
+    const both = document.createElement('span');
+    both.style.cssText = 'display: flex; align-items: flex-end; gap: 6px';
+    both.append(avatar('Clippy', { size }), avatar('Noor', { person: true, size }));
+    return labelled(both, `${size} ${use}`);
+  }));
   fill('states', [['idle', 'Ready'], ['working', 'Working'], ['away', 'Away'], ['idle', 'Failed']]
     .map(([presence, label]) => labelled(avatar('Clippy', { size: 44, presence }), label)));
-  fill('person-states', [['idle', 'Here'], ['away', 'Away']]
+  fill('person-states', [['working', 'Working'], ['idle', 'Here'], ['away', 'Away']]
     .map(([presence, label]) => labelled(avatar('Noor', { person: true, size: 44, presence }), label)));
+  fill('queue', [['Ada', 'working', 'Working'], ['Noor', 'working', 'Typing', true], ['Clippy', 'idle', 'Ready'], ['Bob', 'idle', 'Here', true], ['Rex', 'idle', 'Ready'], ['Alice', 'away', 'Away', true], ['Fan', 'idle', 'You', true]]
+    .map(([name, presence, label, person]) => labelled(avatar(name, { person, size: 32, presence }), label)));
   // The failed moment plays once in the app; here, every few seconds.
   const failed = document.querySelectorAll('[data-faces="states"] .pj-avatar')[3];
   const flinch = () => { failed.classList.remove('pj-failed'); void failed.offsetWidth; failed.classList.add('pj-failed'); };
   flinch();
   setInterval(flinch, 3000);
 </script>
-<script type="module" src="site.js?v=8ac6e4d"></script>
+<script type="module" src="site.js?v=885fb4c"></script>
 </body>
 </html>

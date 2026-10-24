@@ -115,33 +115,47 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 /* the Markdown editor's word count, in its toolbar */
 .pj-count { color: var(--text-faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.pj-people { display: flex; align-items: center; gap: 8px; }
+.pj-people { display: flex; align-items: center; gap: 6px; }
 .pj-me, .pj-agent-face { border: 0; background: none; padding: 0; border-radius: 50%; display: flex; }
-.pj-me:hover .pj-avatar { box-shadow: 0 0 0 3px var(--hover); }
 
-.pj-avatar { --size: 32px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: box-shadow 0.15s, transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.pj-avatar { --size: 32px; width: var(--size); height: var(--size); flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: calc(var(--size) * 0.4); font-weight: 600; letter-spacing: 0.02em; user-select: none; transition: transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1), filter 0.3s, opacity 0.3s; }
 .pj-avatar-small { --size: 24px; }
 .pj-avatar-agent { border-radius: 0; background: none; }
-/* People are circles; agents are faces (faces.js): a circle, square, triangle, pentagon or cloud. */
-.pj-face { display: block; width: 100%; height: 100%; overflow: visible; }
+/* People are circles in a hat, the owner's a crown, a teammate's a top hat;
+   agents are faces (faces.js): a circle, square, triangle, pentagon or cloud. */
+.pj-face { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; }
 .pj-face-body, .pj-face-look { transform-box: view-box; transform-origin: 50% 50%; transition: filter 0.15s; }
+.pj-face-hat { color: var(--text); }
+.pj-face-focused { display: none; }
+/* Small faces stay plain: no blush, glasses or bow, and upright. */
+.pj-avatar { container-type: size; }
+@container (max-width: 20px) {
+  .pj-face-extra { display: none; }
+  .pj-face-tilt { transform: none; }
+}
 
-.pj-agent { display: flex; align-items: center; gap: 8px; }
+.pj-agent { display: flex; align-items: center; }
+.pj-agent[data-presence="working"] { margin: 0 3px; } /* room to grow */
 .pj-agent-face, .pj-profile-face { position: relative; display: flex; }
 
-/* A buddy has three states, the same on every face of it: ready (as drawn),
-   working (it grows, its body rolls and its face bobs) and away (greyed). A
-   failed run is a moment: the face shakes and flashes red, once. A face you
-   point at grows too, and on its card it moves as if at work, to greet you.
-   A person is here (as drawn) or away (greyed). */
-:is([data-presence="working"], .pj-typing, .pj-panel .pj-profile:not([data-presence="away"])) .pj-avatar-agent, .pj-avatar-agent:hover { transform: scale(1.12); }
-:is([data-presence="working"], .pj-typing, .pj-panel .pj-profile:not([data-presence="away"])) .pj-face-body { animation: pj-spin 2.4s linear infinite; }
-:is([data-presence="working"], .pj-typing, .pj-panel .pj-profile:not([data-presence="away"])) .pj-face-look { animation: pj-bob 0.8s ease-in-out infinite alternate; }
+/* Everyone has three states, the same on every face of them: at work (it
+   grows and hops, squashing and stretching, its face looks about and its
+   eyes are focused, which shows even still: a buddy running, a person
+   moving or typing), here (as drawn,
+   still) and away (greyed: a buddy that does not answer here, a person not
+   in this doc). A failed run is a moment: the face shakes and flashes red,
+   once. A face in the header you point at grows a little, and nothing else. */
+:where(.pj-agent-face, .pj-me):hover .pj-avatar { transform: scale(1.1); }
+:is([data-presence="working"], .pj-typing) .pj-avatar { transform: scale(1.18); }
+:is([data-presence="working"], .pj-typing) .pj-face { animation: pj-hop 0.7s ease-in-out infinite alternate; }
+:is([data-presence="working"], .pj-typing) .pj-face-look { animation: pj-bob 0.35s ease-in-out infinite alternate; }
+:is([data-presence="working"], .pj-typing) .pj-face-eyes { display: none; }
+:is([data-presence="working"], .pj-typing) .pj-face-focused { display: inline; }
 [data-presence="away"] .pj-avatar { filter: grayscale(1); opacity: 0.45; }
-.pj-avatar-agent.pj-failed { animation: pj-shake 0.45s ease-in-out; }
+.pj-avatar.pj-failed { animation: pj-shake 0.45s ease-in-out; }
 .pj-failed .pj-face-body { animation: pj-red 1s; }
-@keyframes pj-spin { to { transform: rotate(360deg); } }
-@keyframes pj-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
+@keyframes pj-hop { from { transform: scale(1.1, 0.88); } to { transform: translateY(-14%) scale(0.92, 1.08); } }
+@keyframes pj-bob { from { transform: translate(-3px, 1px); } to { transform: translate(3px, -2px); } }
 @keyframes pj-shake { 20%, 60% { transform: translateX(-3px) rotate(-5deg); } 40%, 80% { transform: translateX(3px) rotate(5deg); } }
 @keyframes pj-red { 0%, 70% { fill: var(--red); } }
 
