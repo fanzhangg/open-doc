@@ -626,7 +626,7 @@ async function moveFile(fromPath, toPath) {
 // would lose its folder, so that is refused.
 async function moveFolderOf(fromPath, toPath) {
   const inFolder = (path) => isInside(fromPath, path);
-  if (windows.openDocs().some((other) => other.folder && inFolder(other.folder))) {
+  if (windows.folderWindows().some((other) => inFolder(other.folder))) {
     throw Object.assign(new Error(`${basename(fromPath)} is open in its own window`), { code: 'busy' });
   }
   const files = await listDocs(fromPath, { max: Infinity, isDoc: () => true });
@@ -685,7 +685,7 @@ async function sidebarTrash(win, { rel, kind } = {}) {
   const name = basename(path);
   const real = await realpath(path);
   const gone = (docPath) => (kind === 'file' ? docPath === real : isInside(real, docPath));
-  if (kind === 'folder' && windows.openDocs().some((other) => other.folder && isInside(real, other.folder))) {
+  if (kind === 'folder' && windows.folderWindows().some((other) => isInside(real, other.folder))) {
     await warn(win, `Could not delete ${name}.`, `${name} is open in its own window. Close that window first.`);
     return { trashed: false };
   }

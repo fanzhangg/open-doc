@@ -70,8 +70,10 @@ export const entryFor = (win) => entries().find((entry) => entry.win === win) ??
 export const windowForContents = (contents) => entries()
   .find((entry) => entry.view.webContents === contents || entry.pending?.view.webContents === contents)?.win ?? null;
 export const isStartWindow = (win) => win !== null && win === startWindow;
+/** The windows open on a folder, with a doc or not. */
+export const folderWindows = () => entries().filter((entry) => entry.folder);
 /** The window open on folder `folder` (a real path), if any. */
-export const folderWindow = (folder) => entries().find((entry) => entry.folder === folder) ?? null;
+export const folderWindow = (folder) => folderWindows().find((entry) => entry.folder === folder) ?? null;
 /** The window `docPath` (a real path) is open in, if any. */
 export const windowOf = (docPath) => docs.get(docPath) ?? null;
 
