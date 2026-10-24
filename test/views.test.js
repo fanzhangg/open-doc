@@ -329,6 +329,21 @@ test('markdown view: typed Markdown stays text and saves escaped', async () => {
   assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
 });
 
+test('markdown view: Enter on an empty heading makes it a paragraph; Backspace at the start of a quote takes it out', async () => {
+  await make('markdown', '# Title\n\nBody.\n');
+  await select('Title', 0, 5);
+  await press('Backspace');
+  await press('Enter');
+  assert.equal(await run(`document.querySelector('.ProseMirror').firstElementChild.tagName`), 'P');
+  await type('Intro');
+  assert.equal(await getText(), 'Intro\n\nBody.\n');
+
+  await make('markdown', 'One.\n\n> Quoted.\n>\n> More.\n');
+  await select('Quoted.', 0, 0);
+  await press('Backspace');
+  assert.equal(await getText(), 'One.\n\nQuoted.\n\n> More.\n');
+});
+
 test('markdown view: the standard keys format the selection, and Mod+K opens the link popover', async () => {
   for (const [letter, modifiers, saved] of [['b', MOD, '**beta**'], ['i', MOD, '*beta*'], ['e', MOD, '`beta`'], ['x', MOD | 8, '~~beta~~']]) {
     await make('markdown', 'Alpha beta.\n', { toolbar: true });
@@ -502,7 +517,7 @@ test('plain view: whitespace marks and guides draw over the text without changin
 
 // A key press, as typing is: keyDown (with the character it types, if any), then keyUp.
 async function press(key, { modifiers = 0, text } = {}) {
-  const codes = { Tab: 9, Enter: 13, Escape: 27, ArrowDown: 40 };
+  const codes = { Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowDown: 40 };
   await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: codes[key], modifiers, ...(text ? { text } : {}) });
   await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: codes[key], modifiers });
 }
