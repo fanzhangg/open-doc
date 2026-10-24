@@ -235,7 +235,7 @@ function outline(points) {
 // Only features that still tell apart at 18px.
 const EYES = ['dot', 'big', 'happy', 'sleepy', 'squint'];
 const MOUTHS = ['smile', 'grin', 'o', 'flat', 'cat'];
-const EXTRAS = [null, 'blush', 'glasses', 'bow'];
+const EXTRAS = [null, 'blush', 'glasses'];
 // Blush and glasses would crowd big eyes.
 const fits = (extra, eye) => eye !== 'big' || !['blush', 'glasses'].includes(extra);
 
@@ -271,13 +271,6 @@ function drawFace(g, { eye, mouth, extra }, cy, hue) {
   }
 
   drawMouth(g, mouth, 50, mouthY, hue);
-
-  if (extra === 'bow') {
-    const y = mouthY + 15;
-    const w = 11;
-    g.append(extras);
-    extras.append(node('path', { d: `M50 ${f(y)}L${f(50 - w)} ${f(y - 5.5)}Q${f(48.5 - w)} ${f(y)} ${f(50 - w)} ${f(y + 5.5)}ZM50 ${f(y)}L${f(50 + w)} ${f(y - 5.5)}Q${f(51.5 + w)} ${f(y)} ${f(50 + w)} ${f(y + 5.5)}Z`, fill: INK, 'stroke-linejoin': 'round', stroke: INK, 'stroke-width': '2' }));
-  }
 }
 
 function drawEye(g, style, x, y, side) {
