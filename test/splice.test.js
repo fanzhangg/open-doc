@@ -91,3 +91,9 @@ test('A5: front matter is one block, kept as written', () => {
   assert.equal(splice(old, '---\ntitle:   Plan\n---\n\n# Plan typed\n'), '---\ntitle:   Plan\n---\n\n# Plan typed\n');
   assert.equal(splice(old, '---\ntitle: Plan\n---\n\n# Plan\n'), '---\ntitle: Plan\n---\n\n# Plan\n', 'a change of its spaces is a change');
 });
+
+test('blank lines that are an empty paragraph count: added or taken away, they change the file', () => {
+  assert.equal(splice('One.\n\nTwo.\n', 'One.\n\n\n\nTwo.\n'), 'One.\n\n\n\nTwo.\n');
+  assert.equal(splice('One.\n\n\n\nTwo.\n', 'One.\n\nTwo.\n'), 'One.\n\nTwo.\n');
+  assert.equal(splice('One.\n\n\nTwo.\n\nThree.\n', 'One.\n\nTwo.\n\nThree!\n'), 'One.\n\n\nTwo.\n\nThree!\n', 'one more blank line is spacing, kept');
+});

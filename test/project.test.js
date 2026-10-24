@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { project, renderedRange, sourceRange } from '../src/markdown/project.js';
+import { blockRanges, project, renderedRange, sourceRange } from '../src/markdown/project.js';
 
 const textOf = (md) => project(md).text;
 
@@ -78,4 +78,16 @@ test('bold that ends on full-width punctuation before CJK text is still bold', (
   assert.equal(textOf('- **熟悉：**直接继承\n- **实时：**agent在后台\n'), '熟悉：直接继承\n实时：agent在后台');
   assert.equal(textOf('这是**重要**的。'), '这是重要的。');
   assert.equal(textOf('a **b** c and 2 * 3 * 4'), 'a b c and 2 * 3 * 4', 'other text is unchanged');
+});
+
+test('two blank lines more than part two blocks, or before the first, are an empty paragraph: a block with no text', () => {
+  const ranges = (md) => blockRanges(md).map(({ start, end }) => [start, end]);
+  assert.deepEqual(ranges('One.\n\nTwo.\n'), [[0, 4], [6, 10]]);
+  assert.deepEqual(ranges('One.\n\n\nTwo.\n'), [[0, 4], [7, 11]], 'one more is not one');
+  assert.deepEqual(ranges('One.\n\n\n\nTwo.\n'), [[0, 4], [6, 6], [8, 12]]);
+  assert.deepEqual(ranges('One.\n\n\n\n\n\nTwo.\n'), [[0, 4], [6, 6], [8, 8], [10, 14]]);
+  assert.deepEqual(ranges('\n\nOne.\n'), [[0, 0], [2, 6]]);
+  assert.deepEqual(ranges('One.\n\n\n\n'), [[0, 4]], 'none after the last');
+  assert.deepEqual(ranges('```\na\n\n\n\nb\n```\n'), [[0, 14]], 'blank lines in a block are its own');
+  assert.equal(textOf('One.\n\n\n\nTwo.\n'), 'One.\nTwo.');
 });

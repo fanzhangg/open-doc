@@ -37,6 +37,10 @@ designed, not built.
   which would put their bytes in the file.
 - **Front matter** (YAML between `---` lines at the top) shows as its
   source, muted, typed into as text; nothing formats it.
+- **Blank lines.** An empty paragraph (Enter on an empty line) is saved as
+  two more blank lines, not `<br />`, and two more blank lines read back as
+  one; in a quote or a list it stays `<br />`. Other Markdown readers show
+  it as the usual space between paragraphs.
 - **Link definitions** (`[d]: https://…`) are kept as written, and so is
   every reference link (`[docs][d]`) in a block not changed but by typing.
 - **Keys:** Undo, Redo, the formatting above, Comment, Find, and focus

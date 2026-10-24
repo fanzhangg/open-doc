@@ -311,6 +311,10 @@ export function parseRun(doc, text, blocks, next, parse) {
   while (to > 0 && blocks[to - 1].start > changedEnd) to--;
   from = Math.max(0, from - 1);
   to = Math.min(blocks.length, to + 1);
+  // An empty paragraph is blank lines (withBlankParagraphs): read with those
+  // on both sides of it, up to a block with text.
+  while (from > 0 && blocks[from].start === blocks[from].end) from--;
+  while (to < blocks.length && blocks[to - 1].start === blocks[to - 1].end) to++;
   if (from >= to || blocks[from].start > head || blocks[to - 1].end < changedEnd) return null;
 
   const start = blocks[from].start;
@@ -363,6 +367,16 @@ function changedRuns(a, b) {
     if (k === undefined || k <= keptA) continue;
     if (k > keptA + 1 || j > keptB + 1) {
       const run = { a0: Math.max(0, keptA), a1: Math.min(a.childCount, k + 1), b0: Math.max(0, keptB), b1: Math.min(b.childCount, j + 1) };
+      // An empty paragraph is blank lines (withBlankParagraphs): a run takes
+      // in the kept ones beside it, up to a block with text.
+      while (run.a0 > 0 && run.b0 > 0 && blank(a.child(run.a0)) && a.child(run.a0 - 1) === b.child(run.b0 - 1)) {
+        run.a0--;
+        run.b0--;
+      }
+      while (run.a1 < a.childCount && run.b1 < b.childCount && blank(a.child(run.a1 - 1)) && a.child(run.a1) === b.child(run.b1)) {
+        run.a1++;
+        run.b1++;
+      }
       const last = runs.at(-1);
       if (last && run.a0 < last.a1) Object.assign(last, { a1: run.a1, b1: run.b1 });
       else runs.push(run);
@@ -374,6 +388,7 @@ function changedRuns(a, b) {
 }
 
 const moved = (range, by) => ({ start: range.start + by, end: range.end + by });
+const blank = (node) => node.type.name === 'paragraph' && node.childCount === 0;
 
 // Runs where two sequences of length n and m differ, given equality by index.
 function diffSeq(n, m, eq) {
