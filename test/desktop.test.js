@@ -11,8 +11,9 @@ import {
 } from '../desktop/files.js';
 import { MAX_FOLDER_DOCS, MAX_RECENT, addRecent, readState, rememberForFolder, removeRecent, renameRecent, writeState } from '../desktop/state.js';
 import {
-  docInFolder, firstDoc, firstTextFile, linkURL, listDocs, neighbourDoc, relativeDoc, watchFolder,
+  docInFolder, firstDoc, firstTextFile, listDocs, neighbourDoc, relativeDoc, watchFolder,
 } from '../desktop/folder.js';
+import { linkURL } from '../src/host/project-service.js';
 import { tempDoc } from './helpers.js';
 
 const tempDir = () => mkdtemp(join(tmpdir(), 'ponjo-desktop-'));

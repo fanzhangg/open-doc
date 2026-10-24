@@ -7,7 +7,6 @@
 import { watch } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { resolve } from '../src/host/project-service.js';
 import { SIDECAR_SUFFIX } from '../src/store/files.js';
 import { isDocName, isTextFile } from './files.js';
@@ -75,16 +74,6 @@ export function relativeDoc(root, path) {
   const rel = relative(root, path);
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
   return rel.split(sep).join('/');
-}
-
-/**
- * Where link `href` in doc `docPath` goes: from the doc's own place, or, in
- * project `root` (null for a single doc), from the project's top when it
- * starts with `/`, as GitHub resolves links in a repo.
- */
-export function linkURL(href, docPath, root) {
-  if (root && href.startsWith('/')) return new URL(`.${href}`, pathToFileURL(join(root, sep)));
-  return new URL(href, pathToFileURL(docPath));
 }
 
 /**

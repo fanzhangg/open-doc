@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, open, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
 import { sameName } from '../core/mentions.js';
@@ -26,7 +27,7 @@ import { secretTails } from '../store/secrets.js';
 import { watchDoc, watchFolder } from '../store/watch.js';
 import { agentScript, agentsDir, installAgents, listAgents, readAgent, SHIPPED_AGENTS } from '../store/agents.js';
 import { mirrorDir, snapshotMirror } from './mirror.js';
-import { projectService } from './project-service.js';
+import { linkURL, projectService } from './project-service.js';
 import { Runner } from './runner.js';
 import { RoomError } from './room.js';
 
@@ -801,6 +802,14 @@ export async function openDoc(docPath, { folder = null, room = null, settingsDir
       // The project's files (project-service.js), `path` in the project.
       // Its real path is the owner's alone.
       list: (body) => inProject().list(body?.path),
+      // An image the doc shows, `src` as written in it (linkURL): from the
+      // project, or for a doc on its own, from its folder.
+      image(body) {
+        const root = folder ?? dirname(docPath);
+        const url = linkURL(String(body?.src), docPath, folder);
+        if (url.protocol !== 'file:') throw new DocError('not_found', 'not a file of the doc');
+        return (project ?? projectService(root)).image(relative(root, fileURLToPath(url)).split(sep).join('/'));
+      },
       read: (body) => inProject().read(body?.path),
       async open(body, who) {
         const opened = await inProject().open(body?.path);

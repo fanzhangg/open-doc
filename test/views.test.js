@@ -506,6 +506,18 @@ test('A5: markdown view: front matter shows as source, which nothing formats, an
   assert.equal(await getText(), text.replace('Plan\ntags', 'Plans\ntags'));
 });
 
+test('markdown view: an image at a path shows what `image` gives for it; one on the web, as it is', async () => {
+  const dot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await run(`contract.images = { 'pics/a.png': ${JSON.stringify(dot)} }`);
+  const text = '![a](pics/a.png) ![b](https://example.com/b.png) ![c](missing.png)\n';
+  await make('markdown', text);
+  await waitFor(() => run(`document.querySelector('.ProseMirror img[alt="a"]').getAttribute('src')`), 5000, 'the image');
+  assert.deepEqual(await run(`[...document.querySelectorAll('.ProseMirror img:not(.ProseMirror-separator)')].map((i) => [i.alt, i.getAttribute('src')])`), [
+    ['a', dot], ['b', 'https://example.com/b.png'], ['c', null],
+  ]);
+  assert.equal(await getText(), text);
+});
+
 test('markdown view: a task list item shows its box; clicking it ticks the item, saved as written otherwise', async () => {
   await make('markdown', '* [ ] one\n* [X] two\n\nAfter.\n');
   // A press in the box, in the item's gutter.

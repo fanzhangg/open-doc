@@ -268,7 +268,7 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
  *
  * @param {{ stage: HTMLElement, text: string, editable?: boolean, onChange?: () => void, onEdit?: () => void,
  *           onMarkClick?: (id: string) => void, onLayout?: () => void,
- *           toolbar?: HTMLElement, onComment?: () => void,
+ *           toolbar?: HTMLElement, onComment?: () => void, image?: (src: string) => Promise<string | null>,
  *           settings?: object, saveSettings?: (patch: object) => void }} options
  */
 // `onChange` fires once the person pauses after changing the doc, `onEdit`
@@ -280,8 +280,11 @@ const uiPlugin = (hooks) => $prose(() => new Plugin({
 // around `stage`; its bubble's Comment button calls `onComment`. The chrome
 // follows the view's `settings` (web/views/markdown/index.js) and changes
 // them through `saveSettings` (the focus mode shortcut).
+// An image at a path, not on the web, shows what `image` gives for its `src`
+// as written: a URL the page may show, or null for none.
 export async function createMarkdownView({
   stage, text, editable = true, onChange = () => {}, onEdit = () => {}, onMarkClick = () => {}, onLayout = () => {}, toolbar = null, onComment = () => {},
+  image = async () => null,
   settings = null, saveSettings = () => {},
 }) {
   // The human changed the doc since `updated` last fired: any change not
@@ -303,12 +306,25 @@ export async function createMarkdownView({
       }
     },
   };
+  // An image's URL by its `src`, asked for once.
+  const images = new Map();
+  const imageView = (node) => {
+    const { src, alt, title } = node.attrs;
+    const dom = Object.assign(document.createElement('img'), { alt, title });
+    if (/^[a-z][a-z\d+.-]*:/i.test(src)) dom.src = src;
+    else {
+      if (!images.has(src)) images.set(src, image(src).catch(() => null));
+      images.get(src).then((url) => url && (dom.src = url));
+    }
+    return { dom };
+  };
   const host = stage.querySelector('.pj-editor');
   const editor = await Editor.make()
     .config((ctx) => {
       ctx.set(rootCtx, host);
       ctx.set(defaultValueCtx, text);
       if (!editable) ctx.update(editorViewOptionsCtx, (options) => ({ ...options, editable: () => false }));
+      ctx.update(editorViewOptionsCtx, (options) => ({ ...options, nodeViews: { image: imageView } }));
       // Delete at the start of a list item deletes forward, as in any text.
       ctx.update(listItemKeymap.key, (keys) => ({ ...keys, LiftFirstListItem: { shortcuts: 'Backspace' } }));
       // Match common markdown style so edited blocks change as little as possible.

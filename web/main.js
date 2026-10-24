@@ -403,6 +403,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
+    image: api.image,
     editable: chosen.editable && !reading(),
     color: chosen.color,
     settings: chosen.settings,

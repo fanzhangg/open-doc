@@ -57,7 +57,9 @@ designed, not built.
 - **Diagrams.** A ` ```mermaid ` block shows as its diagram. Its source is
   hidden and cannot be typed into; a click selects the whole block, to
   comment on or delete. An AI buddy changes it, asked in a comment.
-- Images in the file show; the view does not insert them.
+- Images in the file show; the view does not insert them. One on the web
+  (`https:`) loads from there; one at a path comes from the doc host
+  (`image`, as a link resolves, only what the project shows), up to 5 MB.
 - **Find and replace** (Mod+F; Mod+Alt+F with Replace), as in every view: a
   bar at the page's top right finds what a reader sees, not the markup,
   ignoring case; every match is marked, the current one stronger, with how
