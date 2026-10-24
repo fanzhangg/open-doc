@@ -115,6 +115,32 @@ const tableTab = $shortcut(() => ({
   },
 }));
 
+// Keys that end a block's formatting, as Docs and Notion do: Enter on an
+// empty heading makes it a paragraph (it kept the heading and added one
+// after), and Backspace at the start of a quote takes the paragraph out of
+// it (it joined the paragraph before).
+const blockKeys = $shortcut(() => ({
+  EmptyHeadingEnter: {
+    key: 'Enter',
+    priority: 90,
+    onRun: () => (state, dispatch) => {
+      const { $from, empty } = state.selection;
+      if (!empty || $from.parent.type.name !== 'heading' || $from.parent.content.size > 0) return false;
+      if (dispatch) dispatch(state.tr.setBlockType($from.pos, $from.pos, state.schema.nodes.paragraph));
+      return true;
+    },
+  },
+  QuoteBackspace: {
+    key: 'Backspace',
+    priority: 90,
+    onRun: () => (state, dispatch) => {
+      const { $from, empty } = state.selection;
+      if (!empty || $from.parentOffset > 0 || $from.depth < 2 || $from.node(-1).type.name !== 'blockquote' || $from.index(-1) > 0) return false;
+      return lift(state, dispatch);
+    },
+  },
+}));
+
 // Tab stays in the page: past the list and table keys, in a code block it
 // indents the lines the selection touches (an empty one: at the caret) by the
 // block's own indent, a tab or the fewest spaces a line starts with (2 when
@@ -343,7 +369,7 @@ export async function createMarkdownView({
         }
       });
     })
-    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(codeTab).use(taskBox)
+    .use(markdownPlugins).use(editable ? diagrams : []).use(history).use(paste).use(clipboard).use(listener).use(cursor).use(trailing).use(tableTab).use(blockKeys).use(codeTab).use(taskBox)
     .use(decorationPlugin(highlightKey)).use(decorationPlugin(flashKey)).use(decorationPlugin(foundKey)).use(linkPlugin).use(bidiPlugin).use(uiPlugin(hooks))
     // The standard keys format as the toolbar does; typed Markdown still stays text.
     .use($prose(() => keymap({
