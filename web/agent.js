@@ -603,17 +603,18 @@ export function createPeople({ root, invite, panel, me, getName, getId = () => n
   /**
    * Any of: `agents` (the buddies here, with their statuses), `people` (who
    * commented), `room` (the project's, for its owner: null while closed),
-   * `here` (who has the project open).
+   * `here` (who has the project open). Whether a person's colour changed.
    */
   function render({ agents, people: nextWriters, room: nextRoom, here: nextHere }) {
     if (agents) statuses = agents;
     if (nextWriters) writers = nextWriters;
     if (nextRoom !== undefined) room = nextRoom;
     if (nextHere) here = nextHere;
-    setPeople([getName(), ...writers.map((p) => p.name), ...here.map((p) => p.name), ...(room?.players.map((p) => p.name) ?? [])]);
+    const recoloured = setPeople([getName(), ...writers.map((p) => p.name), ...here.map((p) => p.name), ...(room?.players.map((p) => p.name) ?? [])]);
     paintFaces();
     // Not while a field on the card is being typed in.
     if (showing && showing !== 'me' && !panel.querySelector('input:focus, textarea:focus')) paintCard();
+    return recoloured;
   }
 
   // ---- @names in the text ----

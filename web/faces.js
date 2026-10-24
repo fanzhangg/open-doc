@@ -42,10 +42,15 @@ export function setBuddies(buddies) {
   recolor();
 }
 
-/** The names of the people in this doc, so their colours differ from each other's and the buddies'. */
+/**
+ * The names of the people in this doc, so their colours differ from each
+ * other's and the buddies'; whether any of their colours changed.
+ */
 export function setPeople(list) {
+  const before = people.map((name) => slots.get(name.toLowerCase()));
   people = list;
   recolor();
+  return people.length !== before.length || people.some((name, i) => slots.get(name.toLowerCase()) !== before[i]);
 }
 
 // The buddies keep theirs, so their edits keep their colour; people take what is left.

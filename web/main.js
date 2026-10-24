@@ -353,8 +353,7 @@ async function start() {
     settleCarets = setTimeout(paintMarks, WORKING_MS); // names go once they stop
   });
   events.on('here', (data) => {
-    people.render({ here: data });
-    repaintThreads(); // someone new may move a colour
+    if (people.render({ here: data })) repaintThreads(); // someone new moved a colour
   });
   events.on('saved', (data) => showUnsaved(data.error));
   // Where you are in the text, for the others; a reader has no caret.
@@ -368,8 +367,7 @@ async function start() {
   });
   events.on('agents', (data) => showAgents(data));
   events.on('room', (data) => {
-    people.render({ room: data });
-    repaintThreads();
+    if (people.render({ room: data })) repaintThreads();
   });
   events.on('settings', (data) => settings.receive(data));
   events.on('renamed', (data) => {
