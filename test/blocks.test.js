@@ -62,8 +62,23 @@ const CORPUS = [
   ...JSON.parse(readFileSync(new URL('fixtures/rendered-text.json', import.meta.url), 'utf8')).cases.map((c) => c.markdown)
     .filter((markdown) => !markdown.includes(']:')), // a definition ties blocks together: worked out whole
   'Setext\n======', '* one\n* two\n\n  more', '1) a\n2) b', '> quote\nlazy', '| a | b |\n|---|:-:|\n| c | d |', '```js\nx\n```',
-  'A hard\nwrapped __line__.', '<br />', '---', '- [ ] task',
+  'A hard\nwrapped __line__.', '      ', '---', '- [ ] task', // '      ': blank lines, an empty paragraph
 ].join('\n\n') + '\n\n| last | table |\n| - | - |\n| x | y |\n';
+
+test('an empty paragraph, blank lines, reads and writes with a block beside it, not the whole doc', async () => {
+  const parse = await editorParser();
+  const serialize = await editorSerializer();
+  const serializeNodes = (nodes) => serialize(parse('').type.create(null, nodes));
+  const given = 'Alpha.\n\n\n\nBeta.\n\nGamma.\n';
+  const base = parse(given);
+  assert.deepEqual(base.content.content.map((node) => node.type.name), ['paragraph', 'paragraph', 'paragraph', 'paragraph']);
+  const blocks = blocksOf(base, given);
+  const after = base.copy(Fragment.from([parse('# Alpha.').child(0), ...base.content.content.slice(1)]));
+  const written = textOfDoc(after, base, given, blocks, serializeNodes, parse);
+  assert.equal(written?.text, given.replace('Alpha.', '# Alpha.'));
+  assert.deepEqual(parseRun(base, given, blocks, written.text, parse)?.blocks, written.blocks);
+  assert.equal(serialize(after), written.text, 'and whole, the same');
+});
 
 test('a doc changed in a few blocks reads, writes and projects as it would whole', async () => {
   const parse = await editorParser();
@@ -134,6 +149,7 @@ test('a doc changed in a few blocks reads, writes and projects as it would whole
     }
     assert.deepEqual(projectDoc(after), projectDoc(Node.fromJSON(after.type.schema, after.toJSON())), 'kept lines are the same as fresh ones');
   }
+  console.log('WHOLES', wholes, typedOwn);
   assert.ok(wholes < runs / 5, `${wholes} of ${runs} worked out whole`);
   assert.ok(typedOwn > runs / 4, `${typedOwn} of ${runs} typed into in their own style`);
 });

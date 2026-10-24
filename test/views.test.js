@@ -329,6 +329,21 @@ test('markdown view: typed Markdown stays text and saves escaped', async () => {
   assert.equal(await run(`document.querySelectorAll('.ProseMirror h2, .ProseMirror strong, .ProseMirror ul').length`), 0);
 });
 
+test('markdown view: Enter on an empty heading makes it a paragraph; Backspace at the start of a quote takes it out', async () => {
+  await make('markdown', '# Title\n\nBody.\n');
+  await select('Title', 0, 5);
+  await press('Backspace');
+  await press('Enter');
+  assert.equal(await run(`document.querySelector('.ProseMirror').firstElementChild.tagName`), 'P');
+  await type('Intro');
+  assert.equal(await getText(), 'Intro\n\nBody.\n');
+
+  await make('markdown', 'One.\n\n> Quoted.\n>\n> More.\n');
+  await select('Quoted.', 0, 0);
+  await press('Backspace');
+  assert.equal(await getText(), 'One.\n\nQuoted.\n\n> More.\n');
+});
+
 test('markdown view: the standard keys format the selection, and Mod+K opens the link popover', async () => {
   for (const [letter, modifiers, saved] of [['b', MOD, '**beta**'], ['i', MOD, '*beta*'], ['e', MOD, '`beta`'], ['x', MOD | 8, '~~beta~~']]) {
     await make('markdown', 'Alpha beta.\n', { toolbar: true });
@@ -506,6 +521,32 @@ test('A5: markdown view: front matter shows as source, which nothing formats, an
   assert.equal(await getText(), text.replace('Plan\ntags', 'Plans\ntags'));
 });
 
+test('markdown view: an image at a path shows what `image` gives for it; one on the web, as it is', async () => {
+  const dot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await run(`contract.images = { 'pics/a.png': ${JSON.stringify(dot)} }`);
+  const text = '![a](pics/a.png) ![b](https://example.com/b.png) ![c](missing.png)\n';
+  await make('markdown', text);
+  await waitFor(() => run(`document.querySelector('.ProseMirror img[alt="a"]').getAttribute('src')`), 5000, 'the image');
+  assert.deepEqual(await run(`[...document.querySelectorAll('.ProseMirror img:not(.ProseMirror-separator)')].map((i) => [i.alt, i.getAttribute('src')])`), [
+    ['a', dot], ['b', 'https://example.com/b.png'], ['c', null],
+  ]);
+  assert.equal(await getText(), text);
+});
+
+test('markdown view: an empty paragraph is saved as blank lines, and others\' edits keep it and the caret', async () => {
+  await make('markdown', 'One.\n\nTwo.\n\nThree.\n');
+  await select('One.', 4, 4);
+  await press('Enter');
+  await press('Enter');
+  assert.equal(await getText(), 'One.\n\n\n\n\n\nTwo.\n\nThree.\n', 'two empty paragraphs, no <br />');
+  await run(`view.applyText(view.getText().replace('Three.', 'Three!'))`);
+  await type('x');
+  assert.equal(await getText(), 'One.\n\n\n\nx\n\nTwo.\n\nThree!\n');
+  await make('markdown', 'One.\n\n\n\nTwo.\n');
+  assert.equal(await run(`document.querySelector('.ProseMirror').children.length`), 3, 'read back as one');
+  assert.equal(await getText(), 'One.\n\n\n\nTwo.\n');
+});
+
 test('markdown view: a task list item shows its box; clicking it ticks the item, saved as written otherwise', async () => {
   await make('markdown', '* [ ] one\n* [X] two\n\nAfter.\n');
   // A press in the box, in the item's gutter.
@@ -560,7 +601,7 @@ test('plain view: whitespace marks and guides draw over the text without changin
 
 // A key press, as typing is: keyDown (with the character it types, if any), then keyUp.
 async function press(key, { modifiers = 0, text } = {}) {
-  const codes = { Tab: 9, Enter: 13, Escape: 27, ArrowDown: 40 };
+  const codes = { Backspace: 8, Tab: 9, Enter: 13, Escape: 27, ArrowDown: 40 };
   await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: codes[key], modifiers, ...(text ? { text } : {}) });
   await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: codes[key], modifiers });
 }

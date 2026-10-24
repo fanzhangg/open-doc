@@ -7,12 +7,30 @@
 
 import { spawn } from 'node:child_process';
 import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { extname, isAbsolute, join, relative, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { MAX_TEXT_BYTES, SIDECAR_SUFFIX } from '../store/files.js';
 
 const notFound = (rel) => Object.assign(new Error(`${rel}: no such file in the project`), { code: 'not_found' });
 const hidden = (part) => part.startsWith('.');
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+// The images a doc shows, by extension, and how big one may be: it goes to
+// a teammate's page in one message, base64, under the relay's limit.
+const IMAGE_TYPES = {
+  '.apng': 'image/apng', '.avif': 'image/avif', '.gif': 'image/gif', '.jpeg': 'image/jpeg', '.jpg': 'image/jpeg',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+};
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Where link `href` in doc `docPath` goes: from the doc's own place, or, in
+ * project `root` (null for a single doc), from the project's top when it
+ * starts with `/`, as GitHub resolves links in a repo.
+ */
+export function linkURL(href, docPath, root) {
+  if (root && href.startsWith('/')) return new URL(`.${href}`, pathToFileURL(join(root, sep)));
+  return new URL(href, pathToFileURL(docPath));
+}
 
 /**
  * The real path of `rel` in the project `root`; `not_found` when it is not
@@ -112,6 +130,18 @@ export function projectService(root) {
         if (size > MAX_TEXT_BYTES) return { problem: 'large' };
         const bytes = await handle.readFile();
         return bytes.includes(0) ? { problem: 'binary' } : { text: bytes.toString('utf8') };
+      } finally {
+        await handle.close();
+      }
+    },
+
+    /** The image `rel`: { type, data } (base64), or { problem: 'large' }. */
+    async image(rel) {
+      const type = IMAGE_TYPES[extname(rel).toLowerCase()];
+      if (!type) throw notFound(rel);
+      const { handle, size } = await openFile(root, rel);
+      try {
+        return size > MAX_IMAGE_BYTES ? { problem: 'large' } : { type, data: (await handle.readFile()).toString('base64') };
       } finally {
         await handle.close();
       }

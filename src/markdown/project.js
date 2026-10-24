@@ -104,10 +104,36 @@ export const startsFrontMatter = (markdown) => FRONT_MATTER.test(markdown);
 
 /** The markdown syntax tree (mdast) that the projection is built from. */
 export function parseMarkdown(markdown) {
-  return withFrontMatter(markdown, (text) => fromMarkdown(text, {
+  return withBlankParagraphs(withFrontMatter(markdown, (text) => fromMarkdown(text, {
     extensions: [gfm(), cjkFriendlyExtension()],
     mdastExtensions: [gfmFromMarkdown()],
-  }));
+  })), markdown);
+}
+
+/**
+ * `tree`, the tree of `markdown`, with an empty paragraph as the editor
+ * keeps one (a blank line it shows) for each two blank lines more than part
+ * two top-level blocks, and each two before the first: one at the end of
+ * the blank lines before it. The editor writes one so (web/markdown-schema.js).
+ */
+export function withBlankParagraphs(tree, markdown) {
+  const children = [];
+  let end = null; // where the block before ends; null before the first
+  for (const node of tree.children) {
+    const start = node.position?.start.offset;
+    const gap = start === undefined ? 'x' : markdown.slice(end ?? 0, start);
+    if (!/\S/.test(gap)) {
+      const breaks = [...gap.matchAll(/\n/g)].map((found) => (end ?? 0) + found.index);
+      for (let j = 0; j < Math.floor((breaks.length - (end === null ? 0 : 2)) / 2); j++) {
+        const at = end === null ? breaks[2 * j] : breaks[2 * j + 1] + 1;
+        children.push({ type: 'paragraph', children: [], position: { start: { offset: at }, end: { offset: at } } });
+      }
+    }
+    children.push(node);
+    if (start !== undefined) end = node.position.end.offset;
+  }
+  tree.children = children;
+  return tree;
 }
 
 /**

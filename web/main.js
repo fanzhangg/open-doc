@@ -133,6 +133,20 @@ function followReading() {
 }
 const reading = () => level === 'read' || lineDown;
 
+// A folder window with no doc (the app opened a folder without any): its
+// files, and in the page a way to start a doc or a folder there.
+async function startFolder() {
+  const [{ theme }, { name }] = await Promise.all([window.ponjoDesktop.settings(), window.ponjoDesktop.folder()]);
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  document.title = name;
+  document.documentElement.setAttribute('data-folder-only', '');
+  files = createFileList({ onError: (message) => setStatus(message, 'error') });
+  for (const button of document.querySelectorAll('.pj-folder-empty [data-kind]')) {
+    button.addEventListener('click', () => files.create(button.dataset.kind));
+  }
+  await files.ready;
+}
+
 async function start() {
   const gone = new URLSearchParams(location.search).get('gone');
   if (gone !== null) {
@@ -149,6 +163,7 @@ async function start() {
   try {
     initial = await api.state();
   } catch (error) {
+    if (error.code === 'folder_only') return startFolder();
     document.body.textContent = `Could not load the doc: ${error.message}`;
     return;
   }
@@ -409,6 +424,7 @@ function makeView(chosen, text) {
       } else if (commentsShown()) select(id, { focus: false });
     },
     onLayout: () => margin.layout(),
+    image: api.image,
     editable: chosen.editable && !reading(),
     color: chosen.color,
     settings: chosen.settings,

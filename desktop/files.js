@@ -89,17 +89,6 @@ export async function freeUntitledPath(dir) {
   throw new Error(`no free name for a new doc in ${dir}`);
 }
 
-/** Create the next free `Untitled N.md` in `dir`; another app taking the name first just moves on. */
-export async function createUntitled(dir) {
-  for (;;) {
-    try {
-      return await createDoc(await freeUntitledPath(dir));
-    } catch (error) {
-      if (error.code !== 'exists') throw error;
-    }
-  }
-}
-
 /**
  * Rename (or move) a file and its sidecar together, as `ponjo mv` does.
  * A name that only changes case works on case-insensitive disks too. Never

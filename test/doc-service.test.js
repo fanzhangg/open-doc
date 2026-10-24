@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
-import { appendFile, chmod, open, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, open, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { sidecarPath } from '../src/store/files.js';
 import { openDoc } from '../src/host/doc-service.js';
@@ -300,6 +300,42 @@ test('the project\'s files, at the door: whoever may read lists, reads and opens
       await alone.doc.close();
     }
   });
+});
+
+test('an image the doc shows, at the door: from the doc\'s place or the project\'s top, only what the project shows, and not too big', async () => {
+  const settingsDir = await fakeConfig();
+  const folder = await realpath(dirname(await tempDoc()));
+  await mkdir(join(folder, 'notes', 'pics'), { recursive: true });
+  await mkdir(join(folder, '.private'));
+  const docPath = join(folder, 'notes', 'plan.md');
+  await writeFile(docPath, SAMPLE);
+  const png = Buffer.from('not really a png');
+  for (const path of ['notes/pics/a.png', 'top.PNG', '.private/b.png']) await writeFile(join(folder, path), png);
+  await writeFile(join(folder, 'notes', 'pics', 'big.jpg'), Buffer.alloc(5 * 1024 * 1024 + 1));
+  await writeFile(join(folder, 'notes', 'pics', 'a.txt'), 'text');
+  const opened = await openTestDoc(docPath, { settingsDir, folder });
+  try {
+    const reader = { ...(await opened.doc.owner()), level: 'read' };
+    const image = (src) => opened.doc.call('image', { src }, reader);
+    const shown = { type: 'image/png', data: png.toString('base64') };
+    assert.deepEqual(await image('pics/a.png'), shown);
+    assert.deepEqual(await image('./pics/a%2Epng'), shown, 'as a link, decoded');
+    assert.deepEqual(await image('../top.PNG'), shown);
+    assert.deepEqual(await image('/top.PNG'), shown, 'from the project\'s top');
+    assert.deepEqual(await image('pics/big.jpg'), { problem: 'large' });
+    for (const src of ['pics/a.txt', '/.private/b.png', '../../outside.png', 'pics/none.png', 'https://example.com/a.png']) {
+      await assert.rejects(image(src), refused('not_found'), src);
+    }
+  } finally {
+    await opened.doc.close();
+  }
+  const alone = await openTestDoc(docPath, { settingsDir });
+  try {
+    assert.deepEqual(await alone.call('image', { src: 'pics/a.png' }), { type: 'image/png', data: png.toString('base64') }, 'a doc on its own, from its folder');
+    await assert.rejects(alone.call('image', { src: '../top.PNG' }), refused('not_found'));
+  } finally {
+    await alone.doc.close();
+  }
 });
 
 test('a buddy asked to resolve resolves its thread with its reply; the other buddies there stop', { timeout: 30_000 }, async () => {

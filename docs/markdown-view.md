@@ -37,6 +37,10 @@ designed, not built.
   which would put their bytes in the file.
 - **Front matter** (YAML between `---` lines at the top) shows as its
   source, muted, typed into as text; nothing formats it.
+- **Blank lines.** An empty paragraph (Enter on an empty line) is saved as
+  two more blank lines, not `<br />`, and two more blank lines read back as
+  one; in a quote or a list it stays `<br />`. Other Markdown readers show
+  it as the usual space between paragraphs.
 - **Link definitions** (`[d]: https://…`) are kept as written, and so is
   every reference link (`[docs][d]`) in a block not changed but by typing.
 - **Keys:** Undo, Redo, the formatting above, Comment, Find, and focus
@@ -57,7 +61,9 @@ designed, not built.
 - **Diagrams.** A ` ```mermaid ` block shows as its diagram. Its source is
   hidden and cannot be typed into; a click selects the whole block, to
   comment on or delete. An AI buddy changes it, asked in a comment.
-- Images in the file show; the view does not insert them.
+- Images in the file show; the view does not insert them. One on the web
+  (`https:`) loads from there; one at a path comes from the doc host
+  (`image`, as a link resolves, only what the project shows), up to 5 MB.
 - **Find and replace** (Mod+F; Mod+Alt+F with Replace), as in every view: a
   bar at the page's top right finds what a reader sees, not the markup,
   ignoring case; every match is marked, the current one stronger, with how

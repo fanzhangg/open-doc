@@ -69,6 +69,11 @@ export const api = {
   list: (path) => call('list', { path }),
   /** The project's file `path` to show read only: { text } or { problem: 'large' | 'binary' }. */
   read: (path) => call('read', { path }),
+  /** An image the doc shows, `src` as written in it, as a `data:` URL; null when it is too big to send. */
+  async image(src) {
+    const { type, data } = await call('image', { src });
+    return data ? `data:${type};base64,${data}` : null;
+  },
   /**
    * The owner's: the project's room, { link, locked, players: [{ id, name,
    * level }] } while it is open, else null, and changing it, each answered
