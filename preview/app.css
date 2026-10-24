@@ -123,7 +123,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-avatar-agent { border-radius: 0; background: none; }
 /* People are circles in a hat, the owner's a crown, a teammate's a top hat;
    agents are faces (faces.js): a circle, square, triangle, pentagon or cloud. */
-.pj-face { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; }
+.pj-face { display: block; width: 100%; height: 100%; overflow: visible; }
 .pj-face-body, .pj-face-look { transform-box: view-box; transform-origin: 50% 50%; transition: filter 0.15s; }
 .pj-face-hat { color: var(--text); }
 .pj-face-focused { display: none; }
@@ -139,23 +139,22 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-agent-face, .pj-profile-face { position: relative; display: flex; }
 
 /* Everyone has three states, the same on every face of them: at work (it
-   grows and hops, squashing and stretching, its face looks about and its
-   eyes are focused, which shows even still: a buddy running, a person
-   moving or typing), here (as drawn,
-   still) and away (greyed: a buddy that does not answer here, a person not
+   grows, its body rolls, its face bobs and its eyes are focused, which
+   shows even still: a buddy running, a person moving or typing), here (as
+   drawn, still) and away (greyed: a buddy that does not answer here, a person not
    in this doc). A failed run is a moment: the face shakes and flashes red,
    once. A face in the header you point at grows a little, and nothing else. */
 :where(.pj-agent-face, .pj-me):hover .pj-avatar { transform: scale(1.1); }
-:is([data-presence="working"], .pj-typing) .pj-avatar { transform: scale(1.18); }
-:is([data-presence="working"], .pj-typing) .pj-face { animation: pj-hop 0.7s ease-in-out infinite alternate; }
-:is([data-presence="working"], .pj-typing) .pj-face-look { animation: pj-bob 0.35s ease-in-out infinite alternate; }
+:is([data-presence="working"], .pj-typing) .pj-avatar { transform: scale(1.12); }
+:is([data-presence="working"], .pj-typing) .pj-face-body { animation: pj-spin 2.4s linear infinite; }
+:is([data-presence="working"], .pj-typing) .pj-face-look { animation: pj-bob 0.8s ease-in-out infinite alternate; }
 :is([data-presence="working"], .pj-typing) .pj-face-eyes { display: none; }
 :is([data-presence="working"], .pj-typing) .pj-face-focused { display: inline; }
 [data-presence="away"] .pj-avatar { filter: grayscale(1); opacity: 0.45; }
 .pj-avatar.pj-failed { animation: pj-shake 0.45s ease-in-out; }
 .pj-failed .pj-face-body { animation: pj-red 1s; }
-@keyframes pj-hop { from { transform: scale(1.1, 0.88); } to { transform: translateY(-14%) scale(0.92, 1.08); } }
-@keyframes pj-bob { from { transform: translate(-3px, 1px); } to { transform: translate(3px, -2px); } }
+@keyframes pj-spin { to { transform: rotate(360deg); } }
+@keyframes pj-bob { from { transform: translate(-2px, 1px); } to { transform: translate(2px, -2px); } }
 @keyframes pj-shake { 20%, 60% { transform: translateX(-3px) rotate(-5deg); } 40%, 80% { transform: translateX(3px) rotate(5deg); } }
 @keyframes pj-red { 0%, 70% { fill: var(--red); } }
 
