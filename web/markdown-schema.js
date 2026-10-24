@@ -9,7 +9,7 @@ import {
 } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import remarkCjkFriendly from 'remark-cjk-friendly';
-import { withFrontMatter } from '../src/markdown/project.js';
+import { withBlankParagraphs, withFrontMatter } from '../src/markdown/project.js';
 
 // CommonMark does not close `**熟悉：**直接` (a run after full-width
 // punctuation, before a CJK letter); this reads and writes it as bold, the
@@ -41,6 +41,15 @@ const frontMatterSyntax = $remark('frontMatter', () => function frontMatter() {
   this.parser = (markdown, file) => withFrontMatter(String(markdown), (text) => parse(text, file));
   const data = this.data();
   (data.toMarkdownExtensions ??= []).push({ handlers: { yaml: (node) => (node.value ? `---\n${node.value}\n---` : '---\n---') } });
+});
+// An empty paragraph between top-level blocks is two more blank lines, not
+// Milkdown's `<br />`, and reads back as one (withBlankParagraphs). One in a
+// quote or a list stays `<br />`.
+const blankLines = $remark('blankLines', () => function blankLines() {
+  const compile = this.compiler;
+  const blank = (node) => node.type === 'paragraph' && node.children.length === 1 && node.children[0].type === 'html' && node.children[0].value === '<br />';
+  this.compiler = (tree, file) => compile({ ...tree, children: tree.children.map((node) => (blank(node) ? { type: 'html', value: '' } : node)) }, file);
+  return (tree, file) => withBlankParagraphs(tree, String(file));
 });
 const frontMatterNode = $node('front_matter', () => ({
   content: 'text*',
@@ -115,4 +124,4 @@ const swapped = new Map([
 const FORMATTING = /^(InputRule<|Keymap<(emphasis|strong|inlineCode|paragraph|heading|blockquote|codeBlock|bulletListKeymap|orderedList|strikethrough)>)/;
 const kept = (plugin) => !FORMATTING.test(plugin.meta?.displayName ?? '');
 
-export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly, frontMatterSyntax, frontMatterNode].flat().filter(kept);
+export const markdownPlugins = [commonmark.map((plugin) => swapped.get(plugin) ?? plugin), gfm, cjkFriendly, frontMatterSyntax, frontMatterNode, blankLines].flat().filter(kept);

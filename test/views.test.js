@@ -533,6 +533,20 @@ test('markdown view: an image at a path shows what `image` gives for it; one on 
   assert.equal(await getText(), text);
 });
 
+test('markdown view: an empty paragraph is saved as blank lines, and others\' edits keep it and the caret', async () => {
+  await make('markdown', 'One.\n\nTwo.\n\nThree.\n');
+  await select('One.', 4, 4);
+  await press('Enter');
+  await press('Enter');
+  assert.equal(await getText(), 'One.\n\n\n\n\n\nTwo.\n\nThree.\n', 'two empty paragraphs, no <br />');
+  await run(`view.applyText(view.getText().replace('Three.', 'Three!'))`);
+  await type('x');
+  assert.equal(await getText(), 'One.\n\n\n\nx\n\nTwo.\n\nThree!\n');
+  await make('markdown', 'One.\n\n\n\nTwo.\n');
+  assert.equal(await run(`document.querySelector('.ProseMirror').children.length`), 3, 'read back as one');
+  assert.equal(await getText(), 'One.\n\n\n\nTwo.\n');
+});
+
 test('markdown view: a task list item shows its box; clicking it ticks the item, saved as written otherwise', async () => {
   await make('markdown', '* [ ] one\n* [X] two\n\nAfter.\n');
   // A press in the box, in the item's gutter.
