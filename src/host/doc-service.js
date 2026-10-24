@@ -9,7 +9,7 @@
 // through Room (room.js), at the same door.
 
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import { createAnchor, locate } from '../core/anchor.js';
 import { appendedComments, askedBy, movedAnchor, newComment, newId, parseSidecar, peopleOf, serializeSidecar, threadsOf, validAnchor } from '../core/comments.js';
@@ -947,11 +947,23 @@ async function fileHash(path) {
 }
 
 // A line per run in the config folder's logs/runs.jsonl: what a slow or
-// missing reply was. Never fails a run.
+// missing reply was. Then each log there (an agent's too, as the Ponjo
+// agent's ponjo.jsonl) past LOG_LIMIT keeps its newest half, from a line's
+// start: old runs are worth less. Never fails a run.
+const LOG_LIMIT = 10 * 1024 * 1024;
 async function logRun(dir, entry) {
+  const logs = join(dir, 'logs');
   try {
-    await mkdir(join(dir, 'logs'), { recursive: true });
-    await appendFile(join(dir, 'logs', 'runs.jsonl'), `${JSON.stringify(entry)}\n`);
+    await mkdir(logs, { recursive: true });
+    await appendFile(join(logs, 'runs.jsonl'), `${JSON.stringify(entry)}\n`);
+    for (const name of (await readdir(logs)).filter((n) => n.endsWith('.jsonl'))) {
+      const path = join(logs, name);
+      const { size } = await stat(path);
+      if (size <= LOG_LIMIT) continue;
+      const file = await open(path);
+      const { buffer } = await file.read({ buffer: Buffer.alloc(LOG_LIMIT / 2), position: size - LOG_LIMIT / 2 }).finally(() => file.close());
+      await writeFile(path, buffer.subarray(buffer.indexOf('\n') + 1));
+    }
   } catch (error) {
     console.error('Could not log a run:', error);
   }

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -173,6 +173,22 @@ test('a script that exits 1 is answered with a reply marked failed; @mentioning 
     const logged = await runLog(settingsDir);
     assert.deepEqual(logged.map((l) => [l.doc, l.buddy, l.thread, l.outcome, l.code]), [[docPath, 'Clippy', id, 'failed', 1], [docPath, 'Clippy', id, 'ok', 0]], 'each run is logged');
     assert.ok(logged.every((l) => Number.isInteger(l.ms) && !Number.isNaN(Date.parse(l.at))));
+  });
+});
+
+test('a log past 10 MB keeps its newest half, from a line\'s start: runs.jsonl and an agent\'s', { timeout: 30_000 }, async () => {
+  await withDoc(async ({ call, settingsDir }) => {
+    const logs = join(settingsDir, 'logs');
+    await mkdir(logs, { recursive: true });
+    const old = `${JSON.stringify({ old: 'x'.repeat(1000) })}\n`.repeat(11 * 1024);
+    await writeFile(join(logs, 'runs.jsonl'), old);
+    await writeFile(join(logs, 'ponjo.jsonl'), old);
+    const id = await comment(call, '@Clippy replace "extra load" with "extra peak load"');
+    const sizes = () => Promise.all(['runs.jsonl', 'ponjo.jsonl'].map(async (name) => (await stat(join(logs, name))).size));
+    await until(async () => (await sizes()).every((size) => size <= 5 * 1024 * 1024), 'the logs trimmed');
+    assert.equal((await runLog(settingsDir)).at(-1).thread, id, 'the new line is kept');
+    const agents = (await readFile(join(logs, 'ponjo.jsonl'), 'utf8')).trim().split('\n');
+    assert.ok(agents.every((line) => JSON.parse(line).old), 'whole lines');
   });
 });
 

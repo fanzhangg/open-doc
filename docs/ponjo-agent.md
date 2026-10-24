@@ -109,7 +109,8 @@ flowchart LR
 
 - **Tests** call `turn` with a fake `infer`, and each `infer` on a fake
   server of its API.
-- **Each turn's messages are logged** to a file the script names.
+- **Each turn's messages are logged** to `logs/ponjo.jsonl` in the config
+  folder, which the app keeps under 10 MB (docs/architecture.md, How a turn works).
 
 ## Open questions
 

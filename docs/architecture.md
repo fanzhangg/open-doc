@@ -477,7 +477,8 @@ the ids of those who may ask. AI buddies run only on docs open in a window.
    was given, so a comment the user wrote meanwhile still waits on X.
 4. The private folder is deleted, and the turn gets a line in the config
    folder's `logs/runs.jsonl`: doc, buddy, thread, start, duration, and
-   `ok`, `failed`, `timedOut` or `stopped` with the exit code.
+   `ok`, `failed`, `timedOut` or `stopped` with the exit code. A `.jsonl`
+   log there past 10 MB, an agent's too, then keeps its newest half.
 
 Resolving a thread ends its turns at once, with no answer; a turn that
 ended but is not merged yet is dropped. Deleting a buddy ends its turns too.
