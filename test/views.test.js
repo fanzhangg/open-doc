@@ -365,6 +365,64 @@ test('markdown view: the toolbar switches a numbered list to bullets and back', 
   assert.equal(await getText(), '1. one\n2. two\n');
 });
 
+// Stretch the selection to `end` characters into the first piece of text holding `quote`.
+const selectTo = (quote, end) => run(`(() => {
+  const walker = document.createTreeWalker(document.querySelector('.pj-editor'), NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (!node.data.includes(${JSON.stringify(quote)})) node = walker.nextNode();
+  getSelection().getRangeAt(0).setEnd(node, node.data.indexOf(${JSON.stringify(quote)}) + ${end});
+})()`);
+
+test('markdown view: Tab indents the lines of a code block by its own indent, and Shift+Tab outdents them; elsewhere Tab stays in the page', async () => {
+  for (const [text, quote, saved] of [['```js\nlet a\n```\n', 'let a', '```js\n  let a\n```\n'], ['```py\nif a:\n    b\n```\n', 'if a', '```py\n    if a:\n    b\n```\n']]) {
+    await make('markdown', text);
+    await select(quote, 0, 0);
+    await press('Tab');
+    assert.equal(await getText(), saved, 'at the caret');
+  }
+  await make('markdown', '```js\nlet a\nlet b\n```\n');
+  await select('let a', 0, 3);
+  await selectTo('let b', 2);
+  await new Promise((done) => setTimeout(done, 50));
+  await press('Tab');
+  assert.equal(await getText(), '```js\n  let a\n  let b\n```\n', 'the lines selected');
+  await press('Tab', { modifiers: 8 });
+  assert.equal(await getText(), '```js\nlet a\nlet b\n```\n');
+  for (const [text, quote] of [['Some text.\n', 'text'], ['# Title\n', 'Title'], ['- one\n- two\n', 'one']]) {
+    await make('markdown', text);
+    await select(quote, 0, 0);
+    await run(`document.addEventListener('keydown', (event) => { window.tabKept = event.defaultPrevented; }, { once: true })`);
+    await press('Tab');
+    assert.equal(await run('window.tabKept'), true, `Tab is the page's in ${JSON.stringify(text)}`);
+    assert.equal(await getText(), text);
+  }
+});
+
+test('markdown view: a block style changes only the lines the selection touches, not the rest of their paragraph', async () => {
+  for (const [text, quote, tool, saved] of [
+    ['First line\nsecond line\n\nThird.\n', 'First', 'h1', '# First line\n\nsecond line\n\nThird.\n'],
+    ['Before\nFirst line\nsecond line\n', 'First', 'h2', 'Before\n\n## First line\n\nsecond line\n'],
+    ['Typed\\\nafter Shift+Enter\n', 'Typed', 'h1', '# Typed\n\nafter Shift+Enter\n'],
+  ]) {
+    await make('markdown', text, { toolbar: true });
+    await select(quote, 1, 1);
+    await run(`contract.tool('${tool}')`);
+    assert.equal(await getText(), saved, tool);
+  }
+  for (const [tool, saved] of [
+    ['codeBlock', 'Before\n\n```\nfirst line\nsecond line\n```\n\nAfter\n'],
+    ['bullets', 'Before\n\n- first line\n  second line\n\nAfter\n'],
+    ['h1', 'Before\n\n# first line\n\n# second line\n\nAfter\n'],
+  ]) {
+    await make('markdown', 'Before\nfirst line\nsecond line\nAfter\n', { toolbar: true });
+    await select('first line', 2, 2);
+    await selectTo('second line', 2);
+    await new Promise((done) => setTimeout(done, 50));
+    await run(`contract.tool('${tool}')`);
+    assert.equal(await getText(), saved, `${tool} over two lines`);
+  }
+});
+
 test('markdown view: a change applied with who made it glows, with their name', async () => {
   await make('markdown', 'Alpha.\n\nBeta.\n');
   await run(`view.applyText('Alpha.\\n\\nBeta two.\\n', { by: 'Ana' })`);
@@ -542,6 +600,29 @@ test('plain view: Tab indents and Shift+Tab outdents the lines of a selection', 
   assert.equal(await getText(), 'x\n  one\n  two\n');
   for (let i = 0; i < 2; i++) await press('Tab', { modifiers: 8 });
   assert.equal(await getText(), 'x\none\ntwo\n');
+});
+
+test('plain view: a code file\'s keys: Mod+/ comments out the lines and back, Mod+] and Mod+[ indent and outdent them; Mod+/ in a file with no comments is not the text\'s', async () => {
+  const slash = async () => {
+    for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: '/', code: 'Slash', windowsVirtualKeyCode: 191, modifiers: MOD });
+  };
+  await make('plain', 'let a = 1;\nlet b = 2;\n', { name: 'code.js', color: true });
+  await waitFor(() => run(`document.querySelector('.cm-content .tok-keyword, .cm-content [class*="ͼ"]') !== null`), 10_000, 'the language loaded');
+  await select('let', 0, 0); // the first line's, in a span of its own once coloured
+  await slash();
+  assert.equal(await getText(), '// let a = 1;\nlet b = 2;\n');
+  await slash();
+  assert.equal(await getText(), 'let a = 1;\nlet b = 2;\n');
+  await shortcut(']');
+  assert.equal(await getText(), '    let a = 1;\nlet b = 2;\n', 'the indent the settings give, with nothing indented yet');
+  await shortcut('[');
+  assert.equal(await getText(), 'let a = 1;\nlet b = 2;\n');
+  await make('plain', 'Plain words.\n', { name: 'notes.txt', color: true });
+  await select('words', 0, 0);
+  await run(`document.addEventListener('keydown', (event) => { window.slashTaken = event.defaultPrevented; }, { once: true })`);
+  await slash();
+  assert.equal(await run('window.slashTaken'), false, 'left to open the shortcuts');
+  assert.equal(await getText(), 'Plain words.\n');
 });
 
 test('plain view: the status bar shows the indent and saves what its menu and toggles pick', async () => {

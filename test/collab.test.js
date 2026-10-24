@@ -223,6 +223,22 @@ for (const [prefix, teammate] of [['', false], ['through the relay: ', true]]) {
     assert.equal(await settled(), 'Alpha ONE typed more.\n\nBeta two.\n\nGamma pulled.\n');
   });
 
+  test(`${prefix}10. one composes with an IME while the other types in the same paragraph: what was composed is whole, and so is the other's typing`, async () => {
+    for (const view of ['markdown', 'plain']) {
+      await make('The quick brown fox jumps over the lazy dog.\n', view);
+      await select(0, 'quick', 5);
+      for (const [k, composed] of ['n', 'ni', 'nih', 'niha', 'nihao'].entries()) {
+        await page.send('Input.imeSetComposition', { text: composed, selectionStart: composed.length, selectionEnd: composed.length });
+        const { host } = await run('collab.state()');
+        const at = host.indexOf('lazy') + 4 + k;
+        await run(`collab.inject(${JSON.stringify([{ from: at, to: at, insert: 'xyzxy'[k] }])})`);
+        await wait(200);
+      }
+      await type('你好');
+      assert.equal(await settled(), 'The quick你好 brown fox jumps over the lazyxyzxy dog.\n', view);
+    }
+  });
+
   test(`${prefix}9. a buddy's turn lands while one types: the typing stays; its edit lands where no one typed, and where it collides it runs once more on the typed text`, { timeout: 60_000 }, async () => {
     await make('Alpha one.\n\nBeta two.\n\nGamma three.\n');
     await run(`collab.ask('@Pilot hold replace "Gamma three." with "Gamma buddy."')`);

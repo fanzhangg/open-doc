@@ -425,7 +425,8 @@ function buildMenu() {
       role: 'help',
       submenu: [
         {
-          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', ...PAGE_KEY, enabled: page,
+          // The page's on macOS too: in the plain view Mod+/ comments out lines of code.
+          label: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/', registerAccelerator: false, enabled: page,
           click: (_item, win) => pageCommand(win, 'shortcuts'),
         },
       ],

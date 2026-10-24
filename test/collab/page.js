@@ -107,6 +107,8 @@ function diffs(a, b) {
 }
 
 const stages = [...document.querySelectorAll('.pj-stage')];
+let injected = 0; // a third writer's edits: each its own id
+
 const collab = {
   host,
   clients: [],
@@ -203,7 +205,7 @@ const collab = {
   // An edit from a third writer, landing at the host now.
   async inject(ops) {
     const { result } = await bridge.call('state');
-    return bridge.call('submit', { ops, rev: result.rev, epoch: result.epoch, id: 'third' });
+    return bridge.call('submit', { ops, rev: result.rev, epoch: result.epoch, id: `third.${++injected}` });
   },
   // The doc changed outside (git pull), to `text`.
   pull: (text) => bridge.write(text),

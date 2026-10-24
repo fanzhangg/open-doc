@@ -453,7 +453,7 @@ test('A4: a line deleted outside while two people each have an edit on it on its
   await host.close();
 });
 
-test('D4: nothing goes out during an IME composition, though others\' edits arrive; what it made goes out as one edit', async () => {
+test('D4: nothing goes out during an IME composition, and others\' edits show once it ends; what it made goes out as one edit', async () => {
   const docPath = await tempDoc(TEXT);
   let receive = () => {};
   const host = await openHost(docPath, { settingsDir: await fakeConfig(), emit: (name, data) => name === 'ops' && receive(data) });
@@ -476,11 +476,12 @@ test('D4: nothing goes out during an IME composition, though others\' edits arri
     view.text = view.text.replace(was, `Alpha ${typed}`);
     was = `Alpha ${typed}`;
     client.edited();
-    // Another's edit lands meanwhile: the page reads what is composed so far.
+    // Another's edit lands meanwhile: the page holds it.
     const now = await host.call('state');
     await host.call('submit', { ops: [{ from: now.text.length, to: now.text.length, insert: '.' }], rev: now.rev, epoch: now.epoch, id: `other.${typed}` });
   }
   assert.deepEqual(sent, [], 'pinyin sent');
+  assert.equal(view.text, TEXT.replace('Alpha', 'Alpha nihao'), 'others\' edits shown during the composition');
   view.text = view.text.replace('nihao', '你好');
   composing = false;
   client.edited();
