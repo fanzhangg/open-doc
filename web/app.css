@@ -127,7 +127,7 @@ kbd { font: 500 11px/1 var(--ui-font); padding: 2px 6px; border-radius: 4px; bor
 .pj-face-body, .pj-face-look { transform-box: view-box; transform-origin: 50% 50%; transition: filter 0.15s; }
 .pj-face-hat { color: var(--text); }
 .pj-face-focused { display: none; }
-/* Small faces stay plain: no blush, glasses or bow, and upright. */
+/* Small faces stay plain: no blush or glasses, and upright. */
 .pj-avatar { container-type: size; }
 @container (max-width: 20px) {
   .pj-face-extra { display: none; }
