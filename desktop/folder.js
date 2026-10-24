@@ -7,7 +7,7 @@
 import { watch } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
-import { resolve } from '../src/host/project-service.js';
+import { projectService, resolve } from '../src/host/project-service.js';
 import { SIDECAR_SUFFIX } from '../src/store/files.js';
 import { isDocName, isTextFile } from './files.js';
 
@@ -159,4 +159,37 @@ async function isFile(path) {
   } catch {
     return false;
   }
+}
+
+/**
+ * What the page of a folder window with no doc talks to in place of a doc
+ * (a HostedDoc's `attach`, `call` and `close`; desktop/doc-host-client.js):
+ * the folder's ProjectService, `list`, `read` and `open` as the owner, for
+ * its sidebar. Any other call is refused as `folder_only`, which the page
+ * takes for this.
+ */
+export function hostFolder(folder) {
+  const project = projectService(folder);
+  const ports = new Set();
+  const call = async (type, arg) => {
+    if (!['list', 'read', 'open'].includes(type)) throw Object.assign(new Error('This window has no doc'), { code: 'folder_only' });
+    return project[type](arg?.path);
+  };
+  return {
+    call,
+    async attach(port) {
+      ports.add(port);
+      port.on('message', async ({ data: { id, type, arg } }) => {
+        try {
+          port.postMessage({ id, result: await call(type, arg) });
+        } catch (error) {
+          port.postMessage({ id, error: { message: error.message, code: error.code } });
+        }
+      });
+      port.start();
+    },
+    async close() {
+      for (const port of ports) port.close();
+    },
+  };
 }

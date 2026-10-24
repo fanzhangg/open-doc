@@ -5,7 +5,9 @@
 // talks to its doc over a message port (`connectPage`). A window opened on
 // a folder lists the folder's files in a sidebar and switches docs in
 // place: it opens the next doc and closes the last one, and the buddies of
-// the doc left behind stop.
+// the doc left behind stop. A folder with no doc opens as a window with no
+// doc: its page shows only the sidebar, whose files it reads from the
+// folder (hostFolder), until a doc is made or opened there.
 //
 // A doc's page lives in a view filling its window, not in the window itself,
 // so a switch draws the next doc out of sight, under the one shown, and
@@ -16,7 +18,7 @@ import { existsSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { relativeDoc, watchFolder } from './folder.js';
+import { hostFolder, relativeDoc, watchFolder } from './folder.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PAGE = join(here, '..', 'dist', 'web', 'index.html');
@@ -40,6 +42,7 @@ const WINDOW_ICON = existsSync(ICON) ? { icon: ICON } : {};
  * @type {Map<string, { win: BrowserWindow, view: WebContentsView, hosted: import('./doc-host-client.js').HostedDoc, docPath: string, folder: string | null, expanded: Set<string>, sidebar: boolean, carry: object | null, pending: { view: WebContentsView, docPath: string } | null, stopWatching: (() => void) | null, switching: Promise<object> | null }>}
  */
 const docs = new Map();
+const bare = new Set(); // folder windows with no doc: their `docPath` is null
 const opening = new Map();
 const hostedDocs = new WeakMap(); // a page's webContents → the HostedDoc of its doc
 let startWindow = null;
@@ -60,12 +63,17 @@ export function configure(options) {
 
 export const openDocs = () => [...docs.values()];
 export const docFor = (win) => openDocs().find((entry) => entry.win === win) ?? null;
-/** The window a doc page (`contents`, shown or loading) is in, if any. */
-export const windowForContents = (contents) => openDocs()
+const entries = () => [...docs.values(), ...bare];
+/** The entry of `win`, with a doc or not. */
+export const entryFor = (win) => entries().find((entry) => entry.win === win) ?? null;
+/** The window a page (`contents`, shown or loading) is in, if any. */
+export const windowForContents = (contents) => entries()
   .find((entry) => entry.view.webContents === contents || entry.pending?.view.webContents === contents)?.win ?? null;
 export const isStartWindow = (win) => win !== null && win === startWindow;
+/** The windows open on a folder, with a doc or not. */
+export const folderWindows = () => entries().filter((entry) => entry.folder);
 /** The window open on folder `folder` (a real path), if any. */
-export const folderWindow = (folder) => openDocs().find((entry) => entry.folder === folder) ?? null;
+export const folderWindow = (folder) => folderWindows().find((entry) => entry.folder === folder) ?? null;
 /** The window `docPath` (a real path) is open in, if any. */
 export const windowOf = (docPath) => docs.get(docPath) ?? null;
 
@@ -90,13 +98,28 @@ export async function openDoc(path, { folder = null, expanded = [] } = {}) {
   return { entry: await opening.get(docPath), created: true };
 }
 
+/**
+ * Open a window on `folder` (a real path) with no doc, or focus the one it
+ * has, its subfolders `expanded` open.
+ */
+export async function openFolderWindow(folder, { expanded = [] } = {}) {
+  const open = folderWindow(folder);
+  if (open) {
+    reveal(open.win);
+    return open;
+  }
+  if (!opening.has(folder)) opening.set(folder, createDocWindow(null, folder, expanded).finally(() => opening.delete(folder)));
+  return opening.get(folder);
+}
+
+// A window on `docPath`, or with `docPath` null on `folder` with no doc.
 async function createDocWindow(docPath, folder, expanded) {
-  const hosted = await hooks.openHostedDoc(docPath, { folder });
+  const hosted = docPath ? await hooks.openHostedDoc(docPath, { folder }) : hostFolder(folder);
   const win = new BrowserWindow({
     ...nextBounds(),
     ...MIN_SIZE,
     show: false,
-    title: basename(docPath),
+    title: basename(docPath ?? folder),
     backgroundColor: hooks.background(),
     ...WINDOW_ICON,
     webPreferences: securePreferences(),
@@ -106,9 +129,10 @@ async function createDocWindow(docPath, folder, expanded) {
   };
   entry.view = createView(entry, hosted);
   win.contentView.addChildView(entry.view);
-  docs.set(docPath, entry);
+  if (docPath) docs.set(docPath, entry);
+  else bare.add(entry);
   if (folder) watch(entry, folder);
-  if (process.platform === 'darwin') win.setRepresentedFilename(docPath);
+  if (process.platform === 'darwin') win.setRepresentedFilename(docPath ?? folder);
   win.on('resize', () => {
     for (const view of [entry.view, entry.pending?.view]) if (view) fit(win, view);
   });
@@ -116,6 +140,7 @@ async function createDocWindow(docPath, folder, expanded) {
   closeAfterLeaving(entry);
   win.on('closed', () => {
     docs.delete(entry.docPath);
+    bare.delete(entry);
     entry.stopWatching?.();
     for (const view of [entry.view, entry.pending?.view]) if (view && !view.webContents.isDestroyed()) view.webContents.close();
     entry.hosted.close().catch((error) => console.error(error));
@@ -205,6 +230,7 @@ async function switchTo(entry, docPath) {
   }
   const previous = { view: entry.view, hosted: entry.hosted };
   docs.delete(entry.docPath);
+  bare.delete(entry);
   Object.assign(entry, { view, hosted, docPath });
   docs.set(docPath, entry);
   win.contentView.removeChildView(previous.view);
@@ -257,12 +283,12 @@ async function drawn(view) {
  * single doc.
  */
 export function folderView(win, contents) {
-  const entry = docFor(win);
+  const entry = entryFor(win);
   if (!entry?.folder) return null;
   const docPath = entry.pending?.view.webContents === contents ? entry.pending.docPath : entry.docPath;
   return {
     name: basename(entry.folder),
-    current: relativeDoc(entry.folder, docPath),
+    current: docPath && relativeDoc(entry.folder, docPath),
     expanded: [...entry.expanded],
     sidebar: entry.sidebar,
     carry: entry.carry,
@@ -271,13 +297,13 @@ export function folderView(win, contents) {
 
 /** Show or hide the sidebar of `win`. */
 export function setSidebar(win, open) {
-  const entry = docFor(win);
+  const entry = entryFor(win);
   if (entry?.folder) entry.sidebar = open;
 }
 
 /** Open or close subfolder `rel` in the sidebar of `win`. */
 export function setExpanded(win, rel, open) {
-  const entry = docFor(win);
+  const entry = entryFor(win);
   if (!entry?.folder) return;
   if (open) entry.expanded.add(rel);
   else entry.expanded.delete(rel);
@@ -342,7 +368,7 @@ function watch(entry, folder) {
 
 // Open the subfolders down to the doc, so the sidebar shows it.
 function expandTo(entry, docPath = entry.docPath) {
-  const rel = relativeDoc(entry.folder, docPath);
+  const rel = docPath && relativeDoc(entry.folder, docPath);
   if (!rel) return;
   const parts = rel.split('/').slice(0, -1);
   for (let i = 1; i <= parts.length; i++) entry.expanded.add(parts.slice(0, i).join('/'));
@@ -512,7 +538,7 @@ function closeAfterLeaving(entry) {
       } catch (error) {
         const { response } = await dialog.showMessageBox(win, {
           type: 'warning',
-          message: `Some changes to ${basename(entry.docPath)} are not saved yet.`,
+          message: `Some changes to ${basename(entry.docPath ?? entry.folder)} are not saved yet.`,
           detail: `${error.message} Close the window anyway and lose them?`,
           buttons: ['Keep Open', 'Close Anyway'],
           defaultId: 0,

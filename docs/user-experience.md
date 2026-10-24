@@ -41,7 +41,9 @@ AI buddies.
 1. **Open a doc.** Any `.md` file: File > Open, a double-click in the OS,
    or a drag onto the app. Each doc gets its own window. The home page
    opens a **project** (a folder, or a new one made in the dialog) with its
-   files in a sidebar, and lists the recent ones. A doc opened on its own is a
+   files in a sidebar, and lists the recent ones. A folder with no doc opens
+   with only its files, and New doc and New folder in the page; nothing is
+   made until you ask. A doc opened on its own is a
    quick editor for you and your AI buddies: no team, no sharing.
 2. **Write.** A WYSIWYG editor over plain markdown. Saving is automatic and
    keeps the bytes of every block you did not touch, so `git diff` stays clean.
@@ -250,8 +252,8 @@ shows only its last 4 characters.
   and the filter leaves it out. Everyone on the team sees the same tree. A
   doc opens in the editor; any other file shows read only in its place
   (Escape goes back).
-  Its menu, the same for every row and only yours: New File (in a folder; `/`
-  in the name makes folders), Rename (F2), Copy Path (relative to the
+  Its menu, the same for every row and only yours: New File and New Folder
+  (in a folder; `/` in a name makes folders), Rename (F2), Copy Path (relative to the
   project, as AI buddies read it), Reveal, and Delete (to the Trash). Drag a
   row onto a folder to move it. A file's comments go with it when it is
   renamed, moved or deleted here.
